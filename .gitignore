@@ -1,0 +1,94 @@
+.venv/
+.venv-*/
+.opencode/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+# The assembled release the `hf upload` command publishes. Built by
+# tools/build_release.py, verified locally, uploaded to Hugging Face —
+# artefacts, not source.
+/release-dir/
+# Same for the demo Space's repo: app.py + wheel, assembled here, uploaded to HF.
+/space-dir/
+# Local copy of the large release assets (checkpoint, graphs, packages,
+# reference clip) that tests/assets.py and the parity CI job resolve. About
+# 4 GB of published artefacts — fetched or copied onto a machine, never
+# committed. The two brand images are the deliberate exceptions.
+/assets/*
+!/assets/logo.png
+!/assets/logo-wordmark.png
+# `/out/` is ignored outright further down, so the ten `out/…` rules that used
+# to sit here never applied — a negation cannot re-include a path under an
+# ignored directory. Two of them also named a machine that is nobody's business
+# but its owner's.
+*.egg-info/
+*.npy
+checkpoints/
+*.safetensors
+!tests/data/reference/*.safetensors
+!tests/data/enrollment/*.safetensors
+*.wav
+.DS_Store
+.build/
+
+# unrelated local working notes, not part of loudkit
+/tb-science/
+
+# oracle run-artefacts (external tool output, not repo source)
+/jobs/
+
+# pytest-cov writes this on any run with --cov
+.coverage
+
+# The shipped Apple execution path is not part of this release.
+#
+# `LoudKit` is the declared conformance path: it takes compute units as an
+# `ExecutionConfig` parameter, so it exposes the knob and holds no opinion. The
+# tuned per-stage placement, warm-up order and multi-function graph layout that
+# make the Neural Engine fast are product, not kit — they stay out of the tree
+# so they cannot be committed by accident. What ships is the *measurement* of
+# what the ANE can do (docs/platforms/apple.md, the benchmark rows), not the recipe.
+/swift/LoudKitCoreML/
+/tests/LoudKitCoreMLTests/
+/opencode.json
+/Examples/
+
+# Working notes, not shipped source.
+#
+# Reviews, progress logs and the moving status snapshot are how the work gets
+# done, not what gets published: a reader arriving at a finished v0.1 wants the
+# spec and the measurements, not the order in which they were reached. Kept on
+# disk — untracked, not deleted — because they are still the record while the
+# release is being assembled.
+/progress.md
+/docs/review_architecture.md
+/docs/review_conventions.md
+/docs/review_dx.md
+/docs/PROJECT_STATUS.md
+/docs/coreml-execution.md
+
+# Measurement output and specification drafts: regenerable, or internal.
+#
+# `out/` is benchmark JSON — real evidence, but every row carries the command
+# that reproduces it, so the rows are output rather than source. `openspec/` is
+# how the engine came to be specified and `notebooks/` is scratch; a reader
+# arriving at a finished library wants the spec's conclusions, which live in the
+# docs, not the drafting.
+/out/
+/openspec/
+/.agents/
+/notebooks/*
+!/notebooks/loudkit_quickstart.ipynb
+/lexicons/
+
+# Editor and tool state, not source.
+.swiftpm/
+.claude/
+
+# Internal reports: strategy, optimisation candidates, review notes. Useful to
+# the people writing them and noise to anyone reading the library.
+/reports/

@@ -1,0 +1,67 @@
+[package]
+keywords = ["tts", "speech", "onnx", "local", "voice"]
+categories = ["multimedia::audio"]
+name = "loudkit"
+# Kept in lockstep with the Python and npm packages. The release-coherence gate
+# normalises each ecosystem's version syntax before comparing them.
+version = "0.1.0"
+edition = "2021"
+# The floor `ort` and `ort-sys` 2.0.0-rc.13 declare; nothing here can be built
+# on less. This crate's own use is well below it (`LazyLock` wants 1.80,
+# `is_none_or` 1.82, `usize::is_multiple_of` 1.87), and so is every other
+# dependency — `sha2` 0.11 at 1.85 is the next highest. Stated so a crates.io
+# consumer learns the floor from the metadata rather than from a build error
+# inside a transitive dependency.
+#
+# The `rust-msrv` job in .github/workflows/ci.yml builds this crate with
+# exactly this toolchain, so the number is checked rather than asserted, and it
+# refuses to run if the two ever disagree. Raising this line means raising the
+# toolchain there in the same commit.
+rust-version = "1.88"
+description = "loudkit text-to-speech over ONNX Runtime — the same engine, the same sampling law, no torch."
+repository = "https://github.com/loudreader/loudkit"
+license = "Apache-2.0"
+readme = "README.md"
+# The crate ships the shared grammar data it embeds, plus the terms that data
+# and the enrollment architectures arrive under. `cargo publish` refuses a
+# crate with no licence; it will happily publish one with no NOTICE, which is
+# why this list names it rather than relying on the default. The tests are
+# deliberately absent: several panic without the monorepo's fixtures, so a
+# crates.io `cargo test` would report failures that say nothing about the
+# crate.
+include = [
+    "src/**",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+]
+
+[[bin]]
+name = "loudkit"
+path = "src/main.rs"
+
+# No GPU provider is on by default, and the default build must keep working
+# with nothing but a plain `libonnxruntime`. `ort` puts each provider's
+# registration code behind its own feature, so a feature left off is not a
+# slower path — the provider cannot be registered at all, which is what
+# `execution::OnnxProvider::is_compiled` reports and what the refusal names.
+#
+# Turning one on is necessary and not sufficient: the `libonnxruntime` at
+# ORT_DYLIB_PATH still has to carry the provider, because `load-dynamic` makes
+# the provider set a property of the library the user supplies at runtime.
+[features]
+default = []
+cuda = ["ort/cuda"]
+coreml = ["ort/coreml"]
+directml = ["ort/directml"]
+
+[dependencies]
+ort = { version = "2.0.0-rc.13", features = ["load-dynamic"] }
+ndarray = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+unicode-normalization = "0.1"
+unicode-general-category = "1"
+regex = "1"
+sha2 = "0.11.0"

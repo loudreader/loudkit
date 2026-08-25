@@ -1,0 +1,26 @@
+{
+  "about": [
+    "Per-language ASR round-trip floors: Whisper-large-v3 CER on HUMAN speech",
+    "(FLEURS), from Fleurs-SLU App. A.5. A TTS round-trip number means nothing",
+    "except against its own language's floor — Danish's is more than double the",
+    "others, and one global threshold would silently hold Danish to an",
+    "impossible bar while letting English coast.",
+    "Gate: TTS_CER <= factor * floor, factor defaulting to 2.0, both numbers",
+    "always reported together."
+  ],
+  "whisper_large_v3_fleurs_cer": {
+    "en": 3.1, "pl": 2.3, "de": 2.2, "es": 2.2, "fr": 2.8, "it": 2.1,
+    "pt": 2.8, "nl": 3.1, "da": 4.8
+  },
+  "notes": {
+    "fi": "not in the cited table; measure before gating",
+    "no": "not in the cited table; measure before gating",
+    "sv": "not in the cited table; measure before gating",
+    "blind_spots": [
+      "ASR normalizes French liaison away entirely — liaison errors are invisible to WER",
+      "ASR is variant-agnostic — the pt-PT/pt-BR axis is undetectable by round-trip",
+      "ASR corrects mispronunciations from its language prior — 46 of 110 high-risk cases masked in the audit",
+      "Polish respelled spans raise WER while being correct — exclude them from scoring"
+    ]
+  }
+}

@@ -1,0 +1,290 @@
+---
+title: loudkit
+description: >-
+  Text to speech that sounds like a person, runs on your own machine, and
+  clones a voice from ten seconds of audio.
+template: splash
+editUrl: https://github.com/loudreader/loudkit/edit/main/site/src/handwritten/index.mdx
+hero:
+  title: Text to speech that runs on your machine.
+  tagline: |-
+    <p class="lk-lede">Twenty voices across ten languages, and a new one cloned from ten seconds of audio. Nothing leaves the machine you run&nbsp;it&nbsp;on.</p>
+    <div class="lk-hero-meta">
+      <span class="lk-pill">Open source <i>&middot;</i> On-device <i>&middot;</i> Apache-2.0</span>
+      <span class="lk-pill">No account <i>&middot;</i> Offline after download <i>&middot;</i> No per-character billing</span>
+    </div>
+  actions:
+    - text: Get started
+      link: /loudkit/guides/01-getting-started/
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/loudreader/loudkit
+      variant: minimal
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import CudaCard from '../../components/CudaCard.astro';
+import SamplePlayer from '../../components/SamplePlayer.astro';
+
+{/*
+  The only prose the site owns. Everything else on this site is a file from
+  docs/ or the repository root, rendered as-is. See site/README.md.
+
+  This page is distilled from README.md, not generated from it. Keep the two
+  consistent about the same facts, especially the measured figures in "Where it
+  runs", which are quoted from docs/benchmarks.md and must be re-quoted when
+  that page changes.
+
+  The markup below is plain HTML rather than Starlight's Card components so
+  that the numbers can be set as numbers. Styling lives in
+  site/src/styles/loudkit.css.
+
+  The imports above resolve from src/content/docs/, where the sync step
+  copies this file, not from src/handwritten/ where it is edited.
+*/}
+
+<div class="lk-landing">
+
+<section id="samples">
+
+<div class="lk-section-head">
+  <p class="lk-eyebrow">Hear it</p>
+  <h2>Twenty voices, ten languages.</h2>
+  <p>English, Spanish, French, German, Italian, Portuguese, Polish, Dutch, Swedish and Danish. Every voice is enrolled from a consented donation or a CC0 / CC-BY corpus, with the source named.</p>
+</div>
+
+<div class="lk-samples">
+  <div>
+    <h3>Hear two now.</h3>
+    <p>Both clips read the same sentence from <em>Alice's Adventures in Wonderland</em>.</p>
+    <div class="lk-sample-pair">
+      <SamplePlayer voice="joe" line={false} />
+      <SamplePlayer voice="kathleen" line={false} />
+    </div>
+    <p>One seeded sample per voice, playable in the browser. The sources and the licences are on the same page. <a href="/loudkit/demo/">Open the demo</a> to hear each enrollment recording next to the speech it produced, and the other eighteen voices.</p>
+    <p>We have evaluated English by ear. We do not speak the other nine languages well enough to judge them reliably, so feedback from native speakers is very welcome.</p>
+  </div>
+</div>
+
+</section>
+
+<section id="where-it-runs">
+
+<div class="lk-section-head">
+  <p class="lk-eyebrow">Where it runs</p>
+  <h2>Laptops, GPUs and edge devices.</h2>
+  <p>Faster than real time on datacentre GPUs, on desktop GPUs, on Apple Silicon and on an embedded board. Every figure is one <code>loudkit bench</code> run on the named machine. <a href="/loudkit/benchmarks/">The hardware, the method and the commands</a>.</p>
+</div>
+
+<div class="lk-grid">
+
+  <CudaCard />
+
+  <div class="lk-card">
+    <p class="lk-req">requires Apple Silicon</p>
+    <h3>Apple GPU</h3>
+    <div class="lk-metric">3.43&times;<span>real time, M-series laptop, <code>{'--device mps'}</code></span></div>
+    <p>The generator runs on the CPU and the renderer on the GPU. A CoreML renderer ships for Swift.</p>
+  </div>
+
+  <div class="lk-card">
+    <p class="lk-req">requires no PyTorch</p>
+    <h3>ONNX Runtime</h3>
+    <div class="lk-metric">1.21&times;<span>real time, same laptop, fp32 graphs</span></div>
+    <p>Runs without PyTorch, on ONNX Runtime.</p>
+  </div>
+
+  <div class="lk-card">
+    <p class="lk-req">an embedded NVIDIA GPU</p>
+    <h3>Jetson Orin Nano</h3>
+    <div class="lk-metric">1.83&times;<span>real time, <code>{'--device cuda --cuda-graphs'}</code>, measured on the board</span></div>
+    <p>The same engine, the same conformance fixture, on a board with no discrete GPU.</p>
+  </div>
+
+</div>
+
+<p class="lk-section-foot">Every figure is a multiple of real time. 3&times; real time means one minute of audio in twenty seconds. Under 1&times; is slower than real time.</p>
+
+</section>
+
+<section id="sdks">
+
+<div class="lk-section-head">
+  <p class="lk-eyebrow">Five languages, one engine</p>
+  <h2>Ports, not wrappers.</h2>
+  <p>Python is the reference implementation. Swift, Go, Rust and TypeScript are full ports of it, and all five are held to the same conformance fixture, so the same text and the same voice give the same speech tokens in every one.</p>
+</div>
+
+<div class="lk-sdks">
+  <div class="lk-sdk"><strong>Python</strong><span>PyTorch, ONNX Runtime or CoreML backend</span><em>reference</em></div>
+  <div class="lk-sdk"><strong>Swift</strong><span>CoreML backend</span><em>Swift Package Manager</em></div>
+  <div class="lk-sdk"><strong>Go</strong><span>ONNX Runtime backend</span><em>go get</em></div>
+  <div class="lk-sdk"><strong>Rust</strong><span>ONNX Runtime backend</span><em>cargo</em></div>
+  <div class="lk-sdk"><strong>TypeScript</strong><span>ONNX Runtime backend</span><em>npm i</em></div>
+</div>
+
+</section>
+
+<section id="install">
+
+<div class="lk-section-head">
+  <p class="lk-eyebrow">Install</p>
+  <h2>Install, then speak.</h2>
+  <p>Add the package, load a checkpoint, pick a voice, get a waveform. Python fetches what it needs on the first call. The ONNX ports read files from disk, so they fetch first into <code>loudr-1/</code>, which is what the paths below are relative to.</p>
+</div>
+
+<Tabs syncKey="language">
+  <TabItem label="Python">
+    ```bash
+    pip install "loudkit[torch,audio,hub]"
+    ```
+
+    ```python
+    import loudkit as lk
+
+    engine = lk.load("loudreader/loudr-1")
+    voice = lk.voice("kathleen", repo="loudreader/loudr-1")
+    engine.synthesize("Hello from loudkit.", voice, seed=7).save("hello.wav")
+    ```
+  </TabItem>
+  <TabItem label="TypeScript">
+    ```bash
+    npm i loudkit
+    ```
+
+    ```bash
+    pip install "loudkit[hub]"
+    loudkit download loudreader/loudr-1 --for onnx --local-dir loudr-1
+    ```
+
+    ```typescript
+    import { Engine, loadVoice } from "loudkit";
+
+    const engine = await Engine.load(
+      "loudr-1/loudr-1.safetensors", "loudr-1/onnx", "loudr-1/tokenizer.json");
+    const voice = loadVoice("loudr-1/voices/kathleen.safetensors");
+
+    const result = await engine.synthesize("Hello from loudkit.", voice, 7);
+    // result.audio is a Float32Array at result.sampleRate.
+    ```
+  </TabItem>
+  <TabItem label="Go">
+    ```bash
+    go get github.com/loudreader/loudkit/go
+    ```
+
+    ```bash
+    pip install "loudkit[hub]"
+    loudkit download loudreader/loudr-1 --for onnx --local-dir loudr-1
+    ```
+
+    ```go
+    // Point onnxruntime_go at libonnxruntime first. See the Go guide.
+    eng, _ := engine.Load(
+        "loudr-1/loudr-1.safetensors", "loudr-1/onnx", "loudr-1/tokenizer.json")
+    defer eng.Close()
+    v, _ := voice.Load("loudr-1/voices/kathleen.safetensors")
+
+    // After the seed: language, speed, previousTokens, shouldCancel.
+    audio, _, _, _, sr, _, _ := eng.SynthesizeLong(
+        "Hello from loudkit.", v, 7, "", 1.0, nil, nil)
+    ```
+  </TabItem>
+  <TabItem label="Rust">
+    ```toml
+    loudkit = "0.1"
+    ```
+
+    ```bash
+    pip install "loudkit[hub]"
+    loudkit download loudreader/loudr-1 --for onnx --local-dir loudr-1
+    ```
+
+    ```rust
+    let mut eng = Engine::load(
+        "loudr-1/loudr-1.safetensors", "loudr-1/onnx", "loudr-1/tokenizer.json")?;
+    let v = voice::load("loudr-1/voices/kathleen.safetensors")?;
+
+    // After the seed: language, speed, previous_tokens, should_cancel.
+    let (audio, tokens, _, sr, _, _) =
+        eng.synthesize_long("Hello from loudkit.", &v, 7, None, 1.0, None, None)?;
+    ```
+  </TabItem>
+  <TabItem label="Swift">
+    ```swift
+    // Swift Package Manager
+    .package(url: "https://github.com/loudreader/loudkit", from: "0.1.0")
+    ```
+
+    ```bash
+    pip install "loudkit[hub]"
+    loudkit download loudreader/loudr-1 --for coreml --local-dir loudr-1
+    ```
+
+    ```swift
+    import Foundation
+    import LoudKit
+
+    let engine = try Engine.load(
+        checkpoint: URL(fileURLWithPath: "loudr-1/loudr-1.safetensors"))
+    let voice = try VoiceProfile.load(
+        url: URL(fileURLWithPath: "loudr-1/voices/kathleen.safetensors"))
+
+    let result = try engine.synthesize("Hello from loudkit.", voice: voice, seed: 7)
+    try result.save(to: URL(fileURLWithPath: "hello.wav"))
+    ```
+  </TabItem>
+</Tabs>
+
+<p class="lk-section-foot">The same seed and voice give the same speech tokens in all five. The four ports load graphs exported once from a Python checkout: ONNX for TypeScript, Go and Rust, CoreML for Swift. Each guide has that step.</p>
+
+</section>
+
+<section id="next">
+
+<div class="lk-section-head">
+  <p class="lk-eyebrow">Where to go next</p>
+  <h2>What it promises.</h2>
+</div>
+
+<div class="lk-links">
+  <a class="lk-link" href="/loudkit/overview/">
+    <strong>Documentation index</strong>
+    <span>The same index the repository shows: guides, reference, platforms and the model.</span>
+  </a>
+  <a class="lk-link" href="/loudkit/supported/">
+    <strong>What 0.1 supports</strong>
+    <span>What is supported, what is experimental, and what 0.1 does not attempt.</span>
+  </a>
+  <a class="lk-link" href="/loudkit/reference/identity-contract/">
+    <strong>Identity contract</strong>
+    <span>Same text, same voice, same seed. What that guarantees, and where it stops.</span>
+  </a>
+  <a class="lk-link" href="/loudkit/benchmarks/">
+    <strong>Benchmarks</strong>
+    <span>Measured figures, the hardware, and the command that reproduces each row.</span>
+  </a>
+  <a class="lk-link" href="/loudkit/model-card/">
+    <strong>Model card</strong>
+    <span>What loudr-1 is, where it came from, its limits and what each download contains.</span>
+  </a>
+  <a class="lk-link" href="/loudkit/demo/">
+    <strong>Demo</strong>
+    <span>Enrollment reference and generated speech side by side, plus the twenty voices.</span>
+  </a>
+</div>
+
+</section>
+
+<section id="responsible-use">
+
+<div class="lk-section-head">
+  <h2>Responsible use.</h2>
+  <p>The tool clones a voice from ten seconds of audio and includes C2PA Content Credentials in saved WAVs by default. Consent is yours to obtain. <a href="/loudkit/responsible-use/">Read the terms</a>.</p>
+</div>
+
+<p class="lk-colophon"><a href="https://loudreader.io">LoudReader</a>, the iOS reading app, runs on this engine. loudkit is the engine it ships.</p>
+
+</section>
+
+</div>

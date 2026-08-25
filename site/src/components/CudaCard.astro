@@ -1,0 +1,94 @@
+---
+/*
+  The NVIDIA CUDA card on the landing page.
+
+  One table, every measured host, both execution modes side by side. It used
+  to be two tabs — graphs hosts in one, eager and batching in the other —
+  and a reader owning a Pascal card could not find their hardware anywhere:
+  the 1080 Ti measures eager 1.95x while its graphs run falls back to eager,
+  so it belonged to both lists and sat in neither cleanly. One table with
+  both columns says it without prose.
+
+  Figures are quoted from docs/benchmarks.md and must be re-quoted when that
+  page changes. The measurement-epoch note stays on the benchmarks page.
+*/
+
+// Every CUDA host measured end to end, sorted by the graphs figure. The
+// asterisk marks the one row whose graphs column is not a graph: Pascal
+// cannot capture, so the flag runs eager there (benchmarks.md records both).
+const hosts: Array<{ name: string; eager: string; graphs: string; note?: string }> = [
+  { name: 'A100', eager: '2.16', graphs: '8.12' },
+  { name: 'L4', eager: '2.20', graphs: '7.56' },
+  { name: 'RTX 3090', eager: '3.39', graphs: '7.47' },
+  { name: 'T4', eager: '2.10', graphs: '5.46' },
+  { name: 'GTX&nbsp;1080&nbsp;Ti', eager: '1.95', graphs: '1.89', note: '&thinsp;*' },
+  { name: 'Jetson Orin', eager: '0.73', graphs: '1.83' },
+];
+
+// Batch scaling, RTX 3090 with CUDA graphs: aggregate audio per second of
+// wall clock across the whole batch, never the speed of one synthesis.
+const batch: Array<[string, string]> = [
+  ['20.1', 'batch 1'],
+  ['80.8', 'batch 8'],
+  ['110.8', 'batch 16'],
+  ['137.3', 'batch 32'],
+  ['153.1', 'batch 64'],
+];
+---
+
+<div class="lk-card lk-card--feature">
+  <p class="lk-req">requires an NVIDIA GPU</p>
+  <h3>NVIDIA CUDA</h3>
+  <div class="lk-metric">
+    7.47&times;<span>real time, RTX 3090 with CUDA graphs</span>
+  </div>
+  {/* One line, and it says what the figures cannot: the range of hardware. */}
+  <p>PyTorch, from an embedded board to a datacentre card.</p>
+
+  <table class="lk-bench">
+    <thead>
+      <tr>
+        <th scope="col">Host</th>
+        <th scope="col">Eager</th>
+        <th scope="col">CUDA graphs</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        hosts.map(({ name, eager, graphs, note }) => (
+          <tr>
+            <td set:html={name} />
+            <td>{eager}&times;</td>
+            <td set:html={graphs + '&times;' + (note ?? '')} />
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  <p class="lk-bench-note">
+    &thinsp;*&nbsp;Pascal cannot capture graphs: on the 1080&nbsp;Ti the flag runs eager.
+  </p>
+
+  <div class="lk-batch">
+    <p class="lk-batch-label">Batch throughput, RTX 3090 with CUDA graphs</p>
+    <p class="lk-batch-note">
+      Many texts at once. Each number is the total audio produced per second of wall
+      clock across the whole batch, not the speed of one synthesis.
+    </p>
+    <div class="lk-batch-strip">
+      {
+        batch.map(([rtf, label]) => (
+          <div class="lk-batch-step">
+            <b>{rtf}&times;</b>
+            <span>{label}</span>
+          </div>
+        ))
+      }
+    </div>
+    <p class="lk-batch-note">
+      <a href="/loudkit/benchmarks/#aggregate-throughput-at-batch-n">
+        What it measures, and the full table
+      </a>. The highest measured aggregate is 170.8&times; on an A100 at batch&nbsp;64.
+    </p>
+  </div>
+</div>

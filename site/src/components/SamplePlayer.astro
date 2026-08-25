@@ -1,0 +1,70 @@
+---
+/*
+  One playable sample, for the landing page.
+
+  The landing page used to draw a dimmed waveform and send the reader to the
+  demo to hear anything. This plays a voice where the reader already is.
+
+  The voice, the file name and the sentence all come from
+  docs/voices/roster/provenance.json, the same file VoiceGrid reads, so the
+  landing page cannot claim a sample the roster does not ship. The audio is
+  copied into the build by scripts/sync-docs.mjs.
+
+  Playback is the shared module, not a second player: a press here stops a
+  voice started anywhere else on the page.
+*/
+import rosterJson from '../../../docs/voices/roster/provenance.json';
+
+interface Props {
+  /** Roster name of the voice to play. */
+  voice: string;
+  /**
+   * Show the "Reads a public-domain sentence from …" line. Off when the
+   * page states the sentence once for a pair of players.
+   */
+  line?: boolean;
+}
+
+const { voice: wanted, line = true } = Astro.props;
+
+const roster = rosterJson as Array<{
+  name: string;
+  language: string;
+  gender: string;
+  sample: { audio: string; work: string };
+}>;
+
+const entry = roster.find((v) => v.name === wanted);
+if (!entry) throw new Error(`SamplePlayer: no voice named "${wanted}" in the roster`);
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const audio = `${base}/voices/${entry.sample.audio.split('/').pop()}`;
+const gender = entry.gender === 'F' ? 'female' : 'male';
+
+// "Alice's Adventures in Wonderland (Lewis Carroll) — public domain" is the
+// roster's shape. The page wants the title alone.
+const work = entry.sample.work.split(/\s*[(—]/)[0].trim();
+---
+
+<div class="lk-sample not-content">
+  <button
+    type="button"
+    class="lk-voice-play"
+    data-src={audio}
+    data-name={entry.name}
+    aria-label={`Play ${entry.name}, ${entry.language}`}
+  >
+    <span class="lk-voice-icon" aria-hidden="true"></span>
+  </button>
+  <div class="lk-sample-body">
+    <strong>{entry.name}</strong>
+    <span class="lk-sample-meta">
+      {entry.language} <i>&middot;</i> {gender}
+    </span>
+    {line && <p class="lk-sample-line">Reads a public-domain sentence from {work}.</p>}
+  </div>
+</div>
+
+<script>
+  import '../scripts/voice-player.ts';
+</script>

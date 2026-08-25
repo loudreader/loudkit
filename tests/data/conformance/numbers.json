@@ -1,0 +1,712 @@
+{
+  "version": 1,
+  "about": [
+    "Cardinal numbers in nine languages. Five implementations read one grammar",
+    "file (src/loudkit/models/data/numbers.json) and must produce these strings.",
+    "",
+    "Every expectation is hand-written from the language's own reference",
+    "description, not captured from this implementation's output: a fixture that",
+    "records what the code does proves only that the code is deterministic. Two",
+    "real defects were caught this way while the file was being written — Danish",
+    "*entusind* for 1000, and a listed Spanish *veintiuno* overriding the",
+    "feminine *veintiuna*.",
+    "",
+    "The `gendered` section covers the values that agree with what is counted.",
+    "Nothing here reads context: the caller supplies the gender, because it is a",
+    "property of the sentence rather than of the number.",
+    "French uses the 1990 rectified orthography (vingt-et-un, with hyphens), matching the CLDR corpus this grammar is differentially tested against. Both spellings are read identically aloud; consistency with the larger corpus decides the tie.",
+    "fi/no/sv forms come from each language's own authority (Kotus/Kielikello for Finnish including the thousand-boundary space; Språkrådet's 1951 tens-first order with sju/tjue for Bokmål; SAOL/Isof for Swedish including fyrtio and the ettusen consonant reduction), cross-checked against CLDR. num2words ships förtio, etttusen and 'en tusen' — three more of the Danish-treds class this fixture exists to keep out."
+  ],
+  "cardinals": {
+    "en": [
+      {
+        "value": 0,
+        "expect": "zero"
+      },
+      {
+        "value": 7,
+        "expect": "seven"
+      },
+      {
+        "value": 13,
+        "expect": "thirteen"
+      },
+      {
+        "value": 21,
+        "expect": "twenty-one"
+      },
+      {
+        "value": 40,
+        "expect": "forty"
+      },
+      {
+        "value": 99,
+        "expect": "ninety-nine"
+      },
+      {
+        "value": 100,
+        "expect": "one hundred"
+      },
+      {
+        "value": 101,
+        "expect": "one hundred and one"
+      },
+      {
+        "value": 999,
+        "expect": "nine hundred and ninety-nine"
+      },
+      {
+        "value": 1000,
+        "expect": "one thousand"
+      },
+      {
+        "value": 2400,
+        "expect": "two thousand four hundred"
+      },
+      {
+        "value": 1000000,
+        "expect": "one million"
+      }
+    ],
+    "de": [
+      {
+        "value": 1,
+        "expect": "eins"
+      },
+      {
+        "value": 8,
+        "expect": "acht"
+      },
+      {
+        "value": 16,
+        "expect": "sechzehn"
+      },
+      {
+        "value": 21,
+        "expect": "einundzwanzig"
+      },
+      {
+        "value": 30,
+        "expect": "dreißig"
+      },
+      {
+        "value": 99,
+        "expect": "neunundneunzig"
+      },
+      {
+        "value": 100,
+        "expect": "einhundert"
+      },
+      {
+        "value": 101,
+        "expect": "einhunderteins"
+      },
+      {
+        "value": 121,
+        "expect": "einhunderteinundzwanzig"
+      },
+      {
+        "value": 1000,
+        "expect": "eintausend"
+      },
+      {
+        "value": 1001,
+        "expect": "eintausendeins"
+      },
+      {
+        "value": 2026,
+        "expect": "zweitausendsechsundzwanzig"
+      }
+    ],
+    "nl": [
+      {
+        "value": 1,
+        "expect": "een"
+      },
+      {
+        "value": 21,
+        "expect": "eenentwintig"
+      },
+      {
+        "value": 22,
+        "expect": "tweeëntwintig"
+      },
+      {
+        "value": 33,
+        "expect": "drieëndertig"
+      },
+      {
+        "value": 80,
+        "expect": "tachtig"
+      },
+      {
+        "value": 100,
+        "expect": "honderd"
+      },
+      {
+        "value": 1000,
+        "expect": "duizend"
+      }
+    ],
+    "da": [
+      {
+        "value": 1,
+        "expect": "en"
+      },
+      {
+        "value": 11,
+        "expect": "elleve"
+      },
+      {
+        "value": 21,
+        "expect": "enogtyve"
+      },
+      {
+        "value": 45,
+        "expect": "femogfyrre"
+      },
+      {
+        "value": 50,
+        "expect": "halvtreds"
+      },
+      {
+        "value": 60,
+        "expect": "tres"
+      },
+      {
+        "value": 70,
+        "expect": "halvfjerds"
+      },
+      {
+        "value": 80,
+        "expect": "firs"
+      },
+      {
+        "value": 90,
+        "expect": "halvfems"
+      },
+      {
+        "value": 98,
+        "expect": "otteoghalvfems"
+      },
+      {
+        "value": 100,
+        "expect": "hundrede"
+      },
+      {
+        "value": 200,
+        "expect": "tohundrede"
+      },
+      {
+        "value": 1000,
+        "expect": "tusind"
+      }
+    ],
+    "es": [
+      {
+        "value": 1,
+        "expect": "uno"
+      },
+      {
+        "value": 16,
+        "expect": "dieciséis"
+      },
+      {
+        "value": 21,
+        "expect": "veintiuno"
+      },
+      {
+        "value": 28,
+        "expect": "veintiocho"
+      },
+      {
+        "value": 31,
+        "expect": "treinta y uno"
+      },
+      {
+        "value": 100,
+        "expect": "cien"
+      },
+      {
+        "value": 101,
+        "expect": "ciento uno"
+      },
+      {
+        "value": 200,
+        "expect": "doscientos"
+      },
+      {
+        "value": 500,
+        "expect": "quinientos"
+      },
+      {
+        "value": 1000,
+        "expect": "mil"
+      },
+      {
+        "value": 2026,
+        "expect": "dos mil veintiséis"
+      }
+    ],
+    "fr": [
+      {
+        "value": 1,
+        "expect": "un"
+      },
+      {
+        "value": 17,
+        "expect": "dix-sept"
+      },
+      {
+        "value": 21,
+        "expect": "vingt-et-un"
+      },
+      {
+        "value": 22,
+        "expect": "vingt-deux"
+      },
+      {
+        "value": 61,
+        "expect": "soixante-et-un"
+      },
+      {
+        "value": 70,
+        "expect": "soixante-dix"
+      },
+      {
+        "value": 71,
+        "expect": "soixante-et-onze"
+      },
+      {
+        "value": 80,
+        "expect": "quatre-vingts"
+      },
+      {
+        "value": 81,
+        "expect": "quatre-vingt-un"
+      },
+      {
+        "value": 90,
+        "expect": "quatre-vingt-dix"
+      },
+      {
+        "value": 91,
+        "expect": "quatre-vingt-onze"
+      },
+      {
+        "value": 100,
+        "expect": "cent"
+      },
+      {
+        "value": 1000,
+        "expect": "mille"
+      }
+    ],
+    "it": [
+      {
+        "value": 1,
+        "expect": "uno"
+      },
+      {
+        "value": 17,
+        "expect": "diciassette"
+      },
+      {
+        "value": 21,
+        "expect": "ventuno"
+      },
+      {
+        "value": 23,
+        "expect": "ventitré"
+      },
+      {
+        "value": 28,
+        "expect": "ventotto"
+      },
+      {
+        "value": 48,
+        "expect": "quarantotto"
+      },
+      {
+        "value": 100,
+        "expect": "cento"
+      },
+      {
+        "value": 1000,
+        "expect": "mille"
+      },
+      {
+        "value": 2000,
+        "expect": "duemila"
+      }
+    ],
+    "pt": [
+      {
+        "value": 1,
+        "expect": "um"
+      },
+      {
+        "value": 16,
+        "expect": "dezasseis"
+      },
+      {
+        "value": 21,
+        "expect": "vinte e um"
+      },
+      {
+        "value": 100,
+        "expect": "cem"
+      },
+      {
+        "value": 101,
+        "expect": "cento e um"
+      },
+      {
+        "value": 200,
+        "expect": "duzentos"
+      },
+      {
+        "value": 1800,
+        "expect": "mil e oitocentos"
+      },
+      {
+        "value": 1892,
+        "expect": "mil oitocentos e noventa e dois"
+      }
+    ],
+    "pl": [
+      {
+        "value": 1,
+        "expect": "jeden"
+      },
+      {
+        "value": 2,
+        "expect": "dwa"
+      },
+      {
+        "value": 5,
+        "expect": "pięć"
+      },
+      {
+        "value": 12,
+        "expect": "dwanaście"
+      },
+      {
+        "value": 21,
+        "expect": "dwadzieścia jeden"
+      },
+      {
+        "value": 50,
+        "expect": "pięćdziesiąt"
+      },
+      {
+        "value": 100,
+        "expect": "sto"
+      },
+      {
+        "value": 200,
+        "expect": "dwieście"
+      },
+      {
+        "value": 500,
+        "expect": "pięćset"
+      },
+      {
+        "value": 1000,
+        "expect": "tysiąc"
+      },
+      {
+        "value": 2000,
+        "expect": "dwa tysiące"
+      },
+      {
+        "value": 5000,
+        "expect": "pięć tysięcy"
+      },
+      {
+        "value": 12000,
+        "expect": "dwanaście tysięcy"
+      },
+      {
+        "value": 22000,
+        "expect": "dwadzieścia dwa tysiące"
+      },
+      {
+        "value": 2026,
+        "expect": "dwa tysiące dwadzieścia sześć"
+      }
+    ],
+    "fi": [
+      {
+        "value": 1,
+        "expect": "yksi"
+      },
+      {
+        "value": 7,
+        "expect": "seitsemän"
+      },
+      {
+        "value": 11,
+        "expect": "yksitoista"
+      },
+      {
+        "value": 16,
+        "expect": "kuusitoista"
+      },
+      {
+        "value": 21,
+        "expect": "kaksikymmentäyksi"
+      },
+      {
+        "value": 45,
+        "expect": "neljäkymmentäviisi"
+      },
+      {
+        "value": 100,
+        "expect": "sata"
+      },
+      {
+        "value": 101,
+        "expect": "satayksi"
+      },
+      {
+        "value": 200,
+        "expect": "kaksisataa"
+      },
+      {
+        "value": 1000,
+        "expect": "tuhat"
+      },
+      {
+        "value": 2000,
+        "expect": "kaksituhatta"
+      },
+      {
+        "value": 2026,
+        "expect": "kaksituhatta kaksikymmentäkuusi"
+      },
+      {
+        "value": 21000,
+        "expect": "kaksikymmentäyksituhatta"
+      },
+      {
+        "value": 1000000,
+        "expect": "yksi miljoona"
+      },
+      {
+        "value": 2000000,
+        "expect": "kaksi miljoonaa"
+      }
+    ],
+    "no": [
+      {
+        "value": 1,
+        "expect": "én"
+      },
+      {
+        "value": 7,
+        "expect": "sju"
+      },
+      {
+        "value": 11,
+        "expect": "elleve"
+      },
+      {
+        "value": 16,
+        "expect": "seksten"
+      },
+      {
+        "value": 21,
+        "expect": "tjueén"
+      },
+      {
+        "value": 45,
+        "expect": "førtifem"
+      },
+      {
+        "value": 99,
+        "expect": "nittini"
+      },
+      {
+        "value": 100,
+        "expect": "hundre"
+      },
+      {
+        "value": 101,
+        "expect": "hundre og én"
+      },
+      {
+        "value": 200,
+        "expect": "to hundre"
+      },
+      {
+        "value": 1000,
+        "expect": "tusen"
+      },
+      {
+        "value": 2000,
+        "expect": "to tusen"
+      },
+      {
+        "value": 2026,
+        "expect": "to tusen og tjueseks"
+      },
+      {
+        "value": 1000000,
+        "expect": "én million"
+      },
+      {
+        "value": 2000000,
+        "expect": "to millioner"
+      }
+    ],
+    "sv": [
+      {
+        "value": 1,
+        "expect": "ett"
+      },
+      {
+        "value": 7,
+        "expect": "sju"
+      },
+      {
+        "value": 11,
+        "expect": "elva"
+      },
+      {
+        "value": 18,
+        "expect": "arton"
+      },
+      {
+        "value": 21,
+        "expect": "tjugoett"
+      },
+      {
+        "value": 40,
+        "expect": "fyrtio"
+      },
+      {
+        "value": 45,
+        "expect": "fyrtiofem"
+      },
+      {
+        "value": 100,
+        "expect": "etthundra"
+      },
+      {
+        "value": 101,
+        "expect": "etthundraett"
+      },
+      {
+        "value": 1000,
+        "expect": "ettusen"
+      },
+      {
+        "value": 2000,
+        "expect": "tvåtusen"
+      },
+      {
+        "value": 2026,
+        "expect": "tvåtusen tjugosex"
+      },
+      {
+        "value": 21000,
+        "expect": "tjugoentusen"
+      },
+      {
+        "value": 1000000,
+        "expect": "en miljon"
+      },
+      {
+        "value": 2000000,
+        "expect": "två miljoner"
+      }
+    ]
+  },
+  "gendered": [
+    {
+      "language": "pl",
+      "value": 2,
+      "gender": "f",
+      "expect": "dwie"
+    },
+    {
+      "language": "pl",
+      "value": 2,
+      "gender": "virile",
+      "expect": "dwaj"
+    },
+    {
+      "language": "pl",
+      "value": 1,
+      "gender": "n",
+      "expect": "jedno"
+    },
+    {
+      "language": "pl",
+      "value": 3,
+      "gender": "virile",
+      "expect": "trzej"
+    },
+    {
+      "language": "es",
+      "value": 1,
+      "gender": "f",
+      "expect": "una"
+    },
+    {
+      "language": "es",
+      "value": 21,
+      "gender": "f",
+      "expect": "veintiuna"
+    },
+    {
+      "language": "pt",
+      "value": 2,
+      "gender": "f",
+      "expect": "duas"
+    },
+    {
+      "language": "da",
+      "value": 1,
+      "gender": "common",
+      "expect": "en"
+    },
+    {
+      "language": "da",
+      "value": 1,
+      "gender": "neuter",
+      "expect": "et"
+    },
+    {
+      "language": "no",
+      "value": 1,
+      "gender": "neuter",
+      "expect": "ett"
+    },
+    {
+      "language": "no",
+      "value": 21,
+      "gender": "neuter",
+      "expect": "tjueett"
+    },
+    {
+      "language": "sv",
+      "value": 1,
+      "gender": "common",
+      "expect": "en"
+    },
+    {
+      "language": "sv",
+      "value": 21,
+      "gender": "common",
+      "expect": "tjugoen"
+    },
+    {
+      "language": "sv",
+      "value": 101,
+      "gender": "common",
+      "expect": "etthundraen"
+    }
+  ]
+}

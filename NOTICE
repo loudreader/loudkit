@@ -1,0 +1,232 @@
+loudkit
+Copyright 2026 LoudReader
+
+This product includes software developed at LoudReader.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+--------------------------------------------------------------------------------
+Third-party notices
+--------------------------------------------------------------------------------
+
+Chatterbox TTS
+    Copyright (c) 2025 Resemble AI
+    Licensed under the MIT License.
+    https://github.com/resemble-ai/chatterbox
+
+    The weights distributed with this project — the `loudr` series — are derived
+    from Chatterbox and optimised for real-time synthesis. Parts of the pipeline
+    were retrained; others, among them the tokenizer and speaker encoder that
+    enrollment uses, are carried from the upstream artefact unchanged and are
+    redistributed here under the MIT terms above.
+
+    The architectures in `python/loudkit/models/` are reimplementations written
+    against those weights; they are not copies of the upstream source, but the
+    weights they load could not exist without it.
+
+    Voice profiles
+    The shipped voice profiles — twenty enrollments across ten languages,
+    distributed on the Hugging Face repository under voices/profiles/ —
+    are enrolled from the recordings catalogued in
+    `docs/voices/roster/provenance.json`, which records donor or speaker,
+    source, licence, consent basis, reference construction and sha256 for
+    every profile, reference and sample. None of them are Chatterbox
+    artefacts. Every source below was recorded or released for speech-
+    technology use, and each profile ships under its own terms:
+
+    OHF-Voice / NabuCasa voice-datasets — CC0-1.0
+        https://github.com/NabuCasa/voice-datasets
+        Voice donations recorded expressly for building TTS voices:
+        darkman, gosia (pl); joe, kathleen (en); kerstin (de);
+        pim, nathalie (nl); dave (es); paola (it); tugao (pt).
+        The kathleen reference reads prompts from the CMU ARCTIC prompt
+        list; those prompt texts come from public-domain novels and impose
+        no restriction on the recording itself.
+
+    Thorsten-Voice, TV-44kHz-Full — CC0-1.0
+        https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full
+        thorsten (de), under the donor's own public-domain dedication.
+
+    NST Swedish and NST Danish speech databases — CC0-1.0
+        Språkbanken, National Library of Norway:
+        https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-17/
+        https://huggingface.co/datasets/alexandrainst/nst-da
+        nils, selma (sv); soren, freja (da).
+
+    Kyutai tts-voices — CC-BY-4.0
+        https://huggingface.co/kyutai/tts-voices
+        henri, colette (fr).
+
+    CML-TTS — CC-BY-4.0
+        https://huggingface.co/datasets/ylacombe/cml-tts
+        carmen (es), ines (pt). LibriVox-derived recordings; the dataset's
+        terms credit the original LibriVox readers.
+
+    Multilingual LibriSpeech — CC-BY-4.0
+        https://huggingface.co/datasets/facebook/multilingual_librispeech
+        dante (it). LibriVox-derived; likewise credits the readers.
+
+Voice encoder (`ve.safetensors`)
+    The 5.7 MB utterance voice encoder that drives voice cloning is an export
+    of the `VoiceEncoder` model from the Chatterbox T3 architecture (Resemble
+    AI, MIT — see above), produced by this project's own enrollment export
+    (this project's enrollment export tooling). It is a
+    derived work of the Chatterbox weights and is redistributed under the same
+    MIT terms.
+
+    `docs/PROVENANCE-voice-encoder.md` records the artefact's size and sha256,
+    its tensors, the upstream repository and licence, and the fact that the
+    upstream revision is not recorded in the artefact metadata.
+
+    MIT License text:
+
+        Permission is hereby granted, free of charge, to any person obtaining a
+        copy of this software and associated documentation files (the
+        "Software"), to deal in the Software without restriction, including
+        without limitation the rights to use, copy, modify, merge, publish,
+        distribute, sublicense, and/or sell copies of the Software, and to
+        permit persons to whom the Software is furnished to do so, subject to
+        the following conditions:
+
+        The above copyright notice and this permission notice shall be included
+        in all copies or substantial portions of the Software.
+
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+        OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+        MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+        IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+        CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+        TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+        SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Enrollment architectures
+    `python/loudkit/models/enroll.py` reimplements four inference paths whose
+    designs come from the projects below. The weights those modules load are
+    part of the Chatterbox-derived checkpoint (MIT, above); what is owed here is
+    attribution for the architectures, all of them permissively licensed and all
+    compatible with this project's Apache-2.0 terms.
+
+    CosyVoice — Apache License 2.0
+        Copyright FunAudioLLM / Alibaba Group
+        https://github.com/FunAudioLLM/CosyVoice
+        The S3 speech tokenizer's shape (whisper-style encoder, FSQ quantiser,
+        25 Hz token rate) and the matcha-recipe mel the flow conditions on.
+
+    S3Tokenizer — Apache License 2.0
+        Copyright Xingchen Song
+        https://github.com/xingchensong/S3Tokenizer
+        The standalone tokenizer extraction this port follows, including the
+        FSMN memory over the attention values.
+
+    3D-Speaker (CAM++) — Apache License 2.0
+        Copyright ModelScope / Alibaba Group
+        https://github.com/modelscope/3D-Speaker
+        The CAM++ x-vector encoder: FCM front end, TDNN-dense body with
+        context-aware masking, statistics pooling.
+
+    FunASR — MIT License
+        Copyright ModelScope / Alibaba Group
+        https://github.com/modelscope/FunASR
+        The FSMN formulation the tokenizer's attention block carries.
+
+    Real-Time-Voice-Cloning — MIT License
+        Modified & original work Copyright (c) 2019 Corentin Jemine
+        Original work Copyright (c) 2018 Rayhane Mama
+        Original work Copyright (c) 2019 fatchord
+        Original work Copyright (c) 2015 braindead
+        https://github.com/CorentinJ/Real-Time-Voice-Cloning
+        The utterance voice encoder: 3-layer LSTM over 40-mel partials,
+        L2-normalised, which is the recipe its weights were trained against.
+
+CMUdict (Carnegie Mellon Pronouncing Dictionary)
+    Copyright (C) 1993-2015 Carnegie Mellon University. All rights reserved.
+
+    `python/loudkit/models/data/pl_en_respell.json` is generated from CMUdict by
+    `tools/gen_pl_respell.py`, which maps ARPAbet phonemes to Polish
+    orthography. It is a derived work and it ships in the distribution, so the
+    notice below is reproduced as clause 2 requires.
+
+        Redistribution and use in source and binary forms, with or without
+        modification, are permitted provided that the following conditions
+        are met:
+
+        1. Redistributions of source code must retain the above copyright
+           notice, this list of conditions and the following disclaimer.
+           The contents of this file are deemed to be source code.
+
+        2. Redistributions in binary form must reproduce the above copyright
+           notice, this list of conditions and the following disclaimer in
+           the documentation and/or other materials provided with the
+           distribution.
+
+        This work was supported in part by funding from the Defense Advanced
+        Research Projects Agency, the Office of Naval Research and the
+        National Science Foundation of the United States of America, and by
+        member companies of the Carnegie Mellon Sphinx Speech Consortium. We
+        acknowledge the contributions of many volunteers to the expansion and
+        improvement of this dictionary.
+
+        THIS SOFTWARE IS PROVIDED BY CARNEGIE MELLON UNIVERSITY ``AS IS'' AND
+        ANY EXPRESSED OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+        THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+        PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL CARNEGIE MELLON UNIVERSITY
+        NOR ITS EMPLOYEES BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+        SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+        LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+        DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+        THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+        OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Unicode CLDR
+    Copyright © 1991-2026 Unicode, Inc. All rights reserved.
+    Licensed under the Unicode License v3 — https://www.unicode.org/license.txt
+
+    `tests/data/cldr/*.ssv` are CLDR's own RBNF spellout test data, imported
+    verbatim with their copyright header intact, and `numbers_cldr.json` is the
+    subset mapped onto rulesets this project implements. Test corpus only: none
+    of it is read at runtime and none of it ships in the wheel or the sdist. It
+    is a differential test corpus, independent of this implementation.
+
+NST pronunciation lexicons
+    The Swedish, Danish and Norwegian NST lexicons that
+    `tools/fetch_nst_lexicons.py` downloads are public domain (CC0), from
+    Språkbanken Tal. They are fetched on demand and never vendored, so nothing
+    of theirs is redistributed here.
+
+Philox-4x32-10
+    The counter-based random number generator in `python/loudkit/rng.py` implements
+    the algorithm described in:
+
+        J. K. Salmon, M. A. Moraes, R. O. Dror, D. E. Shaw.
+        "Parallel Random Numbers: As Easy as 1, 2, 3." SC11, 2011.
+
+    The known-answer test vectors are from the Random123 reference library
+    (D. E. Shaw Research), used for verification only.
+
+DSP filterbank and window tables
+    `python/loudkit/models/data/dsp/*.f32`, and the copies each port carries
+    (`swift/LoudKit/Resources/*.f32`, `rust/src/enroll_data/*.f32`,
+    `go/enroll/data/*.f32`, `js/src/dspData.ts`), are
+    numeric tables generated by `tools/gen_dsp_assets.py`. They are precomputed
+    rather than derived at runtime so that five implementations multiply exactly
+    the same numbers; the values come from four upstreams:
+
+        librosa (ISC) — `librosa.filters.mel`, the Slaney-style mel filterbanks
+        for the mel decoder (24 kHz / 1920-point) and the utterance voice
+        encoder (16 kHz / 400-point).
+
+        PyTorch and SciPy (BSD-3-Clause) — `torch.hann_window` and
+        `scipy.signal.get_window`, the analysis windows, including the
+        Povey variant (a Hann window raised to 0.85).
+
+        Kaldi, via torchaudio's `torchaudio.compliance.kaldi` (Apache-2.0) —
+        `get_mel_banks`, the speaker-encoder filterbank.
+
+        Chatterbox (MIT) — the S3 tokenizer's mel filterbank, read out of the
+        upstream checkpoint rather than recomputed, so the tokenizer sees the
+        filters it was trained with.
+
+    Every one of these licences is compatible with Apache-2.0; Kaldi and librosa
+    ask that attribution travel with the values, which is what this section is.
+    `python/loudkit/models/data/dsp/manifest.json` records the same provenance per file.

@@ -1,0 +1,108 @@
+# Build and publish the documentation site to GitHub Pages.
+#
+# The site under site/ owns almost no prose: it renders docs/ and four
+# root-level markdown files directly, generating its Starlight content
+# collection at build time (site/scripts/sync-docs.mjs). That is why the path
+# filter below lists the documentation *and* the site — a change to either one
+# changes what is published, and neither is a subdirectory of the other.
+#
+# Publishing happens only from main. A pull request builds without deploying,
+# so a broken docs change fails in review rather than on the live site; the
+# `deploy` job is guarded on the branch rather than the build being skipped,
+# because the useful signal is "does it build", and that is worth having on
+# every PR.
+#
+# Third-party actions are pinned to commit SHAs rather than tags, for the same
+# reason as ci.yml: a tag is a movable pointer in someone else's repository.
+# The tag each SHA was taken from is in the comment, so an upgrade stays a
+# readable diff.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - site/**
+      - README.md
+      - SUPPORTED.md
+      - VOICES.md
+      - RESPONSIBLE_USE.md
+      - .github/workflows/docs.yml
+  pull_request:
+    paths:
+      - docs/**
+      - site/**
+      - README.md
+      - SUPPORTED.md
+      - VOICES.md
+      - RESPONSIBLE_USE.md
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+# One deployment at a time, and do not cancel one in flight: a half-applied
+# Pages deployment is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      # There is deliberately no actions/configure-pages step. Its only job is
+      # to hand a framework the origin and base path it should build for, and
+      # this site does not infer them — site/site.config.mjs states them, and
+      # the deployed URL has to match that or every internal link breaks. It
+      # also fails outright until Pages is enabled on the repository, which
+      # would make pull-request builds red for a reason unrelated to the docs.
+      - name: install
+        run: npm ci
+        working-directory: site
+
+      - name: build
+        run: npm run build
+        working-directory: site
+
+      # A page built for the wrong base still builds — it just 404s once it is
+      # live, on every link at once. Catch that here instead.
+      - name: check the built pages carry the configured base path
+        run: |
+          grep -q 'href="/loudkit/guides/01-getting-started/"' dist/index.html || {
+            echo "The landing page does not link with the /loudkit base path."
+            echo "site/site.config.mjs and the Pages deployment URL disagree."
+            exit 1
+          }
+        working-directory: site
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5
+        with:
+          path: site/dist
+
+  deploy:
+    name: deploy
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5

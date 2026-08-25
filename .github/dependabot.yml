@@ -1,0 +1,52 @@
+# Nobody watched the dependencies.
+#
+# CI pins its actions by SHA, which is the right call and also a standing cost:
+# a pinned action never updates itself, so a security release sits unnoticed
+# until somebody looks. Four rounds of review checked the dependency tree by
+# hand and found it clean, which is evidence about those four afternoons and
+# not about next month.
+#
+# Weekly rather than daily: this is a small project and a pull request a day is
+# a pull request nobody reads.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+    # `ruff` is pinned exactly on purpose — two versions that both "pass" still
+    # disagree about bytes, and a formatter that updates itself turns a
+    # first-time contributor's green PR red for reasons that are not theirs.
+    # Raise it deliberately, in its own commit, with the reformat it causes.
+    ignore:
+      - dependency-name: ruff
+
+  - package-ecosystem: npm
+    directory: /js
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: cargo
+    directory: /rust
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: gomod
+    directory: /go
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps

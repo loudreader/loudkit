@@ -1,0 +1,331 @@
+[build-system]
+# Floor rather than bare: PEP 639 `license` as an SPDX string and the matching
+# `License-Expression` metadata field arrived in hatchling 1.27, and an older
+# backend silently writes the legacy `License:` field instead.
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "loudkit"
+version = "0.1.0"
+description = "A small text-to-speech engine that behaves the same on every backend."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "LoudReader" }]
+keywords = ["tts", "speech-synthesis", "voice-cloning", "on-device"]
+# No `License ::` classifier: PEP 639 deprecates it in favour of the SPDX
+# expression above, and declaring both makes two sources of truth for one fact.
+# 3.13 is listed because CI tests it; `requires-python` still admits anything
+# newer, which is the usual bet that a minor release does not break a package
+# with two runtime dependencies.
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+  "Typing :: Typed",
+]
+
+# Deliberately small. numpy carries the sampler and every array crossing a
+# component boundary; safetensors carries checkpoints and voices. torch is the
+# reference backend and is required in practice, but it is an extra so that a
+# future runtime-only backend does not have to drag it in.
+dependencies = [
+  # <2.4: numpy 2.4's bundled __init__.pyi uses PEP 695 `type` statements
+  # unconditionally, which mypy can only parse at python_version >= 3.12 —
+  # this project's mypy config targets 3.10 to match requires-python above,
+  # so an unpinned numpy silently breaks `mypy strict` on a fresh install
+  # with no code change on our side. Bump this once mypy/typeshed catch up,
+  # or once requires-python moves to 3.12.
+  "numpy>=1.24,<2.4",
+  "safetensors>=0.4",
+  "tokenizers>=0.15",
+]
+
+[project.optional-dependencies]
+torch = ["torch>=2.4"]
+# `loudkit.load("org/model")` resolves a repo id and caches the download. Keep
+# this direct declaration even though tokenizers currently brings the same
+# client transitively: hub.py imports it itself, so correctness must not depend
+# on an unrelated package retaining that dependency. The extra remains the
+# stable, documented capability selector even while that transitive edge exists.
+hub = ["huggingface_hub>=0.23"]
+enroll = ["torch>=2.4", "torchaudio>=2.4", "librosa>=0.10"]
+onnx = ["onnxruntime>=1.17"]
+coreml = ["coremltools>=8.0"]
+audio = ["soundfile>=0.12", "librosa>=0.10"]
+# The server exists because the synthesis checkpoint is 747 MB and takes ~6 s to load;
+# a CLI paying that per invocation is unusable interactively. It holds no
+# synthesis path of its own -- it builds an Engine and calls it.
+#
+# It depends on ``torch`` through this self-reference rather than listing
+# fastapi alone, because ``loudkit serve`` loads an engine on the first
+# request and the default device is the torch backend. An extra that installs
+# everything except the thing that makes sound is a documented install that
+# does not work: guide 04 documents ``pip install -e ".[server]"`` alone,
+# so that command has to be sufficient. Someone running an ONNX-only
+# server still installs ``[onnx]`` on top; carrying torch costs them disk,
+# not correctness, and `loudkit --device onnx` never imports it.
+server = ["loudkit[torch]", "fastapi>=0.110", "uvicorn>=0.29", "soundfile>=0.12"]
+# MCP rides on the server's engine but is a separate extra: it is only useful
+# to agent hosts, and the SDK is heavier than the core package wants.
+#
+# It carries ``torch`` because ``load()`` defaults to that backend; the
+# ``VoiceLibrary`` and ``render_bytes`` — sharing the one synthesis path is
+# deliberate, and it means the MCP extra inherits fastapi whether or not an
+# agent host ever serves HTTP.
+# Floor at the 2.0.0 release, not the alpha it was pinned to while 2.0 was
+# unreleased: `>=2.0.0a1` keeps accepting pre-releases forever, and this SDK has
+# shipped security advisories. Capped below 3 because the tool-registration API
+# it uses is the part that moved between 1.x and 2.x.
+mcp = ["loudkit[audio]", "torch", "mcp>=2.0.0,<3"]
+# A third transport over the one synthesis path, for callers who want a typed
+# schema and streaming backpressure. Its own extra because neither matters on
+# loopback with one caller, and grpcio is a compiled dependency the core does
+# not need. `grpcio-tools` is here rather than in `dev` because regenerating the
+# stubs from `proto/loudkit.proto` is part of using this extra, not of
+# developing the library.
+# Both floors are pinned to what the checked-in stubs were generated with:
+# `loudkit_pb2.py` calls ValidateProtobufRuntimeVersion(7, 35, 1) and
+# `loudkit_pb2_grpc.py` declares GRPC_GENERATED_VERSION 1.83.0, so an older
+# runtime refuses to import them and the failure looks like a broken install
+# rather than a version bound. `grpcio-tools` matches so a regeneration cannot
+# produce stubs demanding a runtime the metadata does not. The floors move
+# together, when the stubs are regenerated.
+grpc = ["loudkit[audio]", "torch", "grpcio>=1.83", "grpcio-tools>=1.83", "protobuf>=7.35.1,<8"]
+dev = [
+  "pytest>=8.0,<10",
+  "pytest-cov>=5.0",
+  "mypy>=1.10",
+  # Pinned exactly, not floored: `ruff format` is a formatter, so two versions
+  # that both "pass" still disagree about bytes. With `>=0.6`, CI installed
+  # whatever was newest that morning and `ruff format --check` went red on files
+  # nobody had touched — a first-time contributor's PR failed for reasons that
+  # were not theirs. An exact pin makes the formatter CI runs the formatter a
+  # contributor gets. Raise it deliberately, in its own commit, with the
+  # reformat it causes.
+  "ruff==0.16.0",
+  # `tomllib` is 3.11+, and `requires-python` promises 3.10. Three release
+  # tests read pyproject and Cargo.toml, so on the one interpreter the
+  # floor exists to prove they could not run at all.
+  'tomli>=2.0; python_version < "3.11"',
+  "soundfile>=0.12",
+  # fastapi/uvicorn ship real type information, and mypy checks server.py
+  # against it — a dev environment without them cannot run the type gate.
+  "fastapi>=0.110",
+  "uvicorn>=0.29",
+  # tests/test_models.py imports torch at module scope, and CI installs
+  # nothing but `.[dev]`, so without this a clean runner fails at collection
+  # rather than at a test. The reference backend is a development dependency
+  # whether or not it is a runtime one.
+  "torch>=2.4",
+  # Same reason, discovered the same way: `.[dev]` did not carry the MCP SDK,
+  # so tests/test_mcp.py `importorskip`ped away on all six matrix cells and
+  # the whole agent-facing transport had no CI coverage at all — while
+  # `mypy python/loudkit` reported an unresolved import for `loudkit.mcp` on
+  # every run. An optional *runtime* extra is still a mandatory *test*
+  # dependency when there are tests for it.
+  # Same floor as the `mcp` extra above, for the same reason: a dev environment
+  # that resolves a pre-release is a dev environment testing something the
+  # published extra will never install.
+  "mcp>=2.0.0,<3",
+]
+
+[project.urls]
+Issues = "https://github.com/loudreader/loudkit/issues"
+Changelog = "https://github.com/loudreader/loudkit/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/loudreader/loudkit"
+Documentation = "https://github.com/loudreader/loudkit#readme"
+
+[project.scripts]
+loudkit = "loudkit.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["python/loudkit"]
+# py.typed rides along because hatchling packages the whole directory, but
+# state it anyway: without the marker installed, downstream mypy discards
+# every annotation in this package (PEP 561).
+include = [
+  "python/loudkit/py.typed",
+  "python/loudkit/models/data/*.json",
+  "python/loudkit/proto/*.pyi",
+]
+# `packages` takes the directory whole, so the `include` above adds nothing the
+# wheel did not already have — and the eight `models/data/dsp/*.f32` tables rode
+# in the same way. They are inputs for the Go, Rust and Swift ports, which embed
+# their own copies out of the repository; Python reads exactly two files from
+# `models/data` (`numbers.json` and `pl_en_respell.json`) and never opens a
+# `.f32`. Half a megabyte in every wheel for a consumer that cannot reach it.
+# `dsp/manifest.json` stays: it is small, and it says what the tables are.
+exclude = ["python/loudkit/models/data/dsp/*.f32"]
+
+# The sdist is what a downstream packaging tool builds a wheel from, so it must
+# contain exactly the source that produces the wheel — not the monorepo's
+# bindings, docs, Swift package or benchmark tooling. Without an explicit
+# target, hatchling falls back to "whole tree minus VCS ignores", which would
+# ship the other four implementations (go/, rust/, js/ with 1.1 GB of
+# node_modules, swift/), Examples/, openspec/ and tb-science/. The allowlist
+# below is the contract:
+# if a file is not in this list, it is not in the sdist.
+[tool.hatch.build.targets.sdist]
+include = [
+  "python/loudkit/**",
+  "pyproject.toml",
+  "README.md",
+  "LICENSE",
+  "NOTICE",
+  "RESPONSIBLE_USE.md",
+]
+# Even the allowlist is subject to VCS ignore: nothing gitignored (node_modules,
+# build outputs, caches) can sneak in through a glob.
+only-include = [
+  "python/loudkit",
+  "pyproject.toml",
+  "README.md",
+  "LICENSE",
+  "NOTICE",
+  "RESPONSIBLE_USE.md",
+]
+exclude = [
+  "python/loudkit/models/data/dsp/*.f32",
+]
+
+[tool.ruff]
+# Generated by `tools/gen_proto.py` from proto/loudkit.proto. Linting a code
+# generator's output means either editing it — and losing the edit on the next
+# regeneration — or carrying suppressions for style nobody chose. The check
+# that matters for these files is `tests/test_grpc.py`, which regenerates them
+# and compares.
+extend-exclude = ["python/loudkit/proto"]
+line-length = 96
+target-version = "py310"
+src = ["python", "tests"]
+
+[tool.ruff.format]
+# Markdown is prose, and the Python inside a doc block is an illustration, not a
+# module: the guides align trailing comments into a column so the reader's eye
+# reads the values down the page, and the formatter collapses that to two spaces.
+# The generated `python/loudkit/proto` output is already off-limits through the
+# `extend-exclude` above, which the formatter honours too — reformatting protoc's
+# output only means the next `tools/gen_proto.py` run brings the diff straight back.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# TID is deliberately absent: TID252 bans relative imports, and this package
+# uses them throughout so that a module never names the package it lives in.
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "RET", "SIM", "ARG", "PL"]
+ignore = [
+  "PLR0913",  # a config-heavy library legitimately takes many arguments
+  "PLR0917",  # ditto, for positional ones
+  "PLR2004",  # measured constants are clearer inline, with the comment that explains them
+  "PLC0415",  # imports inside functions are deliberate: torch, soundfile and
+              # coremltools are optional extras, and importing them at module
+              # scope would make `import loudkit` fail without them
+  "N812",     # `torch.nn.functional as F` is the universal convention in this
+              # ecosystem; renaming it would make the code harder to read for
+              # every torch author who opens it
+]
+
+[tool.ruff.lint.per-file-ignores]
+"python/loudkit/cli.py" = [
+  "PLR0911",  # a CLI entry point maps error kinds to exit codes; collapsing
+              # those returns would hide which failure produced which code
+]
+"tests/*" = [
+  "PLR2004",
+  "ARG001",
+  "ARG002",  # fake components implement protocols; unused parameters
+             # are the protocol's shape, not dead code
+  "PT011",   # a broad raises is fine where the point is that it raises
+]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+files = ["python/loudkit"]
+exclude = "loudkit/proto/"
+
+[[tool.mypy.overrides]]
+# `bench` reads peak memory, which every OS reports differently, so it branches
+# on `sys.platform` and one arm is dead on any given machine — by design.
+# mypy narrows `sys.platform` to the platform it is *running* on, so with
+# `warn_unreachable` on globally, `import resource` reads as unreachable code
+# on the Windows leg of the CI matrix and the type gate went red there for a
+# module that is correct on both. The check still runs everywhere; only this
+# one module stops being asked to have no platform-specific dead code.
+module = ["loudkit.bench"]
+warn_unreachable = false
+
+[[tool.mypy.overrides]]
+# Third-party dependencies that ship no stubs / py.typed marker (verified per
+# package): their values enter loudkit as Any and are pinned down at the call
+# site — see docs/reference/typing.md for where those boundaries are.
+module = [
+  "torch.*", "torchaudio.*", "safetensors.*", "soundfile.*", "librosa.*",
+  "onnxruntime.*", "coremltools.*", "mcp.*", "grpc.*", "grpc_tools.*",
+  # A core runtime dependency, not an extra: `tokenizers` ships a single .pyi
+  # and no py.typed marker, so `mypy python/loudkit` reported an unresolved
+  # import for models/text.py on every run, including CI's.
+  "tokenizers.*",
+  # An extra, so a bare dev environment does not have it — and the type gate
+  # must not depend on which extras happen to be installed.
+  "huggingface_hub.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# No `-q` here. CI runs `pytest -m "not slow" -q`, and a `-q` in both places
+# is `-qq`, which suppresses the summary line — so every CI log ended with a
+# row of dots and no "N passed", and a green run and an empty run looked
+# alike. Verbosity is the caller's to choose; this file should only carry
+# what every invocation needs.
+addopts = "--strict-markers"
+# No `conformance` marker: it was declared, filtered against in the justfile,
+# and applied to zero tests — so the filter removed nothing and the recipe read
+# as if cross-backend work were being skipped when it was not. What actually
+# gates those tests is `@requires("checkpoint")` in tests/assets.py, which skips
+# on the asset being absent rather than on a label someone has to remember.
+markers = [
+  "slow: needs real weights or a long run",
+  "cuda: needs an NVIDIA GPU",
+  "mps: needs Apple silicon",
+]
+
+[tool.coverage.run]
+source = ["loudkit"]
+omit = [
+  # Generated by `tools/gen_proto.py` from `proto/loudkit.proto`. Nobody writes
+  # it and nobody should test it; counting it drags the number down while saying
+  # nothing about this project's code.
+  "*/loudkit/proto/*",
+]
+
+[tool.coverage.report]
+# 80, against 83 measured on a checkout with no weights.
+#
+# A number chosen to catch a regression rather than to look impressive. Three
+# points of headroom is deliberate: a floor set at exactly today's figure fails
+# on the first refactor that deletes a covered line, and a floor nobody can
+# satisfy gets raised by whoever is unblocking CI at the time.
+#
+# It is a floor on the whole package on purpose, and worth reading with the
+# skips in mind: `flow.py` at 28%, the ONNX backend at 29% and the CoreML one at
+# 38% are low because they need a checkpoint and graphs that a plain checkout
+# does not have — 41 tests skip for exactly that. So this number measures the
+# weight-free layer and asset availability together, and moves when either does.
+# The `parity` job is where the weighted paths are actually exercised.
+fail_under = 80
+show_missing = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "@overload",
+]

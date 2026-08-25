@@ -1,0 +1,683 @@
+[
+ {
+  "name": "darkman",
+  "language": "Polish",
+  "language_id": "pl",
+  "gender": "M",
+  "donor": "darkman (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "darkman.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/darkman.opus",
+   "sha256": "d228db9d17b1ddb4ba450f16a6b8650bb0a8550521b78a914cb9e573cd24d576",
+   "duration_s": 9.78,
+   "construction": "concatenated donation clips, 120 ms gaps"
+  },
+  "profile": {
+   "hf_path": "voices/darkman.safetensors",
+   "sha256": "78988a6769f90c209240f9f285eb9cdd760d1ba471cfa7d6e67db632599cfa1b"
+  },
+  "speaker_similarity": 0.935,
+  "sample": {
+   "seed": 7,
+   "text": "Petroniusz obudził się zaledwie koło południa, a jak zwykle, zmęczony bardzo.",
+   "work": "Quo Vadis (Henryk Sienkiewicz) — public domain",
+   "audio": "audio/darkman.opus",
+   "sha256": "b30f98cf0452e9c694fcbafc27b413041c87022238f5424fc1aa452c8eb156a5"
+  }
+ },
+ {
+  "name": "gosia",
+  "language": "Polish",
+  "language_id": "pl",
+  "gender": "F",
+  "donor": "gosia (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "gosia.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/gosia.opus",
+   "sha256": "02c1d09db8b097c66dd8705747a6ef138596f5f91c3213b1cd430ae75ca2279a",
+   "duration_s": 10.86,
+   "construction": "concatenated long donation clips, 120 ms gaps"
+  },
+  "profile": {
+   "hf_path": "voices/gosia.safetensors",
+   "sha256": "e115cf64bfa0ad15770a50c0be8097312a58d41f84c7bb4f01ecbdbac5d21823"
+  },
+  "speaker_similarity": 0.917,
+  "sample": {
+   "seed": 7,
+   "text": "Petroniusz obudził się zaledwie koło południa, a jak zwykle, zmęczony bardzo.",
+   "work": "Quo Vadis (Henryk Sienkiewicz) — public domain",
+   "audio": "audio/gosia.opus",
+   "sha256": "4ba1107d7f807ac2e0941167d1bc4a7cfb2039a4b0482a3bc798db5eeefe17e5"
+  }
+ },
+ {
+  "name": "joe",
+  "language": "English",
+  "language_id": "en",
+  "gender": "M",
+  "donor": "joe (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "joe.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/joe.opus",
+   "sha256": "591c8d6a5799a4266d029762dc0f671ac9f0455382aeef1e763ca206d6fdd164",
+   "duration_s": 10.99,
+   "construction": "concatenated donation clips, 120 ms gaps"
+  },
+  "profile": {
+   "hf_path": "voices/joe.safetensors",
+   "sha256": "cfc3687fdb1f6b56fe13e252ca4a5bd681cef0702dc5cd56d4ebbc60e1aea6e8"
+  },
+  "speaker_similarity": 0.924,
+  "sample": {
+   "seed": 11,
+   "text": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading.",
+   "work": "Alice's Adventures in Wonderland (Lewis Carroll) — public domain",
+   "audio": "audio/joe.opus",
+   "sha256": "83e0bf0a1f6b03e047de66871536c3ff77291041d0a3f2907b6990e580519fea"
+  }
+ },
+ {
+  "name": "kathleen",
+  "language": "English",
+  "language_id": "en",
+  "gender": "F",
+  "donor": "kathleen (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "kathleen.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/kathleen.opus",
+   "sha256": "f43a24359a333e1f723c5f10d7dc799ec5880abf2b5b9321a7d5f8c7064d6f73",
+   "duration_s": 11.0,
+   "construction": "concatenated donation clips; prompt texts from the CMU ARCTIC prompt list (public-domain Gutenberg novels), recording is kathleen's own CC0 donation"
+  },
+  "profile": {
+   "hf_path": "voices/kathleen.safetensors",
+   "sha256": "6a845e4eb11989fc9bd8e19eed7c5ac585e6d08e1ec824211f0eb240ce523d29"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading.",
+   "work": "Alice's Adventures in Wonderland (Lewis Carroll) — public domain",
+   "audio": "audio/kathleen.opus",
+   "sha256": "48615517c1d1d2d55dbb7f74f37982918236e33f079947459d56c116cd70b7a3"
+  }
+ },
+ {
+  "name": "thorsten",
+  "language": "German",
+  "language_id": "de",
+  "gender": "M",
+  "donor": "Thorsten Mueller",
+  "speaker_id": null,
+  "source": {
+   "name": "Thorsten-Voice TV-44kHz-Full",
+   "url": "https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full",
+   "license": "CC0-1.0",
+   "consent": "voice deliberately donated by Thorsten Mueller for TTS"
+  },
+  "reference": {
+   "source_filename": "thorsten.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/thorsten.opus",
+   "sha256": "37805d1136f727f7530e714b772c23224ae1c6f6931ea5b78399cf286694de3e",
+   "duration_s": 6.37,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/thorsten.safetensors",
+   "sha256": "87873fec8d3dceaa643ab1ab07cf5143364e659dd6b3caec707f51408ac2154a"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Ach, was muss man oft von bösen Kindern hören oder lesen! Wie zum Beispiel hier von diesen, welche Max und Moritz hießen.",
+   "work": "Max und Moritz (Wilhelm Busch) — public domain",
+   "audio": "audio/thorsten.opus",
+   "sha256": "d45938440534f7fa11afe388fa41a9a56879809a65c8477605220ed53d5a938b"
+  }
+ },
+ {
+  "name": "kerstin",
+  "language": "German",
+  "language_id": "de",
+  "gender": "F",
+  "donor": "kerstin (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "kerstin.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/kerstin.opus",
+   "sha256": "34d7c0db776bcda98e56bc130ced840debe0b12a73f4b03c556b30fc356db187",
+   "duration_s": 9.79,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/kerstin.safetensors",
+   "sha256": "d096ecde83dfc5de7a927acf67a5304c55f863ca722f826c67fafd31c48609a6"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Ach, was muss man oft von bösen Kindern hören oder lesen! Wie zum Beispiel hier von diesen, welche Max und Moritz hießen.",
+   "work": "Max und Moritz (Wilhelm Busch) — public domain",
+   "audio": "audio/kerstin.opus",
+   "sha256": "dc1990efd85eafee75810f45fd259505d4840579f008aba9f38ca1a7c42e839b"
+  }
+ },
+ {
+  "name": "henri",
+  "language": "French",
+  "language_id": "fr",
+  "gender": "M",
+  "donor": "anonymous (invented name)",
+  "speaker_id": "10087",
+  "source": {
+   "name": "Kyutai tts-voices, cml-tts french enhanced references",
+   "url": "https://huggingface.co/kyutai/tts-voices",
+   "license": "CC-BY-4.0",
+   "consent": "LibriVox recording, redistributed under CC-BY; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "henri.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/henri.opus",
+   "sha256": "9185f21daf7bcbb9a53ea06b059438ea83b7315ef4f852d69d56afc562061fc0",
+   "duration_s": 6.56,
+   "construction": "pre-cut enhanced 10 s reference"
+  },
+  "profile": {
+   "hf_path": "voices/henri.safetensors",
+   "sha256": "2be79463e8a2cfe339a7d6088e397c22be4430c6796e76362a0f33f351bf940a"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Maître Corbeau, sur un arbre perché, tenait en son bec un fromage. Maître Renard, par l'odeur alléché, lui tint à peu près ce langage: Hé! bonjour, Monsieur du Corbeau.",
+   "work": "Le Corbeau et le Renard (Jean de La Fontaine) — public domain",
+   "audio": "audio/henri.opus",
+   "sha256": "9a63ac8258c23aa750c871b4cc050da5658cd44b77448aad3cf1caef5ecb047b"
+  }
+ },
+ {
+  "name": "colette",
+  "language": "French",
+  "language_id": "fr",
+  "gender": "F",
+  "donor": "anonymous (invented name)",
+  "speaker_id": "1406",
+  "source": {
+   "name": "Kyutai tts-voices, cml-tts french enhanced references",
+   "url": "https://huggingface.co/kyutai/tts-voices",
+   "license": "CC-BY-4.0",
+   "consent": "LibriVox recording, redistributed under CC-BY; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "colette.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/colette.opus",
+   "sha256": "324d657ffdc1d1651e9da4ad57258b1c54ee429b437f909ac29130e78cee21a9",
+   "duration_s": 7.24,
+   "construction": "pre-cut enhanced 10 s reference"
+  },
+  "profile": {
+   "hf_path": "voices/colette.safetensors",
+   "sha256": "bdccafdc54f700cb456e3f531d0f9da3e5cc0c9fcece8284db44773f99c162c9"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Maître Corbeau, sur un arbre perché, tenait en son bec un fromage. Maître Renard, par l'odeur alléché, lui tint à peu près ce langage: Hé! bonjour, Monsieur du Corbeau.",
+   "work": "Le Corbeau et le Renard (Jean de La Fontaine) — public domain",
+   "audio": "audio/colette.opus",
+   "sha256": "e9f0084bb45e1b7647eec082dc03f43a110e10f915a2baf99d5776201ec664bd"
+  }
+ },
+ {
+  "name": "pim",
+  "language": "Dutch",
+  "language_id": "nl",
+  "gender": "M",
+  "donor": "pim (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "pim.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/pim.opus",
+   "sha256": "b7428579a45f688ebf6602fd94e6a92dfe34b20cf34e7aae3c73fb73b2182d29",
+   "duration_s": 11.0,
+   "construction": "concatenated donation clips, 120 ms gaps"
+  },
+  "profile": {
+   "hf_path": "voices/pim.safetensors",
+   "sha256": "05c5b3bd921240acc39cc8ffd576ab71dcbc36e6238ce468292ae74c61190130"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Jantje zag eens pruimen hangen, o! als eieren zo groot. 't Scheen, dat Jantje wou gaan plukken, schoon zijn vader 't hem verbood.",
+   "work": "De pruimeboom (Hieronymus van Alphen) — public domain",
+   "audio": "audio/pim.opus",
+   "sha256": "c00535642d18623f4d2085fa0bde17bdd08c7c8b9b38ade8a85dfee7b9974b37"
+  }
+ },
+ {
+  "name": "nathalie",
+  "language": "Dutch",
+  "language_id": "nl",
+  "gender": "F",
+  "donor": "nathalie (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "nathalie.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/nathalie.opus",
+   "sha256": "bc09a866b18264d555a35522e3319ff820914f59a8c3dd8687c01ee16203e5fd",
+   "duration_s": 10.8,
+   "construction": "concatenated donation clips, 120 ms gaps"
+  },
+  "profile": {
+   "hf_path": "voices/nathalie.safetensors",
+   "sha256": "a61158533e125600613719617ccc89ea4b66fbc9fbe149ee02e3b5c4113cc11d"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Jantje zag eens pruimen hangen, o! als eieren zo groot. 't Scheen, dat Jantje wou gaan plukken, schoon zijn vader 't hem verbood.",
+   "work": "De pruimeboom (Hieronymus van Alphen) — public domain",
+   "audio": "audio/nathalie.opus",
+   "sha256": "d2bf4970c1cf1d8f4437ee183e67ed5d1f67683249d26e36c6bf7cf3904490da"
+  }
+ },
+ {
+  "name": "dave",
+  "language": "Spanish",
+  "language_id": "es",
+  "gender": "M",
+  "donor": "dave (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "dave.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/dave.opus",
+   "sha256": "9e30010eafeb37abb20a9976e17bfa3d313f779d5703bba9a536791916b162d6",
+   "duration_s": 11.0,
+   "construction": "concatenated donation clips, 120 ms gaps"
+  },
+  "profile": {
+   "hf_path": "voices/dave.safetensors",
+   "sha256": "14b5e58a6e5a457b516f5a9ae02d3a739449a02a92d0791b356377b68c366cb4"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "Subió una mona a un nogal, y cogiendo una nuez verde, en la cáscara la muerde, con que le supo muy mal.",
+   "work": "La mona (Felix Maria de Samaniego) — public domain",
+   "audio": "audio/dave.opus",
+   "sha256": "c1240b63c1f83b5279dccd028c18410d4051f590e695199a91bdd87af4c08d22"
+  }
+ },
+ {
+  "name": "carmen",
+  "language": "Spanish",
+  "language_id": "es",
+  "gender": "F",
+  "donor": "anonymous (invented name)",
+  "speaker_id": "2308",
+  "source": {
+   "name": "CML-TTS (LibriVox-derived, ylacombe/cml-tts on Hugging Face)",
+   "url": "https://huggingface.co/datasets/ylacombe/cml-tts",
+   "license": "CC-BY-4.0",
+   "consent": "LibriVox recording, redistributed under CC-BY; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "carmen.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/carmen.opus",
+   "sha256": "ec9a38e7c13420543a004c4db665af8fb1b66a952f18edeb98d0099a14f186e3",
+   "duration_s": 14.37,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/carmen.safetensors",
+   "sha256": "c9387f3bc58e8e1dd41700339e886a546200597fe629e523282ba4dbd4ddc069"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 3,
+   "text": "Subió una mona a un nogal, y cogiendo una nuez verde, en la cáscara la muerde, con que le supo muy mal.",
+   "work": "La mona (Felix Maria de Samaniego) — public domain",
+   "audio": "audio/carmen.opus",
+   "sha256": "aefb626d30e906f729e8ea4c7a178f3b0b3092851fdbb1af2578fb840ae2078c"
+  }
+ },
+ {
+  "name": "dante",
+  "language": "Italian",
+  "language_id": "it",
+  "gender": "M",
+  "donor": "anonymous (invented name)",
+  "speaker_id": "12598",
+  "source": {
+   "name": "Multilingual LibriSpeech (facebook/multilingual_librispeech)",
+   "url": "https://huggingface.co/datasets/facebook/multilingual_librispeech",
+   "license": "CC-BY-4.0",
+   "consent": "LibriVox recording, redistributed under CC-BY; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "dante.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/dante.opus",
+   "sha256": "df142e760a870aaf53d71e945fcafbdfb2c5bcf14676c4c8b90ded229b9a48fe",
+   "duration_s": 14.0,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/dante.safetensors",
+   "sha256": "d0ba2cf9871b7f933ff5f0dbdca9578077599c2e8209fc6246727edd79c15924"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "C'era una volta... Un re! diranno subito i miei piccoli lettori. No, ragazzi, avete sbagliato: c'era una volta un pezzo di legno.",
+   "work": "Le avventure di Pinocchio (Carlo Collodi) — public domain",
+   "audio": "audio/dante.opus",
+   "sha256": "9b05b0d44b83e208ea4c97b30a4b2e03cb323e5108adf0847f1572f18639fc04"
+  }
+ },
+ {
+  "name": "paola",
+  "language": "Italian",
+  "language_id": "it",
+  "gender": "F",
+  "donor": "paola (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "paola.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/paola.opus",
+   "sha256": "424e0cecda21fa34c5a05fb5f6bc029949f0485ac91e7fd45afc7645ff4cdbb9",
+   "duration_s": 11.0,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/paola.safetensors",
+   "sha256": "6c8bcd3d39dce92955833b1b9b2d483d1f8e48ac48fb772acbb63d45e4e00f6c"
+  },
+  "speaker_similarity": null,
+  "sample": {
+   "seed": 7,
+   "text": "C'era una volta... Un re! diranno subito i miei piccoli lettori. No, ragazzi, avete sbagliato: c'era una volta un pezzo di legno.",
+   "work": "Le avventure di Pinocchio (Carlo Collodi) — public domain",
+   "audio": "audio/paola.opus",
+   "sha256": "452ae96e4a6195a781c1aa521d7a856300ae814541856702824ad413527dabd3"
+  }
+ },
+ {
+  "name": "tugao",
+  "language": "Portuguese (European)",
+  "language_id": "pt",
+  "gender": "M",
+  "donor": "tugao (donor alias)",
+  "speaker_id": null,
+  "source": {
+   "name": "Home Assistant / Piper voice-datasets (voice donations recorded for TTS)",
+   "url": "https://github.com/NabuCasa/voice-datasets",
+   "license": "CC0-1.0",
+   "consent": "recorded and donated expressly for building TTS voices"
+  },
+  "reference": {
+   "source_filename": "tugao.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/tugao.opus",
+   "sha256": "d6b40a71decdc9e9a560442f0c0e78f412b4d94365c9bddcb3e215ca4f452118",
+   "duration_s": 9.78,
+   "construction": "concatenated donation clips, 120 ms gaps"
+  },
+  "profile": {
+   "hf_path": "voices/tugao.safetensors",
+   "sha256": "adcebf6fe42125bdc0aaca6ba3d23d79a30c8ad6a52aa65fd7970bed540eec43"
+  },
+  "speaker_similarity": 0.916,
+  "sample": {
+   "seed": 7,
+   "text": "O meu amigo Jacinto nasceu num palácio, com cento e nove contos de renda em terras de semeadura, de vinhedo, de cortiça e de olival.",
+   "work": "A Cidade e as Serras (Eca de Queiros) — public domain",
+   "audio": "audio/tugao.opus",
+   "sha256": "ddf3be70b986247fc879f90d5dc3f9e41e28d763e08ca10de1a44ea08e3f112b"
+  }
+ },
+ {
+  "name": "ines",
+  "language": "Portuguese (European)",
+  "language_id": "pt",
+  "gender": "F",
+  "donor": "anonymous (invented name)",
+  "speaker_id": "7925",
+  "source": {
+   "name": "CML-TTS (LibriVox-derived, ylacombe/cml-tts on Hugging Face)",
+   "url": "https://huggingface.co/datasets/ylacombe/cml-tts",
+   "license": "CC-BY-4.0",
+   "consent": "LibriVox recording, redistributed under CC-BY; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "ines.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/ines.opus",
+   "sha256": "59f2fde8e98c8183e995e2576128ac4bbb186c08f677c1ac6daf2cd359bba7f4",
+   "duration_s": 10.44,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/ines.safetensors",
+   "sha256": "b7f76b52170dfcdcef0e8835956967bf2fbc4973883b6e99d6b2be7fd4f3a496"
+  },
+  "speaker_similarity": 0.96,
+  "sample": {
+   "seed": 7,
+   "text": "O meu amigo Jacinto nasceu num palácio, com cento e nove contos de renda em terras de semeadura, de vinhedo, de cortiça e de olival.",
+   "work": "A Cidade e as Serras (Eca de Queiros) — public domain",
+   "audio": "audio/ines.opus",
+   "sha256": "55c9cb8a3716ccfce280c25b577e344363fe3978b35577ce8c20ee6d4f3869ea"
+  },
+  "notes": "CML-TTS is LibriVox-derived; accent is Brazilian Portuguese, unlike tugao (European)."
+ },
+ {
+  "name": "nils",
+  "language": "Swedish",
+  "language_id": "sv",
+  "gender": "M",
+  "donor": "anonymous (invented name)",
+  "speaker_id": null,
+  "source": {
+   "name": "NST Swedish speech database (Sprakbanken, National Library of Norway)",
+   "url": "https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-17/",
+   "license": "CC0-1.0",
+   "consent": "corpus released CC0 by Sprakbanken; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "nils.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/nils.opus",
+   "sha256": "26680c82a976fe2d6f3202a97b50499274f1f0c36d329cbe6cdd6c3ebac1f0f0",
+   "duration_s": 11.0,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/nils.safetensors",
+   "sha256": "be75721c99547ab3ecdf1f8629101e9fa3ea1d569fc6e1220b8e2f259fb49f4e"
+  },
+  "speaker_similarity": 0.92,
+  "sample": {
+   "seed": 7,
+   "text": "Det var en gång en pojke, som var så där en fjorton år gammal, lång och ranglig och linhårig.",
+   "work": "Nils Holgerssons underbara resa (Selma Lagerlof) — public domain",
+   "audio": "audio/nils.opus",
+   "sha256": "61b704118c82878a218d0db2b0fd3da20a70d0d442e2a36cc064ccc1a7f0679b"
+  }
+ },
+ {
+  "name": "selma",
+  "language": "Swedish",
+  "language_id": "sv",
+  "gender": "F",
+  "donor": "anonymous (invented name)",
+  "speaker_id": null,
+  "source": {
+   "name": "NST Swedish speech database (Sprakbanken, National Library of Norway)",
+   "url": "https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-17/",
+   "license": "CC0-1.0",
+   "consent": "corpus released CC0 by Sprakbanken; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "selma.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/selma.opus",
+   "sha256": "775d4db5a95ac9fea95b1f9b8d6a5b1917a3aefd466e153962ad195d83ed51d0",
+   "duration_s": 8.53,
+   "construction": "single continuous clip"
+  },
+  "profile": {
+   "hf_path": "voices/selma.safetensors",
+   "sha256": "d3ba9ab18c676db23028c9561ad79a183b35adae377d20d46f1d8f253ce6eeec"
+  },
+  "speaker_similarity": 0.925,
+  "sample": {
+   "seed": 7,
+   "text": "Det var en gång en pojke, som var så där en fjorton år gammal, lång och ranglig och linhårig.",
+   "work": "Nils Holgerssons underbara resa (Selma Lagerlof) — public domain",
+   "audio": "audio/selma.opus",
+   "sha256": "70f186995d8b6aac965662cdff346ec5211bef98276c7ef94a69c096dccd0782"
+  }
+ },
+ {
+  "name": "soren",
+  "language": "Danish",
+  "language_id": "da",
+  "gender": "M",
+  "donor": "anonymous (invented name)",
+  "speaker_id": "37",
+  "source": {
+   "name": "NST Danish speech database (alexandrainst/nst-da on Hugging Face)",
+   "url": "https://huggingface.co/datasets/alexandrainst/nst-da",
+   "license": "CC0-1.0",
+   "consent": "corpus released CC0; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "soren.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/soren.opus",
+   "sha256": "a0d7510fa2de66b8bf656c5f2ff93ddf462878ce31799860ca242bcad64487fb",
+   "duration_s": 7.38,
+   "construction": "single continuous clip, close mic"
+  },
+  "profile": {
+   "hf_path": "voices/soren.safetensors",
+   "sha256": "30d9fe9ee02928cd65ef7f4cb286c401c1809f07c13c19de79ffa375a027412e"
+  },
+  "speaker_similarity": 0.893,
+  "sample": {
+   "seed": 7,
+   "text": "Der var så dejligt ude på landet; det var sommer, kornet stod gult, og havren grøn.",
+   "work": "Den grimme aelling (H. C. Andersen) — public domain",
+   "audio": "audio/soren.opus",
+   "sha256": "f9841dd5162d30df3e67aee92128bd3708f4eff6c3d1c5c177091765cf04af2c"
+  }
+ },
+ {
+  "name": "freja",
+  "language": "Danish",
+  "language_id": "da",
+  "gender": "F",
+  "donor": "anonymous (invented name)",
+  "speaker_id": "35",
+  "source": {
+   "name": "NST Danish speech database (alexandrainst/nst-da on Hugging Face)",
+   "url": "https://huggingface.co/datasets/alexandrainst/nst-da",
+   "license": "CC0-1.0",
+   "consent": "corpus released CC0; anonymous speaker id, invented voice name"
+  },
+  "reference": {
+   "source_filename": "freja.wav",
+   "published_in_model_repo": false,
+   "public_preview": "audio/refs/freja.opus",
+   "sha256": "078baf737c9acc6f567dd87a8b3eca897becb0e83d9209279bf8314830d2678a",
+   "duration_s": 8.78,
+   "construction": "single continuous clip, close mic"
+  },
+  "profile": {
+   "hf_path": "voices/freja.safetensors",
+   "sha256": "0a3f913b9b47c529393f843850228bd8eee6a883b4c138978fd3afa7758561e8"
+  },
+  "speaker_similarity": 0.907,
+  "sample": {
+   "seed": 7,
+   "text": "Der var så dejligt ude på landet; det var sommer, kornet stod gult, og havren grøn.",
+   "work": "Den grimme aelling (H. C. Andersen) — public domain",
+   "audio": "audio/freja.opus",
+   "sha256": "cd785cc844250a5ae97010e2a3b0ee9260c5a24d016350d931aa7ec776958812"
+  }
+ }
+]

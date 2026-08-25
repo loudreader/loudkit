@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "about": [
+    "Targeted per-language probes: the items where a grapheme model fails first,",
+    "assembled from the per-language research (each item names its class). Held-out",
+    "averages hide exactly these errors — the one controlled study that measured it",
+    "found grapheme and phoneme input indistinguishable on a held-out set and",
+    "distinguishable at 70/30 on targeted stimuli.",
+    "",
+    "Protocol: render each item, then (a) a native speaker marks binary pass/fail —",
+    "one hour per language, the highest-value evaluation money can buy here — and",
+    "(b) the ASR round-trip runs against the language's own floor (tools/eval_floors.json).",
+    "Items are inputs only: the correct pronunciations are what the native ear",
+    "carries, not what this file could encode."
+  ],
+  "languages": {
+    "da": [
+      {"class": "stød-minimal-pair", "text": "Hun så en hund ved huset."},
+      {"class": "stød-homograph", "text": "En læser læser en bog."},
+      {"class": "silent-d", "text": "Vi mødtes ved bordet med maden."},
+      {"class": "silent-g", "text": "Han var syg hele ugen, det var lige meget."},
+      {"class": "soft-d", "text": "De bade i det bløde vand."},
+      {"class": "vigesimal", "text": "Der var halvtreds, tres, halvfjerds, firs og halvfems gæster."}
+    ],
+    "de": [
+      {"class": "compound-boundary", "text": "In der Wachstube roch es nach Wachs."},
+      {"class": "compound-boundary", "text": "Das Frauchen rief den Hund."},
+      {"class": "vowel-length-ss", "text": "Die Straße war nass, die Masse in Maßen."},
+      {"class": "prefix-stress", "text": "Er wollte den Poller umfahren, nicht umfahren."},
+      {"class": "loanword", "text": "Der Manager checkte das Design des Toasters."}
+    ],
+    "sv": [
+      {"class": "accent-2-pair", "text": "Anden simmade medan anden svävade."},
+      {"class": "accent-2-pair", "text": "Tomten stod på tomten."},
+      {"class": "accent-2-pair", "text": "Regeln satt fast, det var regeln."},
+      {"class": "sje-sound", "text": "Sju sjösjuka sjömän sköttes av skjortklädda läkare."},
+      {"class": "kex-class", "text": "Han åt kex och keso i köket."},
+      {"class": "reduction", "text": "Det är de som ser dem sedan."}
+    ],
+    "no": [
+      {"class": "tonelag-pair", "text": "Bønder spiser bønner."},
+      {"class": "retroflex-sandhi", "text": "Han var snill og kom for sent."},
+      {"class": "silent-letters", "text": "Hvem vet hva det ligger i sanden."},
+      {"class": "counting-reform", "text": "Det kostet tjueen kroner, ikke enogtyve."}
+    ],
+    "fi": [
+      {"class": "boundary-gemination", "text": "Tule tänne ja anna olla."},
+      {"class": "gemination-homograph", "text": "Pekka voi antaa lisää ruokaa, ja Pekka antaa lisää ruokaa."},
+      {"class": "compound-stress", "text": "Maatalousyrittäjä osti hernekeittoa."},
+      {"class": "loanword-length", "text": "Hän kuunteli sinfoniaa autossa parlamentin edessä."},
+      {"class": "ng-cases", "text": "Kangas ja gangsteri Englannissa, magneetti kädessä."}
+    ],
+    "fr": [
+      {"class": "liaison-interdite", "text": "Les haricots et les hérissons sont arrivés."},
+      {"class": "liaison-obligatoire", "text": "Les enfants ont vu les autres amis."},
+      {"class": "silent-ent", "text": "Ils parlent souvent, et le vent se lève."},
+      {"class": "foreign-names", "text": "Miguel de Cervantès rencontra Monica Lewinsky à Rio de Janeiro."},
+      {"class": "homograph", "text": "Le président et les étudiants président la séance."}
+    ],
+    "it": [
+      {"class": "stress-pair", "text": "L'ancora è ancora lì."},
+      {"class": "stress-pair", "text": "I principi seguono i principi."},
+      {"class": "stress-pair", "text": "Subito dopo ha subito un torto."},
+      {"class": "open-closed-vowel", "text": "La pesca era matura, la pesca era lunga."}
+    ],
+    "pt": [
+      {"class": "variant-consistency", "text": "A tia comprou dezasseis bilhetes no dia certo."},
+      {"class": "open-closed-vowel", "text": "O olho vê o que o olho quer."},
+      {"class": "homograph", "text": "Eu gosto do gosto do café."}
+    ],
+    "es": [
+      {"class": "x-words", "text": "En México y Oaxaca hay un examen de xilófono."},
+      {"class": "inverted-question", "text": "Te gusta el verano. ¿Te gusta el verano?"},
+      {"class": "loanword", "text": "El boxeador miró el ranking del marketing."}
+    ],
+    "pl": [
+      {"class": "morpheme-digraph", "text": "Odznaka zamarzła, a on nie chciał marznąć."},
+      {"class": "nasal-context", "text": "Dąb stał przy tęczy, wziął gęś pod rękę."},
+      {"class": "respell-false-positive", "text": "Pan Novak i pani Water byli w Radomiu."}
+    ],
+    "en": [
+      {"class": "heteronym", "text": "He will read what she read; the lead pipe took the lead."},
+      {"class": "heteronym", "text": "They present the present at the present time."},
+      {"class": "names", "text": "Siobhan and Joaquin met Nguyen in Worcester."}
+    ],
+    "nl": [
+      {"class": "vowel-length-compound", "text": "De dagarbeider at makken en maakte er wat van."},
+      {"class": "loan-phonemes", "text": "De goal in de garage was een show."},
+      {"class": "final-devoicing", "text": "Ik heb het geld, wij hebben de tijd."}
+    ]
+  }
+}

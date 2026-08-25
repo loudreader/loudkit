@@ -1,0 +1,217 @@
+// loudkit over gRPC — a third transport, not a third synthesis path.
+//
+// The HTTP server, the MCP server and this one all call `render_bytes` and
+// `render_stream_chunks` and do nothing else with audio. That rule is why a new
+// transport is cheap and why it cannot drift: there is one place audio is made,
+// and a transport that re-implemented any of the speed, language or prefix
+// handling would be a second place for it to go wrong.
+//
+// The contract mirrors the HTTP one field for field, deliberately. Where a
+// name differs from `/v1/synthesize`, that is a bug in this file.
+syntax = "proto3";
+
+package loudkit.v1;
+
+// The engine is single-flight, so `Synthesize` and `SynthesizeStream` can both
+// answer RESOURCE_EXHAUSTED: either too many callers are already waiting for
+// the engine, or this one waited and never got in. Both mean "come back", not
+// "the request was wrong" - retry with backoff. The server refuses early on
+// purpose: a caller parked on a waiting thread is a thread `ListVoices` and
+// `Describe` cannot be answered with, and those need no engine at all.
+//
+// Every refusal this server decides carries `loudkit-error-code` in its
+// trailing metadata: the same frozen vocabulary the HTTP bodies carry as
+// `"code"`, because gRPC status codes are coarser than the conditions
+// (INVALID_ARGUMENT covers a dozen refusals). Branch on the metadata, treat
+// the status as the class of answer. One refusal is decided below the server:
+// a request message over the 256 KiB transport limit is refused by gRPC core
+// as RESOURCE_EXHAUSTED before a servicer exists, so that one arrives with
+// core's own message and no `loudkit-error-code` - there is no frame left to
+// attach it from.
+//
+// Cancelling a call, or letting its deadline expire, stops the work - on
+// `Synthesize` and `SynthesizeStream` alike. The server wires both to the
+// engine's own cancel flag, and a deadline that expires while a call is still
+// waiting for the engine means the engine is never taken at all.
+// `SynthesizeStream` also has a server-side cap on how long one stream may
+// hold the engine, and reports DEADLINE_EXCEEDED when it fires.
+//
+// Cancellation is cooperative, not preemptive. The flag is polled on every
+// token decode step, which is where nearly all the time goes, but it cannot
+// interrupt a backend kernel already executing: a mel decode, a vocoder pass
+// or a time-stretch that has entered its backend call runs to the end of that
+// call before the flag is read again. A cancel is honoured within one such
+// step, not within zero.
+service Speech {
+  // One utterance, one reply. Same text, voice and seed give the same bytes.
+  rpc Synthesize(SynthesizeRequest) returns (SynthesizeResponse);
+
+  // The same passage as a stream of chunks, in the order they are read.
+  //
+  // A reading app starts playing on the first chunk instead of waiting for the
+  // last. Every chunk is a *complete, standalone* payload in `audio_format` -
+  // its own header, playable on its own - so the chunks do not concatenate
+  // byte-wise into what `Synthesize` returns: join them with a decoder, or play
+  // them in order. What does hold across the two RPCs is the reading itself:
+  // the chunks' `token_count` sums to the unary reply's, and the last chunk's
+  // `continuation` is the unary reply's `continuation`.
+  //
+  // This RPC always splits at sentence boundaries. `long_form` is a question
+  // only `Synthesize` answers, and is ignored here.
+  //
+  // Prefer it for a long passage whatever the client is doing with the audio:
+  // one message per chunk stays under the 4 MiB a default client accepts, and
+  // `Synthesize` refuses a request whose reply obviously would not (see
+  // `text`).
+  rpc SynthesizeStream(SynthesizeRequest) returns (stream SynthesizeChunk);
+
+  // The resolved algorithm and execution config — the line every run should be
+  // able to answer about itself, and the one that makes two builds comparable.
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+
+  // Names the server can speak in.
+  rpc ListVoices(ListVoicesRequest) returns (ListVoicesResponse);
+}
+
+message SynthesizeRequest {
+  // At most 10 000 characters, refused as INVALID_ARGUMENT. The whole request
+  // message is additionally capped at 256 KiB by the transport itself; a
+  // message past that is refused by gRPC core as RESOURCE_EXHAUSTED before it
+  // is parsed, with core's own message and no `loudkit-error-code` - see the
+  // service comment.
+  //
+  // `Synthesize` refuses a shorter text than that when the reply it would
+  // render obviously exceeds the 4 MiB a default gRPC client accepts: the
+  // ceiling belongs to the client, so the alternative is a full render nobody
+  // can receive. The bound is measured on the text as it will be spoken - the
+  // normalisation funnel expands digits, dates and symbols into words, so a
+  // thousand characters of digits are minutes of audio - and it reserves
+  // headroom for the WAV header, the provenance manifest and protobuf framing.
+  // The refusal names the length that would fit and points at
+  // `SynthesizeStream`, which has no such ceiling.
+  string text = 1;
+  // A voice *name*, resolved in the server's library. Never a path: a request
+  // naming a filesystem path would let any caller read any profile on the host.
+  string voice = 2;
+  uint64 seed = 3;
+
+  // Empty means "read it in the voice's own language". Set it only to read
+  // text in a language the voice was not enrolled in; the engine owns the
+  // argument-then-voice-then-"en" chain and this transport does not touch it.
+  string language = 4;
+
+  // Playback speed in [0.5, 2.0], pitch preserved. 0 is read as unset and
+  // becomes 1.0, which is an exact bypass - proto3 cannot tell an absent
+  // double from a zero one, and 0.0 is not a speed anybody means. A value
+  // outside the range is INVALID_ARGUMENT, refused before the engine is taken
+  // rather than clamped: a caller that asked for 3x and silently got 2x has
+  // audio that is not what it asked for and nothing saying so.
+  double speed = 5;
+
+  // Split a long passage at sentence boundaries rather than refusing it.
+  // `Synthesize` only: `SynthesizeStream` splits whatever this says.
+  //
+  // `optional` for presence, not for style: proto3's default for a bool is
+  // false and the library's default is true, so a request that simply does not
+  // mention the field would have silently taken the other path and produced
+  // different audio from every other transport. `speed` above is the same
+  // hazard handled the other way, because 0.0 is not a speed anybody means and
+  // an absent double can be read as unset without ambiguity.
+  optional bool long_form = 6;
+
+  // The previous reply's `continuation`, to chain calls without an audible
+  // restart at each join.
+  repeated int32 previous_tokens = 7;
+
+  // "wav" (default), "pcm16", "flac" or "ogg". Empty means wav; any other
+  // name is INVALID_ARGUMENT listing the four that work.
+  string audio_format = 8;
+}
+
+message SynthesizeResponse {
+  bytes audio = 1;
+  string media_type = 2;
+  double duration_seconds = 3;
+  uint32 token_count = 4;
+
+  // True when generation stopped at the token cap rather than at a stop token:
+  // the speech is cut off mid-sentence. Carried because a caller that cannot
+  // see this reads a truncated reply as a complete one.
+  bool truncated = 5;
+
+  // The tail to pass back as `previous_tokens` on the next call.
+  repeated int32 continuation = 6;
+
+  // The algorithm fingerprint this was rendered under. Two servers answering
+  // the same request with different fingerprints are two different engines,
+  // and a client comparing audio without comparing this is comparing nothing.
+  string fingerprint = 7;
+
+  // Samples per second of the audio. wav, flac and ogg record it in their own
+  // headers; raw pcm16 frames carry no header at all, so without this field a
+  // pcm16 caller had nowhere to read the rate from. Stated on every format so
+  // no caller has to parse a container to learn what it asked for - the same
+  // reason the HTTP server sends X-Loudkit-Sample-Rate unconditionally.
+  uint32 sample_rate = 8;
+}
+
+message SynthesizeChunk {
+  // One complete file in `audio_format`, with its own header. Not a slice of a
+  // container that spans the stream: a chunk plays on its own, and joining two
+  // of them is a decode rather than a byte concatenation.
+  bytes audio = 1;
+  string media_type = 2;
+  double duration_seconds = 3;
+  uint32 token_count = 4;
+
+  // True when *this chunk* stopped at the token cap rather than at a stop
+  // token. Per chunk, not per passage: a client that wants the passage's
+  // verdict ORs the field across the chunks it received, which is what the
+  // whole-passage RPCs report in one field.
+  bool truncated = 5;
+
+  // The passage's tail as of this chunk: the ids to pass back as
+  // `previous_tokens` to continue from here. Cumulative rather than the
+  // chunk's own last few ids, because a chunk can be shorter than the prefix
+  // the engine conditions on - a two-token closing sentence carries a tail
+  // that reaches back into the chunk before it. A client that stops reading
+  // mid-passage chains from the last chunk it received; a client that reads
+  // to the end takes the final chunk's value, which equals `Synthesize`'s
+  // `continuation` for the same request, whatever length the last chunk had.
+  repeated int32 continuation = 6;
+  string fingerprint = 7;
+
+  // Samples per second, on every chunk for the same reason
+  // `SynthesizeResponse` carries it: raw pcm16 has no header to read it from.
+  uint32 sample_rate = 8;
+}
+
+message DescribeRequest {}
+
+message DescribeResponse {
+  string algorithm = 1;
+  string execution = 2;
+  string fingerprint = 3;
+  string version = 4;
+
+  // How long the engine has been held by one request, in seconds; 0 when it is
+  // free. `Describe` does not take the engine lock, so this answers while a
+  // synthesis is in flight -- which is the point.
+  //
+  // A cancel, an expired deadline and the server's own stream cap all stop the
+  // render within a decode step, so this value falling back to 0 is the normal
+  // end of every one of them. That includes a client that stays connected and
+  // stops *reading*: production is separated from the socket by a bounded
+  // queue, so a stalled peer stalls delivery while the render stops at the
+  // cap and the engine comes back. A value that keeps growing past the cap
+  // names a render stuck inside a backend kernel, which cooperative
+  // cancellation cannot interrupt - the HTTP server reports the same
+  // condition on `/health` as "stuck".
+  double engine_held_seconds = 5;
+}
+
+message ListVoicesRequest {}
+
+message ListVoicesResponse {
+  repeated string voices = 1;
+}

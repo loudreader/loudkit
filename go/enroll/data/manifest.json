@@ -1,0 +1,30 @@
+{
+  "s3_mel_filters.f32": [
+    128,
+    201
+  ],
+  "s3_hann400.f32": [
+    400
+  ],
+  "matcha_mel_filters.f32": [
+    80,
+    961
+  ],
+  "matcha_hann1920.f32": [
+    1920
+  ],
+  "voiceenc_mel_filters.f32": [
+    40,
+    201
+  ],
+  "voiceenc_hann400.f32": [
+    400
+  ],
+  "kaldi_mel_filters.f32": [
+    80,
+    256
+  ],
+  "kaldi_povey400.f32": [
+    400
+  ]
+}

@@ -1,0 +1,149 @@
+---
+/*
+  The shipped voice roster, as a playable card grid.
+
+  The data is read at build time from docs/voices/roster/provenance.json —
+  the same file the repository ships and the same file VOICES.md points at.
+  Nothing is copied into site/. The audio is copied into the build by
+  scripts/sync-docs.mjs, which writes site/public/voices/*.opus and is
+  gitignored, so the .opus files exist once in the repository.
+
+  The player is plain JavaScript in src/scripts/voice-player.ts. One <audio>
+  element is shared by every card and by the landing page's single sample, so
+  starting a second voice stops the first without any bookkeeping.
+*/
+// A static import, not fs.readFileSync: the component is bundled before it
+// runs, so at render time `import.meta.url` is the chunk in dist/ and a path
+// derived from it resolves inside site/. Vite resolves this one at transform
+// time, against this file, and inlines the data.
+import rosterJson from '../../../docs/voices/roster/provenance.json';
+
+interface Props {
+  /** Heading rendered above the filter row. Omit for no heading. */
+  heading?: string;
+  /** One short line under the heading. */
+  note?: string;
+  /**
+   * Set on a page that already prints the roster table. The footnote then
+   * points down at that table instead of at the Voices page.
+   */
+  sourcesBelow?: boolean;
+}
+
+const { heading, note, sourcesBelow = false } = Astro.props;
+
+const roster = rosterJson as Array<{
+  name: string;
+  language: string;
+  language_id: string;
+  gender: string;
+  sample: { audio: string };
+}>;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+// One language order, used by the card grid and by the filter row. English,
+// Spanish, French, German, Italian first; the rest keep the roster's order.
+const LANGUAGE_ORDER = ['en', 'es', 'fr', 'de', 'it'];
+
+function languageRank(id: string): number {
+  const i = LANGUAGE_ORDER.indexOf(id);
+  return i === -1 ? LANGUAGE_ORDER.length : i;
+}
+
+const voices = [...roster]
+  .sort((a, b) => languageRank(a.language_id) - languageRank(b.language_id))
+  .map((v) => ({
+    name: v.name,
+    language: v.language,
+    languageId: v.language_id,
+    gender: v.gender === 'F' ? 'female' : 'male',
+    audio: `${base}/voices/${v.sample.audio.split('/').pop()}`,
+  }));
+
+// The filter row follows the grid, so the pills and the cards read in the
+// same order.
+const languages: Array<{ id: string; label: string }> = [];
+for (const v of voices) {
+  if (!languages.some((l) => l.id === v.languageId)) {
+    languages.push({ id: v.languageId, label: v.language });
+  }
+}
+---
+
+<div class="lk-voices not-content">
+  {heading && <h2 class="lk-voices-heading">{heading}</h2>}
+  {note && <p class="lk-voices-note">{note}</p>}
+
+  <div class="lk-voice-filters" role="group" aria-label="Filter voices by language">
+    <button type="button" class="lk-voice-filter" data-filter="all" aria-pressed="true">
+      All <span>{voices.length}</span>
+    </button>
+    {
+      languages.map((l) => (
+        <button type="button" class="lk-voice-filter" data-filter={l.id} aria-pressed="false">
+          {l.label}
+        </button>
+      ))
+    }
+  </div>
+
+  <ul class="lk-voice-grid">
+    {
+      voices.map((v) => (
+        <li class="lk-voice" data-lang={v.languageId}>
+          <button
+            type="button"
+            class="lk-voice-play"
+            data-src={v.audio}
+            data-name={v.name}
+            aria-label={`Play ${v.name}, ${v.language}`}
+          >
+            <span class="lk-voice-icon" aria-hidden="true" />
+          </button>
+          <div class="lk-voice-body">
+            <strong>{v.name}</strong>
+            <span class="lk-voice-meta">
+              {v.language} <i>&middot;</i> {v.gender}
+            </span>
+          </div>
+        </li>
+      ))
+    }
+  </ul>
+
+  <p class="lk-voices-foot">
+    Each sample is one seeded render of a public-domain sentence. The source, the licence
+    and the hashes of every voice are {
+      sourcesBelow ? (
+        <span>in the table below.</span>
+      ) : (
+        <span>
+          in <a href={`${base}/voices/`}>Voices</a>.
+        </span>
+      )
+    }
+  </p>
+</div>
+
+<script>
+  // Playback is shared with the landing page's single sample, so it lives in
+  // one module rather than in this component. Importing it registers the one
+  // player for the page. Only the filter row is this component's own.
+  import '../scripts/voice-player.ts';
+
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    const filter = target?.closest<HTMLButtonElement>('.lk-voice-filter');
+    if (!filter) return;
+    const root = filter.closest('.lk-voices');
+    if (!root) return;
+    const want = filter.dataset.filter;
+    root.querySelectorAll<HTMLButtonElement>('.lk-voice-filter').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b === filter));
+    });
+    root.querySelectorAll<HTMLElement>('.lk-voice').forEach((card) => {
+      card.hidden = want !== 'all' && card.dataset.lang !== want;
+    });
+  });
+</script>
