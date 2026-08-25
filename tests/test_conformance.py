@@ -6,7 +6,7 @@ it, this file fails; if Swift drifts from it, the Swift tests fail; if both
 pass, the two implementations agree without ever having met.
 
 The weight-free sections (Philox, sampler, frontend, seeds) run everywhere.
-The algorithm-identity and end-to-end sections need the packed checkpoint and
+The algorithm-identity and end-to-end sections need the synthesis checkpoint and
 the exported CoreML packages, and skip with a named reason without them
 (``LOUDKIT_REQUIRE_ASSETS=1`` turns that into a failure, as everywhere else).
 

@@ -40,6 +40,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -453,6 +454,25 @@ def test_dual_use_npm_release_never_automates_a_direct_publish() -> None:
     assert any(line.startswith('npm stage publish "$tarball"') for line in commands)
     assert not any(line.startswith("npm publish ") for line in commands)
     assert "attest-npm" in publish
+
+
+def test_parity_uses_a_pinned_public_release_on_an_isolated_runner() -> None:
+    """Public workflow code must not need a maintainer's machine or hidden WAV."""
+    workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    parity = workflow.split("\n  parity:\n", 1)[1].split("\n  packaging:\n", 1)[0]
+    revision = re.search(r'LOUDKIT_HF_REVISION: "([0-9a-f]{40})"', parity)
+    assert revision, "parity must pin an immutable Hugging Face commit"
+    assert "runs-on: macos-latest" in parity
+    assert "runs-on: [self-hosted" not in parity
+    assert "loudkit download loudreader/loudr-1" in parity
+    assert '--revision "$LOUDKIT_HF_REVISION"' in parity
+    assert "for backend in torch onnx coreml" in parity
+    assert "LOUDKIT_REFERENCE_WAV" not in parity
+
+    assets = (REPO / "tests" / "assets.py").read_text(encoding="utf-8")
+    reference = (REPO / "tests" / "test_parity.py").read_text(encoding="utf-8")
+    assert '"reference_wav":' not in assets
+    assert 'ENROLLMENT / "ref_audio.f32"' in reference
 
 
 def test_the_crate_declares_a_licence_and_packs_the_notice() -> None:

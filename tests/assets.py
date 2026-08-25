@@ -35,9 +35,11 @@ _DEFAULT_ROOT = Path(__file__).resolve().parents[1] / "assets"
 
 The default used to be a sibling ``chatterbox-apple`` checkout, which is gone;
 its artefacts were copied into ``assets/`` here (gitignored, about 4 GB). The
-layout is the release bundle's, flat at the root: the packed checkpoint,
-``tokenizer.json`` and ``ve.safetensors`` beside ``onnx/``, ``coreml/`` and
-``en_reader1.wav``. Anywhere else, set ``LOUDKIT_ASSET_ROOT``.
+layout is the release bundle's, flat at the root: the synthesis checkpoint,
+``tokenizer.json`` and ``ve.safetensors`` beside ``onnx/`` and ``coreml/``.
+Enrollment audio is the checked-in ``tests/data/enrollment/ref_audio.f32``
+fixture, so a clean checkout does not depend on an untracked source WAV.
+Anywhere else, set ``LOUDKIT_ASSET_ROOT``.
 """
 _ROOT = Path(os.environ.get("LOUDKIT_ASSET_ROOT", str(_DEFAULT_ROOT)))
 
@@ -45,7 +47,6 @@ _ASSETS: dict[str, tuple[str, Path]] = {
     "checkpoint": ("LOUDKIT_CHECKPOINT", _ROOT / "loudr-1.safetensors"),
     "tokenizer": ("LOUDKIT_TOKENIZER", _ROOT / "tokenizer.json"),
     "voice_encoder": ("LOUDKIT_VOICE_ENCODER", _ROOT / "ve.safetensors"),
-    "reference_wav": ("LOUDKIT_REFERENCE_WAV", _ROOT / "en_reader1.wav"),
 }
 
 

@@ -269,8 +269,7 @@ class TestTheInventoryChecksTheBasics:
             hub_mod.verify_release_inventory(root, "torch", cloning=True)
 
     def test_a_presplit_checkpoint_still_satisfies_cloning(self, tmp_path) -> None:
-        """One file holding every tensor is what the published release is, and
-        it can clone. The inventory must not report it as short."""
+        """An older one-file release can clone and is not reported as short."""
         import loudkit.hub as hub_mod
 
         root = self._torch_root(tmp_path)

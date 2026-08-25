@@ -1,17 +1,18 @@
 # CI for loudkit.
 #
-# Two jobs, split by what they need rather than by what they run.
+# Two layers, split by what they need rather than by what they run.
 #
 # `check` needs nothing — no weights, no GPU, no network — so it runs on every
 # push, on three operating systems, and it is the gate for a pull request. It
 # covers the algorithm layer: the sampler, the RNG against its published
 # vectors, the config split, chunking, and the engine's own control flow.
 #
-# `parity` needs the checkpoint and is self-hosted, because a 1.27 GB artefact
-# and an Apple GPU do not belong in a hosted runner. It sets
-# LOUDKIT_REQUIRE_ASSETS so a missing checkpoint fails the run instead of
-# skipping — a skip and a pass look identical in a summary line, and the parity
-# suite is the one it would be most damaging to lose that way.
+# `parity` needs every runtime and the public model release. It runs on an
+# isolated, hosted Apple-silicon runner and downloads a pinned Hugging Face
+# revision through LoudKit's own selective downloader. LOUDKIT_REQUIRE_ASSETS
+# turns any missing file or runtime into a failure instead of a skip. This is
+# slower than a private machine, but reproducible by anyone and gives public
+# workflow code no access to a maintainer's host or untracked model files.
 #
 # Third-party actions are pinned to commit SHAs rather than tags. A tag is a
 # movable pointer in someone else's repository: `@v4` before and after a
@@ -373,9 +374,9 @@ jobs:
     # What it still does not cover: the provider actually executing a model. The
     # feature only lets `ort` register CoreML; whether registration succeeds
     # depends on the `libonnxruntime` at ORT_DYLIB_PATH carrying the provider at
-    # runtime, and no hosted runner here has the weights to render with it. That
-    # is the self-hosted `parity` job's ground, and this job is the compile and
-    # unit-test gate below it.
+    # runtime, and this job deliberately does not download the weights. Actual
+    # execution belongs to the hosted `parity` job; this is the faster compile
+    # and unit-test gate below it.
     name: rust (coreml)
     runs-on: macos-latest
     defaults:
@@ -552,26 +553,27 @@ jobs:
         # oversight: `LoudKitText` imports CryptoKit and OSLog, `LoudKit`
         # imports CoreML, and none of the three exist on Linux, so `swift test`
         # cannot run on a hosted ubuntu runner at all. It is fuzzed on macOS
-        # before merge and is green on the same seeds. The self-hosted macOS
-        # runner in the `parity` job could run it, but that job needs the
-        # weights and excludes forks, and hanging a weight-free gate off a
-        # weights runner would cover less than this does, not more.
+        # before merge and is green on the same seeds. The macOS `parity` job
+        # could run it, but that job downloads the model and excludes forks;
+        # hanging a weight-free gate off a weight-bearing job would cover less
+        # than this does, not more.
         run: |
           python tools/fuzz_parity.py --cases 300 --seed 1 --ports go,rust,js
           python tools/fuzz_parity.py --cases 300 --seed 2 --ports go,rust,js
 
   parity:
-    name: parity (self-hosted, needs weights)
-    runs-on: [self-hosted, macos]
+    name: parity (hosted macOS, pinned public release)
+    runs-on: macos-latest
+    timeout-minutes: 120
     # Also on pull requests from this repository, which is the change: it ran
     # only on `main` and on demand, so every weights regression reached `main`
     # before anything measured it -- the one job that can catch a weights
     # regression, arriving after the merge that caused it.
     #
-    # Forks are deliberately excluded. This runner is self-hosted and holds the
-    # weights; running fork code on it hands an untrusted PR both the machine
-    # and the checkpoint. A fork's parity is checked when a maintainer opens
-    # the PR from a branch here, or by `workflow_dispatch`.
+    # Forks are deliberately excluded even though the runner and weights are
+    # public: downloading and exercising roughly 4 GB for arbitrary fork pushes
+    # is an avoidable denial-of-service surface. A fork's parity is checked when
+    # a maintainer opens the PR from a branch here, or by `workflow_dispatch`.
     if: >-
       github.event_name == 'workflow_dispatch'
       || github.ref == 'refs/heads/main'
@@ -580,8 +582,48 @@ jobs:
     env:
       # A missing asset is a broken runner, not a reason to report success.
       LOUDKIT_REQUIRE_ASSETS: "1"
+      # Model bytes are part of this test's input, so a moving branch is not a
+      # test input. Raise this pin only after the replacement bundle passes its
+      # own release verification and update the cache key with it automatically.
+      LOUDKIT_HF_REVISION: "0fe297e449ba4f31113977f6c7f8c438fdfd1be3"
+      PIP_NO_CACHE_DIR: "1"
+      HF_XET_CHUNK_CACHE_SIZE_BYTES: "0"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      # The release is public and immutable at the revision above. Caching it
+      # avoids moving 4 GB on every main push; running `loudkit download` below
+      # even on a cache hit still checks the remote revision, SHA256SUMS and the
+      # complete backend inventories before any test can use the files.
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+        with:
+          path: ${{ runner.temp }}/loudr-1
+          key: loudr-1-${{ runner.os }}-${{ env.LOUDKIT_HF_REVISION }}
+
+      - name: Install every measured runtime
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e ".[dev,hub,torch,audio,coreml,onnx]"
+
+      - name: Fetch and verify the pinned public release
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/loudr-1"
+          for backend in torch onnx coreml; do
+            .venv/bin/loudkit download loudreader/loudr-1 \
+              --revision "$LOUDKIT_HF_REVISION" \
+              --for "$backend" --with-cloning --local-dir "$root"
+          done
+          {
+            echo "LOUDKIT_ASSET_ROOT=$root"
+            echo "LOUDKIT_CKPT=$root/loudr-1.safetensors"
+            echo "LOUDKIT_CHECKPOINT=$root/loudr-1.safetensors"
+          } >> "$GITHUB_ENV"
+          du -sh "$root"
 
       # Resolved once, here, and written to $GITHUB_ENV so every later step
       # inherits them. They used to be exported inside the last step of the
@@ -596,6 +638,10 @@ jobs:
       - name: Resolve the asset paths
         run: |
           set -euo pipefail
+          if [ "$(uname -m)" != "arm64" ]; then
+            echo "parity requires the Apple-silicon hosted image, got $(uname -m)" >&2
+            exit 1
+          fi
           # Two names, two meanings, and every reader honours the split:
           # _DIR is the conformance directory, LOUDKIT_FIXTURE is the
           # vectors.json file inside it. The weight-free suites (Go, Rust, JS)
@@ -606,36 +652,20 @@ jobs:
           # which is deterministic and therefore only ever seen on the one
           # runner that gets this far.
           fixture_dir="$PWD/tests/data/conformance"
-          # The asset root is this repository's own assets/ directory
-          # (gitignored, provisioned onto the runner), laid out flat like the
-          # release bundle: the packed checkpoint, tokenizer.json and
-          # ve.safetensors beside onnx/, coreml/ and en_reader1.wav. The
-          # sibling chatterbox-apple checkout this used to fall back to is
-          # gone. A runner that keeps the assets elsewhere sets
-          # LOUDKIT_ASSET_ROOT.
-          root="${LOUDKIT_ASSET_ROOT:-$PWD/assets}"
+          # The preceding step wrote the exact public release directory. Do
+          # not fall back to a checkout-relative path: hosted runners have no
+          # untracked assets, and a fallback would turn a broken download into
+          # a misleading missing-file error here.
+          root="${LOUDKIT_ASSET_ROOT:?download step did not set LOUDKIT_ASSET_ROOT}"
           if [ ! -d "$root" ]; then
-            echo "no asset directory at $root; set LOUDKIT_ASSET_ROOT" >&2
+            echo "downloaded asset directory is absent: $root" >&2
             exit 1
           fi
 
-          # The weights file carries the release's name, so any fixed name is
-          # wrong from the next release onwards. The root holds exactly one
-          # checkpoint: every *.safetensors that is not the utterance voice
-          # encoder. Two of them is an ambiguity a job may not resolve by
-          # guessing: name one with LOUDKIT_CKPT.
-          ckpt="${LOUDKIT_CKPT:-}"
-          if [ -z "$ckpt" ]; then
-            weights=$(find "$root" -maxdepth 1 -name '*.safetensors' \
-                        ! -name 've.safetensors' | sort)
-            if [ "$(printf '%s' "$weights" | grep -c . || true)" != "1" ]; then
-              echo "expected one checkpoint *.safetensors in $root, found:" >&2
-              printf '%s\n' "$weights" >&2
-              echo "set LOUDKIT_CKPT to name the one to measure" >&2
-              exit 1
-            fi
-            ckpt="$weights"
-          fi
+          # A split release has two checkpoint containers. The download step
+          # names the synthesis half explicitly rather than globbing and then
+          # treating the expected enrollment half as an ambiguity.
+          ckpt="${LOUDKIT_CKPT:?download step did not set LOUDKIT_CKPT}"
 
           # Both spellings are exported on purpose. Go, Rust and JS read
           # LOUDKIT_CKPT; tests/assets.py and tests/LoudKitTests/Fixture.swift
@@ -645,16 +675,14 @@ jobs:
           onnx_dir="${LOUDKIT_ONNX_DIR:-$root/onnx}"
           voice="${LOUDKIT_VOICE:-$PWD/tests/data/reference/testvoice.voice.safetensors}"
           tokenizer="${LOUDKIT_TOKENIZER:-$root/tokenizer.json}"
-          # The enrollment pair the two Python enrollment-parity tests and the
-          # Go and Rust enrollment suites read. These were never exported
-          # before, so those tests measured nothing on this runner: the Python
-          # pair skipped on a path gate and Go and Rust failed outright.
+          # The utterance encoder is the only extra file Python enrollment
+          # reads. The reference clip itself is a checked-in float fixture, the
+          # same input consumed by the Go, Rust and JS conformance tests.
           voice_encoder="${LOUDKIT_VOICE_ENCODER:-$root/ve.safetensors}"
-          reference_wav="${LOUDKIT_REFERENCE_WAV:-$root/en_reader1.wav}"
 
           for path in "$fixture_dir" "$fixture_dir/vectors.json" \
                       "$ckpt" "$onnx_dir" "$voice" "$tokenizer" \
-                      "$voice_encoder" "$reference_wav" \
+                      "$voice_encoder" \
                       "$onnx_dir/s3_tokenizer.onnx" "$onnx_dir/camp.onnx" \
                       "$onnx_dir/voice_encoder.onnx"; do
             if [ ! -e "$path" ]; then
@@ -680,14 +708,8 @@ jobs:
             echo "LOUDKIT_VOICE=$voice"
             echo "LOUDKIT_TOKENIZER=$tokenizer"
             echo "LOUDKIT_VOICE_ENCODER=$voice_encoder"
-            echo "LOUDKIT_REFERENCE_WAV=$reference_wav"
           } >> "$GITHUB_ENV"
           echo "measuring $ckpt"
-
-      - name: Install
-        run: |
-          python3.12 -m venv .venv
-          .venv/bin/pip install -e ".[dev,torch,audio,coreml,onnx]"
 
       # The Go and Rust suites load libonnxruntime at runtime: Go through
       # LOUDKIT_ONNXRUNTIME_LIB, Rust (built with `load-dynamic`) through
@@ -728,7 +750,7 @@ jobs:
       # is `slow`, it needs the checkpoint and the CoreML packages, and it is
       # the only automated proof that a CoreML synthesis does not kill its
       # host process a second later (the `_PinnedInputs` regression). This is
-      # the one job with the assets and a macOS runner, and
+      # the one job with the assets and an Apple-silicon runner, and
       # LOUDKIT_REQUIRE_ASSETS=1 in the job env turns its skips into
       # failures, so it cannot quietly stop running again.
       # test_enroll_onnx.py is named because it is `slow` and needs the three
@@ -736,17 +758,30 @@ jobs:
       # (LOUDKIT_ENROLL_ONNX); before that, no job anywhere invoked it.
       - name: Parity and conformance
         run: |
+          # Each backend gets a fresh process. Besides bounding memory on the
+          # 7 GB hosted M1, this enforces the project's own rule that torch must
+          # not decode after coremltools has entered the process.
           .venv/bin/pytest \
-            tests/test_parity.py tests/test_conformance.py tests/test_onnx.py \
-            tests/test_enroll_onnx.py tests/test_coreml_lifetime.py \
+            tests/test_parity.py::TestGeneratorParity \
+            tests/test_parity.py::TestRendererParity -q
+          .venv/bin/pytest tests/test_parity.py::TestMPS -q
+          .venv/bin/pytest tests/test_parity.py::TestCoreML -q
+          .venv/bin/pytest \
+            tests/test_parity.py::TestEnrollmentParity \
+            tests/test_parity.py::TestEnrollmentRoundTrip -q
+          .venv/bin/pytest tests/test_conformance.py -q
+          .venv/bin/pytest tests/test_onnx.py -q
+          .venv/bin/pytest tests/test_enroll_onnx.py -q
+          .venv/bin/pytest tests/test_coreml_lifetime.py -q
+          .venv/bin/pytest \
             tests/test_docs.py::test_published_voice_profile_digests_match_the_roster \
             tests/test_docs.py::test_public_docs_quote_the_measured_voice_profile_size -q
 
       - name: Swift conformance against the same fixture
         run: swift test
 
-      # The bindings' asset-backed conformance, on the one runner that has the
-      # assets. LOUDKIT_REQUIRE_ASSETS (job env, above) makes a missing one a
+      # The bindings' asset-backed conformance, after the same public release
+      # has been resolved for every port. LOUDKIT_REQUIRE_ASSETS makes a missing
       # failure: these tests self-skip, and a skip is indistinguishable from a
       # pass in a summary line.
       #

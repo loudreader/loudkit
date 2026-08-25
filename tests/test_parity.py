@@ -19,9 +19,10 @@ sides, identical seeds and logits within the fp16 band, every sampled token
 matched on every measured sentence — a stronger observed result than the gate
 requires, so a regression here means logits moved.
 
-Everything needs the packed checkpoint; ``LOUDKIT_CHECKPOINT`` overrides the
-default location. One process per *device sweep* is the documented rule; the
-mps tests run eager attention, which is the configuration that does not abort.
+Everything needs the synthesis checkpoint; ``LOUDKIT_CHECKPOINT`` overrides
+the default location. One process per *device sweep* is the documented rule;
+the mps tests run eager attention, which is the configuration that does not
+abort.
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ from .assets import asset, needs_module, requires, skip_or_fail
 
 CKPT = asset("checkpoint")
 VE_WEIGHTS = asset("voice_encoder")
-REF_WAV = asset("reference_wav")
 REFERENCE = Path(__file__).parent / "data" / "reference"
+ENROLLMENT = Path(__file__).parent / "data" / "enrollment"
 
 pytestmark = [
     pytest.mark.slow,
@@ -160,7 +161,7 @@ class TestMPS:
         import torch
 
         if not torch.backends.mps.is_available():
-            pytest.skip("no MPS device")
+            skip_or_fail("MPS is unavailable on the Apple-silicon parity runner")
         import loudkit
 
         return loudkit.load(str(CKPT), device="mps")
@@ -263,16 +264,26 @@ class TestCoreML:
         assert np.array_equal(a.audio, b.audio)
 
 
-@requires("voice_encoder", "reference_wav")
+def _enrollment_audio() -> np.ndarray:
+    """The exact 24 kHz input clip committed as the enrollment fixture."""
+    manifest = json.loads((ENROLLMENT / "manifest.json").read_text(encoding="utf-8"))
+    shape = tuple(manifest["files"]["ref_audio.f32"]["shape"])
+    raw = (ENROLLMENT / "ref_audio.f32").read_bytes()
+    return np.frombuffer(raw, dtype="<f4").reshape(shape).copy()
+
+
+@requires("voice_encoder")
 class TestEnrollmentParity:
     def test_enrolled_profile_matches_reference(self, voice) -> None:  # type: ignore[no-untyped-def]
-        librosa = needs_module("librosa")
         needs_module("torchaudio")
-        from loudkit.backends.torch_backend import build_torch_enroller
+        import loudkit
 
-        enroller = build_torch_enroller(str(CKPT), voice_encoder_weights=str(VE_WEIGHTS))
-        wav, _ = librosa.load(str(REF_WAV), sr=24_000)
-        mine = enroller.enroll(wav, 24_000, name="en_reader1")
+        mine = loudkit.enroll(
+            _enrollment_audio(),
+            str(CKPT),
+            name="en_reader1",
+            voice_encoder_weights=str(VE_WEIGHTS),
+        )
 
         np.testing.assert_array_equal(mine.prompt_tokens, voice.prompt_tokens)
         np.testing.assert_array_equal(mine.cond_prompt_tokens, voice.cond_prompt_tokens)
@@ -294,16 +305,17 @@ class TestEnrollmentRoundTrip:
     actually performs works end to end.
     """
 
-    @requires("voice_encoder", "reference_wav")
+    @requires("voice_encoder")
     def test_enroll_save_load_speak_round_trip(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        librosa = needs_module("librosa")
         needs_module("torchaudio")
         import loudkit
-        from loudkit.backends.torch_backend import build_torch_enroller
 
-        enroller = build_torch_enroller(str(CKPT), voice_encoder_weights=str(VE_WEIGHTS))
-        wav, _ = librosa.load(str(REF_WAV), sr=24_000)
-        voice = enroller.enroll(wav, 24_000, name="my-voice")
+        voice = loudkit.enroll(
+            _enrollment_audio(),
+            str(CKPT),
+            name="my-voice",
+            voice_encoder_weights=str(VE_WEIGHTS),
+        )
 
         profile_path = tmp_path / "my-voice.safetensors"
         voice.save(profile_path)

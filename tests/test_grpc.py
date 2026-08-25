@@ -41,8 +41,7 @@ is a suite people rerun until it is green.
 The mechanism is asserted unconditionally either way: that callers past the
 depth bound are *refused* rather than parked on a thread is what makes the
 latency true, and it is checkable without a clock. Set ``LOUDKIT_TIMED=1`` on a
-machine that is not contended — a developer box, the self-hosted runner — to
-pin the number as well."""
+machine that is not contended to pin the number as well."""
 
 
 @pytest.fixture

@@ -169,8 +169,8 @@ class TestSnapshotIntegrity:
 
     A checksum file that is merely consulted proves nothing: before this, a
     release with no manifest verified silently, and a file the manifest did
-    not mention was never looked at — which is the state the published release
-    is in for its exported graphs.
+    not mention was never looked at. That was the defect this regression test
+    was added to prevent in future releases.
     """
 
     def test_a_good_manifest_passes_and_marks_the_snapshot(self, tmp_path) -> None:
@@ -1085,9 +1085,7 @@ class TestTheEnrollmentArtefactIsFetchedOnItsOwn:
     def test_a_presplit_repo_falls_back_to_its_one_checkpoint(
         self, monkeypatch, tmp_path
     ) -> None:
-        """The published release holds no enrollment artefact today, and its
-        checkpoint carries the tensors. `enroll` against it must keep working
-        until the new bundle is uploaded."""
+        """An older release may carry enrollment tensors in its sole checkpoint."""
         self._client(monkeypatch, tmp_path, holds=False)
         packed = tmp_path / _SYNTHESIS
         _pack(packed)

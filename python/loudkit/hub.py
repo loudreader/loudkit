@@ -83,12 +83,11 @@ SYNTHESIS_ROLE = "synthesis"
 """``manifest["artifact_role"]`` of the file :func:`resolve_checkpoint` returns.
 
 A manifest with **no** ``artifact_role`` is a pre-split checkpoint: one file
-holding every tensor, which is what the published release and ``release-dir/``
-hold today. That is not an error and must keep loading — and it is also the
-only thing that lets the enrollment resolver answer for a release built before
-the split, since such a file does carry the enrollment tensors. So the field is
-read to *refuse* a file, never to require one: absence is the old release, and
-the old release still works.
+holding every tensor. That is not an error and must keep loading, and it is also
+the only thing that lets the enrollment resolver answer for a release built
+before the split, since such a file does carry the enrollment tensors. So the
+field is read to *refuse* a file, never to require one: absence is an older
+release, and older releases still work.
 """
 
 ENROLLMENT_ROLE = "enrollment"
@@ -1452,13 +1451,13 @@ def _enrollment_in(directory: Path) -> Path:
     resolver is separate rather than a flag:
 
     **A pre-split checkpoint answers for both.** A directory a user assembled
-    by hand, and the published release as it stands today, hold one file that
-    carries every tensor including the two enrollment modules. Its manifest
-    declares no ``artifact_role``, and that absence is the evidence: nothing
-    has claimed the file is synthesis-only, and before the split nothing could
-    be. A file that *does* declare :data:`SYNTHESIS_ROLE` is the opposite
-    claim, and gets the synthesis-only error rather than a confusing failure
-    inside the enroller about tensors that are not there.
+    by hand may hold one older file carrying every tensor, including the two
+    enrollment modules. Its manifest declares no ``artifact_role``, and that
+    absence is the evidence: nothing has claimed the file is synthesis-only,
+    and before the split nothing could be. A file that *does* declare
+    :data:`SYNTHESIS_ROLE` is the opposite claim, and gets the synthesis-only
+    error rather than a confusing failure inside the enroller about tensors
+    that are not there.
     """
     named = directory / ENROLLMENT_NAME
     if named.is_file():
