@@ -183,7 +183,7 @@ jobs:
         working-directory: js
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -431,7 +431,7 @@ jobs:
       - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5
         with:
           go-version: "1.25"
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v4
         with:
           node-version: "22"
       - name: Python
@@ -532,7 +532,7 @@ jobs:
       - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5
         with:
           go-version: "1.25"
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v4
         with:
           node-version: "22"
       - name: Install
@@ -604,7 +604,7 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: go/go.sum
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: "22"
           cache: npm
