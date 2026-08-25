@@ -489,6 +489,21 @@ def test_parity_uses_a_pinned_public_release_on_an_isolated_runner() -> None:
     assert "enroll" in extras, "enrollment parity needs the torchaudio runtime"
     assert "runs-on: macos-latest" in parity
     assert "runs-on: [self-hosted" not in parity
+    assert re.search(
+        r"(?m)^\s+- uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff\s",
+        parity,
+    )
+    assert re.search(r'(?m)^\s+go-version: "1\.25"$', parity)
+    assert re.search(
+        r"(?m)^\s+- uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020\s",
+        parity,
+    )
+    assert re.search(r'(?m)^\s+node-version: "22"$', parity)
+    assert re.search(
+        r"(?m)^\s+- uses: dtolnay/rust-toolchain@"
+        r"4360b52568e2003a75bf9bc1d59f33a8e3fc893c\s",
+        parity,
+    )
     assert "loudkit download loudreader/loudr-1" in parity
     assert '--revision "$LOUDKIT_HF_REVISION"' in parity
     assert "for backend in torch onnx coreml" in parity
