@@ -482,7 +482,11 @@ def test_parity_uses_a_pinned_public_release_on_an_isolated_runner() -> None:
     workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     parity = workflow.split("\n  parity:\n", 1)[1].split("\n  packaging:\n", 1)[0]
     revision = re.search(r'LOUDKIT_HF_REVISION: "([0-9a-f]{40})"', parity)
+    install = re.search(r'pip install -e "\.\[([^]]+)]"', parity)
     assert revision, "parity must pin an immutable Hugging Face commit"
+    assert install, "parity must install the runtimes it measures"
+    extras = {extra.strip() for extra in install.group(1).split(",")}
+    assert "enroll" in extras, "enrollment parity needs the torchaudio runtime"
     assert "runs-on: macos-latest" in parity
     assert "runs-on: [self-hosted" not in parity
     assert "loudkit download loudreader/loudr-1" in parity

@@ -607,7 +607,9 @@ jobs:
       - name: Install every measured runtime
         run: |
           python -m venv .venv
-          .venv/bin/pip install -e ".[dev,hub,torch,audio,coreml,onnx]"
+          # `audio` is file I/O; the enrollment path imports torchaudio from
+          # the separate `enroll` extra and is exercised later in this job.
+          .venv/bin/pip install -e ".[dev,hub,torch,audio,enroll,coreml,onnx]"
 
       - name: Fetch and verify the pinned public release
         run: |
