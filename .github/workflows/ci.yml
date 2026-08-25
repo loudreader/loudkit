@@ -642,6 +642,8 @@ jobs:
             echo "parity requires the Apple-silicon hosted image, got $(uname -m)" >&2
             exit 1
           fi
+          .venv/bin/python -c \
+            'import platform, torch; print(platform.platform()); print("torch", torch.__version__); print("mps", torch.backends.mps.is_available())'
           # Two names, two meanings, and every reader honours the split:
           # _DIR is the conformance directory, LOUDKIT_FIXTURE is the
           # vectors.json file inside it. The weight-free suites (Go, Rust, JS)
