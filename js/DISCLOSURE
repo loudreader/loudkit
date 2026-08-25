@@ -1,0 +1,12 @@
+LoudKit includes local text-to-speech and voice enrollment functionality.
+A user can create a reusable voice profile from a recording and synthesize new
+speech with it. This is intended for voices the user owns or has permission to
+use, including accessibility, localization, product speech and creative work.
+
+The same capability can be misused for impersonation or deceptive synthetic
+media. Users are responsible for obtaining consent, disclosing synthetic audio
+where appropriate and following applicable law. LoudKit does not provide voice
+authentication bypasses or tools for removing provenance metadata.
+
+The project's full responsible-use policy is available at:
+https://github.com/loudreader/loudkit/blob/main/RESPONSIBLE_USE.md

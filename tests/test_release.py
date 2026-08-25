@@ -422,14 +422,37 @@ def test_every_published_package_carries_the_licence_and_the_notice() -> None:
             )
 
 
-def test_the_npm_tarball_lists_the_terms_it_ships() -> None:
-    """``files`` decides the tarball, so a present-but-unlisted file is absent."""
+def test_the_npm_tarball_lists_its_terms_and_dual_use_disclosure() -> None:
+    """``files`` decides the tarball, so present-but-unlisted is absent.
+
+    Voice enrollment is a dual-use capability under npm's current policy. The
+    declaration is permanent once published, so both halves are pinned here:
+    machine-readable metadata for the registry and an explanation for people.
+    """
     package = json.loads((REPO / "js" / "package.json").read_text(encoding="utf-8"))
     listed = set(package["files"])
-    assert {"LICENSE", "NOTICE"} <= listed, (
-        f"package.json files omits the terms: {sorted(listed)}"
+    assert {"LICENSE", "NOTICE", "DISCLOSURE"} <= listed, (
+        f"package.json files omits terms or disclosure: {sorted(listed)}"
     )
     assert package["license"] == "Apache-2.0"
+    assert package["contentPolicy"] == {"class": "dual-use"}
+    disclosure = (REPO / "js" / "DISCLOSURE").read_text(encoding="utf-8").lower()
+    assert "voice enrollment" in disclosure
+    assert "impersonation" in disclosure
+    assert "permission" in disclosure
+
+
+def test_dual_use_npm_release_never_automates_a_direct_publish() -> None:
+    """npm requires proof of presence for this declared dual-use package."""
+    workflow = (REPO / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    publish = workflow.split("\n  publish-npm:\n", 1)[1].split("\n  publish-pypi:\n", 1)[0]
+    commands = [
+        line.strip() for line in publish.splitlines() if not line.lstrip().startswith("#")
+    ]
+    assert "NPM_BOOTSTRAP_TOKEN" not in workflow
+    assert any(line.startswith('npm stage publish "$tarball"') for line in commands)
+    assert not any(line.startswith("npm publish ") for line in commands)
+    assert "attest-npm" in publish
 
 
 def test_the_crate_declares_a_licence_and_packs_the_notice() -> None:

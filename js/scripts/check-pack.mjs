@@ -90,10 +90,10 @@ if (!existsSync(join(root, "data", "numbers.json"))) {
 }
 
 // The tarball is what a recipient gets, and it is not this repository: without
-// these two files in it, the terms the code and the embedded CMUdict-derived
-// lexicon arrive under reach nobody. They are checked in rather than generated,
+// these files in it, neither the legal terms nor the required dual-use
+// declaration reach the recipient. They are checked in rather than generated,
 // so a missing one means someone deleted it.
-for (const entry of ["LICENSE", "NOTICE"]) {
+for (const entry of ["LICENSE", "NOTICE", "DISCLOSURE"]) {
   if (!existsSync(join(root, entry))) {
     problems.push(`${entry} is missing — copy it from the repository root`);
   }
@@ -105,4 +105,6 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log("pack check OK: dist/, self-contained source maps, data/ and terms are present");
+console.log(
+  "pack check OK: dist/, self-contained source maps, data/, terms and disclosure are present"
+);

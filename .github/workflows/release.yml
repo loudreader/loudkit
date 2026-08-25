@@ -9,14 +9,14 @@
 #   tag-gate
 #      ↓
 #   build
-#     ├─ attest ──────┐
-#     ├─ check-pypi ──┤
-#     ├─ check-npm ───┤
-#     └─ check-crates ┘
-#                     ↓
-#              [ human approves the `release` environment ]
-#                     ↓
-#            publish-npm → publish-pypi → publish-crates → github-release
+#     ├─ attest ──────────────┐
+#     ├─ check-pypi ──────────┤
+#     ├─ check-npm → attest-npm
+#     └─ check-crates ────────┘
+#                              ↓
+#               [ human approves the `release` environment ]
+#                              ↓
+#             publish-npm → publish-pypi → publish-crates → github-release
 #
 # **`tag-gate` ties the tag to this repository's own history and checks.** A
 # `v*` tag is just a name for a commit; nothing else in this repository stops
@@ -26,19 +26,16 @@
 # ruleset is relied on for either check; if one is added later it is a second
 # fence, not a replacement for this one.
 #
-# **`attest` is the only job holding `id-token: write` outside the two
-# Trusted Publishing jobs, and it runs no fetched tooling.** The build job
-# installs third-party packages from PyPI and runs the test suite, which is
-# exactly the code an OIDC-minting job must not run: a compromised dependency
-# there could sign whatever it liked. So the build job has `contents: read`
-# and nothing else, and the attestation happens in a separate job that only
-# downloads the built artefacts and signs them.
+# **The attestation jobs hold `id-token: write` and run no fetched tooling.**
+# The build and registry-check jobs execute downloaded dependencies, so they
+# cannot mint OIDC identities. Separate jobs only download the checked Python
+# distributions or npm tarball and attest those exact bytes.
 #
-# **Nothing is published until every registry has said it would accept the
-# artefact.** The three `check-*` jobs run each registry's own acceptance
-# check — `twine check --strict`, `npm pack`, `cargo package` — against the
-# bytes the publish jobs will send. A packaging defect that only PyPI can see
-# has to surface while all three ecosystems are still untouched, because after
+# **Nothing is released until every package has passed its ecosystem's
+# acceptance gate.** The three `check-*` jobs run `twine check --strict`,
+# `npm pack` plus a clean consumer install, and `cargo package` against the
+# bytes the publish jobs will send. A packaging defect that only one ecosystem
+# can see has to surface while all three are still untouched, because after
 # the first upload it cannot be undone by fixing it.
 #
 # **A check is only worth the artefact it inspects**, which is why each of the
@@ -46,8 +43,9 @@
 #
 #   - PyPI: `build` uploads `dist/` as a workflow artifact, and both
 #     `check-pypi` and `publish-pypi` download that one copy.
-#   - npm: `check-npm` packs the `.tgz`, uploads it, and `publish-npm`
-#     publishes that exact file. It does not rebuild.
+#   - npm: `check-npm` packs the `.tgz` and uploads it. Version one publishes
+#     that artifact interactively; later runs stage it through `publish-npm`.
+#     Neither route rebuilds.
 #   - crates.io: `check-crates` runs `cargo package`, unpacks the resulting
 #     `.crate` outside the checkout, and builds and tests what a consumer of
 #     `cargo add loudkit` actually gets. crates.io has no upload-this-file
@@ -55,8 +53,9 @@
 #     verification, so the tarball it uploads is built before it is sent.
 #
 # **The gate is the `release` GitHub environment**, configured to require a
-# reviewer. Every publish job names it, so a tag builds and verifies on its
-# own and then waits for a person before anything leaves the repository.
+# reviewer. Every automated publish job names it, so a tag builds and verifies
+# on its own and then waits for a person. The first npm bootstrap happens only
+# after those checks are green and is itself protected by npm 2FA.
 #
 # That wall is not ceremony. Publishing is the one irreversible act in the
 # release: crates.io never frees a yanked version, PyPI never reuses a number,
@@ -67,18 +66,13 @@
 # gives: npm, then PyPI, then crates.io. That is most reversible to least, so
 # each link only runs because the one before it did not fail.
 #
-# **Every published artefact carries provenance, the first one included.** The
-# wheel and the sdist are signed by `attest`, and npm's own attestation is
-# minted by `publish-npm`. The awkward case is the very first npm publish: a
-# trusted publisher can only be attached to a package the registry already
-# has, so version one cannot use OIDC and something has to stand in for it.
-# What stands in is a granular token in the `NPM_BOOTSTRAP_TOKEN` secret, read
-# by that same job, on that same approval, sending that same tarball, with
-# `--provenance` passed explicitly. Nobody publishes from a laptop, and the
-# artefact everyone installs first is not the one artefact with nothing behind
-# it. The secret is deleted as soon as the trusted publisher exists;
-# RELEASING.md §7.1 is the sequence and says when each credential is created
-# and when it is revoked.
+# **Every artefact is attested before publication.** Python distributions and
+# the npm tarball receive GitHub build attestations. npm also attaches its own
+# provenance when later versions are staged through its trusted publisher.
+# Version one is the registry bootstrap exception: npm cannot stage or attach a
+# trusted publisher before the package exists, while its dual-use policy
+# requires an interactive 2FA publish. RELEASING.md §7.1 publishes the exact
+# attested tarball from this run, then configures stage-only OIDC for good.
 #
 # **The GitHub Release is created last**, and only because `publish-crates`
 # succeeded. It used to be written by the build job, which meant a release a
@@ -484,6 +478,28 @@ jobs:
           path: ${{ runner.temp }}/npm/*.tgz
           if-no-files-found: error
 
+  attest-npm:
+    name: attest npm tarball provenance
+    needs: check-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      # No checkout and no installs. The only executable code here is the two
+      # pinned GitHub actions; registry dependencies ran in check-npm, where no
+      # OIDC identity was available.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: npm-tarball
+          path: npm-tarball
+
+      - name: Attest the tarball check-npm packed and imported
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2
+        with:
+          subject-path: "npm-tarball/*.tgz"
+
   check-crates:
     name: crates.io accepts the crate
     needs: build
@@ -615,36 +631,22 @@ jobs:
 
   publish-npm:
     name: publish to npm
-    # `attest` is in the list so nothing can publish before the artefacts are
-    # signed: an attestation that appears after the upload attests nothing.
-    needs: [attest, check-pypi, check-npm, check-crates]
+    # Both attestations are prerequisites. An attestation created after an
+    # upload would not protect the decision to upload those bytes.
+    needs: [attest, attest-npm, check-pypi, check-npm, check-crates]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: release
     permissions:
       contents: read
-      # Both routes below need it, for related reasons. Trusted Publishing
-      # exchanges the OIDC token for a short-lived publish token and signs the
-      # provenance attestation with the same identity. The bootstrap
-      # authenticates with a token instead, but `--provenance` still mints the
-      # statement over this repository's OIDC identity: without this
-      # permission npm refuses with "Provenance generation in GitHub Actions
-      # requires 'write' access to the 'id-token' permission".
+      # Later releases stage through npm Trusted Publishing. Version one is
+      # published interactively with 2FA before this job is approved because
+      # npm cannot stage or configure trust for a package that does not exist.
       id-token: write
-    # The one bit that chooses between the two routes. `secrets` is not a
-    # context that a job-level or a step-level `if:` can read, and it is not
-    # read here either: the value is lifted into the environment, where the
-    # script can ask whether it is empty. Present means the package does not
-    # exist on npm yet and this run is the bootstrap; absent is every release
-    # after it. Absent is the resting state: RELEASING.md §7.1 has the owner
-    # delete the secret as soon as the trusted publisher is configured.
-    env:
-      NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
     steps:
       # No checkout, and no build. The tarball check-npm packed is the tarball
-      # that is published, so there is no source tree here to build a different
-      # one from. `npm publish <file>.tgz` does not run `prepack` — the guard
-      # already ran, on these bytes, in check-npm.
+      # that is published or staged, so there is no source tree here from which
+      # to build a different one.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: npm-tarball
@@ -654,89 +656,34 @@ jobs:
       # `.npmrc` containing `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`,
       # and npm reads a configured `_authToken` — even one expanding to nothing,
       # which is what it expands to here — as "auth is already arranged" and
-      # never starts the OIDC exchange. The publish then fails with ENEEDAUTH.
-      # https://registry.npmjs.org is npm's built-in default, so writing it down
-      # buys nothing and costs the handshake. The bootstrap route does not want
-      # it either: it writes its own config file, for one command, and deletes
-      # it, rather than leaving an auth line in the runner's `.npmrc` for every
-      # later step to inherit.
+      # never starts the OIDC exchange. npm's built-in registry default is the
+      # intended one, so writing it down buys nothing and breaks authentication.
       #
-      # Node 24, because it bundles an npm new enough for Trusted Publishing
-      # (the floor npm documents is npm 11.5.1 with Node 24; see
-      # https://docs.npmjs.com/trusted-publishers/). This job used to run
-      # `npm install --global npm@11.19.0` on top of Node 22, which fetched
-      # and executed registry code *after* `id-token: write` was granted —
-      # exactly what the `attest` job exists to avoid. Nothing is installed
-      # here any more: the npm that publishes is the one the pinned setup-node
-      # action provides. `cache:` stays absent for the same reason — a
-      # publishing job restores no cached dependencies.
+      # Staged publishing needs npm 11.15 or newer. Node 24 carries a suitable
+      # npm, so this credentialed job installs and caches nothing.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: "24"
 
-      # One step, two authentication routes, one set of bytes.
-      #
-      # **The steady state: Trusted Publishing, no flag and no token.** npm
-      # exchanges the job's OIDC token for a short-lived publish credential and
-      # generates and publishes the provenance attestation on its own, so
-      # `--provenance` is not passed: under Trusted Publishing the flag is
-      # redundant, and there is no long-lived credential to rotate or to leak.
-      # npmjs.com decides which workflow in which repository may publish.
-      #
-      # **The first release: a token, and `--provenance` spelled out.** A
-      # trusted publisher can only be attached to a package that already exists
-      # on the registry, so the first version has to go up some other way, and
-      # the way it goes up decides whether the artefact everybody installs first
-      # is the only one without a provenance statement. It goes up from here.
-      # The token authenticates; `--provenance` makes npm mint and attach the
-      # statement over the same GitHub OIDC identity, which is why this job holds
-      # `id-token: write` on both routes. `--access public` is not decoration
-      # here but required: before signing, npm asks the registry whether the
-      # package is public, a question a package that does not exist yet cannot
-      # answer, and without the flag it refuses with "Can't generate provenance
-      # for new or private package, you must set `access` to public."
-      #
-      # The tarball is the same one either way: the artefact `check-npm` packed,
-      # installed into a clean directory and imported, in this same run. Nothing
-      # here checks out the source or builds, so there is no second tarball for
-      # this step to reach for by mistake.
-      #
-      # The token reaches npm through a config file written for this one
-      # command, mode 0600, removed by a trap whether the publish succeeds or
-      # fails, rather than through the `registry-url:` form the setup-node step
-      # above rejects. Under `NPM_CONFIG_USERCONFIG` the two routes cannot
-      # reach each other's credentials, and no auth line outlives the command
-      # that needed it.
-      #
-      # npm 11 does try the OIDC exchange first even with a token configured.
-      # For a package with no trusted publisher the exchange fails, and npm's
-      # own helper is written never to throw on that. It logs, it leaves the
-      # configured token in place, and the bootstrap proceeds on the token.
-      #
-      # The version may already be on the registry for one legitimate reason: a
-      # re-run of a tag whose publish already succeeded. Publishing it a second
-      # time would fail and, because publish-pypi and publish-crates chain off
-      # this job, take PyPI and crates.io down with it. So when the version
-      # exists, this job verifies that what is published is the artefact CI
-      # checked (npm records the tarball's sha1 as `dist.shasum`) and succeeds
-      # without sending anything. A shasum mismatch is the one thing that must
-      # never pass: it means the bytes on the registry are not the bytes this
-      # run verified.
-      - name: Publish the tarball check-npm packed
+      # LoudKit declares voice enrollment as dual-use. npm's policy therefore
+      # forbids direct automated publishing: later versions are staged over
+      # stage-only OIDC, then this job waits for a maintainer to approve them
+      # with 2FA on npmjs.com. The first release cannot be staged because npm
+      # requires the package to exist first; §7.1 publishes this exact tarball
+      # interactively, and this job verifies its registry shasum before the
+      # PyPI and crates.io chain may continue.
+      - name: Verify the live tarball, or stage it and wait for 2FA approval
         run: |
           set -euo pipefail
-          npmrc="$RUNNER_TEMP/npmrc-bootstrap"
-          trap 'rm -f "$npmrc"' EXIT
-
           tarball=$(ls npm-tarball/*.tgz)
           version="${GITHUB_REF_NAME#v}"
+          local=$(sha1sum "$tarball" | cut -d' ' -f1)
           echo "loudkit@$version from $tarball"
           sha256sum "$tarball"
           npm --version
 
           published=$(npm view "loudkit@$version" dist.shasum 2>/dev/null || true)
           if [ -n "$published" ]; then
-            local=$(shasum -a 1 "$tarball" | cut -d' ' -f1)
             if [ "$published" != "$local" ]; then
               echo "loudkit@$version is already on the registry with shasum $published," >&2
               echo "but the tarball this run checked has shasum $local." >&2
@@ -748,20 +695,33 @@ jobs:
             exit 0
           fi
 
-          if [ -n "${NPM_BOOTSTRAP_TOKEN:-}" ]; then
-            echo "NPM_BOOTSTRAP_TOKEN is set: this is the first publish of this"
-            echo "package, over a granular token, with provenance."
-            ( umask 077 && printf '//registry.npmjs.org/:_authToken=%s\n' \
-                "$NPM_BOOTSTRAP_TOKEN" > "$npmrc" )
-            NPM_CONFIG_USERCONFIG="$npmrc" \
-              npm publish --provenance --access public "$tarball"
-            echo "Published with provenance. Configure the trusted publisher on the"
-            echo "package now, then delete this secret and revoke the token"
-            echo "(RELEASING.md §7.1). The next release must not find it here."
-          else
-            echo "No bootstrap token: publishing over Trusted Publishing."
-            npm publish --access public "$tarball"
+          package=$(npm view loudkit name 2>/dev/null || true)
+          if [ -z "$package" ]; then
+            echo "loudkit does not exist on npm yet." >&2
+            echo "Publish this run's npm-tarball artifact interactively with 2FA," >&2
+            echo "configure its trusted publisher for stage-only access, then rerun." >&2
+            echo "See RELEASING.md §7.1. No CI token may bypass this step." >&2
+            exit 1
           fi
+
+          npm stage publish "$tarball"
+          echo "Staged loudkit@$version. Review and approve it with 2FA on npmjs.com."
+          echo "This job will wait up to 30 minutes before stopping the release chain."
+          for _ in $(seq 1 120); do
+            sleep 15
+            published=$(npm view "loudkit@$version" dist.shasum 2>/dev/null || true)
+            if [ -z "$published" ]; then
+              continue
+            fi
+            if [ "$published" != "$local" ]; then
+              echo "npm published shasum $published, expected $local" >&2
+              exit 1
+            fi
+            echo "npm approval complete; the live tarball matches this run."
+            exit 0
+          done
+          echo "npm approval did not arrive within 30 minutes; PyPI and crates.io remain blocked." >&2
+          exit 1
 
   publish-pypi:
     name: publish to PyPI

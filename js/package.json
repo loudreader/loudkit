@@ -7,7 +7,10 @@
     "url": "git+https://github.com/loudreader/loudkit.git",
     "directory": "js"
   },
-  "description": "loudkit text-to-speech over onnxruntime-node — the same engine, the same sampling law, no torch.",
+  "description": "loudkit text-to-speech over onnxruntime-node: the same engine, the same sampling law, no torch.",
+  "contentPolicy": {
+    "class": "dual-use"
+  },
   "type": "module",
   "exports": {
     ".": {
@@ -30,6 +33,7 @@
     "!dist/test/",
     "data/",
     "README.md",
+    "DISCLOSURE",
     "LICENSE",
     "NOTICE"
   ],

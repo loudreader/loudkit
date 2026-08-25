@@ -1,11 +1,11 @@
 # Releasing loudkit
 
 The release workflow (`.github/workflows/release.yml`) builds and verifies the
-artefacts, attests their provenance, and, after a reviewer approves the
-`release` environment, publishes to npm, PyPI and crates.io and then creates
-the GitHub Release. Nothing leaves the repository before that approval. The
-manual commands in §7 remain the fallback and the record of what the jobs do.
-This file is the whole procedure, in order.
+artefacts, attests their provenance, coordinates npm's required 2FA step and,
+after a reviewer approves the `release` environment, publishes PyPI and
+crates.io before creating the GitHub Release. The manual commands in §7 are the
+first npm bootstrap, the fallback and the record of what the jobs do. This file
+is the whole procedure, in order.
 
 Read §0 before anything else. The public history of this project begins at §5,
 in a single commit, and §5 cannot be redone.
@@ -224,10 +224,11 @@ it may be delegated.
 
 - [ ] `cd js && npm pack --dry-run`. The `prepack` guard
       (`js/scripts/check-pack.mjs`) runs `npm run build`, copies the data files
-      and refuses a tarball missing `dist/`, either data file, `LICENSE` or
-      `NOTICE`. Confirm the listing carries `LICENSE`, `NOTICE`, `README.md`,
-      `data/numbers.json`, `data/pl_en_respell.json` (about 6.6 MB) and
-      `dist/`, and that no `dist/test/` entry appears.
+      and refuses a tarball missing `dist/`, either data file, `LICENSE`,
+      `NOTICE` or `DISCLOSURE`. Confirm the listing carries those files,
+      `README.md`, `data/numbers.json`, `data/pl_en_respell.json` (about
+      6.6 MB) and `dist/`, and that no `dist/test/` entry appears. Confirm
+      `package.json` declares `contentPolicy.class` as `dual-use`.
 - [ ] In a scratch dir: `npm install /path/to/loudkit-0.1.0.tgz`, then run the
       example from `js/README.md` against downloaded weights.
 
@@ -587,10 +588,11 @@ job has finished.
 second build. That tag exists purely so the module proxy can find the
 subdirectory module.
 
-**First release only:** complete the §7.1 npm bootstrap (steps 1 to 4) before
-anyone approves the `release` environment on this tag's run. The run waits at
-the approval wall, so there is no race; an early approval only fails
-`publish-npm` at authentication.
+**First release only:** when the run reaches the `release` environment wall,
+complete the interactive npm bootstrap in §7.1 before approving it. npm cannot
+stage or configure trust for a package that does not exist, and its dual-use
+policy requires 2FA for the first direct publish. An early GitHub approval
+fails safely without publishing PyPI or crates.io.
 
 Wait for `release.yml` to go green. It does the following:
 
@@ -602,8 +604,8 @@ Wait for `release.yml` to go green. It does the following:
 - smoke-tests **both** artefacts in clean venvs;
 - runs the no-weights suite;
 - generates an SBOM scoped to the wheel, not the runner;
-- attests provenance over both artefacts, in a job of its own that runs no
-  fetched tooling, so the job that can mint an OIDC token never executes the
+- attests the Python distributions and npm tarball in isolated jobs that run
+  no fetched tooling, so jobs that mint OIDC identities never execute the
   build's downloaded dependencies;
 - **creates the GitHub Release for the tag and uploads `dist/*` to it**,
   including the SBOM, with auto-generated notes.
@@ -617,22 +619,23 @@ the auto-generated notes with the `CHANGELOG.md` section for this version.
 registry has agreed that it can be:
 
 ```
-tag-gate → build → attest        ┐
-                 → check-pypi    ├→ [a reviewer approves `release`] →
-                 → check-npm     │   publish-npm → publish-pypi →
-                 → check-crates  ┘   publish-crates → github-release
+tag-gate → build → attest            ┐
+                 → check-pypi        ├→ [approve `release`] →
+                 → check-npm → attest-npm
+                 → check-crates      ┘   publish-npm → publish-pypi →
+                                         publish-crates → github-release
 ```
 
-The three checks run each registry's own acceptance test against the exact
-bytes the publish jobs will send: `twine check --strict` on the built
-distributions; `npm pack` followed by installing the packed tarball into a
-clean directory and importing it; `cargo package` followed by building and
-testing the unpacked `.crate`, plus a fresh consumer crate that depends on it
-and calls the API with no lockfile and no monorepo paths. They gate the first
-publish, so a packaging fault in one registry surfaces while the other two are
-still untouched. That ordering is the point: a version number spent on
-crates.io is never freed, and a filename spent on PyPI is never reused, so a
-half-published release cannot be repaired, only worked around.
+The three checks run each ecosystem's acceptance gate against the exact bytes
+the publish jobs will send: `twine check --strict` on the built distributions;
+`npm pack` followed by installing the packed tarball into a clean directory and
+importing it; `cargo package` followed by building and testing the unpacked
+`.crate`, plus a fresh consumer crate that depends on it and calls the API with
+no lockfile and no monorepo paths. They gate the first publish, so a packaging
+fault in one ecosystem surfaces while the other two are still untouched. That
+ordering is the point: a version number spent on crates.io is never freed, and
+a filename spent on PyPI is never reused, so a half-published release cannot be
+repaired, only worked around.
 
 The GitHub Release is created last, after the publishes, rather than before the
 reviewer sees the request.
@@ -646,44 +649,23 @@ None of this can be done from CI, and until it is done the publish jobs fail
 at the authentication step rather than publishing something wrong.
 
 - [ ] **PyPI** — add a Trusted Publisher at
-      <https://pypi.org/manage/account/publishing/>: owner `loudreader`,
-      repository `loudkit`, workflow `release.yml`, environment `release`.
-      No token is stored anywhere.
-- [ ] **npm**: two credentials, one after the other, and the order is the
-      whole of it. A trusted publisher can only be attached to a package the
-      registry already has, so the first publish cannot use one. It runs from
-      Actions all the same, on a granular token and with
-      `npm publish --provenance`, so the first artefact anybody installs
-      carries a provenance statement like every one after it. §7.1 is the
-      sequence; these are the four acts it asks of an owner:
-
-      1. Create a granular access token at npmjs.com → Access Tokens →
-         Generate New Token → Granular Access Token, with read-and-write on
-         packages and the shortest expiry the form allows. `loudkit` is
-         unscoped and does not exist yet, so "Only select packages" has
-         nothing to select and the token is necessarily account-wide. That is
-         why it is short-lived and why it is revoked the same day.
-      2. Store it as the repository secret `NPM_BOOTSTRAP_TOKEN`, last of the
-         four items in this section and immediately before the tag. While it
-         exists it is the broadest credential this repository can reach.
-      3. After the first release lands: add the trusted publisher on the
-         package that now exists, naming this repository, `release.yml` and
-         the `release` environment.
-      4. Delete the `NPM_BOOTSTRAP_TOKEN` secret, then revoke the token.
-         `publish-npm` picks its route by whether that secret is set, so
-         deleting it is what puts npm on OIDC for good.
-
-      After that there is no npm credential in this repository at all. Trusted
-      Publishing exchanges the job's OIDC token for a short-lived publish
-      credential and generates and publishes the provenance attestation
-      itself. It needs npm 11.5.1 or newer, which is why `publish-npm` runs on
-      Node 24: that Node bundles a new enough npm, so the job installs nothing
-      after its OIDC grant. Installing an npm inside the publishing job would
-      run registry-fetched code in the one job that can mint a token, and the
-      job also configures no dependency cache, per the setup-node guidance
-      (<https://docs.npmjs.com/trusted-publishers/>,
-      <https://docs.npmjs.com/generating-provenance-statements/>,
-      <https://github.com/actions/setup-node/blob/main/docs/advanced-usage.md>).
+      <https://pypi.org/manage/account/publishing/>. Create a pending publisher
+      with project name `loudkit`, owner `loudreader`, repository `loudkit`,
+      workflow `release.yml` and environment `release`. PyPI turns it into a
+      normal publisher on first use; no token is stored. A pending publisher
+      does not reserve the name, so do this immediately before tagging.
+- [ ] **npm** — no repository secret. `loudkit` declares voice enrollment as
+      dual-use, so npm requires proof of presence: direct automated publishing
+      is forbidden. The first tarball is published interactively with 2FA from
+      the exact attested Actions artifact. Once the package exists, configure
+      its trusted publisher for **`npm stage publish` only**: owner
+      `loudreader`, repository `loudkit`, workflow `release.yml`, environment
+      `release`. Also set Publishing access to "Require two-factor
+      authentication and disallow tokens". Later workflows stage over OIDC and
+      wait while a maintainer reviews and approves the stage with 2FA. §7.1 is
+      the exact sequence. These requirements come from npm's
+      [Dual-Use Content Policy](https://docs.npmjs.com/policies/dual-use/) and
+      [staged publishing](https://docs.npmjs.com/staged-publishing/) contract.
 - [ ] **crates.io** — create an API token scoped to publish and store it as
       the `CARGO_REGISTRY_TOKEN` repository secret. crates.io has no OIDC
       equivalent.
@@ -707,64 +689,63 @@ crates.io costs the version number in every ecosystem.
 ### 7.1 npm: the first-release bootstrap
 
 npm has no `loudkit` package yet, so there is nothing for a trusted publisher
-to be attached to and the first version has to authenticate some other way. It
-does not have to leave the workflow to do that. `publish-npm` takes a second
-route when the `NPM_BOOTSTRAP_TOKEN` secret is set: the same job, behind the
-same approval, sending the same tarball, authenticated by the token and
-publishing with `--provenance`. So `loudkit@0.1.0` on npm carries a provenance
-statement naming this repository, `release.yml` and the commit the tag points
-at, exactly like every release after it. The version everybody installs first
-is not the one version with nothing behind it.
+to be attached to, and npm also refuses to stage a brand-new package. LoudKit's
+voice enrollment is declared as dual-use, so its first direct publish must be
+interactive and protected by 2FA. A CI token that bypasses 2FA and a direct
+OIDC publish are both disallowed by npm's policy.
 
-**Never `cd js && npm publish`, on any machine.** That command builds a new
-tarball out of whatever the working tree holds and sends it: bytes no CI job
-packed, listed or installed. What goes up is the `npm-tarball` artifact
-`check-npm` produced in this same run: packed with `npm pack`, its contents
-listed, installed into a clean directory and imported from there.
-`publish-npm` neither checks out the source nor builds, so it has no second
-tarball to reach for by mistake.
+The unavoidable bootstrap exception is native npm provenance: npm can only
+mint it from CI, while CI cannot create this first dual-use package. The exact
+tarball is still covered by the separate GitHub build attestation created by
+`attest-npm`. Every later version is staged through npm OIDC and receives npm's
+own provenance as well.
 
-The sequence, in order:
+The first-release sequence is:
 
-1. Before the tag, and after the other three items in §7.0 are done: create
-   the granular token and store it as the repository secret
-   `NPM_BOOTSTRAP_TOKEN`. Confirm first that the `release` environment already
-   has its required reviewer. From the moment the secret exists, a tag can
-   reach a publishable npm credential, and the reviewer is the only thing
-   standing between the two.
-2. Push the tag (§6). `tag-gate`, `build`, `attest` and the three `check-*`
-   jobs run, and `publish-npm` stops at the `release` wall.
-3. Read the run before approving. `check-npm` logs the `sha256sum` of the
-   tarball it packed and a `tar -tzf` listing of what is inside it. That is
-   the artefact the next step sends.
-4. Approve the `release` environment. `publish-npm` finds the secret, writes
-   it to a config file for one command, and runs `npm publish --provenance
-   --access public` on the downloaded artifact. The log repeats that same
-   `sha256sum` and prints the Sigstore transparency-log entry for the
-   statement. The rest of the chain, PyPI then crates.io then the GitHub
-   Release, carries on without further approval.
-5. Confirm the provenance is really there, from outside CI:
+1. Push the tag (§6) and wait until `attest`, `attest-npm` and all three
+   `check-*` jobs are green. `publish-npm` then waits at the GitHub `release`
+   environment. Do not approve it yet.
+2. Download the exact npm artifact from that run and verify its attestation.
+   Use a fresh directory so no local `npm pack` output can be selected:
 
    ```bash
-   npm view loudkit@0.1.0 dist.attestations
-   mkdir /tmp/lk-bootstrap && cd /tmp/lk-bootstrap && npm init -y >/dev/null
-   npm install loudkit@0.1.0 && npm audit signatures
+   RUN_ID=PASTE_RELEASE_RUN_ID
+   NPM_OUT=$(mktemp -d)
+   gh run download "$RUN_ID" --repo loudreader/loudkit \
+     --name npm-tarball --dir "$NPM_OUT"
+   gh attestation verify "$NPM_OUT"/*.tgz --repo loudreader/loudkit
+   shasum -a 256 "$NPM_OUT"/*.tgz
+   tar -tzf "$NPM_OUT"/*.tgz
    ```
 
-   `npm audit signatures` reporting a verified provenance attestation is the
-   result this whole section exists for. If it does not, stop here: step 6
-   would hide the problem rather than fix it.
-6. On npmjs.com, on the package that now exists, add the trusted publisher per
-   §7.0: this repository, workflow `release.yml`, environment `release`.
-7. Delete the `NPM_BOOTSTRAP_TOKEN` repository secret, then revoke the token
-   on npmjs.com. Both, in that order. Deleting the secret is what moves
-   `publish-npm` onto the OIDC route for every later release; revoking is what
-   makes the value worthless if it was ever copied anywhere it should not have
-   been.
+   The listing must include `DISCLOSURE`, `LICENSE`, `NOTICE`, `dist/` and both
+   files under `data/`. Never run `npm pack` here; that would create different,
+   unattested bytes.
+3. Log in to npm with the owner account and publish that tarball interactively.
+   Complete the 2FA challenge npm presents:
 
-From the second release on, none of this happens: the secret is gone, the job
-takes the Trusted Publishing route, npm mints the attestation itself, and this
-section is a record of how the package came to exist.
+   ```bash
+   npm login --auth-type=web
+   npm publish --access public "$NPM_OUT"/*.tgz
+   ```
+
+4. On the new `loudkit` package, add its GitHub Actions trusted publisher:
+   repository `loudreader/loudkit`, workflow `release.yml`, environment
+   `release`, and allow **`npm stage publish` only**. Then set Publishing access
+   to "Require two-factor authentication and disallow tokens".
+5. Approve the GitHub `release` environment. `publish-npm` compares npm's live
+   `dist.shasum` with the checked tarball and only then unblocks PyPI and
+   crates.io. A mismatch stops the chain.
+6. In a scratch directory, install `loudkit@0.1.0` and import it. Also repeat
+   `gh attestation verify` on the downloaded tarball as the provenance gate for
+   this bootstrap version.
+
+From the second release on, `publish-npm` stages the checked tarball through
+the stage-only trusted publisher and waits for up to 30 minutes. Open npm's
+Staged Packages page, inspect the version, approve it with 2FA, and leave the
+workflow running. Only after the live registry shasum matches does PyPI start.
+Those later versions carry both GitHub's tarball attestation and npm's native
+OIDC provenance.
 
 Re-running a tag whose publish already succeeded does not publish twice.
 `publish-npm` finds the version on the registry, compares the registry's
