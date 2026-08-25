@@ -1,0 +1,2529 @@
+{
+ "version": 1,
+ "about": [
+  "Number grammars for the nine languages the kit speaks, written from the",
+  "languages' own reference descriptions rather than derived from any library.",
+  "This file is the single source of truth: five implementations read it, so a",
+  "rule lives once and the conformance fixture catches a port that drifts.",
+  "",
+  "Format is documented on `loudkit.numbers.Grammar`. In short: a regular",
+  "generative core (ones, teens, tens, hundreds, scales) plus a listed set of",
+  "irregular forms, because that is how these grammars are actually described.",
+  "",
+  "`unit_tens_joiner` carries its own spacing, so one concatenation serves a",
+  "hyphenating language (en), a spacing one (es) and a compounding one (de).",
+  "",
+  "Scale `forms` is one word where the language does not inflect the scale noun",
+  "and three where it does (Polish: singular / few / many)."
+ ],
+ "languages": {
+  "en": {
+   "ones": [
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine"
+   ],
+   "teens": [
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen"
+   ],
+   "tens": [
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety"
+   ],
+   "hundred": "hundred",
+   "scales": [
+    {
+     "value": 1000000000000,
+     "forms": [
+      "trillion"
+     ],
+     "separate": true,
+     "small_joiner": "and"
+    },
+    {
+     "value": 1000000000,
+     "forms": [
+      "billion"
+     ],
+     "separate": true,
+     "small_joiner": "and"
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "million"
+     ],
+     "separate": true,
+     "small_joiner": "and"
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "thousand"
+     ],
+     "separate": true,
+     "small_joiner": "and"
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": "-",
+   "hundred_joiner": "and",
+   "one_before_hundred": true,
+   "one_before_scale": true,
+   "word_join": " ",
+   "decimal_separator": ".",
+   "decimal_word": "point",
+   "minus_word": "minus",
+   "scale_large_joiner": ", ",
+   "unit_words": {
+    "$": "dollars",
+    "£": "pounds",
+    "€": "euros",
+    "¥": "yen",
+    "₹": "rupees",
+    "kr": "kroner",
+    "zł": "zlotys",
+    "%": "percent",
+    "°": "degrees",
+    "¢": "cents"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "e.g.": "for example",
+    "i.e.": "that is",
+    "etc.": "etcetera"
+   },
+   "dates": {
+    "day_form": "ordinal",
+    "day_words": {
+     "1": "first",
+     "2": "second",
+     "3": "third",
+     "4": "fourth",
+     "5": "fifth",
+     "6": "sixth",
+     "7": "seventh",
+     "8": "eighth",
+     "9": "ninth",
+     "10": "tenth",
+     "11": "eleventh",
+     "12": "twelfth",
+     "13": "thirteenth",
+     "14": "fourteenth",
+     "15": "fifteenth",
+     "16": "sixteenth",
+     "17": "seventeenth",
+     "18": "eighteenth",
+     "19": "nineteenth",
+     "20": "twentieth",
+     "21": "twenty-first",
+     "22": "twenty-second",
+     "23": "twenty-third",
+     "24": "twenty-fourth",
+     "25": "twenty-fifth",
+     "26": "twenty-sixth",
+     "27": "twenty-seventh",
+     "28": "twenty-eighth",
+     "29": "twenty-ninth",
+     "30": "thirtieth",
+     "31": "thirty-first"
+    },
+    "months": [
+     "January",
+     "February",
+     "March",
+     "April",
+     "May",
+     "June",
+     "July",
+     "August",
+     "September",
+     "October",
+     "November",
+     "December"
+    ],
+    "day_first_prefix": "the",
+    "day_first_infix": "of",
+    "year_rule": "en_split",
+    "dotted_is_ambiguous": true
+   },
+   "letter_names": {
+    "a": "ay",
+    "b": "bee",
+    "c": "see",
+    "d": "dee",
+    "e": "ee",
+    "f": "eff",
+    "g": "gee",
+    "h": "aitch",
+    "i": "eye",
+    "j": "jay",
+    "k": "kay",
+    "l": "el",
+    "m": "em",
+    "n": "en",
+    "o": "oh",
+    "p": "pee",
+    "q": "cue",
+    "r": "ar",
+    "s": "ess",
+    "t": "tee",
+    "u": "you",
+    "v": "vee",
+    "w": "double-you",
+    "x": "ex",
+    "y": "why",
+    "z": "zee"
+   },
+   "word_acronyms": [
+    "aids",
+    "europol",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "scuba",
+    "sim",
+    "unesco",
+    "unicef"
+   ],
+   "ordinals": {
+    "suffixes": [
+     "st",
+     "nd",
+     "rd",
+     "th"
+    ],
+    "units": {
+     "0": "",
+     "1": "first",
+     "2": "second",
+     "3": "third",
+     "4": "fourth",
+     "5": "fifth",
+     "6": "sixth",
+     "7": "seventh",
+     "8": "eighth",
+     "9": "ninth"
+    },
+    "teens": {
+     "10": "tenth",
+     "11": "eleventh",
+     "12": "twelfth",
+     "13": "thirteenth",
+     "14": "fourteenth",
+     "15": "fifteenth",
+     "16": "sixteenth",
+     "17": "seventeenth",
+     "18": "eighteenth",
+     "19": "nineteenth"
+    },
+    "tens": {
+     "0": "",
+     "10": "",
+     "20": "twentieth",
+     "30": "thirtieth",
+     "40": "fortieth",
+     "50": "fiftieth",
+     "60": "sixtieth",
+     "70": "seventieth",
+     "80": "eightieth",
+     "90": "ninetieth"
+    },
+    "tens_joiner": "-"
+   }
+  },
+  "de": {
+   "ones": [
+    "null",
+    "eins",
+    "zwei",
+    "drei",
+    "vier",
+    "fünf",
+    "sechs",
+    "sieben",
+    "acht",
+    "neun"
+   ],
+   "teens": [
+    "zehn",
+    "elf",
+    "zwölf",
+    "dreizehn",
+    "vierzehn",
+    "fünfzehn",
+    "sechzehn",
+    "siebzehn",
+    "achtzehn",
+    "neunzehn"
+   ],
+   "tens": [
+    "zwanzig",
+    "dreißig",
+    "vierzig",
+    "fünfzig",
+    "sechzig",
+    "siebzig",
+    "achtzig",
+    "neunzig"
+   ],
+   "hundred": "hundert",
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "Milliarde",
+      "Milliarden"
+     ],
+     "one": "eine",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "Million",
+      "Millionen"
+     ],
+     "one": "eine",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "tausend"
+     ]
+    }
+   ],
+   "units_before_tens": true,
+   "unit_tens_joiner": "und",
+   "one_before_hundred": true,
+   "one_before_scale": true,
+   "word_join": "",
+   "combining_ones": {
+    "1": "ein"
+   },
+   "decimal_separator": ",",
+   "decimal_word": "Komma",
+   "minus_word": "minus",
+   "unit_words": {
+    "$": "Dollar",
+    "£": "Pfund",
+    "€": "Euro",
+    "¥": "Yen",
+    "₹": "Rupien",
+    "kr": "Kronen",
+    "zł": "Zloty",
+    "%": "Prozent",
+    "°": "Grad",
+    "¢": "Cent"
+   },
+   "time_infix": "Uhr",
+   "abbreviations": {
+    "z.B.": "zum Beispiel",
+    "usw.": "und so weiter",
+    "bzw.": "beziehungsweise",
+    "ca.": "circa",
+    "d.h.": "das heißt"
+   },
+   "dates": {
+    "day_form": "ordinal",
+    "day_words": {
+     "1": "erste",
+     "2": "zweite",
+     "3": "dritte",
+     "4": "vierte",
+     "5": "fünfte",
+     "6": "sechste",
+     "7": "siebte",
+     "8": "achte",
+     "9": "neunte",
+     "10": "zehnte",
+     "11": "elfte",
+     "12": "zwölfte",
+     "13": "dreizehnte",
+     "14": "vierzehnte",
+     "15": "fünfzehnte",
+     "16": "sechzehnte",
+     "17": "siebzehnte",
+     "18": "achtzehnte",
+     "19": "neunzehnte",
+     "20": "zwanzigste",
+     "21": "einundzwanzigste",
+     "22": "zweiundzwanzigste",
+     "23": "dreiundzwanzigste",
+     "24": "vierundzwanzigste",
+     "25": "fünfundzwanzigste",
+     "26": "sechsundzwanzigste",
+     "27": "siebenundzwanzigste",
+     "28": "achtundzwanzigste",
+     "29": "neunundzwanzigste",
+     "30": "dreißigste",
+     "31": "einunddreißigste"
+    },
+    "day_words_oblique": {
+     "1": "ersten",
+     "2": "zweiten",
+     "3": "dritten",
+     "4": "vierten",
+     "5": "fünften",
+     "6": "sechsten",
+     "7": "siebten",
+     "8": "achten",
+     "9": "neunten",
+     "10": "zehnten",
+     "11": "elften",
+     "12": "zwölften",
+     "13": "dreizehnten",
+     "14": "vierzehnten",
+     "15": "fünfzehnten",
+     "16": "sechzehnten",
+     "17": "siebzehnten",
+     "18": "achtzehnten",
+     "19": "neunzehnten",
+     "20": "zwanzigsten",
+     "21": "einundzwanzigsten",
+     "22": "zweiundzwanzigsten",
+     "23": "dreiundzwanzigsten",
+     "24": "vierundzwanzigsten",
+     "25": "fünfundzwanzigsten",
+     "26": "sechsundzwanzigsten",
+     "27": "siebenundzwanzigsten",
+     "28": "achtundzwanzigsten",
+     "29": "neunundzwanzigsten",
+     "30": "dreißigsten",
+     "31": "einunddreißigsten"
+    },
+    "oblique_triggers": [
+     "am",
+     "vom",
+     "zum",
+     "seit",
+     "bis",
+     "den",
+     "ab"
+    ],
+    "months": [
+     "Januar",
+     "Februar",
+     "März",
+     "April",
+     "Mai",
+     "Juni",
+     "Juli",
+     "August",
+     "September",
+     "Oktober",
+     "November",
+     "Dezember"
+    ],
+    "year_rule": "de_hundreds"
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "be",
+    "c": "ze",
+    "d": "de",
+    "e": "e",
+    "f": "ef",
+    "g": "ge",
+    "h": "ha",
+    "i": "i",
+    "j": "jot",
+    "k": "ka",
+    "l": "el",
+    "m": "em",
+    "n": "en",
+    "o": "o",
+    "p": "pe",
+    "q": "ku",
+    "r": "er",
+    "s": "es",
+    "t": "te",
+    "u": "u",
+    "v": "fau",
+    "w": "we",
+    "x": "iks",
+    "y": "üpsilon",
+    "z": "zet",
+    "ä": "ä",
+    "ö": "ö",
+    "ü": "ü",
+    "ß": "eszett"
+   },
+   "word_acronyms": [
+    "aids",
+    "benelux",
+    "europol",
+    "gestapo",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sim",
+    "tüv",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "nl": {
+   "ones": [
+    "nul",
+    "een",
+    "twee",
+    "drie",
+    "vier",
+    "vijf",
+    "zes",
+    "zeven",
+    "acht",
+    "negen"
+   ],
+   "teens": [
+    "tien",
+    "elf",
+    "twaalf",
+    "dertien",
+    "veertien",
+    "vijftien",
+    "zestien",
+    "zeventien",
+    "achttien",
+    "negentien"
+   ],
+   "tens": [
+    "twintig",
+    "dertig",
+    "veertig",
+    "vijftig",
+    "zestig",
+    "zeventig",
+    "tachtig",
+    "negentig"
+   ],
+   "hundred": "honderd",
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "miljard"
+     ],
+     "one": "een",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "miljoen"
+     ],
+     "one": "een",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "duizend"
+     ],
+     "one": ""
+    }
+   ],
+   "units_before_tens": true,
+   "unit_tens_joiner": "en",
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": "",
+   "exceptions": {
+    "22": "tweeëntwintig",
+    "23": "drieëntwintig",
+    "32": "tweeëndertig",
+    "33": "drieëndertig",
+    "42": "tweeënveertig",
+    "43": "drieënveertig",
+    "52": "tweeënvijftig",
+    "53": "drieënvijftig",
+    "62": "tweeënzestig",
+    "63": "drieënzestig",
+    "72": "tweeënzeventig",
+    "73": "drieënzeventig",
+    "82": "tweeëntachtig",
+    "83": "drieëntachtig",
+    "92": "tweeënnegentig",
+    "93": "drieënnegentig"
+   },
+   "decimal_separator": ",",
+   "decimal_word": "komma",
+   "minus_word": "min",
+   "unit_words": {
+    "$": "dollar",
+    "£": "pond",
+    "€": "euro",
+    "¥": "yen",
+    "₹": "roepies",
+    "kr": "kronen",
+    "zł": "zloty",
+    "%": "procent",
+    "°": "graden",
+    "¢": "cent"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "bijv.": "bijvoorbeeld",
+    "enz.": "enzovoort",
+    "d.w.z.": "dat wil zeggen"
+   },
+   "dates": {
+    "day_form": "cardinal",
+    "day_one_word": "één",
+    "months": [
+     "januari",
+     "februari",
+     "maart",
+     "april",
+     "mei",
+     "juni",
+     "juli",
+     "augustus",
+     "september",
+     "oktober",
+     "november",
+     "december"
+    ],
+    "year_rule": "nl_hundreds"
+   },
+   "letter_names": {
+    "a": "aa",
+    "b": "bee",
+    "c": "see",
+    "d": "dee",
+    "e": "ee",
+    "f": "ef",
+    "g": "gee",
+    "h": "haa",
+    "i": "ie",
+    "j": "jee",
+    "k": "kaa",
+    "l": "el",
+    "m": "em",
+    "n": "en",
+    "o": "oo",
+    "p": "pee",
+    "q": "kuu",
+    "r": "er",
+    "s": "es",
+    "t": "tee",
+    "u": "uu",
+    "v": "vee",
+    "w": "wee",
+    "x": "iks",
+    "y": "ei",
+    "z": "zet"
+   },
+   "word_acronyms": [
+    "aids",
+    "europol",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "navo",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "da": {
+   "ones": [
+    "nul",
+    "en",
+    "to",
+    "tre",
+    "fire",
+    "fem",
+    "seks",
+    "syv",
+    "otte",
+    "ni"
+   ],
+   "teens": [
+    "ti",
+    "elleve",
+    "tolv",
+    "tretten",
+    "fjorten",
+    "femten",
+    "seksten",
+    "sytten",
+    "atten",
+    "nitten"
+   ],
+   "tens": [
+    "tyve",
+    "tredive",
+    "fyrre",
+    "halvtreds",
+    "tres",
+    "halvfjerds",
+    "firs",
+    "halvfems"
+   ],
+   "hundred": "hundrede",
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "milliard",
+      "milliarder"
+     ],
+     "one": "en",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "million",
+      "millioner"
+     ],
+     "one": "en",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "tusind"
+     ],
+     "one": "",
+     "small_joiner": "og"
+    }
+   ],
+   "units_before_tens": true,
+   "unit_tens_joiner": "og",
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": " ",
+   "genders": {
+    "common": {
+     "1": "en"
+    },
+    "neuter": {
+     "1": "et"
+    }
+   },
+   "decimal_separator": ",",
+   "decimal_word": "komma",
+   "minus_word": "minus",
+   "hundred_joiner": "og",
+   "hundreds": [
+    "hundrede",
+    "tohundrede",
+    "trehundrede",
+    "firehundrede",
+    "femhundrede",
+    "sekshundrede",
+    "syvhundrede",
+    "ottehundrede",
+    "nihundrede"
+   ],
+   "gender_scopes": {
+    "1": "outside_tens"
+   },
+   "unit_words": {
+    "$": "dollar",
+    "£": "pund",
+    "€": "euro",
+    "¥": "yen",
+    "₹": "rupier",
+    "kr": "kroner",
+    "zł": "zloty",
+    "%": "procent",
+    "°": "grader",
+    "¢": "cent"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "f.eks.": "for eksempel",
+    "osv.": "og så videre",
+    "bl.a.": "blandt andet",
+    "ca.": "cirka",
+    "dvs.": "det vil sige"
+   },
+   "dates": {
+    "day_form": "ordinal",
+    "day_words": {
+     "1": "første",
+     "2": "anden",
+     "3": "tredje",
+     "4": "fjerde",
+     "5": "femte",
+     "6": "sjette",
+     "7": "syvende",
+     "8": "ottende",
+     "9": "niende",
+     "10": "tiende",
+     "11": "ellevte",
+     "12": "tolvte",
+     "13": "trettende",
+     "14": "fjortende",
+     "15": "femtende",
+     "16": "sekstende",
+     "17": "syttende",
+     "18": "attende",
+     "19": "nittende",
+     "20": "tyvende",
+     "21": "enogtyvende",
+     "22": "toogtyvende",
+     "23": "treogtyvende",
+     "24": "fireogtyvende",
+     "25": "femogtyvende",
+     "26": "seksogtyvende",
+     "27": "syvogtyvende",
+     "28": "otteogtyvende",
+     "29": "niogtyvende",
+     "30": "tredivte",
+     "31": "enogtredivte"
+    },
+    "months": [
+     "januar",
+     "februar",
+     "marts",
+     "april",
+     "maj",
+     "juni",
+     "juli",
+     "august",
+     "september",
+     "oktober",
+     "november",
+     "december"
+    ],
+    "year_rule": "da_long"
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "be",
+    "c": "se",
+    "d": "de",
+    "e": "e",
+    "f": "ef",
+    "g": "ge",
+    "h": "hå",
+    "i": "i",
+    "j": "jåd",
+    "k": "kå",
+    "l": "el",
+    "m": "em",
+    "n": "en",
+    "o": "o",
+    "p": "pe",
+    "q": "ku",
+    "r": "ær",
+    "s": "es",
+    "t": "te",
+    "u": "u",
+    "v": "ve",
+    "w": "dobbelt-ve",
+    "x": "eks",
+    "y": "y",
+    "z": "set",
+    "æ": "æ",
+    "ø": "ø",
+    "å": "å"
+   },
+   "word_acronyms": [
+    "aids",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "es": {
+   "ones": [
+    "cero",
+    "uno",
+    "dos",
+    "tres",
+    "cuatro",
+    "cinco",
+    "seis",
+    "siete",
+    "ocho",
+    "nueve"
+   ],
+   "teens": [
+    "diez",
+    "once",
+    "doce",
+    "trece",
+    "catorce",
+    "quince",
+    "dieciséis",
+    "diecisiete",
+    "dieciocho",
+    "diecinueve"
+   ],
+   "tens": [
+    "veinte",
+    "treinta",
+    "cuarenta",
+    "cincuenta",
+    "sesenta",
+    "setenta",
+    "ochenta",
+    "noventa"
+   ],
+   "hundred": "ciento",
+   "hundreds": [
+    "ciento",
+    "doscientos",
+    "trescientos",
+    "cuatrocientos",
+    "quinientos",
+    "seiscientos",
+    "setecientos",
+    "ochocientos",
+    "novecientos"
+   ],
+   "scales": [
+    {
+     "value": 1000000000000,
+     "forms": [
+      "billón",
+      "billones"
+     ],
+     "one": "un",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "millón",
+      "millones"
+     ],
+     "one": "un",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "mil"
+     ],
+     "one": ""
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": " y ",
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": " ",
+   "exceptions": {
+    "21": "veintiuno",
+    "22": "veintidós",
+    "23": "veintitrés",
+    "24": "veinticuatro",
+    "25": "veinticinco",
+    "26": "veintiséis",
+    "27": "veintisiete",
+    "28": "veintiocho",
+    "29": "veintinueve",
+    "100": "cien"
+   },
+   "genders": {
+    "f": {
+     "1": "una",
+     "21": "veintiuna"
+    }
+   },
+   "decimal_separator": ",",
+   "decimal_word": "coma",
+   "minus_word": "menos",
+   "hundreds_gendered": {
+    "f": [
+     "ciento",
+     "doscientas",
+     "trescientas",
+     "cuatrocientas",
+     "quinientas",
+     "seiscientas",
+     "setecientas",
+     "ochocientas",
+     "novecientas"
+    ]
+   },
+   "unit_words": {
+    "$": "dólares",
+    "£": "libras",
+    "€": "euros",
+    "¥": "yenes",
+    "₹": "rupias",
+    "kr": "coronas",
+    "zł": "eslotis",
+    "%": "por ciento",
+    "°": "grados",
+    "¢": "centavos"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "etc.": "etcétera",
+    "p. ej.": "por ejemplo"
+   },
+   "dates": {
+    "day_form": "cardinal",
+    "day_one_word_alt": "primero",
+    "months": [
+     "enero",
+     "febrero",
+     "marzo",
+     "abril",
+     "mayo",
+     "junio",
+     "julio",
+     "agosto",
+     "septiembre",
+     "octubre",
+     "noviembre",
+     "diciembre"
+    ],
+    "day_month_infix": "de",
+    "month_year_infix": "de",
+    "year_rule": "cardinal"
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "be",
+    "c": "ce",
+    "d": "de",
+    "e": "e",
+    "f": "efe",
+    "g": "ge",
+    "h": "hache",
+    "i": "i",
+    "j": "jota",
+    "k": "ka",
+    "l": "ele",
+    "m": "eme",
+    "n": "ene",
+    "ñ": "eñe",
+    "o": "o",
+    "p": "pe",
+    "q": "cu",
+    "r": "erre",
+    "s": "ese",
+    "t": "te",
+    "u": "u",
+    "v": "uve",
+    "w": "uve doble",
+    "x": "equis",
+    "y": "ye",
+    "z": "zeta"
+   },
+   "word_acronyms": [
+    "interpol",
+    "laser",
+    "mercosur",
+    "nasa",
+    "otan",
+    "ovni",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sida",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "fr": {
+   "ones": [
+    "zéro",
+    "un",
+    "deux",
+    "trois",
+    "quatre",
+    "cinq",
+    "six",
+    "sept",
+    "huit",
+    "neuf"
+   ],
+   "teens": [
+    "dix",
+    "onze",
+    "douze",
+    "treize",
+    "quatorze",
+    "quinze",
+    "seize",
+    "dix-sept",
+    "dix-huit",
+    "dix-neuf"
+   ],
+   "tens": [
+    "vingt",
+    "trente",
+    "quarante",
+    "cinquante",
+    "soixante",
+    "soixante-dix",
+    "quatre-vingt",
+    "quatre-vingt-dix"
+   ],
+   "hundred": "cent",
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "milliard",
+      "milliards"
+     ],
+     "one": "un",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "million",
+      "millions"
+     ],
+     "one": "un",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "mille"
+     ],
+     "one": ""
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": "-",
+   "tens_joiner_exceptions": {
+    "21": "-et-",
+    "31": "-et-",
+    "41": "-et-",
+    "51": "-et-",
+    "61": "-et-"
+   },
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": " ",
+   "exceptions": {
+    "70": "soixante-dix",
+    "71": "soixante-et-onze",
+    "72": "soixante-douze",
+    "73": "soixante-treize",
+    "74": "soixante-quatorze",
+    "75": "soixante-quinze",
+    "76": "soixante-seize",
+    "77": "soixante-dix-sept",
+    "78": "soixante-dix-huit",
+    "79": "soixante-dix-neuf",
+    "80": "quatre-vingts",
+    "90": "quatre-vingt-dix",
+    "91": "quatre-vingt-onze",
+    "92": "quatre-vingt-douze",
+    "93": "quatre-vingt-treize",
+    "94": "quatre-vingt-quatorze",
+    "95": "quatre-vingt-quinze",
+    "96": "quatre-vingt-seize",
+    "97": "quatre-vingt-dix-sept",
+    "98": "quatre-vingt-dix-huit",
+    "99": "quatre-vingt-dix-neuf"
+   },
+   "decimal_separator": ",",
+   "decimal_word": "virgule",
+   "minus_word": "moins",
+   "hundred_plural_final": "cents",
+   "unit_words": {
+    "$": "dollars",
+    "£": "livres",
+    "€": "euros",
+    "¥": "yens",
+    "₹": "roupies",
+    "kr": "couronnes",
+    "zł": "zlotys",
+    "%": "pour cent",
+    "°": "degrés",
+    "¢": "centimes"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "etc.": "et cetera",
+    "p. ex.": "par exemple"
+   },
+   "dates": {
+    "day_form": "cardinal_except_first",
+    "day_one_word": "premier",
+    "months": [
+     "janvier",
+     "février",
+     "mars",
+     "avril",
+     "mai",
+     "juin",
+     "juillet",
+     "août",
+     "septembre",
+     "octobre",
+     "novembre",
+     "décembre"
+    ],
+    "year_rule": "cardinal"
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "bé",
+    "c": "cé",
+    "d": "dé",
+    "e": "e",
+    "f": "effe",
+    "g": "gé",
+    "h": "ache",
+    "i": "i",
+    "j": "ji",
+    "k": "ka",
+    "l": "elle",
+    "m": "emme",
+    "n": "enne",
+    "o": "o",
+    "p": "pé",
+    "q": "ku",
+    "r": "erre",
+    "s": "esse",
+    "t": "té",
+    "u": "u",
+    "v": "vé",
+    "w": "double vé",
+    "x": "iks",
+    "y": "i grec",
+    "z": "zède"
+   },
+   "word_acronyms": [
+    "interpol",
+    "laser",
+    "nasa",
+    "otan",
+    "ovni",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sida",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "it": {
+   "ones": [
+    "zero",
+    "uno",
+    "due",
+    "tre",
+    "quattro",
+    "cinque",
+    "sei",
+    "sette",
+    "otto",
+    "nove"
+   ],
+   "teens": [
+    "dieci",
+    "undici",
+    "dodici",
+    "tredici",
+    "quattordici",
+    "quindici",
+    "sedici",
+    "diciassette",
+    "diciotto",
+    "diciannove"
+   ],
+   "tens": [
+    "venti",
+    "trenta",
+    "quaranta",
+    "cinquanta",
+    "sessanta",
+    "settanta",
+    "ottanta",
+    "novanta"
+   ],
+   "hundred": "cento",
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "miliardo",
+      "miliardi"
+     ],
+     "one": "un",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "milione",
+      "milioni"
+     ],
+     "one": "un",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "mille",
+      "mila"
+     ],
+     "one": ""
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": "",
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": "",
+   "exceptions": {
+    "21": "ventuno",
+    "23": "ventitré",
+    "28": "ventotto",
+    "31": "trentuno",
+    "33": "trentatré",
+    "38": "trentotto",
+    "41": "quarantuno",
+    "43": "quarantatré",
+    "48": "quarantotto",
+    "51": "cinquantuno",
+    "53": "cinquantatré",
+    "58": "cinquantotto",
+    "61": "sessantuno",
+    "63": "sessantatré",
+    "68": "sessantotto",
+    "71": "settantuno",
+    "73": "settantatré",
+    "78": "settantotto",
+    "81": "ottantuno",
+    "83": "ottantatré",
+    "88": "ottantotto",
+    "91": "novantuno",
+    "93": "novantatré",
+    "98": "novantotto"
+   },
+   "decimal_separator": ",",
+   "decimal_word": "virgola",
+   "minus_word": "meno",
+   "unit_words": {
+    "$": "dollari",
+    "£": "sterline",
+    "€": "euro",
+    "¥": "yen",
+    "₹": "rupie",
+    "kr": "corone",
+    "zł": "zloty",
+    "%": "per cento",
+    "°": "gradi",
+    "¢": "centesimi"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "ecc.": "eccetera",
+    "ad es.": "ad esempio"
+   },
+   "dates": {
+    "day_form": "cardinal_except_first",
+    "day_one_word": "primo",
+    "months": [
+     "gennaio",
+     "febbraio",
+     "marzo",
+     "aprile",
+     "maggio",
+     "giugno",
+     "luglio",
+     "agosto",
+     "settembre",
+     "ottobre",
+     "novembre",
+     "dicembre"
+    ],
+    "year_rule": "cardinal"
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "bi",
+    "c": "ci",
+    "d": "di",
+    "e": "e",
+    "f": "effe",
+    "g": "gi",
+    "h": "acca",
+    "i": "i",
+    "j": "i lunga",
+    "k": "cappa",
+    "l": "elle",
+    "m": "emme",
+    "n": "enne",
+    "o": "o",
+    "p": "pi",
+    "q": "cu",
+    "r": "erre",
+    "s": "esse",
+    "t": "ti",
+    "u": "u",
+    "v": "vu",
+    "w": "doppia vu",
+    "x": "ics",
+    "y": "ipsilon",
+    "z": "zeta"
+   },
+   "word_acronyms": [
+    "aids",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "pt": {
+   "ones": [
+    "zero",
+    "um",
+    "dois",
+    "três",
+    "quatro",
+    "cinco",
+    "seis",
+    "sete",
+    "oito",
+    "nove"
+   ],
+   "teens": [
+    "dez",
+    "onze",
+    "doze",
+    "treze",
+    "catorze",
+    "quinze",
+    "dezasseis",
+    "dezassete",
+    "dezoito",
+    "dezanove"
+   ],
+   "tens": [
+    "vinte",
+    "trinta",
+    "quarenta",
+    "cinquenta",
+    "sessenta",
+    "setenta",
+    "oitenta",
+    "noventa"
+   ],
+   "hundred": "cento",
+   "hundreds": [
+    "cento",
+    "duzentos",
+    "trezentos",
+    "quatrocentos",
+    "quinhentos",
+    "seiscentos",
+    "setecentos",
+    "oitocentos",
+    "novecentos"
+   ],
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "mil milhões"
+     ],
+     "one": "um",
+     "separate": true,
+     "small_joiner": "e"
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "milhão",
+      "milhões"
+     ],
+     "one": "um",
+     "separate": true,
+     "small_joiner": "e"
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "mil"
+     ],
+     "one": "",
+     "small_joiner": "e",
+     "multiplier_agrees": true
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": " e ",
+   "hundred_joiner": "e",
+   "scale_joiner": "e",
+   "scale_joiner_below": 100,
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": " ",
+   "exceptions": {
+    "100": "cem"
+   },
+   "genders": {
+    "f": {
+     "1": "uma",
+     "2": "duas"
+    }
+   },
+   "scale_joiner_on_round_hundreds": true,
+   "decimal_separator": ",",
+   "decimal_word": "vírgula",
+   "minus_word": "menos",
+   "hundreds_gendered": {
+    "f": [
+     "cento",
+     "duzentas",
+     "trezentas",
+     "quatrocentas",
+     "quinhentas",
+     "seiscentas",
+     "setecentas",
+     "oitocentas",
+     "novecentas"
+    ]
+   },
+   "unit_words": {
+    "$": "dólares",
+    "£": "libras",
+    "€": "euros",
+    "¥": "ienes",
+    "₹": "rupias",
+    "kr": "coroas",
+    "zł": "zlótis",
+    "%": "por cento",
+    "°": "graus",
+    "¢": "cêntimos"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "etc.": "et cetera",
+    "p. ex.": "por exemplo"
+   },
+   "dates": {
+    "day_form": "cardinal",
+    "day_one_word_alt": "primeiro",
+    "months": [
+     "janeiro",
+     "fevereiro",
+     "março",
+     "abril",
+     "maio",
+     "junho",
+     "julho",
+     "agosto",
+     "setembro",
+     "outubro",
+     "novembro",
+     "dezembro"
+    ],
+    "day_month_infix": "de",
+    "month_year_infix": "de",
+    "year_rule": "cardinal"
+   },
+   "letter_names": {
+    "a": "á",
+    "b": "bê",
+    "c": "cê",
+    "d": "dê",
+    "e": "é",
+    "f": "efe",
+    "g": "gê",
+    "h": "agá",
+    "i": "i",
+    "j": "jota",
+    "k": "capa",
+    "l": "ele",
+    "m": "eme",
+    "n": "ene",
+    "o": "ó",
+    "p": "pê",
+    "q": "quê",
+    "r": "erre",
+    "s": "esse",
+    "t": "tê",
+    "u": "u",
+    "v": "vê",
+    "w": "dáblio",
+    "x": "xis",
+    "y": "ípsilon",
+    "z": "zê",
+    "ç": "cê cedilha"
+   },
+   "word_acronyms": [
+    "interpol",
+    "laser",
+    "nasa",
+    "otan",
+    "ovni",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sida",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "pl": {
+   "ones": [
+    "zero",
+    "jeden",
+    "dwa",
+    "trzy",
+    "cztery",
+    "pięć",
+    "sześć",
+    "siedem",
+    "osiem",
+    "dziewięć"
+   ],
+   "teens": [
+    "dziesięć",
+    "jedenaście",
+    "dwanaście",
+    "trzynaście",
+    "czternaście",
+    "piętnaście",
+    "szesnaście",
+    "siedemnaście",
+    "osiemnaście",
+    "dziewiętnaście"
+   ],
+   "tens": [
+    "dwadzieścia",
+    "trzydzieści",
+    "czterdzieści",
+    "pięćdziesiąt",
+    "sześćdziesiąt",
+    "siedemdziesiąt",
+    "osiemdziesiąt",
+    "dziewięćdziesiąt"
+   ],
+   "hundred": "sto",
+   "hundreds": [
+    "sto",
+    "dwieście",
+    "trzysta",
+    "czterysta",
+    "pięćset",
+    "sześćset",
+    "siedemset",
+    "osiemset",
+    "dziewięćset"
+   ],
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "miliard",
+      "miliardy",
+      "miliardów"
+     ],
+     "one": ""
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "milion",
+      "miliony",
+      "milionów"
+     ],
+     "one": ""
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "tysiąc",
+      "tysiące",
+      "tysięcy"
+     ],
+     "one": ""
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": " ",
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": " ",
+   "genders": {
+    "f": {
+     "1": "jedna",
+     "2": "dwie"
+    },
+    "n": {
+     "1": "jedno",
+     "2": "dwa"
+    },
+    "virile": {
+     "2": "dwaj",
+     "3": "trzej",
+     "4": "czterej",
+     "5": "pięciu",
+     "6": "sześciu",
+     "7": "siedmiu",
+     "8": "ośmiu",
+     "9": "dziewięciu",
+     "10": "dziesięciu",
+     "11": "jedenastu",
+     "12": "dwunastu",
+     "13": "trzynastu",
+     "14": "czternastu",
+     "15": "piętnastu",
+     "16": "szesnastu",
+     "17": "siedemnastu",
+     "18": "osiemnastu",
+     "19": "dziewiętnastu",
+     "20": "dwudziestu",
+     "30": "trzydziestu",
+     "40": "czterdziestu",
+     "50": "pięćdziesięciu",
+     "60": "sześćdziesięciu",
+     "70": "siedemdziesięciu",
+     "80": "osiemdziesięciu",
+     "90": "dziewięćdziesięciu"
+    }
+   },
+   "decimal_separator": ",",
+   "decimal_word": "przecinek",
+   "minus_word": "minus",
+   "gender_scopes": {
+    "1": "standalone"
+   },
+   "hundreds_gendered": {
+    "virile": [
+     "stu",
+     "dwustu",
+     "trzystu",
+     "czterystu",
+     "pięciuset",
+     "sześciuset",
+     "siedmiuset",
+     "ośmiuset",
+     "dziewięciuset"
+    ]
+   },
+   "unit_words": {
+    "$": "dolarów",
+    "£": "funtów",
+    "€": "euro",
+    "¥": "jenów",
+    "₹": "rupii",
+    "kr": "koron",
+    "zł": "złotych",
+    "%": "procent",
+    "°": "stopni",
+    "¢": "centów"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "np.": "na przykład",
+    "itd.": "i tak dalej",
+    "itp.": "i tym podobne",
+    "tzn.": "to znaczy",
+    "tzw.": "tak zwany"
+   },
+   "dates": {
+    "day_form": "ordinal",
+    "day_words": {
+     "1": "pierwszego",
+     "2": "drugiego",
+     "3": "trzeciego",
+     "4": "czwartego",
+     "5": "piątego",
+     "6": "szóstego",
+     "7": "siódmego",
+     "8": "ósmego",
+     "9": "dziewiątego",
+     "10": "dziesiątego",
+     "11": "jedenastego",
+     "12": "dwunastego",
+     "13": "trzynastego",
+     "14": "czternastego",
+     "15": "piętnastego",
+     "16": "szesnastego",
+     "17": "siedemnastego",
+     "18": "osiemnastego",
+     "19": "dziewiętnastego",
+     "20": "dwudziestego",
+     "21": "dwudziestego pierwszego",
+     "22": "dwudziestego drugiego",
+     "23": "dwudziestego trzeciego",
+     "24": "dwudziestego czwartego",
+     "25": "dwudziestego piątego",
+     "26": "dwudziestego szóstego",
+     "27": "dwudziestego siódmego",
+     "28": "dwudziestego ósmego",
+     "29": "dwudziestego dziewiątego",
+     "30": "trzydziestego",
+     "31": "trzydziestego pierwszego"
+    },
+    "months": [
+     "stycznia",
+     "lutego",
+     "marca",
+     "kwietnia",
+     "maja",
+     "czerwca",
+     "lipca",
+     "sierpnia",
+     "września",
+     "października",
+     "listopada",
+     "grudnia"
+    ],
+    "year_rule": "pl_ordinal_genitive",
+    "year_units": {
+     "0": "",
+     "1": "pierwszego",
+     "2": "drugiego",
+     "3": "trzeciego",
+     "4": "czwartego",
+     "5": "piątego",
+     "6": "szóstego",
+     "7": "siódmego",
+     "8": "ósmego",
+     "9": "dziewiątego"
+    },
+    "year_teens": {
+     "10": "dziesiątego",
+     "11": "jedenastego",
+     "12": "dwunastego",
+     "13": "trzynastego",
+     "14": "czternastego",
+     "15": "piętnastego",
+     "16": "szesnastego",
+     "17": "siedemnastego",
+     "18": "osiemnastego",
+     "19": "dziewiętnastego"
+    },
+    "year_tens": {
+     "0": "",
+     "10": "",
+     "20": "dwudziestego",
+     "30": "trzydziestego",
+     "40": "czterdziestego",
+     "50": "pięćdziesiątego",
+     "60": "sześćdziesiątego",
+     "70": "siedemdziesiątego",
+     "80": "osiemdziesiątego",
+     "90": "dziewięćdziesiątego"
+    },
+    "year_two_thousand": "dwutysięcznego"
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "be",
+    "c": "ce",
+    "d": "de",
+    "e": "e",
+    "f": "ef",
+    "g": "gie",
+    "h": "ha",
+    "i": "i",
+    "j": "jot",
+    "k": "ka",
+    "l": "el",
+    "m": "em",
+    "n": "en",
+    "o": "o",
+    "p": "pe",
+    "q": "ku",
+    "r": "er",
+    "s": "es",
+    "t": "te",
+    "u": "u",
+    "v": "fał",
+    "w": "wu",
+    "x": "iks",
+    "y": "igrek",
+    "z": "zet",
+    "ą": "ą",
+    "ć": "cie",
+    "ę": "ę",
+    "ł": "eł",
+    "ń": "eń",
+    "ó": "o kreskowane",
+    "ś": "eś",
+    "ź": "ziet",
+    "ż": "żet"
+   },
+   "word_acronyms": [
+    "interpol",
+    "lot",
+    "nasa",
+    "nato",
+    "nfz",
+    "pesel",
+    "pin",
+    "pit",
+    "ram",
+    "rom",
+    "sim",
+    "unesco",
+    "unicef",
+    "vat",
+    "zus"
+   ]
+  },
+  "fi": {
+   "ones": [
+    "nolla",
+    "yksi",
+    "kaksi",
+    "kolme",
+    "neljä",
+    "viisi",
+    "kuusi",
+    "seitsemän",
+    "kahdeksan",
+    "yhdeksän"
+   ],
+   "teens": [
+    "kymmenen",
+    "yksitoista",
+    "kaksitoista",
+    "kolmetoista",
+    "neljätoista",
+    "viisitoista",
+    "kuusitoista",
+    "seitsemäntoista",
+    "kahdeksantoista",
+    "yhdeksäntoista"
+   ],
+   "tens": [
+    "kaksikymmentä",
+    "kolmekymmentä",
+    "neljäkymmentä",
+    "viisikymmentä",
+    "kuusikymmentä",
+    "seitsemänkymmentä",
+    "kahdeksankymmentä",
+    "yhdeksänkymmentä"
+   ],
+   "hundred": "sata",
+   "hundreds": [
+    "sata",
+    "kaksisataa",
+    "kolmesataa",
+    "neljäsataa",
+    "viisisataa",
+    "kuusisataa",
+    "seitsemänsataa",
+    "kahdeksansataa",
+    "yhdeksänsataa"
+   ],
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "miljardi",
+      "miljardia",
+      "miljardia"
+     ],
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "miljoona",
+      "miljoonaa",
+      "miljoonaa"
+     ],
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "tuhat",
+      "tuhatta",
+      "tuhatta"
+     ],
+     "one": "",
+     "link": " "
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": "",
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": "",
+   "minus_word": "miinus",
+   "decimal_separator": ",",
+   "decimal_word": "pilkku",
+   "unit_words": {
+    "$": "dollaria",
+    "£": "puntaa",
+    "€": "euroa",
+    "¥": "jeniä",
+    "₹": "rupiaa",
+    "kr": "kruunua",
+    "zł": "złotya",
+    "%": "prosenttia",
+    "°": "astetta",
+    "¢": "senttiä"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "esim.": "esimerkiksi",
+    "jne.": "ja niin edelleen",
+    "ts.": "toisin sanoen",
+    "klo": "kello"
+   },
+   "dates": {
+    "day_form": "ordinal",
+    "day_words": {
+     "1": "ensimmäinen",
+     "2": "toinen",
+     "3": "kolmas",
+     "4": "neljäs",
+     "5": "viides",
+     "6": "kuudes",
+     "7": "seitsemäs",
+     "8": "kahdeksas",
+     "9": "yhdeksäs",
+     "10": "kymmenes",
+     "11": "yhdestoista",
+     "12": "kahdestoista",
+     "13": "kolmastoista",
+     "14": "neljästoista",
+     "15": "viidestoista",
+     "16": "kuudestoista",
+     "17": "seitsemästoista",
+     "18": "kahdeksastoista",
+     "19": "yhdeksästoista",
+     "20": "kahdeskymmenes",
+     "21": "kahdeskymmenesensimmäinen",
+     "22": "kahdeskymmenestoinen",
+     "23": "kahdeskymmeneskolmas",
+     "24": "kahdeskymmenesneljäs",
+     "25": "kahdeskymmenesviides",
+     "26": "kahdeskymmeneskuudes",
+     "27": "kahdeskymmenesseitsemäs",
+     "28": "kahdeskymmeneskahdeksas",
+     "29": "kahdeskymmenesyhdeksäs",
+     "30": "kolmaskymmenes",
+     "31": "kolmaskymmenesensimmäinen"
+    },
+    "months": [
+     "tammikuuta",
+     "helmikuuta",
+     "maaliskuuta",
+     "huhtikuuta",
+     "toukokuuta",
+     "kesäkuuta",
+     "heinäkuuta",
+     "elokuuta",
+     "syyskuuta",
+     "lokakuuta",
+     "marraskuuta",
+     "joulukuuta"
+    ],
+    "year_rule": "cardinal"
+   },
+   "letter_names": {
+    "a": "aa",
+    "b": "bee",
+    "c": "see",
+    "d": "dee",
+    "e": "ee",
+    "f": "äf",
+    "g": "gee",
+    "h": "hoo",
+    "i": "ii",
+    "j": "jii",
+    "k": "koo",
+    "l": "äl",
+    "m": "äm",
+    "n": "än",
+    "o": "oo",
+    "p": "pee",
+    "q": "kuu",
+    "r": "är",
+    "s": "äs",
+    "t": "tee",
+    "u": "uu",
+    "v": "vee",
+    "w": "kaksois-vee",
+    "x": "äks",
+    "y": "yy",
+    "z": "tset",
+    "å": "ruotsalainen oo",
+    "ä": "ää",
+    "ö": "öö"
+   },
+   "word_acronyms": [
+    "aids",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "pin",
+    "ram",
+    "rom",
+    "sim",
+    "tutka",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "no": {
+   "ones": [
+    "null",
+    "én",
+    "to",
+    "tre",
+    "fire",
+    "fem",
+    "seks",
+    "sju",
+    "åtte",
+    "ni"
+   ],
+   "teens": [
+    "ti",
+    "elleve",
+    "tolv",
+    "tretten",
+    "fjorten",
+    "femten",
+    "seksten",
+    "sytten",
+    "atten",
+    "nitten"
+   ],
+   "tens": [
+    "tjue",
+    "tretti",
+    "førti",
+    "femti",
+    "seksti",
+    "sytti",
+    "åtti",
+    "nitti"
+   ],
+   "hundred": "hundre",
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "milliard",
+      "milliarder"
+     ],
+     "one": "én",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "million",
+      "millioner"
+     ],
+     "one": "én",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "tusen"
+     ],
+     "one": "",
+     "separate": true,
+     "small_joiner": "og"
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": "",
+   "hundred_joiner": "og",
+   "one_before_hundred": false,
+   "one_before_scale": false,
+   "word_join": " ",
+   "minus_word": "minus",
+   "decimal_separator": ",",
+   "decimal_word": "komma",
+   "genders": {
+    "neuter": {
+     "1": "ett"
+    },
+    "f": {
+     "1": "ei"
+    }
+   },
+   "unit_words": {
+    "$": "dollar",
+    "£": "pund",
+    "€": "euro",
+    "¥": "yen",
+    "₹": "rupier",
+    "kr": "kroner",
+    "zł": "zloty",
+    "%": "prosent",
+    "°": "grader",
+    "¢": "cent"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "f.eks.": "for eksempel",
+    "osv.": "og så videre",
+    "dvs.": "det vil si",
+    "ca.": "cirka"
+   },
+   "dates": {
+    "day_form": "ordinal",
+    "day_words": {
+     "1": "første",
+     "2": "andre",
+     "3": "tredje",
+     "4": "fjerde",
+     "5": "femte",
+     "6": "sjette",
+     "7": "sjuende",
+     "8": "åttende",
+     "9": "niende",
+     "10": "tiende",
+     "11": "ellevte",
+     "12": "tolvte",
+     "13": "trettende",
+     "14": "fjortende",
+     "15": "femtende",
+     "16": "sekstende",
+     "17": "syttende",
+     "18": "attende",
+     "19": "nittende",
+     "20": "tjuende",
+     "21": "tjueførste",
+     "22": "tjueandre",
+     "23": "tjuetredje",
+     "24": "tjuefjerde",
+     "25": "tjuefemte",
+     "26": "tjuesjette",
+     "27": "tjuesjuende",
+     "28": "tjueåttende",
+     "29": "tjueniende",
+     "30": "trettiende",
+     "31": "trettiførste"
+    },
+    "months": [
+     "januar",
+     "februar",
+     "mars",
+     "april",
+     "mai",
+     "juni",
+     "juli",
+     "august",
+     "september",
+     "oktober",
+     "november",
+     "desember"
+    ],
+    "year_rule": "no_split"
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "be",
+    "c": "se",
+    "d": "de",
+    "e": "e",
+    "f": "eff",
+    "g": "ge",
+    "h": "hå",
+    "i": "i",
+    "j": "je",
+    "k": "kå",
+    "l": "ell",
+    "m": "em",
+    "n": "enn",
+    "o": "o",
+    "p": "pe",
+    "q": "ku",
+    "r": "ærr",
+    "s": "ess",
+    "t": "te",
+    "u": "u",
+    "v": "ve",
+    "w": "dobbelt-ve",
+    "x": "eks",
+    "y": "y",
+    "z": "sett",
+    "æ": "æ",
+    "ø": "ø",
+    "å": "å"
+   },
+   "word_acronyms": [
+    "aids",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  },
+  "sv": {
+   "ones": [
+    "noll",
+    "ett",
+    "två",
+    "tre",
+    "fyra",
+    "fem",
+    "sex",
+    "sju",
+    "åtta",
+    "nio"
+   ],
+   "teens": [
+    "tio",
+    "elva",
+    "tolv",
+    "tretton",
+    "fjorton",
+    "femton",
+    "sexton",
+    "sjutton",
+    "arton",
+    "nitton"
+   ],
+   "tens": [
+    "tjugo",
+    "trettio",
+    "fyrtio",
+    "femtio",
+    "sextio",
+    "sjuttio",
+    "åttio",
+    "nittio"
+   ],
+   "hundred": "hundra",
+   "scales": [
+    {
+     "value": 1000000000,
+     "forms": [
+      "miljard",
+      "miljarder"
+     ],
+     "one": "en",
+     "separate": true
+    },
+    {
+     "value": 1000000,
+     "forms": [
+      "miljon",
+      "miljoner"
+     ],
+     "one": "en",
+     "separate": true
+    },
+    {
+     "value": 1000,
+     "forms": [
+      "tusen"
+     ],
+     "link": " ",
+     "multiplier_gender": "common",
+     "one": "et"
+    }
+   ],
+   "units_before_tens": false,
+   "unit_tens_joiner": "",
+   "one_before_hundred": true,
+   "one_before_scale": false,
+   "word_join": "",
+   "minus_word": "minus",
+   "decimal_separator": ",",
+   "decimal_word": "komma",
+   "genders": {
+    "common": {
+     "1": "en"
+    }
+   },
+   "unit_words": {
+    "$": "dollar",
+    "£": "pund",
+    "€": "euro",
+    "¥": "yen",
+    "₹": "rupier",
+    "kr": "kronor",
+    "zł": "zloty",
+    "%": "procent",
+    "°": "grader",
+    "¢": "cent"
+   },
+   "time_infix": "",
+   "abbreviations": {
+    "t.ex.": "till exempel",
+    "dvs.": "det vill säga",
+    "osv.": "och så vidare",
+    "kl.": "klockan",
+    "ca": "cirka",
+    "fr.o.m.": "från och med",
+    "t.o.m.": "till och med"
+   },
+   "dates": {
+    "day_form": "ordinal",
+    "day_words": {
+     "1": "första",
+     "2": "andra",
+     "3": "tredje",
+     "4": "fjärde",
+     "5": "femte",
+     "6": "sjätte",
+     "7": "sjunde",
+     "8": "åttonde",
+     "9": "nionde",
+     "10": "tionde",
+     "11": "elfte",
+     "12": "tolfte",
+     "13": "trettonde",
+     "14": "fjortonde",
+     "15": "femtonde",
+     "16": "sextonde",
+     "17": "sjuttonde",
+     "18": "artonde",
+     "19": "nittonde",
+     "20": "tjugonde",
+     "21": "tjugoförsta",
+     "22": "tjugoandra",
+     "23": "tjugotredje",
+     "24": "tjugofjärde",
+     "25": "tjugofemte",
+     "26": "tjugosjätte",
+     "27": "tjugosjunde",
+     "28": "tjugoåttonde",
+     "29": "tjugonionde",
+     "30": "trettionde",
+     "31": "trettioförsta"
+    },
+    "months": [
+     "januari",
+     "februari",
+     "mars",
+     "april",
+     "maj",
+     "juni",
+     "juli",
+     "augusti",
+     "september",
+     "oktober",
+     "november",
+     "december"
+    ],
+    "year_rule": "sv_hundreds",
+    "no_dotted_dates": true
+   },
+   "letter_names": {
+    "a": "a",
+    "b": "be",
+    "c": "se",
+    "d": "de",
+    "e": "e",
+    "f": "eff",
+    "g": "ge",
+    "h": "hå",
+    "i": "i",
+    "j": "ji",
+    "k": "kå",
+    "l": "ell",
+    "m": "em",
+    "n": "en",
+    "o": "o",
+    "p": "pe",
+    "q": "ku",
+    "r": "ärr",
+    "s": "ess",
+    "t": "te",
+    "u": "u",
+    "v": "ve",
+    "w": "dubbel-ve",
+    "x": "eks",
+    "y": "y",
+    "z": "säta",
+    "å": "å",
+    "ä": "ä",
+    "ö": "ö"
+   },
+   "word_acronyms": [
+    "aids",
+    "interpol",
+    "laser",
+    "nasa",
+    "nato",
+    "pin",
+    "radar",
+    "ram",
+    "rom",
+    "sim",
+    "unesco",
+    "unicef"
+   ]
+  }
+ }
+}

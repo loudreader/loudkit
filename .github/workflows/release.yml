@@ -1,0 +1,929 @@
+# Release build — the artifact assembly half of the release step.
+#
+# On a version tag, build the sdist + wheel, verify them (the no-weights
+# suite, plus an import-and-synthesise smoke from *both* built artefacts in
+# clean venvs), attest their provenance, and hand them to the jobs below.
+#
+# The order of the graph is the whole design, so it is written out here:
+#
+#   tag-gate
+#      ↓
+#   build
+#     ├─ attest ──────────────┐
+#     ├─ check-pypi ──────────┤
+#     ├─ check-npm → attest-npm
+#     └─ check-crates ────────┘
+#                              ↓
+#               [ human approves the `release` environment ]
+#                              ↓
+#             publish-npm → publish-pypi → publish-crates → github-release
+#
+# **`tag-gate` ties the tag to this repository's own history and checks.** A
+# `v*` tag is just a name for a commit; nothing else in this repository stops
+# one from pointing at a branch, or at a commit whose CI never ran. The gate
+# refuses a tag whose commit is not on `main`, and refuses one without a green
+# `ci` run carrying a successful `parity` job for that exact SHA. No external
+# ruleset is relied on for either check; if one is added later it is a second
+# fence, not a replacement for this one.
+#
+# **The attestation jobs hold `id-token: write` and run no fetched tooling.**
+# The build and registry-check jobs execute downloaded dependencies, so they
+# cannot mint OIDC identities. Separate jobs only download the checked Python
+# distributions or npm tarball and attest those exact bytes.
+#
+# **Nothing is released until every package has passed its ecosystem's
+# acceptance gate.** The three `check-*` jobs run `twine check --strict`,
+# `npm pack` plus a clean consumer install, and `cargo package` against the
+# bytes the publish jobs will send. A packaging defect that only one ecosystem
+# can see has to surface while all three are still untouched, because after
+# the first upload it cannot be undone by fixing it.
+#
+# **A check is only worth the artefact it inspects**, which is why each of the
+# three names the same bytes twice rather than once:
+#
+#   - PyPI: `build` uploads `dist/` as a workflow artifact, and both
+#     `check-pypi` and `publish-pypi` download that one copy.
+#   - npm: `check-npm` packs the `.tgz` and uploads it. Version one publishes
+#     that artifact interactively; later runs stage it through `publish-npm`.
+#     Neither route rebuilds.
+#   - crates.io: `check-crates` runs `cargo package`, unpacks the resulting
+#     `.crate` outside the checkout, and builds and tests what a consumer of
+#     `cargo add loudkit` actually gets, then preserves that tarball as a
+#     workflow artifact. crates.io has no upload-this-file call, so a publish
+#     must repackage, but the job proves that copy matches the checked artifact
+#     first. Later releases authenticate with a short-lived Trusted Publishing
+#     token. The first crate is bootstrapped manually and the rerun verifies
+#     its registry checksum against the checked artifact before continuing.
+#
+# **The gate is the `release` GitHub environment**, configured to require a
+# reviewer. Every automated publish job names it, so a tag builds and verifies
+# on its own and then waits for a person. The first npm bootstrap happens only
+# after those checks are green and is itself protected by npm 2FA.
+#
+# That wall is not ceremony. Publishing is the one irreversible act in the
+# release: crates.io never frees a yanked version, PyPI never reuses a number,
+# and npm allows an unpublish for 72 hours and not a minute more. A wrong tag
+# without the wall is a burned version number in three ecosystems at once.
+#
+# **The publish jobs are chained, not parallel**, in the order RELEASING.md §7
+# gives: npm, then PyPI, then crates.io. That is most reversible to least, so
+# each link only runs because the one before it did not fail.
+#
+# **Every artefact is attested before publication.** Python distributions and
+# the npm tarball receive GitHub build attestations. npm also attaches its own
+# provenance when later versions are staged through its trusted publisher.
+# Version one has two registry bootstrap exceptions. npm cannot stage or attach
+# a trusted publisher before the package exists, while its dual-use policy
+# requires an interactive 2FA publish. crates.io also requires the first crate
+# to be published manually before Trusted Publishing can be configured.
+# RELEASING.md §§7.1 and 7.3 make both one-time steps explicit.
+#
+# **The GitHub Release is created last**, and only because `publish-crates`
+# succeeded. It used to be written by the build job, which meant a release a
+# human had never approved already existed under the tag, carrying artefacts
+# that might never be published. Last is also where it costs least to be
+# wrong: a GitHub Release can be deleted, and none of the three registries
+# can. It needs no `environment:` of its own — it cannot start until the three
+# gated jobs have run, so it is already downstream of the approval, and adding
+# the environment would only ask the reviewer a fourth time.
+#
+# Hugging Face is not here. The weights are uploaded by hand, deliberately.
+#
+# Go has no publish step and needs none: `go get` resolves straight from the
+# tag through proxy.golang.org. Note that the proxy caches immutably, so the
+# `go/v0.1.0` tag is the last one to push, never the first.
+#
+# **Actions are pinned to commit SHAs, not tags, and the Python tooling is
+# pinned to versions.** A tag is a movable pointer in someone else's
+# repository: `@v4` today and `@v4` after a compromise are the same string and
+# different code. `pip install build` is the same problem in the other package
+# manager, which is one half of why the job that runs it holds no OIDC token
+# (the `attest` job above is the other half). The comment beside each pin
+# records which tag it was, so an upgrade stays a readable diff.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# Read-only by default, and every job widens this to exactly what it needs.
+# The build job in particular does not get `contents: write`: it produces
+# artefacts and an attestation and writes nothing to the repository, and it is
+# the job that installs third-party tooling.
+permissions:
+  contents: read
+
+# The npm package uses the CPU files bundled by onnxruntime-node. Its optional
+# CUDA postinstall fetch is not part of this artefact and would make release
+# acceptance depend on a second registry being reachable.
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  # The job always runs so `needs: tag-gate` never skips the graph, and its
+  # steps only bite on a `v*` tag: a `workflow_dispatch` build has no tag to
+  # hold to account, and its publish jobs are tag-gated anyway.
+  tag-gate:
+    name: the tag points at green main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read       # to read this repository's ci runs for the SHA
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          # Full history: ancestry cannot be decided from a shallow clone.
+          fetch-depth: 0
+
+      - name: The tagged commit is on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "tag $GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main." >&2
+            echo "Releases are cut from main only; retag after the merge." >&2
+            exit 1
+          fi
+          echo "$GITHUB_SHA is an ancestor of origin/main"
+
+      - name: ci ran green, parity included, for this exact commit
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A successful `ci` run alone is not enough: `parity` is the job
+          # that measures the weights, it runs conditionally, and a run in
+          # which it was skipped still concludes `success`. So the gate walks
+          # the successful runs for this SHA and requires one whose parity
+          # job itself succeeded. A tag pushed before ci finishes fails here;
+          # re-run this workflow once ci is green.
+          found=""
+          for id in $(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml \
+                        --commit "$GITHUB_SHA" --status success \
+                        --json databaseId --jq '.[].databaseId'); do
+            if gh run view "$id" --repo "$GITHUB_REPOSITORY" --json jobs \
+                 --jq '.jobs[] | select(.name | startswith("parity")) | .conclusion' \
+               | grep -qx success; then
+              found="$id"
+              break
+            fi
+          done
+          if [ -z "$found" ]; then
+            echo "no successful ci run with a green parity job exists for $GITHUB_SHA" >&2
+            echo "wait for ci (including parity) to pass on main, then re-run" >&2
+            exit 1
+          fi
+          echo "ci run $found is green for $GITHUB_SHA, parity included"
+
+  build:
+    name: build sdist + wheel
+    needs: tag-gate
+    runs-on: ubuntu-latest
+    # `contents: read` and nothing more. This job installs tooling from PyPI
+    # and runs the test suite; it must not be able to mint an OIDC token or
+    # write an attestation. The `attest` job below signs what this job built.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build deps
+        run: python -m pip install --upgrade pip "build==1.5.0"
+
+      # The tag is what people install; the version is what the artefact says
+      # it is. When they disagree, `pip install loudkit==0.1.0` fetches
+      # something built from a tree tagged v0.2.0 and no error is ever raised —
+      # the release is unfalsifiable after the fact. Checked before the build,
+      # because there is no point producing artefacts that must be discarded.
+      - name: The tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(python -c "
+          import tomllib
+          print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])
+          ")
+          if [ "$tag" != "$version" ]; then
+            echo "tag $GITHUB_REF_NAME declares version $tag, but pyproject.toml says $version"
+            exit 1
+          fi
+          echo "tag and version agree: $version"
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Verify the wheel carries the data and py.typed
+        # The Polish respelling lexicon ships in the wheel; losing it would
+        # make Polish text read differently from the source checkout.
+        run: |
+          python -c "
+          import zipfile, glob
+          whl = glob.glob('dist/*.whl')[0]
+          z = zipfile.ZipFile(whl)
+          names = z.namelist()
+          assert any('pl_en_respell.json' in n for n in names), 'lexicon missing from wheel'
+          assert any('py.typed' in n for n in names), 'py.typed missing from wheel'
+          print('wheel OK:', whl)
+          "
+
+      - name: Smoke-test both artefacts in clean venvs
+        # Import and exercise the weight-free path from each installed
+        # artefact, not the source tree — the assembly must work on its own.
+        #
+        # The **sdist** matters as much as the wheel and used to go untested:
+        # it is what a distro packager, a `--no-binary` install and any
+        # platform without a matching wheel actually build from, and it is
+        # exactly where an over-narrow `only-include` allowlist shows up. A
+        # wheel that works proves nothing about a source tree that cannot.
+        run: |
+          set -euo pipefail
+          for artefact in dist/*.whl dist/*.tar.gz; do
+            name=$(basename "$artefact")
+            rm -rf "/tmp/venv-$name"
+            python -m venv "/tmp/venv-$name"
+            "/tmp/venv-$name/bin/pip" install --quiet "$artefact"
+            "/tmp/venv-$name/bin/python" -c "
+          import loudkit
+          from loudkit.rng import philox_4x32_10
+          from loudkit.frontend.polish import lexical_respelling
+          assert lexical_respelling('download', 'pl') == 'dałnloud'
+          print('installed OK:', loudkit.__version__)
+          "
+            echo "$name is installable and importable"
+          done
+
+      - name: Run the no-weights test suite from the source checkout
+        run: |
+          python -m pip install --quiet -e ".[dev]"
+          pytest -m "not slow" -q
+
+      # An SBOM and a signed provenance statement are how someone who did not
+      # build these artefacts can tell what is in them and where they came
+      # from. Without them the only answer to "is this really loudkit v0.1?"
+      # is "it says so on the tin", which is the same answer a substituted
+      # artefact gives.
+      - name: Generate an SBOM for the artefact, not the runner
+        # `cyclonedx_py environment` describes the interpreter it is pointed at.
+        # Pointed at *this* one it listed pytest, mypy, ruff, build and whatever
+        # else the job had installed — a bill of materials for the CI runner,
+        # published as if it were the wheel's. It is pointed at a clean venv
+        # holding only the wheel and its declared dependencies.
+        #
+        # It is written to `sbom/`, **not** `dist/`. `dist/` is handed whole to
+        # the PyPI publish action, which refuses anything that is not a
+        # distribution: `twine check` on a directory holding the JSON answers
+        # `InvalidDistribution: Unknown distribution format`. The SBOM reaches
+        # readers through the GitHub Release instead, which is where someone
+        # asking what is in the wheel would look for it.
+        run: |
+          set -euo pipefail
+          mkdir -p sbom
+          rm -rf /tmp/venv-sbom
+          python -m venv /tmp/venv-sbom
+          /tmp/venv-sbom/bin/pip install --quiet --upgrade pip
+          /tmp/venv-sbom/bin/pip install --quiet \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            "$(ls dist/*.whl)"
+          python -m pip install --quiet "cyclonedx-bom==7.3.1"
+          # `-o`, not `--outfile`: cyclonedx-bom 7.x has no long form for the
+          # output path, and the first tag build failed on exactly that.
+          python -m cyclonedx_py environment /tmp/venv-sbom \
+            --output-format json -o sbom/loudkit-sbom.cdx.json
+          python - <<'PY'
+          import json
+          sbom = json.load(open("sbom/loudkit-sbom.cdx.json"))
+          names = {c["name"].lower() for c in sbom["components"]}
+          # The runner's tooling must not appear: its presence means the SBOM
+          # describes the machine that built the wheel, not the wheel.
+          leaked = names & {"pytest", "mypy", "ruff", "build", "cyclonedx-bom", "pytest-cov"}
+          assert not leaked, f"SBOM describes the CI environment: {sorted(leaked)}"
+          assert "loudkit" in names, "SBOM does not contain loudkit itself"
+          print(f"SBOM: {len(sbom['components'])} components, none from the runner")
+          PY
+
+      # `dist/` must hold distributions and nothing else, because that is what
+      # is uploaded to PyPI. Asserted rather than assumed: the SBOM lived here
+      # once, and the check that would have caught it is one line.
+      - name: dist/ holds distributions and nothing else
+        run: |
+          set -euo pipefail
+          strays=$(ls dist | grep -Ev '\.whl$|\.tar\.gz$' || true)
+          if [ -n "$strays" ]; then
+            echo "dist/ carries files PyPI cannot accept:" >&2
+            echo "$strays" >&2
+            exit 1
+          fi
+          ls dist
+
+      # The publish job installs exactly these bytes, rather than rebuilding.
+      # A second build could differ from the one that was tested and attested,
+      # and the difference would reach the registry unexamined.
+      - name: Hand the built artefacts to the publish jobs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Hand the SBOM to the release job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: sbom
+          path: sbom/*
+          if-no-files-found: error
+
+  # The attestation is minted in its own job, because `id-token: write` is the
+  # ability to sign as this repository and the build job runs code fetched
+  # from the network (pip-installed tooling, the test suite, npm and cargo in
+  # the check jobs). This job runs none of that: no checkout, no installs,
+  # only the pinned attestation action over the bytes the build job handed
+  # over. What it signs is therefore exactly what was built, and nothing that
+  # ran during the build could have held the signing token.
+  attest:
+    name: attest build provenance
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write      # provenance attestation signs via OIDC
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2
+        with:
+          subject-path: "dist/*.whl,dist/*.tar.gz"
+
+  # --- the dry runs, before anything is published ----------------------------
+  #
+  # Each of these asks one registry the question it would answer at upload
+  # time, and none of them is gated: they are the evidence the reviewer is
+  # approving. All three must pass before the first publish job can start.
+
+  check-pypi:
+    name: PyPI accepts the distributions
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      # The same validation the upload performs, run where a failure costs
+      # nothing. It reads the metadata and the long description out of both
+      # artefacts and refuses anything PyPI's own renderer would refuse.
+      - name: twine check
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet "twine==7.0.0"
+          python -m twine check --strict dist/*
+
+  check-npm:
+    name: npm accepts the tarball
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "22"
+
+      # The tag is what people install; package.json is what npm records. A
+      # mismatch here publishes a version nobody asked for, under a number that
+      # can never be reused.
+      - name: The tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./js/package.json').version")
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag $tag does not match js/package.json $pkg" >&2
+            exit 1
+          fi
+
+      # `npm pack` runs `prepack`, which builds and then refuses a package
+      # missing dist/ or the respelling lexicon. `--dry-run` would run the same
+      # guard and then throw the tarball away, leaving publish-npm to build a
+      # second one that nothing had looked at. This writes the real file, and
+      # publish-npm sends this file.
+      #
+      # It is packed into RUNNER_TEMP rather than `js/`, so a `.tgz` cannot end
+      # up inside a later `npm pack`'s idea of the package directory.
+      - name: Build, test and pack
+        working-directory: js
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm test
+          # npm does not create the destination directory; without this the
+          # pack dies with ENOENT, which is how the first tag build ended here.
+          mkdir -p "$RUNNER_TEMP/npm"
+          npm pack --pack-destination "$RUNNER_TEMP/npm"
+
+      - name: Record what the tarball carries
+        run: |
+          set -euo pipefail
+          tarball=$(ls "$RUNNER_TEMP"/npm/*.tgz)
+          echo "packed $tarball"
+          sha256sum "$tarball"
+          tar -tzf "$tarball"
+
+      # A listing proves the files are in the tarball; it does not prove they
+      # work from there. This installs the exact `.tgz` that publish-npm will
+      # send into a clean directory, the way a consumer's `npm install
+      # loudkit` lands it, and imports it. The respelling call is the same
+      # smoke the Python artefacts get: it only answers correctly if the
+      # shipped data files resolve from the installed location, which is
+      # precisely what running from the source checkout can never test.
+      - name: Install the tarball as a consumer and import it
+        run: |
+          set -euo pipefail
+          tarball=$(ls "$RUNNER_TEMP"/npm/*.tgz)
+          consumer="$RUNNER_TEMP/npm-consumer"
+          mkdir -p "$consumer"
+          cd "$consumer"
+          npm init --yes >/dev/null
+          npm install --no-audit --no-fund "$tarball"
+          node --input-type=module -e "
+          import { Engine, LRSamplerV1, lexicalRespelling } from 'loudkit';
+          const got = lexicalRespelling('download', 'pl');
+          if (got !== 'dałnloud') {
+            throw new Error('respelling data missing or wrong: ' + got);
+          }
+          console.log('installed tarball imports OK:', typeof Engine, typeof LRSamplerV1);
+          "
+
+      # The bytes that were just checked, handed to the job that holds the
+      # credentials. Without this the check and the publish are two builds of
+      # the same source, and only the first one was ever inspected.
+      - name: Hand the tarball to the publish job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: npm-tarball
+          path: ${{ runner.temp }}/npm/*.tgz
+          if-no-files-found: error
+
+  attest-npm:
+    name: attest npm tarball provenance
+    needs: check-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      # No checkout and no installs. The only executable code here is the two
+      # pinned GitHub actions; registry dependencies ran in check-npm, where no
+      # OIDC identity was available.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: npm-tarball
+          path: npm-tarball
+
+      - name: Attest the tarball check-npm packed and imported
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2
+        with:
+          subject-path: "npm-tarball/*.tgz"
+
+  check-crates:
+    name: crates.io accepts the crate
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
+        with:
+          toolchain: stable
+
+      - name: The tag matches the crate version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          if [ "$tag" != "$crate" ]; then
+            echo "tag $tag does not match rust/Cargo.toml $crate" >&2
+            exit 1
+          fi
+
+      # What a consumer gets is the `.crate` tarball, not this checkout, and
+      # the two are not the same tree: `include` in Cargo.toml is an allowlist,
+      # so anything outside it is silently absent from the tarball while still
+      # sitting on disk here. A check that compiles the checkout cannot see
+      # that. This one compiles the tarball.
+      #
+      # Three steps, each catching something the one before it cannot:
+      #
+      #   1. `cargo package` builds its own staging copy of the packaged
+      #      contents. That is the step `--no-verify` used to skip, which is
+      #      what let a crate that does not compile from its own tarball pass.
+      #   2. The `.crate` is unpacked *outside* the checkout, so a path that
+      #      only resolves next to the monorepo cannot resolve by accident.
+      #   3. That unpacked tree is built and tested, which is the closest this
+      #      workflow can get to running `cargo add loudkit` in a stranger's
+      #      project.
+      #
+      # Steps 1 and 3 are two compiles of the same source, and they cost about
+      # one: `CARGO_TARGET_DIR` is shared, so the dependency graph — `ort`,
+      # `ndarray`, `regex`, `sha2` — is built once and only loudkit's own
+      # twenty files are compiled twice. Paying that twice is worth not having
+      # to argue about which of the two trees is authoritative.
+      - name: Package the crate, then build and test what it contains
+        working-directory: rust
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/rust/target
+        run: |
+          set -euo pipefail
+
+          # --locked, because the lockfile ships inside the crate: if it cannot
+          # satisfy the manifest, the consumer finds out and not us.
+          cargo package --locked
+
+          crate=$(ls target/package/*.crate)
+          echo "packaged $crate"
+          sha256sum "$crate"
+          tar -tzf "$crate"
+
+          unpacked="$RUNNER_TEMP/crate"
+          mkdir -p "$unpacked"
+          tar -xzf "$crate" -C "$unpacked"
+          cd "$unpacked"/loudkit-*
+
+          cargo build --locked --all-targets
+
+          # `src/chunking.rs` carries a `#[cfg(test)]` test that reads the
+          # shared conformance fixture, and the fixture is not in the crate:
+          # `include` ships `src/**` and the fixture lives at the monorepo
+          # root. Without this variable the test looks for `../tests/data`
+          # relative to the unpacked tree and fails on a missing file, which
+          # says nothing about the crate. Pointed at the checkout it says what
+          # it was written to say. (The integration tests under `rust/tests`
+          # are excluded from the package for the same reason and so do not
+          # run here; Cargo.toml records that choice.)
+          #
+          # Two ways this test run is *not* what a consumer gets, both
+          # deliberate and both compensated below: the fixture path reaches
+          # back into this monorepo, and `--locked` resolves dependencies
+          # from a lockfile a `cargo add loudkit` consumer never sees.
+          LOUDKIT_FIXTURE_DIR="${{ github.workspace }}/tests/data/conformance" \
+            cargo test --locked
+
+      # The closest available imitation of `cargo add loudkit` before the
+      # crate exists on crates.io: a brand-new binary crate, outside the
+      # checkout, depends on the unpacked package contents, resolves its
+      # dependency graph fresh from the registry (no --locked, no shipped
+      # lockfile, which is how every consumer resolves a library), and calls
+      # the public API.
+      #
+      # What this still cannot cover, recorded so nobody reads more into the
+      # green than it holds: the bytes crates.io will actually serve and
+      # index (only a publish creates those), version resolution of
+      # `loudkit = "0.1"` through the registry, and the fixture-backed tests
+      # above, which need data no consumer has.
+      - name: A fresh crate depends on the package and calls it
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/rust/target
+        run: |
+          set -euo pipefail
+          consumer="$RUNNER_TEMP/crate-consumer"
+          cargo new --bin "$consumer" --name smoke
+          unpacked=$(cd "$RUNNER_TEMP"/crate/loudkit-* && pwd)
+          cd "$consumer"
+          cargo add loudkit --path "$unpacked"
+          cat > src/main.rs <<'RS'
+          fn main() {
+              let got = loudkit::respell::lexical_respelling("download", "pl");
+              assert_eq!(got, "dałnloud", "respelling data missing or wrong");
+              let n = loudkit::chunking::estimate_tokens("The release is assembled.");
+              assert!(n > 0);
+              println!("consumer crate calls loudkit OK: {n} tokens estimated");
+          }
+          RS
+          cargo run
+
+      - name: Preserve the crate that passed both consumer gates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: crate-tarball
+          path: rust/target/package/loudkit-*.crate
+          if-no-files-found: error
+
+  # --- publishing ------------------------------------------------------------
+  #
+  # Every job below needs a reviewer on the `release` environment before it
+  # runs, and every one of them is irreversible once it does.
+  #
+  # PyPI, npm and crates.io authenticate over OIDC (Trusted Publishing). The
+  # first npm and crates.io packages are manual bootstrap exceptions because
+  # neither registry can attach trust to a package that does not exist. No
+  # long-lived registry token is stored in this repository.
+  #
+  # Registry-side setup is a human act and is recorded in RELEASING.md.
+
+  publish-npm:
+    name: publish to npm
+    # Both attestations are prerequisites. An attestation created after an
+    # upload would not protect the decision to upload those bytes.
+    needs: [attest, attest-npm, check-pypi, check-npm, check-crates]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      # Later releases stage through npm Trusted Publishing. Version one is
+      # published interactively with 2FA before this job is approved because
+      # npm cannot stage or configure trust for a package that does not exist.
+      id-token: write
+    steps:
+      # No checkout, and no build. The tarball check-npm packed is the tarball
+      # that is published or staged, so there is no source tree here from which
+      # to build a different one.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: npm-tarball
+          path: npm-tarball
+
+      # `registry-url:` is deliberately absent. Given it, setup-node writes an
+      # `.npmrc` containing `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`,
+      # and npm reads a configured `_authToken` — even one expanding to nothing,
+      # which is what it expands to here — as "auth is already arranged" and
+      # never starts the OIDC exchange. npm's built-in registry default is the
+      # intended one, so writing it down buys nothing and breaks authentication.
+      #
+      # Staged publishing needs npm 11.15 or newer. Node 24 carries a suitable
+      # npm, so this credentialed job installs and caches nothing.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "24"
+
+      # LoudKit declares voice enrollment as dual-use. npm's policy therefore
+      # forbids direct automated publishing: later versions are staged over
+      # stage-only OIDC, then this job waits for a maintainer to approve them
+      # with 2FA on npmjs.com. The first release cannot be staged because npm
+      # requires the package to exist first; §7.1 publishes this exact tarball
+      # interactively, and this job verifies its registry shasum before the
+      # PyPI and crates.io chain may continue.
+      - name: Verify the live tarball, or stage it and wait for 2FA approval
+        run: |
+          set -euo pipefail
+          tarball=$(ls npm-tarball/*.tgz)
+          version="${GITHUB_REF_NAME#v}"
+          local=$(sha1sum "$tarball" | cut -d' ' -f1)
+          echo "loudkit@$version from $tarball"
+          sha256sum "$tarball"
+          npm --version
+
+          published=$(npm view "loudkit@$version" dist.shasum 2>/dev/null || true)
+          if [ -n "$published" ]; then
+            if [ "$published" != "$local" ]; then
+              echo "loudkit@$version is already on the registry with shasum $published," >&2
+              echo "but the tarball this run checked has shasum $local." >&2
+              echo "The registry holds bytes this workflow never verified. Stopping." >&2
+              exit 1
+            fi
+            echo "loudkit@$version is already published and its shasum matches the"
+            echo "tarball this run checked: nothing to send."
+            exit 0
+          fi
+
+          package=$(npm view loudkit name 2>/dev/null || true)
+          if [ -z "$package" ]; then
+            echo "loudkit does not exist on npm yet." >&2
+            echo "Publish this run's npm-tarball artifact interactively with 2FA," >&2
+            echo "configure its trusted publisher for stage-only access, then rerun." >&2
+            echo "See RELEASING.md §7.1. No CI token may bypass this step." >&2
+            exit 1
+          fi
+
+          npm stage publish "$tarball"
+          echo "Staged loudkit@$version. Review and approve it with 2FA on npmjs.com."
+          echo "This job will wait up to 30 minutes before stopping the release chain."
+          for _ in $(seq 1 120); do
+            sleep 15
+            published=$(npm view "loudkit@$version" dist.shasum 2>/dev/null || true)
+            if [ -z "$published" ]; then
+              continue
+            fi
+            if [ "$published" != "$local" ]; then
+              echo "npm published shasum $published, expected $local" >&2
+              exit 1
+            fi
+            echo "npm approval complete; the live tarball matches this run."
+            exit 0
+          done
+          echo "npm approval did not arrive within 30 minutes; PyPI and crates.io remain blocked." >&2
+          exit 1
+
+  publish-pypi:
+    name: publish to PyPI
+    needs: publish-npm
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write     # Trusted Publishing; no API token is stored
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish
+        # v1.14.2, not v1.12.4: the wheel's Metadata-Version is 2.5 and the
+        # twine bundled in v1.12.4 refuses it — check-pypi's own twine==7.0.0
+        # accepts it, so the check passed and the publish failed. The pin and
+        # the check must track the same metadata era.
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+        with:
+          # Named rather than left to the default, so it stays visible that
+          # this directory is uploaded whole and may hold only distributions.
+          packages-dir: dist
+
+  publish-crates:
+    name: publish to crates.io
+    needs: publish-pypi
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
+        with:
+          toolchain: stable
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: crate-tarball
+          path: crate-tarball
+
+      # A publish job may be rerun after a network failure or after the manual
+      # first-release bootstrap. Read the registry before asking for a token:
+      # an existing version is accepted only when its immutable registry
+      # checksum equals the crate this exact tag packages.
+      - name: Read the live crate state
+        id: registry
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          response="$RUNNER_TEMP/crates-version.json"
+          agent="loudkit-release/$GITHUB_SHA (https://github.com/loudreader/loudkit)"
+          status=$(curl -sS -A "$agent" -o "$response" -w '%{http_code}' \
+            "https://crates.io/api/v1/crates/loudkit/$version")
+
+          if [ "$status" = 200 ]; then
+            checksum=$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1]))["version"]["checksum"])' \
+              "$response")
+            echo "package_exists=true" >> "$GITHUB_OUTPUT"
+            echo "version_exists=true" >> "$GITHUB_OUTPUT"
+            echo "version_checksum=$checksum" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$status" != 404 ]; then
+            cat "$response" >&2
+            echo "crates.io version lookup returned HTTP $status" >&2
+            exit 1
+          fi
+
+          status=$(curl -sS -A "$agent" -o "$response" -w '%{http_code}' \
+            "https://crates.io/api/v1/crates/loudkit")
+          case "$status" in
+            200) echo "package_exists=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "package_exists=false" >> "$GITHUB_OUTPUT" ;;
+            *)
+              cat "$response" >&2
+              echo "crates.io package lookup returned HTTP $status" >&2
+              exit 1
+              ;;
+          esac
+          echo "version_exists=false" >> "$GITHUB_OUTPUT"
+
+      # crates.io cannot configure a Trusted Publisher before the crate exists.
+      # Fail after npm and PyPI have succeeded, then follow RELEASING.md §7.3:
+      # publish the exact public tag manually with a publish-new token, attach
+      # this workflow as its trusted publisher, and rerun the failed job.
+      - name: Ask for the one-time crates.io bootstrap
+        if: steps.registry.outputs.package_exists == 'false'
+        run: |
+          echo "loudkit does not exist on crates.io yet." >&2
+          echo "Publish this public tag manually with a publish-new token," >&2
+          echo "configure crates.io Trusted Publishing, then rerun this job." >&2
+          echo "See RELEASING.md §7.3. No registry token belongs in GitHub." >&2
+          exit 1
+
+      - name: Authenticate with crates.io Trusted Publishing
+        id: crates-auth
+        if: >-
+          steps.registry.outputs.package_exists == 'true'
+          && steps.registry.outputs.version_exists == 'false'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18  # v1.0.5
+
+      # No `--no-verify`. crates.io has no "upload this file I already built"
+      # call, so this job has to repackage rather than receive the `.crate`
+      # that check-crates inspected — and a second packaging run is a second
+      # set of bytes unless something builds them. Verification is that
+      # something: cargo packages, unpacks its own tarball, and compiles it,
+      # and only then uploads. The crate that reaches crates.io has therefore
+      # been built from its own contents on this runner, moments earlier.
+      #
+      # It is the same compile check-crates already passed, so the expected
+      # outcome is a slower job and no new information. That is the point: the
+      # one run where it disagrees is the run where the checkout and the
+      # tarball drifted apart, and it happens before the upload rather than
+      # after, which is the only side of the upload where it can be fixed.
+      - name: The repackaged crate is the one that passed the gates
+        if: steps.registry.outputs.version_exists == 'false'
+        working-directory: rust
+        run: |
+          set -euo pipefail
+          cargo package --locked
+          checked=$(sha256sum ../crate-tarball/*.crate | cut -d' ' -f1)
+          repacked=$(sha256sum target/package/loudkit-*.crate | cut -d' ' -f1)
+          if [ "$repacked" != "$checked" ]; then
+            echo "checked crate has checksum $checked" >&2
+            echo "publish runner repackaged checksum $repacked" >&2
+            exit 1
+          fi
+
+      - name: Publish through the short-lived token
+        if: steps.registry.outputs.version_exists == 'false'
+        working-directory: rust
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+
+      - name: Verify an already-published version is the checked crate
+        if: steps.registry.outputs.version_exists == 'true'
+        env:
+          EXPECTED_CHECKSUM: ${{ steps.registry.outputs.version_checksum }}
+        run: |
+          set -euo pipefail
+          actual=$(sha256sum crate-tarball/*.crate | cut -d' ' -f1)
+          if [ "$actual" != "$EXPECTED_CHECKSUM" ]; then
+            echo "crates.io holds checksum $EXPECTED_CHECKSUM" >&2
+            echo "the checked crate has checksum $actual" >&2
+            echo "the published crate is not the artifact this run tested" >&2
+            exit 1
+          fi
+          echo "live crate matches the checked artifact: $actual"
+
+  # --- the record ------------------------------------------------------------
+
+  github-release:
+    name: create the GitHub Release
+    needs: publish-crates
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    # The only job that writes to the repository, and the only one that needs
+    # this permission.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: sbom
+          path: sbom
+
+      - name: Upload the artefacts to the tag's Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
+        with:
+          files: |
+            dist/*
+            sbom/*
+          generate_release_notes: true

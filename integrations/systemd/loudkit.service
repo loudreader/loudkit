@@ -1,0 +1,48 @@
+# A user service, so the model stays warm across reboots.
+#
+#     mkdir -p ~/.config/systemd/user
+#     cp loudkit.service ~/.config/systemd/user/
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now loudkit
+#
+# User scope, not system: this binds localhost, runs as you, and reads voices
+# from your home directory. Running it as root would grant it more than it
+# needs to speak.
+
+[Unit]
+Description=loudkit text-to-speech server
+Documentation=https://github.com/loudreader/loudkit
+After=network.target
+
+[Service]
+Type=simple
+Environment=LOUDKIT_CHECKPOINT=%h/.local/share/loudkit/loudr-1.safetensors
+# Unbuffered, so `journalctl -fu loudkit` shows the banner and any warning as
+# they happen rather than when the pipe fills. A service whose logs arrive in
+# 4 KB batches looks hung while it is starting.
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/env loudkit serve --checkpoint ${LOUDKIT_CHECKPOINT}
+Restart=on-failure
+RestartSec=5
+
+# It needs to read a checkpoint and open a localhost port. Nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# No writable paths at all: the service reads a checkpoint, holds it in
+# memory and answers on a socket. Granting a directory "just in case" is how
+# a hardened unit stops being one.
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+# ^ false on purpose: torch JITs, and denying W^X kills it at import.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target

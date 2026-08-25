@@ -1,0 +1,89 @@
+{
+  "source_sample_rate": 24000,
+  "name": "en_reader1",
+  "files": {
+    "ref_audio.f32": {
+      "shape": [
+        360000
+      ],
+      "role": "input clip"
+    },
+    "wav16_flow.f32": {
+      "shape": [
+        160000
+      ],
+      "role": "torchaudio 24k->16k"
+    },
+    "wav16_t3.f32": {
+      "shape": [
+        240000
+      ],
+      "role": "librosa 24k->16k"
+    },
+    "tokenizer_mel.f32": {
+      "shape": [
+        128,
+        1000
+      ],
+      "role": "S3 tokenizer input"
+    },
+    "tokenizer_mel_cond.f32": {
+      "shape": [
+        128,
+        600
+      ],
+      "role": "S3 tokenizer input (cond path)"
+    },
+    "matcha_mel.f32": {
+      "shape": [
+        80,
+        500
+      ],
+      "role": "flow conditioning mel"
+    },
+    "kaldi_fbank.f32": {
+      "shape": [
+        998,
+        80
+      ],
+      "role": "CAM++ input"
+    },
+    "voiceenc_trimmed.f32": {
+      "shape": [
+        239488
+      ],
+      "role": "trimmed 16k"
+    },
+    "voiceenc_mel.f32": {
+      "shape": [
+        1497,
+        40
+      ],
+      "role": "voice-encoder input"
+    },
+    "prompt_tokens.i64": {
+      "shape": [
+        250
+      ],
+      "role": "prompt tokens"
+    },
+    "cond_prompt_tokens.i64": {
+      "shape": [
+        150
+      ],
+      "role": "cond tokens"
+    },
+    "flow_embedding.f32": {
+      "shape": [
+        192
+      ],
+      "role": "CAM++ x-vector"
+    },
+    "speaker_embedding.f32": {
+      "shape": [
+        256
+      ],
+      "role": "utterance vec"
+    }
+  }
+}

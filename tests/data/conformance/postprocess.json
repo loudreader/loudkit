@@ -1,0 +1,1239 @@
+{
+  "version": 1,
+  "about": [
+    "Conformance cases for the postprocess layer: five ports must reach the same",
+    "verdict on the same tokens. Every case is a regression from the shipped",
+    "reader (LoudReaderTests/TrailingFillerTests.swift) or a device trace named",
+    "in docs/postprocess.md — none was invented to exercise a branch.",
+    "",
+    "Token sequences are written as a shape rather than spelled out, so the",
+    "intent stays readable. Build one by concatenating segments in order:",
+    "  ['speech', n] -> n tokens, the i-th being 20 + (i mod 60)",
+    "  ['quiet',  n] -> n tokens, the i-th being      (i mod 8)",
+    "The index restarts at 0 for every segment. Silence ids are 0..7, so 'quiet'",
+    "is silence and 'speech' never is."
+  ],
+  "silence_token_ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "config": {
+    "mode": "trim",
+    "ceiling_speech_per_text_token": 4.0,
+    "ceiling_slack_tokens": 40,
+    "trailing_filler_threshold": 0.7,
+    "trailing_silence_run_tokens": 12,
+    "filler_min_eos_probability": 0.05,
+    "filler_max_speech_after_run": 10,
+    "desperation_speech_per_text_token": 4.5,
+    "desperation_min_text_tokens": 10,
+    "ended_tail_silence_run": 6,
+    "ended_tail_blip_max": 2,
+    "ended_tail_word_max": 10,
+    "ended_tail_keep": 5,
+    "echo_strong_eos_probability": 0.1,
+    "echo_strong_max_tail": 30,
+    "echo_strong_min_position_pct": 68,
+    "echo_weak_eos_probability": 0.003,
+    "echo_weak_max_tail": 16,
+    "echo_weak_min_position_pct": 85,
+    "repetition_max_period": 12,
+    "repetition_min_cycles": 3,
+    "repetition_min_span": 24,
+    "dropout_min_tokens": 25,
+    "pacing_tolerance": 1.6,
+    "retry_max_attempts": 2
+  },
+  "ceiling": [
+    {
+      "name": "short text still gets the slack",
+      "why": "a ratio alone is unsafe on a three-word line; the slack carries it",
+      "text_tokens": 4,
+      "window": 255,
+      "expect": 56
+    },
+    {
+      "name": "the showcase overrun",
+      "why": "device trace t3.overrun gen=92 ceiling=92 bestEOS=74@0.003 floor=31",
+      "text_tokens": 13,
+      "window": 255,
+      "expect": 92
+    },
+    {
+      "name": "a long text is clamped to the window",
+      "why": "the renderer accepts 255 and the ceiling must never promise more. This expected 270 while saying exactly that: the +15 slack was unreachable, so a row was allowed to reach 270, stopped there, and then rejected at 255 — time spent on a device for tokens certain to be discarded.",
+      "text_tokens": 200,
+      "window": 255,
+      "expect": 255
+    }
+  ],
+  "trailing_filler": [
+    {
+      "name": "a long silence with a stray word is filler",
+      "why": "the case the rule exists for: sentence ends, silence, one word seconds later",
+      "shape": [
+        [
+          "speech",
+          60
+        ],
+        [
+          "quiet",
+          40
+        ],
+        [
+          "speech",
+          3
+        ]
+      ],
+      "from": 60,
+      "expect": true
+    },
+    {
+      "name": "a tail that is still speech is not filler",
+      "why": "the model hesitated early; cutting here would drop 140 tokens of speech",
+      "shape": [
+        [
+          "speech",
+          200
+        ]
+      ],
+      "from": 60,
+      "expect": false
+    },
+    {
+      "name": "a pause followed by more sentence is not filler",
+      "why": "a rhetorical pause mid-tail was mistaken for the end of the sentence",
+      "shape": [
+        [
+          "speech",
+          50
+        ],
+        [
+          "quiet",
+          25
+        ],
+        [
+          "speech",
+          80
+        ]
+      ],
+      "from": 50,
+      "expect": false
+    },
+    {
+      "name": "an empty tail is never filler",
+      "why": "nothing to discard is not a reason to cut",
+      "shape": [
+        [
+          "speech",
+          40
+        ]
+      ],
+      "from": 40,
+      "expect": false
+    },
+    {
+      "name": "an out-of-range index is never filler",
+      "why": "same, from the other side",
+      "shape": [
+        [
+          "speech",
+          40
+        ]
+      ],
+      "from": 99,
+      "expect": false
+    },
+    {
+      "name": "an empty row is never filler",
+      "why": "index 0 into no tokens must not read past the end",
+      "shape": [],
+      "from": 0,
+      "expect": false
+    }
+  ],
+  "desperation": [
+    {
+      "name": "an impossibly long row is cut at its seam",
+      "why": "the 'Tas shape: real sentence, long silence seam, dense babble after",
+      "shape": [
+        [
+          "speech",
+          52
+        ],
+        [
+          "quiet",
+          14
+        ],
+        [
+          "speech",
+          30
+        ]
+      ],
+      "text_tokens": 18,
+      "min_tokens": 21,
+      "eos_peak_at": 96,
+      "peak_allowed": true,
+      "expect": 52
+    },
+    {
+      "name": "an impossibly long row without a seam is cut at the peak",
+      "why": "'It was as he expected.' — 14 text tokens, 96 speech tokens of dense babble",
+      "shape": [
+        [
+          "speech",
+          96
+        ]
+      ],
+      "text_tokens": 14,
+      "min_tokens": 16,
+      "eos_peak_at": 45,
+      "peak_allowed": true,
+      "expect": 45
+    },
+    {
+      "name": "a peak outside the plausible band is not trusted",
+      "why": "a peak that late is part of the garbage, not a stop",
+      "shape": [
+        [
+          "speech",
+          96
+        ]
+      ],
+      "text_tokens": 14,
+      "min_tokens": 16,
+      "eos_peak_at": 90,
+      "peak_allowed": true,
+      "expect": null
+    },
+    {
+      "name": "a merely slow row is never desperation cut",
+      "why": "the mislabeled-language showcase row, 92 gen / 26 text = 3.5x",
+      "shape": [
+        [
+          "speech",
+          60
+        ],
+        [
+          "quiet",
+          14
+        ],
+        [
+          "speech",
+          18
+        ]
+      ],
+      "text_tokens": 26,
+      "min_tokens": 31,
+      "eos_peak_at": 74,
+      "peak_allowed": true,
+      "expect": null
+    },
+    {
+      "name": "a tiny text is exempt from the ratio guard",
+      "why": "breath and final pause put a clean 'No!' at ratio 6+ by itself",
+      "shape": [
+        [
+          "speech",
+          25
+        ]
+      ],
+      "text_tokens": 4,
+      "min_tokens": 10,
+      "eos_peak_at": 20,
+      "peak_allowed": true,
+      "expect": null
+    },
+    {
+      "name": "nothing before the floor anchors a cut",
+      "why": "a run straddling the floor belongs to the sentence; a peak below it is the old truncation bug",
+      "shape": [
+        [
+          "quiet",
+          30
+        ],
+        [
+          "speech",
+          80
+        ]
+      ],
+      "text_tokens": 12,
+      "min_tokens": 40,
+      "eos_peak_at": 20,
+      "peak_allowed": true,
+      "expect": null
+    },
+    {
+      "name": "a continuation chunk never falls back to its peak",
+      "why": "a chunk with no sentence end has no meaningful stop peak",
+      "shape": [
+        [
+          "speech",
+          96
+        ]
+      ],
+      "text_tokens": 14,
+      "min_tokens": 16,
+      "eos_peak_at": 45,
+      "peak_allowed": false,
+      "expect": null
+    }
+  ],
+  "ended_tail": [
+    {
+      "name": "a silence run with a blip before the stop is trimmed",
+      "why": "the 'Tas device specimen ended '.......#' — seven silence tokens and a click",
+      "shape": [
+        [
+          "speech",
+          37
+        ],
+        [
+          "quiet",
+          7
+        ],
+        [
+          "speech",
+          1
+        ]
+      ],
+      "is_terminal": false,
+      "expect": 42
+    },
+    {
+      "name": "a short natural pause before the stop is left alone",
+      "why": "three tokens of silence is no evidence of stranding",
+      "shape": [
+        [
+          "speech",
+          40
+        ],
+        [
+          "quiet",
+          3
+        ],
+        [
+          "speech",
+          1
+        ]
+      ],
+      "is_terminal": false,
+      "expect": null
+    },
+    {
+      "name": "a bare long silence tail is tightened",
+      "why": "dead air past half a second becomes a natural pause",
+      "shape": [
+        [
+          "speech",
+          40
+        ],
+        [
+          "quiet",
+          14
+        ]
+      ],
+      "is_terminal": false,
+      "expect": 45
+    },
+    {
+      "name": "a real trailing word is never trimmed mid-sentence",
+      "why": "on a continuation chunk the pause is the sentence's rhythm",
+      "shape": [
+        [
+          "speech",
+          40
+        ],
+        [
+          "quiet",
+          13
+        ],
+        [
+          "speech",
+          6
+        ]
+      ],
+      "is_terminal": false,
+      "expect": null
+    },
+    {
+      "name": "a stranded word behind a full seam is trimmed on a terminal chunk",
+      "why": "heard live on the smoke's spoken proof: end, half a second, one word, stop",
+      "shape": [
+        [
+          "speech",
+          40
+        ],
+        [
+          "quiet",
+          13
+        ],
+        [
+          "speech",
+          6
+        ]
+      ],
+      "is_terminal": true,
+      "expect": 45
+    },
+    {
+      "name": "a word after a short pause is kept even terminally",
+      "why": "that is the sentence's own ending cadence",
+      "shape": [
+        [
+          "speech",
+          40
+        ],
+        [
+          "quiet",
+          8
+        ],
+        [
+          "speech",
+          6
+        ]
+      ],
+      "is_terminal": true,
+      "expect": null
+    },
+    {
+      "name": "a stranded word with trailing silence is still caught",
+      "why": "a word wrapped in silence on both sides is junk; the click rule generalised",
+      "shape": [
+        [
+          "speech",
+          40
+        ],
+        [
+          "quiet",
+          14
+        ],
+        [
+          "speech",
+          5
+        ],
+        [
+          "quiet",
+          4
+        ]
+      ],
+      "is_terminal": true,
+      "expect": 45
+    },
+    {
+      "name": "an all-silence row is left alone",
+      "why": "there is no sentence to strand anything behind; walking back must stop",
+      "shape": [
+        [
+          "quiet",
+          20
+        ]
+      ],
+      "is_terminal": true,
+      "expect": null
+    }
+  ],
+  "terminal_echo": [
+    {
+      "name": "the James device regression",
+      "why": "'...but a brigand. Pass. Four.' gen=124/124, bestEOS=109@0.004, ceiling hit",
+      "token_count": 124,
+      "eos_peak_at": 109,
+      "eos_peak_prob": 0.004,
+      "min_tokens": 20,
+      "is_terminal": true,
+      "hit_ceiling": true,
+      "expect": 109
+    },
+    {
+      "name": "a weak late peak without a ceiling overrun is refused",
+      "why": "weak confidence is trustworthy only with all three corroborators",
+      "token_count": 124,
+      "eos_peak_at": 109,
+      "eos_peak_prob": 0.004,
+      "min_tokens": 20,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": null
+    },
+    {
+      "name": "a strong late peak with a short tail is cut",
+      "why": "the ordinary echo: the sentence ended and one word free-ran after it",
+      "token_count": 100,
+      "eos_peak_at": 80,
+      "eos_peak_prob": 0.3,
+      "min_tokens": 20,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": 80
+    },
+    {
+      "name": "a strong peak too early is a clause pause",
+      "why": "the late-position rule is what protects real comma and clause pauses",
+      "token_count": 100,
+      "eos_peak_at": 50,
+      "eos_peak_prob": 0.3,
+      "min_tokens": 20,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": null
+    },
+    {
+      "name": "a continuation chunk is never echo-cut",
+      "why": "its end is not an end",
+      "token_count": 100,
+      "eos_peak_at": 80,
+      "eos_peak_prob": 0.3,
+      "min_tokens": 20,
+      "is_terminal": false,
+      "hit_ceiling": false,
+      "expect": null
+    }
+  ],
+  "resolve": [
+    {
+      "name": "clean row passes through",
+      "why": "a sentence that ended when it meant to keeps every token",
+      "shape": [
+        [
+          "speech",
+          40
+        ],
+        [
+          "quiet",
+          4
+        ]
+      ],
+      "text_tokens": 30,
+      "min_tokens": 36,
+      "eos_peak_at": 44,
+      "eos_peak_prob": 0.4,
+      "ended": true,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": {
+        "keep": 44,
+        "reason": "clean",
+        "suspect": false
+      }
+    },
+    {
+      "name": "silence tail wins over everything below it",
+      "why": "the peak-anchored rescue is consulted first on a row that never stopped",
+      "shape": [
+        [
+          "speech",
+          60
+        ],
+        [
+          "quiet",
+          40
+        ],
+        [
+          "speech",
+          3
+        ]
+      ],
+      "text_tokens": 40,
+      "min_tokens": 48,
+      "eos_peak_at": 60,
+      "eos_peak_prob": 0.2,
+      "ended": false,
+      "is_terminal": true,
+      "hit_ceiling": true,
+      "expect": {
+        "keep": 60,
+        "reason": "silence_tail",
+        "suspect": false
+      }
+    },
+    {
+      "name": "a weak peak leaves the silence tail rule dormant",
+      "why": "below filler_min_eos_probability the share test is not even consulted",
+      "shape": [
+        [
+          "speech",
+          60
+        ],
+        [
+          "quiet",
+          40
+        ],
+        [
+          "speech",
+          3
+        ]
+      ],
+      "text_tokens": 40,
+      "min_tokens": 48,
+      "eos_peak_at": 60,
+      "eos_peak_prob": 0.01,
+      "ended": false,
+      "is_terminal": true,
+      "hit_ceiling": true,
+      "expect": {
+        "keep": 103,
+        "reason": "clean",
+        "suspect": false
+      }
+    },
+    {
+      "name": "desperation catches an ended row that babbled first",
+      "why": "a model that babbles past its sentence and only then stops has forfeited that trust",
+      "shape": [
+        [
+          "speech",
+          52
+        ],
+        [
+          "quiet",
+          14
+        ],
+        [
+          "speech",
+          30
+        ]
+      ],
+      "text_tokens": 18,
+      "min_tokens": 21,
+      "eos_peak_at": 96,
+      "eos_peak_prob": 0.0,
+      "ended": true,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": {
+        "keep": 52,
+        "reason": "desperation",
+        "suspect": false
+      }
+    },
+    {
+      "name": "ended tail trim only runs when nothing above fired",
+      "why": "an ended row keeps its own decision; only stranded dead air comes off",
+      "shape": [
+        [
+          "speech",
+          37
+        ],
+        [
+          "quiet",
+          7
+        ],
+        [
+          "speech",
+          1
+        ]
+      ],
+      "text_tokens": 30,
+      "min_tokens": 36,
+      "eos_peak_at": -1,
+      "eos_peak_prob": 0.0,
+      "ended": true,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": {
+        "keep": 42,
+        "reason": "ended_tail",
+        "suspect": false
+      }
+    },
+    {
+      "name": "an impossibly long row no rule can place is reported, not cut",
+      "why": "cutting at a guess is how the rescue truncated whole sentences before",
+      "shape": [
+        [
+          "speech",
+          96
+        ]
+      ],
+      "text_tokens": 14,
+      "min_tokens": 16,
+      "eos_peak_at": 90,
+      "eos_peak_prob": 0.0,
+      "ended": true,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": {
+        "keep": 96,
+        "reason": "clean",
+        "suspect": true
+      }
+    },
+    {
+      "name": "mode off returns the row untouched",
+      "why": "the detectors cost an exponential per step; off must cost nothing and change nothing",
+      "mode": "off",
+      "shape": [
+        [
+          "speech",
+          52
+        ],
+        [
+          "quiet",
+          14
+        ],
+        [
+          "speech",
+          30
+        ]
+      ],
+      "text_tokens": 18,
+      "min_tokens": 21,
+      "eos_peak_at": 96,
+      "eos_peak_prob": 0.0,
+      "ended": true,
+      "is_terminal": true,
+      "hit_ceiling": false,
+      "expect": {
+        "keep": 96,
+        "reason": "clean",
+        "suspect": false
+      }
+    }
+  ],
+  "language_guard": {
+    "about": [
+      "Does the English-tuned ceiling truncate correct speech in the other",
+      "eight languages? Measured with one voice held constant across nine",
+      "language tags (voice-to-voice spread is larger than language-to-language,",
+      "so mixing voices would confound the effect), three length classes each.",
+      "",
+      "Result: mid and long sentences run 1.69-2.79 speech tokens per text token",
+      "in every language, against a ceiling that only bites at 4.0 plus 40 slack.",
+      "The one row the ceiling stopped is a Spanish three-word phrase whose",
+      "decoder never emitted a stop token — a runaway the guard caught, not a",
+      "legitimate read it cut.",
+      "",
+      "A port asserts ceiling_for() against `expect`, and that a row's measured",
+      "length is under that ceiling unless `expect_stopped_by_ceiling`."
+    ],
+    "cases": [
+      {
+        "name": "en_short",
+        "why": "measured: 10 text tokens rendered 56 speech tokens (ratio 5.60)",
+        "text_tokens": 10,
+        "window": 255,
+        "expect": 80,
+        "measured_speech_tokens": 56,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "en_mid",
+        "why": "measured: 33 text tokens rendered 92 speech tokens (ratio 2.79)",
+        "text_tokens": 33,
+        "window": 255,
+        "expect": 172,
+        "measured_speech_tokens": 92,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "en_long",
+        "why": "measured: 77 text tokens rendered 159 speech tokens (ratio 2.06)",
+        "text_tokens": 77,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 159,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "pl_short",
+        "why": "measured: 15 text tokens rendered 46 speech tokens (ratio 3.07)",
+        "text_tokens": 15,
+        "window": 255,
+        "expect": 100,
+        "measured_speech_tokens": 46,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "pl_mid",
+        "why": "measured: 41 text tokens rendered 92 speech tokens (ratio 2.24)",
+        "text_tokens": 41,
+        "window": 255,
+        "expect": 204,
+        "measured_speech_tokens": 92,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "pl_long",
+        "why": "measured: 80 text tokens rendered 159 speech tokens (ratio 1.99)",
+        "text_tokens": 80,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 159,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "de_short",
+        "why": "measured: 14 text tokens rendered 35 speech tokens (ratio 2.50)",
+        "text_tokens": 14,
+        "window": 255,
+        "expect": 96,
+        "measured_speech_tokens": 35,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "de_mid",
+        "why": "measured: 39 text tokens rendered 83 speech tokens (ratio 2.13)",
+        "text_tokens": 39,
+        "window": 255,
+        "expect": 196,
+        "measured_speech_tokens": 83,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "de_long",
+        "why": "measured: 86 text tokens rendered 194 speech tokens (ratio 2.26)",
+        "text_tokens": 86,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 194,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "es_short",
+        "why": "measured: 10 text tokens rendered 80 speech tokens (ratio 8.00); this row ran away and the ceiling stopped it",
+        "text_tokens": 10,
+        "window": 255,
+        "expect": 80,
+        "measured_speech_tokens": 80,
+        "expect_stopped_by_ceiling": true
+      },
+      {
+        "name": "es_mid",
+        "why": "measured: 45 text tokens rendered 106 speech tokens (ratio 2.36)",
+        "text_tokens": 45,
+        "window": 255,
+        "expect": 220,
+        "measured_speech_tokens": 106,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "es_long",
+        "why": "measured: 90 text tokens rendered 168 speech tokens (ratio 1.87)",
+        "text_tokens": 90,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 168,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "fr_short",
+        "why": "measured: 18 text tokens rendered 47 speech tokens (ratio 2.61)",
+        "text_tokens": 18,
+        "window": 255,
+        "expect": 112,
+        "measured_speech_tokens": 47,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "fr_mid",
+        "why": "measured: 44 text tokens rendered 92 speech tokens (ratio 2.09)",
+        "text_tokens": 44,
+        "window": 255,
+        "expect": 216,
+        "measured_speech_tokens": 92,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "fr_long",
+        "why": "measured: 91 text tokens rendered 154 speech tokens (ratio 1.69)",
+        "text_tokens": 91,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 154,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "it_short",
+        "why": "measured: 11 text tokens rendered 39 speech tokens (ratio 3.55)",
+        "text_tokens": 11,
+        "window": 255,
+        "expect": 84,
+        "measured_speech_tokens": 39,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "it_mid",
+        "why": "measured: 41 text tokens rendered 101 speech tokens (ratio 2.46)",
+        "text_tokens": 41,
+        "window": 255,
+        "expect": 204,
+        "measured_speech_tokens": 101,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "it_long",
+        "why": "measured: 83 text tokens rendered 168 speech tokens (ratio 2.02)",
+        "text_tokens": 83,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 168,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "pt_short",
+        "why": "measured: 17 text tokens rendered 49 speech tokens (ratio 2.88)",
+        "text_tokens": 17,
+        "window": 255,
+        "expect": 108,
+        "measured_speech_tokens": 49,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "pt_mid",
+        "why": "measured: 38 text tokens rendered 101 speech tokens (ratio 2.66)",
+        "text_tokens": 38,
+        "window": 255,
+        "expect": 192,
+        "measured_speech_tokens": 101,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "pt_long",
+        "why": "measured: 77 text tokens rendered 153 speech tokens (ratio 1.99)",
+        "text_tokens": 77,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 153,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "nl_short",
+        "why": "measured: 14 text tokens rendered 46 speech tokens (ratio 3.29)",
+        "text_tokens": 14,
+        "window": 255,
+        "expect": 96,
+        "measured_speech_tokens": 46,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "nl_mid",
+        "why": "measured: 36 text tokens rendered 90 speech tokens (ratio 2.50)",
+        "text_tokens": 36,
+        "window": 255,
+        "expect": 184,
+        "measured_speech_tokens": 90,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "nl_long",
+        "why": "measured: 75 text tokens rendered 167 speech tokens (ratio 2.23)",
+        "text_tokens": 75,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 167,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "da_short",
+        "why": "measured: 14 text tokens rendered 50 speech tokens (ratio 3.57)",
+        "text_tokens": 14,
+        "window": 255,
+        "expect": 96,
+        "measured_speech_tokens": 50,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "da_mid",
+        "why": "measured: 40 text tokens rendered 104 speech tokens (ratio 2.60)",
+        "text_tokens": 40,
+        "window": 255,
+        "expect": 200,
+        "measured_speech_tokens": 104,
+        "expect_stopped_by_ceiling": false
+      },
+      {
+        "name": "da_long",
+        "why": "measured: 81 text tokens rendered 204 speech tokens (ratio 2.52)",
+        "text_tokens": 81,
+        "window": 255,
+        "expect": 255,
+        "measured_speech_tokens": 204,
+        "expect_stopped_by_ceiling": false
+      }
+    ]
+  },
+  "repetition": [
+    {
+      "name": "a locked decoder repeating one token",
+      "why": "VALL-E's greedy failure: the model 'continually generates' one code",
+      "shape": [
+        [
+          "speech",
+          20
+        ],
+        [
+          "cycle",
+          1,
+          30
+        ]
+      ],
+      "expect": 21
+    },
+    {
+      "name": "a locked decoder repeating a short fragment",
+      "why": "the common shape: a syllable-sized cycle read back off its own tail",
+      "shape": [
+        [
+          "speech",
+          30
+        ],
+        [
+          "cycle",
+          5,
+          5
+        ]
+      ],
+      "expect": 35
+    },
+    {
+      "name": "a short repeat is how this model winds down",
+      "why": "measured: healthy rows repeat a tail token for up to 10 tokens; keying on cycle count alone fired on 22 of 27 real renders",
+      "shape": [
+        [
+          "speech",
+          30
+        ],
+        [
+          "cycle",
+          1,
+          8
+        ]
+      ],
+      "expect": null
+    },
+    {
+      "name": "three repetitions of a word are speech, not a loop",
+      "why": "'very, very, very good' is a sentence; span and count both fall short",
+      "shape": [
+        [
+          "speech",
+          20
+        ],
+        [
+          "cycle",
+          4,
+          3
+        ]
+      ],
+      "expect": null
+    },
+    {
+      "name": "a long repeated block is rhetoric, not a lock",
+      "why": "a repeated phrase is a refrain; only sub-half-second cycles count",
+      "shape": [
+        [
+          "speech",
+          10
+        ],
+        [
+          "cycle",
+          20,
+          4
+        ]
+      ],
+      "expect": null
+    },
+    {
+      "name": "a silence run is never a loop",
+      "why": "the Spanish runaway repeats one silence token 44 times — a pause, not a lock-up, and the desperation rule already owns that row",
+      "shape": [
+        [
+          "speech",
+          30
+        ],
+        [
+          "quiet",
+          44
+        ]
+      ],
+      "expect": null
+    },
+    {
+      "name": "a word-then-pause stutter is a loop",
+      "why": "a cycle mixing silence with speech is still a stuck decoder",
+      "shape": [
+        [
+          "speech",
+          25
+        ],
+        [
+          "cycle_mixed",
+          6,
+          5
+        ]
+      ],
+      "expect": 31
+    },
+    {
+      "name": "ordinary speech never anchors",
+      "why": "the rule must be silent on a clean row, which is every row measured",
+      "shape": [
+        [
+          "speech",
+          120
+        ]
+      ],
+      "expect": null
+    },
+    {
+      "name": "a row too short to hold a qualifying span",
+      "why": "no reading past the end on a two-token row",
+      "shape": [
+        [
+          "speech",
+          2
+        ]
+      ],
+      "expect": null
+    }
+  ],
+  "repetition_about": [
+    "Extra shape segments used only here:",
+    "  ['cycle', p, k]        -> k copies of a p-token speech cycle (ids 20+i)",
+    "  ['cycle_mixed', p, k]  -> k copies of a p-token cycle whose second half",
+    "                            is silence, i.e. the word-then-pause stutter"
+  ],
+  "dropout": {
+    "about": [
+      "Early truncation: the row is too short to be the text it was asked for.",
+      "",
+      "Reported, never cut — there is nothing to cut. It is the only verdict here",
+      "that says 'what you have is incomplete' rather than 'the end of what you",
+      "have is wrong', and it is the most damaging failure in the set because a",
+      "listener cannot hear that anything is absent.",
+      "",
+      "The floor is 25 speech tokens, borrowed from the published criterion for a",
+      "catastrophic neural-codec TTS failure rather than guessed. It applies only",
+      "when the text asked for more than arrived: the shortest healthy reads",
+      "measured across nine languages run 35 tokens, so a short line is exempt."
+    ],
+    "cases": [
+      {
+        "name": "a row that stopped almost immediately",
+        "why": "40 text tokens produced 8 speech tokens; no pronunciation says that text",
+        "tokens": 8,
+        "text_tokens": 40,
+        "expect": true
+      },
+      {
+        "name": "the shortest healthy read measured",
+        "why": "German 'Nein, heute nicht.' — 14 text tokens, 35 speech tokens",
+        "tokens": 35,
+        "text_tokens": 14,
+        "expect": false
+      },
+      {
+        "name": "a short row whose text was short too",
+        "why": "under the absolute floor but not under the text; a real short line",
+        "tokens": 20,
+        "text_tokens": 14,
+        "expect": false
+      },
+      {
+        "name": "an ordinary row",
+        "why": "the rule must be silent on the common case",
+        "tokens": 90,
+        "text_tokens": 40,
+        "expect": false
+      },
+      {
+        "name": "exactly at the floor",
+        "why": "the boundary is inclusive on the safe side",
+        "tokens": 25,
+        "text_tokens": 40,
+        "expect": false
+      },
+      {
+        "name": "no text tokens at all",
+        "why": "nothing was asked for, so nothing is missing",
+        "tokens": 5,
+        "text_tokens": 0,
+        "expect": false
+      }
+    ]
+  },
+  "pacing": {
+    "about": [
+      "Long-form drift: per-chunk pace (speech tokens / text tokens) against the",
+      "passage's own median. Report-only — a strange pace is evidence of",
+      "something without saying what. The median, not the mean, so one broken",
+      "chunk cannot drag the baseline toward itself and hide. Tolerance 1.6x is",
+      "calibrated from the nine-language probe: healthy ratios run 1.69-2.79",
+      "across languages, so a chunk drifting 1.6x from its own passage's median",
+      "is outside anything ordinary prose produced."
+    ],
+    "cases": [
+      {
+        "name": "a healthy passage flags nothing",
+        "why": "the common case must stay silent",
+        "ratios": [
+          2.1,
+          2.3,
+          2.0,
+          2.4,
+          2.2
+        ],
+        "expect": []
+      },
+      {
+        "name": "a dragging chunk is flagged",
+        "why": "5.9 against a median of 2.2 is the runaway shape, mid-passage",
+        "ratios": [
+          2.1,
+          2.3,
+          5.9,
+          2.4,
+          2.2
+        ],
+        "expect": [
+          2
+        ]
+      },
+      {
+        "name": "a rushing chunk is flagged",
+        "why": "0.9 against 2.2 is the truncation shape: less speech than text",
+        "ratios": [
+          2.1,
+          2.3,
+          0.9,
+          2.4,
+          2.2
+        ],
+        "expect": [
+          2
+        ]
+      },
+      {
+        "name": "two chunks cannot accuse each other",
+        "why": "with no third opinion, which one drifted is unknowable",
+        "ratios": [
+          2.1,
+          9.9
+        ],
+        "expect": []
+      },
+      {
+        "name": "a broken chunk cannot hide by dragging the mean",
+        "why": "median baseline: two bad chunks among five still both flag",
+        "ratios": [
+          2.0,
+          6.0,
+          2.1,
+          6.2,
+          2.2
+        ],
+        "expect": [
+          1,
+          3
+        ]
+      }
+    ]
+  }
+}

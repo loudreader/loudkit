@@ -1,0 +1,83 @@
+# The Swift port had `swift build` and `swift test` and no linter, so what the
+# compiler does not object to was nobody's job.
+#
+# Opt-in rules are where the value is: the defaults mostly police formatting,
+# and this package is already formatted consistently by hand. What is worth
+# catching is the class the compiler allows and a reviewer misses — a force
+# unwrap on a file the process does not control, an empty `catch`, a `first(
+# where:) != nil` that reads as a search and means a test.
+included:
+  - swift
+  - tests
+
+disabled_rules:
+  # Deliberate here. The Swift funnel mirrors the Python one function for
+  # function and its comments carry the reasoning the other four ports point
+  # at, so files are long on purpose and shortening them would scatter the
+  # argument.
+  - file_length
+  - type_body_length
+  - function_body_length
+  # Bit-parity ports read as arithmetic because they are arithmetic. A cyclomatic
+  # limit here asks for helper functions whose only purpose is to satisfy it.
+  - cyclomatic_complexity
+  - line_length
+  # `i`, `n`, `g` are the names the reference implementation uses; renaming them
+  # for length would break reading five implementations side by side.
+  - identifier_name
+  # Philox 4x32-10 is a four-word counter and a four-word key: the tuple *is*
+  # the algorithm, named after its own arity. `LexicalRespelling`'s payload is
+  # four parallel tables loaded together for the same reason. Boxing either in a
+  # struct to satisfy a member count would rename the reference implementation's
+  # vocabulary and buy nothing.
+  - large_tuple
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - contains_over_first_not_nil
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - first_where
+  - last_where
+  - reduce_into
+  - unavailable_function
+  - redundant_nil_coalescing
+  - toggle_bool
+  - fatal_error_message
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - overridden_super_call
+  - prohibited_super_call
+  - unowned_variable_capture
+  - yoda_condition
+
+# Warnings, not errors, and the reasoning changed once the findings were read
+# rather than imagined.
+#
+# The first version of this file made `force_unwrapping` and `force_try` errors,
+# on the argument that a safetensors file is data from outside the process and a
+# `!` three lines from a bounds check undoes it. Sound argument, wrong target:
+# all seven `try!` in the library are `NSRegularExpression(pattern:)` over
+# *literal* patterns, where a throw would mean the source is broken and not that
+# the input is. That is correct Swift and an error severity would have taught
+# people to add `// swiftlint:disable` above it.
+#
+# The paths that do read untrusted bytes were fixed properly instead:
+# `Safetensors` bounds every offset before slicing and returns errors, and its
+# readers use `loadUnaligned` rather than `bindMemory`. Those are tested.
+#
+# Left on as warnings because the next `!` might be the one that matters, and a
+# warning is where a reviewer looks.
+force_unwrapping:
+  severity: warning
+force_try:
+  severity: warning
+force_cast:
+  severity: warning
+
+# Test code force-unwraps fixture JSON by the hundred, which is idiomatic there:
+# a nil means the fixture is broken and the test should fail loudly. 178 of the
+# 227 findings in the first run were exactly that.
+excluded:
+  - tests

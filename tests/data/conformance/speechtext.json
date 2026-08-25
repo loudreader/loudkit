@@ -1,0 +1,1120 @@
+{
+ "version": 1,
+ "generated_by": "tools/make_speechtext_fixture.py",
+ "note": "Expected output of SpeechText.prepared / speech_text for each (text, language). Every port must reproduce these exactly; a difference is a divergence, not a dialect.",
+ "cases": [
+  {
+   "text": "Hello there.",
+   "language": "en",
+   "expected": "Hello there."
+  },
+  {
+   "text": "Zero​width‌and﻿soft­hyphen",
+   "language": "en",
+   "expected": "Zerowidthandsofthyphen"
+  },
+  {
+   "text": "A footnote[12] and a range[3–5] marker.",
+   "language": "en",
+   "expected": "A footnote and a range marker."
+  },
+  {
+   "text": "temperature 21°, 50% done, ≈ 3 items",
+   "language": "en",
+   "expected": "temperature twenty-one degrees, fifty percent done, about three items",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "$5 and £250, and €10 too",
+   "language": "en",
+   "expected": "five dollars and two hundred and fifty pounds, and ten euros too",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "a → b • c ✓ d ✗",
+   "language": "en",
+   "expected": "a, b, c yes d no"
+  },
+  {
+   "text": "well-known in-word hyphen",
+   "language": "en",
+   "expected": "well-known in-word hyphen"
+  },
+  {
+   "text": "ranges 1-5 and fractions 3/4 and times 10:30",
+   "language": "en",
+   "expected": "ranges one-five and fractions three four and times ten thirty",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "decimal 0.49 and thousands 1,000",
+   "language": "en",
+   "expected": "decimal zero point four nine and thousands one thousand",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "keep? these! marks; and: those…",
+   "language": "en",
+   "expected": "keep? these! marks; and: those.",
+   "why": "a run of clause marks collapses to one; the pair rule this fixture recorded left \"..\" on one pass and \".\" on the next"
+  },
+  {
+   "text": "drop|these\\slashes*and+plus=signs",
+   "language": "en",
+   "expected": "drop these slashes and+plus signs"
+  },
+  {
+   "text": "  collapse   the    spaces  ",
+   "language": "en",
+   "expected": "collapse the spaces"
+  },
+  {
+   "text": "Pi equals 3.14 exactly.",
+   "language": "en",
+   "expected": "Pi equals three point one four exactly."
+  },
+  {
+   "text": "It costs $0.49 today.",
+   "language": "en",
+   "expected": "It costs zero point four nine dollars today."
+  },
+  {
+   "text": "Termin um 14.30 Uhr.",
+   "language": "de",
+   "expected": "Termin um vierzehn Uhr dreißig."
+  },
+  {
+   "text": "Az̬b w̬ x.",
+   "language": "en",
+   "expected": "Az b w x."
+  },
+  {
+   "text": "Az̬b w̬ x.",
+   "language": "pl",
+   "expected": "Az b w eks."
+  },
+  {
+   "text": "The value is 1.5e3.",
+   "language": "en",
+   "expected": "The value is 1.5e3."
+  },
+  {
+   "text": "The value is 1e-3.",
+   "language": "en",
+   "expected": "The value is 1e-3."
+  },
+  {
+   "text": "It is 3.14abc here.",
+   "language": "en",
+   "expected": "It is 3.14abc here."
+  },
+  {
+   "text": "Pi equals 3.14.",
+   "language": "en",
+   "expected": "Pi equals three point one four."
+  },
+  {
+   "text": "It is -5 degrees.",
+   "language": "en",
+   "expected": "It is minus five degrees."
+  },
+  {
+   "text": "A well-known fact.",
+   "language": "en",
+   "expected": "A well-known fact."
+  },
+  {
+   "text": "Wersja v1.2.3 juz jest.",
+   "language": "pl",
+   "expected": "Wersja v1.2.3 juz jest."
+  },
+  {
+   "text": "Wersja 1.2.3 juz jest.",
+   "language": "pl",
+   "expected": "Wersja 1.2.3 juz jest."
+  },
+  {
+   "text": "Mam R2 tutaj.",
+   "language": "pl",
+   "expected": "Mam er dwa tutaj."
+  },
+  {
+   "text": "Cena 2.5 tutaj.",
+   "language": "pl",
+   "expected": "Cena dwa przecinek pięć tutaj."
+  },
+  {
+   "text": "x200 000 y",
+   "language": "en",
+   "expected": "x200 000 y"
+  },
+  {
+   "text": "a1 000 000 b",
+   "language": "en",
+   "expected": "a1 000 000 b"
+  },
+  {
+   "text": "200 000x here",
+   "language": "en",
+   "expected": "200 000x here"
+  },
+  {
+   "text": "Sold 200 000 units.",
+   "language": "en",
+   "expected": "Sold two hundred thousand units."
+  },
+  {
+   "text": "In 2024 200 people came.",
+   "language": "en",
+   "expected": "In two thousand and twenty-four two hundred people came."
+  },
+  {
+   "text": "The value is 1e+3.",
+   "language": "en",
+   "expected": "The value is 1e+3."
+  },
+  {
+   "text": "Value 2.5E+1 here.",
+   "language": "en",
+   "expected": "Value 2.5E+1 here."
+  },
+  {
+   "text": "It costs 0.49¢.",
+   "language": "de",
+   "expected": "It costs null Komma vier neun Cent."
+  },
+  {
+   "text": "It costs 0.49¢.",
+   "language": "en",
+   "expected": "It costs zero point four nine cents."
+  },
+  {
+   "text": "Es kostet 2.50 €.",
+   "language": "de",
+   "expected": "Es kostet zwei Komma fünf null Euro."
+  },
+  {
+   "text": "1 234 567 12.",
+   "language": "fr",
+   "expected": "un deux cent trente-quatre cinq cent soixante-sept douze."
+  },
+  {
+   "text": "Mam Müller123 tutaj.",
+   "language": "pl",
+   "expected": "Mam Müller123 tutaj."
+  },
+  {
+   "text": "Mam żelazny2024 tutaj.",
+   "language": "pl",
+   "expected": "Mam żelazny2024 tutaj."
+  },
+  {
+   "text": "Mam R2 tutaj.",
+   "language": "pl",
+   "expected": "Mam er dwa tutaj."
+  },
+  {
+   "text": "Mam iOS18 tutaj.",
+   "language": "pl",
+   "expected": "Mam i o es jeden osiem tutaj."
+  },
+  {
+   "text": "Kosztuje R$3,14.",
+   "language": "de",
+   "expected": "Kosztuje R drei Komma eins vier."
+  },
+  {
+   "text": "Es kostet $2.50.",
+   "language": "de",
+   "expected": "Es kostet zwei Komma fünf null Dollar."
+  },
+  {
+   "text": "Son 1000 5.1e+3 aqui.",
+   "language": "es",
+   "expected": "Son mil 5.1e+3 aqui."
+  },
+  {
+   "text": "Cena 2,50 1e6 tutaj.",
+   "language": "pl",
+   "expected": "Cena dwa przecinek pięć zero jeden e sześć tutaj."
+  },
+  {
+   "text": "Value 3.14 200 000 here.",
+   "language": "en",
+   "expected": "Value three point one four two hundred thousand here."
+  },
+  {
+   "text": "R2 5 iOS.",
+   "language": "de",
+   "expected": "R2 fünf iOS."
+  },
+  {
+   "text": "a1 000 000 b",
+   "language": "en",
+   "expected": "a1 000 000 b"
+  },
+  {
+   "text": "Sold 200 000 units.",
+   "language": "en",
+   "expected": "Sold two hundred thousand units."
+  },
+  {
+   "text": "x1 000 000 y",
+   "language": "en",
+   "expected": "x1 000 000 y"
+  },
+  {
+   "text": "Spotkanie o 14.30 dzisiaj.",
+   "language": "pl",
+   "expected": "Spotkanie o czternaście trzydzieści dzisiaj."
+  },
+  {
+   "text": "Meeting at 14:30 today.",
+   "language": "en",
+   "expected": "Meeting at fourteen thirty today."
+  },
+  {
+   "text": "Call +48 123 456 789 now.",
+   "language": "en",
+   "expected": "Call four eight one two three four five six seven eight nine now."
+  },
+  {
+   "text": "Dial 1 202 555 0199 now.",
+   "language": "en",
+   "expected": "Dial one two hundred and two five hundred and fifty-five zero one nine nine now."
+  },
+  {
+   "text": "Gained +1 000 000 users.",
+   "language": "en",
+   "expected": "Gained one million users."
+  },
+  {
+   "text": "Sold 200 000 units.",
+   "language": "en",
+   "expected": "Sold two hundred thousand units."
+  },
+  {
+   "text": "Minus sign −5 here.",
+   "language": "en",
+   "expected": "Minus sign minus five here."
+  },
+  {
+   "text": "Temperatura −5 stopni.",
+   "language": "pl",
+   "expected": "Temperatura minus pięć stopni."
+  },
+  {
+   "text": "Value 1e6 here.",
+   "language": "en",
+   "expected": "Value 1e6 here."
+  },
+  {
+   "text": "It is 5x3 grid.",
+   "language": "en",
+   "expected": "It is 5x3 grid."
+  },
+  {
+   "text": "Version v1.2.3 out.",
+   "language": "en",
+   "expected": "Version v1.2.3 out."
+  },
+  {
+   "text": "See SVN r123 now.",
+   "language": "en",
+   "expected": "See ess-vee-en r123 now."
+  },
+  {
+   "text": "At 24:00 sharp.",
+   "language": "en",
+   "expected": "At twenty-four sharp."
+  },
+  {
+   "text": "At 23:59 sharp.",
+   "language": "en",
+   "expected": "At twenty-three fifty-nine sharp."
+  },
+  {
+   "text": "Son 2 500 000 000 personas.",
+   "language": "es",
+   "expected": "Son dos mil quinientos millones personas."
+  },
+  {
+   "text": "São 2 500 000 000 pessoas.",
+   "language": "pt",
+   "expected": "São dois mil milhões e quinhentos milhões pessoas."
+  },
+  {
+   "text": "١٢٣",
+   "language": "en",
+   "expected": "one hundred and twenty-three",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "١٢٣",
+   "language": "pl",
+   "expected": "sto dwadzieścia trzy"
+  },
+  {
+   "text": "٣٫١٤",
+   "language": "en",
+   "expected": "three point one four"
+  },
+  {
+   "text": "٣٫١٤",
+   "language": "pl",
+   "expected": "trzy przecinek jeden cztery"
+  },
+  {
+   "text": "٣٫١٤",
+   "language": "de",
+   "expected": "drei Komma eins vier"
+  },
+  {
+   "text": "٥٪",
+   "language": "en",
+   "expected": "five percent"
+  },
+  {
+   "text": "٥٪",
+   "language": "pl",
+   "expected": "pięć procent"
+  },
+  {
+   "text": "It costs $٥ today.",
+   "language": "en",
+   "expected": "It costs five dollars today."
+  },
+  {
+   "text": "Kosztuje $٥ dzisiaj.",
+   "language": "pl",
+   "expected": "Kosztuje pięć dolarów dzisiaj."
+  },
+  {
+   "text": "Cost £٢٥٠ now.",
+   "language": "en",
+   "expected": "Cost two hundred and fifty pounds now."
+  },
+  {
+   "text": "It costs $0.49.",
+   "language": "de",
+   "expected": "It costs null Komma vier neun Dollar."
+  },
+  {
+   "text": "It costs $0.49.",
+   "language": "pl",
+   "expected": "It kasc zero przecinek cztery dziewięć dolarów."
+  },
+  {
+   "text": "It costs $0.49.",
+   "language": "en",
+   "expected": "It costs zero point four nine dollars."
+  },
+  {
+   "text": "Es kostet $2.50.",
+   "language": "de",
+   "expected": "Es kostet zwei Komma fünf null Dollar."
+  },
+  {
+   "text": "Termin um 14.30 Uhr.",
+   "language": "de",
+   "expected": "Termin um vierzehn Uhr dreißig."
+  },
+  {
+   "text": "123",
+   "language": "pl",
+   "expected": "sto dwadzieścia trzy"
+  },
+  {
+   "text": "0",
+   "language": "pl",
+   "expected": "zero"
+  },
+  {
+   "text": "0042",
+   "language": "pl",
+   "expected": "zero zero cztery dwa",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "download",
+   "language": "pl",
+   "expected": "dałnloud"
+  },
+  {
+   "text": "Download",
+   "language": "pl",
+   "expected": "Dałnloud"
+  },
+  {
+   "text": "DOWNLOAD",
+   "language": "pl",
+   "expected": "Dałnloud"
+  },
+  {
+   "text": "download",
+   "language": "en",
+   "expected": "download"
+  },
+  {
+   "text": "Zrobiłem deadline'u wczoraj.",
+   "language": "pl",
+   "expected": "Zrobiłem dedlajnu wczoraj."
+  },
+  {
+   "text": "Wysłałem release notes i pull request.",
+   "language": "pl",
+   "expected": "Wysłałem rilis nołc i pul rekłest."
+  },
+  {
+   "text": "To jest 0,49 procenta.",
+   "language": "pl",
+   "expected": "To jest zero przecinek cztery dziewięć procenta."
+  },
+  {
+   "text": "Adres 192.168.0.1 dzisiaj.",
+   "language": "pl",
+   "expected": "Adres 192.168.0.1 dzisiaj."
+  },
+  {
+   "text": "Wersja 1.2.3 juz jest.",
+   "language": "pl",
+   "expected": "Wersja 1.2.3 juz jest."
+  },
+  {
+   "text": "Maska 10.0.0.255 tutaj.",
+   "language": "pl",
+   "expected": "Maska 10.0.0.255 tutaj."
+  },
+  {
+   "text": "To 2.5 metra.",
+   "language": "pl",
+   "expected": "To dwa przecinek pięć metra."
+  },
+  {
+   "text": "Sprawdź API i HTTP oraz JSON.",
+   "language": "pl",
+   "expected": "Sprawdź a-pe-i i ha-te-te-pe oraz jot-es-o-en."
+  },
+  {
+   "text": "Kod ABC-123 do sprawdzenia.",
+   "language": "pl",
+   "expected": "Kod a-be-ce-sto dwadzieścia trzy do sprawdzenia.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Polskie słowa zostają nietknięte.",
+   "language": "pl",
+   "expected": "Polskie słowa zostają nietknięte."
+  },
+  {
+   "text": "deadline’u",
+   "language": "pl",
+   "expected": "dedlajnu"
+  },
+  {
+   "text": "download",
+   "language": "PL",
+   "expected": "dałnloud"
+  },
+  {
+   "text": "download",
+   "language": null,
+   "expected": "download"
+  },
+  {
+   "text": "Es kostet $5 und 50%.",
+   "language": "de",
+   "expected": "Es kostet fünf Dollar und fünfzig Prozent.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Cuesta €10, un 3%.",
+   "language": "es",
+   "expected": "Cuesta diez euros, un tres por ciento.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Il fait 30° dehors.",
+   "language": "fr",
+   "expected": "Il fait trente degrés dehors.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Det koster €10.",
+   "language": "da",
+   "expected": "Det koster ti euro.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Costa £250 al mese.",
+   "language": "it",
+   "expected": "Costa duecentocinquanta sterline al mese.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Kost €5 per maand.",
+   "language": "nl",
+   "expected": "Kost vijf euro per maand.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Custa $100 por mês.",
+   "language": "pt",
+   "expected": "Custa cem dólares por mês.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Meeting at 14:30, e.g. tomorrow.",
+   "language": "en",
+   "expected": "Meeting at fourteen thirty, for example tomorrow.",
+   "why": "clock times and authority-listed abbreviations are spoken now"
+  },
+  {
+   "text": "Es ist 14.30, z.B. morgen, usw.",
+   "language": "de",
+   "expected": "Es ist vierzehn Uhr dreißig, zum Beispiel morgen, und so weiter",
+   "why": "clock times and authority-listed abbreviations are spoken now"
+  },
+  {
+   "text": "Klockan 16.31, t.ex. fr.o.m. måndag.",
+   "language": "sv",
+   "expected": "Klockan sexton trettioett, till exempel från och med måndag.",
+   "why": "clock times and authority-listed abbreviations are spoken now"
+  },
+  {
+   "text": "Kello 9.05, esim. huomenna.",
+   "language": "fi",
+   "expected": "Kello yhdeksän viisi, esimerkiksi huomenna.",
+   "why": "clock times and authority-listed abbreviations are spoken now"
+  },
+  {
+   "text": "Spotkanie o 14:30, np. jutro, itd.",
+   "language": "pl",
+   "expected": "Spotkanie o czternaście trzydzieści, na przykład jutro, i tak dalej",
+   "why": "clock times and authority-listed abbreviations are spoken now"
+  },
+  {
+   "text": "Kl. 9.05, f.eks. i morgen.",
+   "language": "da",
+   "expected": "Kl. ni fem, for eksempel i morgen.",
+   "why": "clock times and authority-listed abbreviations are spoken now"
+  },
+  {
+   "text": "Zaźółć gęślą jaźń.",
+   "language": "pl",
+   "expected": "Zaźółć gęślą jaźń.",
+   "why": "NFD input. The funnel's first pass composes it; without NFC the output differs from every other implementation's by combining marks alone, which no eye catches in a diff."
+  },
+  {
+   "text": "Månsken er små.",
+   "language": "da",
+   "expected": "Månsken er små.",
+   "why": "NFD input. The funnel's first pass composes it; without NFC the output differs from every other implementation's by combining marks alone, which no eye catches in a diff."
+  },
+  {
+   "text": "The CIA said so.",
+   "language": "en",
+   "expected": "The see-eye-ay said so.",
+   "why": "acronyms are spelled in the render language in all twelve, by all five implementations"
+  },
+  {
+   "text": "Die CIA sagte es.",
+   "language": "de",
+   "expected": "Die ze-i-a sagte es.",
+   "why": "acronyms are spelled in the render language in all twelve, by all five implementations"
+  },
+  {
+   "text": "NASA and NATO.",
+   "language": "en",
+   "expected": "nasa and nato.",
+   "why": "acronyms are spelled in the render language in all twelve, by all five implementations"
+  },
+  {
+   "text": "El FBI y la CIA.",
+   "language": "es",
+   "expected": "El efe-be-i y la ce-i-a.",
+   "why": "acronyms are spelled in the render language in all twelve, by all five implementations"
+  },
+  {
+   "text": "Spotkanie 12.03.2026.",
+   "language": "pl",
+   "expected": "Spotkanie dwunastego marca dwa tysiące dwudziestego szóstego.",
+   "why": "dates and ordinals run in all five implementations"
+  },
+  {
+   "text": "Termin 12.03.2026.",
+   "language": "de",
+   "expected": "Termin zwölfte März zweitausendsechsundzwanzig.",
+   "why": "dates and ordinals run in all five implementations"
+  },
+  {
+   "text": "The 1st of May.",
+   "language": "en",
+   "expected": "The first of May.",
+   "why": "dates and ordinals run in all five implementations"
+  },
+  {
+   "text": "iOS18 is out.",
+   "language": "en",
+   "expected": "iOS18 is out.",
+   "why": "the four number-regex shapes Swift used to read differently"
+  },
+  {
+   "text": "I have 1 000 things.",
+   "language": "en",
+   "expected": "I have one thousand things.",
+   "why": "the four number-regex shapes Swift used to read differently"
+  },
+  {
+   "text": "It is -5 degrees.",
+   "language": "en",
+   "expected": "It is minus five degrees.",
+   "why": "the four number-regex shapes Swift used to read differently"
+  },
+  {
+   "text": "Meet at a14:30.",
+   "language": "en",
+   "expected": "Meet at afourteen thirty.",
+   "why": "the four number-regex shapes Swift used to read differently"
+  },
+  {
+   "text": "Price 1 234 567 exact.",
+   "language": "en",
+   "expected": "Price one million two hundred and thirty-four thousand, five hundred and sixty-seven exact.",
+   "why": "the four number-regex shapes Swift used to read differently"
+  },
+  {
+   "text": "Det koster 250 kroner.",
+   "language": "no",
+   "expected": "Det koster to hundre og femti kroner.",
+   "why": "digits are said as words now: the number verbalizer is wired into all five funnels in one commit"
+  },
+  {
+   "text": "Kl. 9.05, f.eks. i morgen.",
+   "language": "no",
+   "expected": "Kl. ni fem, for eksempel i morgen.",
+   "why": "clock times and authority-listed abbreviations are spoken now"
+  },
+  {
+   "text": "Møtet er 12.03.2026.",
+   "language": "no",
+   "expected": "Møtet er tolvte mars to tusen og tjueseks.",
+   "why": "dates and ordinals run in all five implementations"
+  },
+  {
+   "text": "Prisen er 1 234 567 kroner, altså 2,5 millioner.",
+   "language": "no",
+   "expected": "Prisen er én million to hundre og trettifire tusen fem hundre og sekstisju kroner, altså to komma fem millioner.",
+   "why": "space grouping and the decimal comma, which is how Norwegian writes both — the pair a port that assumes the English conventions reads as seven separate numbers and a date"
+  },
+  {
+   "text": "NATO og FBI sa det.",
+   "language": "no",
+   "expected": "nato og eff-be-i sa det.",
+   "why": "acronyms are spelled in the render language in all twelve, by all five implementations"
+  },
+  {
+   "text": "a̬123",
+   "language": "no",
+   "expected": "a hundre og tjuetre",
+   "why": "a combining mark is not a word character. ICU's `\\w` — which is what NSRegularExpression gives Swift — is documented as including `\\p{M}`, so the mark behind the digits looked like the tail of a word and the number stayed written while four ports read it"
+  },
+  {
+   "text": "a̬CIA.",
+   "language": "it",
+   "expected": "a ci-i-a.",
+   "why": "the same mark, one pass earlier: Python splits `(\\W+)` on code points and Swift was walking `Character`, which is a grapheme cluster, so `a̬CIA` was one mixed-case token rather than a lone acronym beside a letter, and never reached the speller"
+  },
+  {
+   "text": "zł€ 000 000",
+   "language": "nl",
+   "expected": "zł euro nul nul nul nul nul nul",
+   "why": "a letter in front of a currency mark refuses the whole amount — `R$` is the Brazilian real and this table cannot name it. The regex crate's `[:alpha:]` is ASCII even in Unicode mode, so Rust alone read `ł` as a non-letter, took the `€` for a bare euro sign and moved the first group behind it: `zł000 euro nul nul nul`, the rest stranded"
+  },
+  {
+   "text": "CIA CIA",
+   "language": "pl",
+   "expected": "CIA CIA",
+   "why": "a run of capitals is emphasis, not initialisms, and `spell_acronyms` decides that where the neighbours are still visible. The Polish respeller had its own acronym branch in Go, Rust, JS and Swift — deleted in Python, kept in four — which spelled one word at a time with no view of the run: `ce-i-a ce-i-a`"
+  },
+  {
+   "text": "Preis٣٫١٤ iOS.",
+   "language": "de",
+   "expected": "Preis3,14 iOS.",
+   "why": "the mixed-script class this fuzzer was written for, now closed: foreign digits fold to ASCII, the token still has a letter glued to it, and all five leave it written. It read `Preis3,vierzehn` — half a token spoken, which is exactly what the refusal rule exists to stop"
+  }
+ ],
+ "chunking": [
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "One. Two. Three.",
+   "chunks": [
+    "One. Two. Three."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "A single sentence that is comfortably shorter than one window.",
+   "chunks": [
+    "A single sentence that is comfortably shorter than one window."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while. Sentence number 4 runs on for a while. Sentence number 5 runs on for a while. Sentence number 6 runs on for a while. Sentence number 7 runs on for a while. Sentence number 8 runs on for a while. Sentence number 9 runs on for a while. Sentence number 10 runs on for a while. Sentence number 11 runs on for a while.",
+   "chunks": [
+    "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while.",
+    "Sentence number 4 runs on for a while. Sentence number 5 runs on for a while. Sentence number 6 runs on for a while.",
+    "Sentence number 7 runs on for a while. Sentence number 8 runs on for a while. Sentence number 9 runs on for a while.",
+    "Sentence number 10 runs on for a while. Sentence number 11 runs on for a while."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space between two of them so that is where it goes even though nobody enjoys it",
+   "chunks": [
+    "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space",
+    "between two of them so that is where it goes even though nobody enjoys it"
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "Clauses, separated only by commas, keep going and going and going, and the splitter should prefer the latest comma inside the budget, not the first one it happens to find while scanning, which would make chunks shorter than they need to be.",
+   "chunks": [
+    "Clauses, separated only by commas, keep going and going and going,",
+    "and the splitter should prefer the latest comma inside the budget, not the first one it happens to find while scanning,",
+    "which would make chunks shorter than they need to be."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run.",
+   "chunks": [
+    "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more.",
+   "chunks": [
+    "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "chunks": [
+    "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "Ten tysięcy złotych, a potem nowa linia, i koniec zdania.",
+   "chunks": [
+    "Ten tysięcy złotych, a potem nowa linia, i koniec zdania."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "One. Two. Three.",
+   "chunks": [
+    "One. Two. Three."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "A single sentence that is comfortably shorter than one window.",
+   "chunks": [
+    "A single sentence",
+    "that is comfortably",
+    "shorter than one",
+    "window."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while. Sentence number 4 runs on for a while. Sentence number 5 runs on for a while. Sentence number 6 runs on for a while. Sentence number 7 runs on for a while. Sentence number 8 runs on for a while. Sentence number 9 runs on for a while. Sentence number 10 runs on for a while. Sentence number 11 runs on for a while.",
+   "chunks": [
+    "Sentence number 1",
+    "runs on for a while.",
+    "Sentence number 2",
+    "runs on for a while.",
+    "Sentence number 3",
+    "runs on for a while.",
+    "Sentence number 4",
+    "runs on for a while.",
+    "Sentence number 5",
+    "runs on for a while.",
+    "Sentence number 6",
+    "runs on for a while.",
+    "Sentence number 7",
+    "runs on for a while.",
+    "Sentence number 8",
+    "runs on for a while.",
+    "Sentence number 9",
+    "runs on for a while.",
+    "Sentence number 10",
+    "runs on for a while.",
+    "Sentence number 11",
+    "runs on for a while."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space between two of them so that is where it goes even though nobody enjoys it",
+   "chunks": [
+    "No punctuation at",
+    "all just a very long",
+    "run of words that",
+    "has to break",
+    "somewhere and the",
+    "only available",
+    "boundary is a space",
+    "between two of them",
+    "so that is where it",
+    "goes even though",
+    "nobody enjoys it"
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "Clauses, separated only by commas, keep going and going and going, and the splitter should prefer the latest comma inside the budget, not the first one it happens to find while scanning, which would make chunks shorter than they need to be.",
+   "chunks": [
+    "Clauses,",
+    "separated only by",
+    "commas,",
+    "keep going and going",
+    "and going,",
+    "and the splitter",
+    "should prefer the",
+    "latest comma inside",
+    "the budget,",
+    "not the first one it",
+    "happens to find",
+    "while scanning,",
+    "which would make",
+    "chunks shorter than",
+    "they need to be."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run.",
+   "chunks": [
+    "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+    "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+    ". A tail sentence",
+    "after the emoji run."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more.",
+   "chunks": [
+    "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌",
+    "𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋",
+    "𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍",
+    ", and a clause after",
+    "the ideographs,",
+    "and one more."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "chunks": [
+    "xxxxxxxxxxxxxxxxxxxx",
+    "yyyyyyyyyyyyyyyyyyyy",
+    "yyyyyyyyyyyyyyyyyyyy"
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "text": "Ten tysięcy złotych, a potem nowa linia, i koniec zdania.",
+   "chunks": [
+    "Ten tysięcy złotych,",
+    "a potem nowa linia,",
+    "i koniec zdania."
+   ]
+  }
+ ],
+ "disputed": [
+  {
+   "text": "Mam 21 maili i 3 deadline'y.",
+   "language": "pl",
+   "python": "Mam dwadzieścia jeden maili i trzy dedlajny.",
+   "why": "Python leaves 'maili'; Swift respells it to 'mejli'. Both are written in the wild; 'mejl' is the commoner Polish spelling of the loanword, which argues for Swift — but the curated lexicon is approved by ear and this needs the same treatment."
+  },
+  {
+   "text": "apostrophe",
+   "language": "pl",
+   "python": "apastrafi",
+   "why": "Python's generated CMUdict tail respells 'apostrophe' to 'apastrafi'; the Swift payload does not carry the word and leaves it. A generated lexicon that differs between ports is a parity gap in the data, not in the code."
+  }
+ ],
+ "divergent": {
+  "why": "What one implementation still does differently. Dates, ordinals, acronyms and NFC used to live here; all four ports have them now and their cases moved into `cases` above, where every implementation is held to them."
+ }
+}

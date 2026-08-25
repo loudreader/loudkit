@@ -1,0 +1,8126 @@
+{
+ "version": 1,
+ "source": "Unicode CLDR common/testData/rbnf (https://github.com/unicode-org/cldr)",
+ "license": "Unicode License v3 — https://www.unicode.org/license.txt",
+ "about": [
+  "Differential corpus: CLDR's expected spellouts for the rulesets that",
+  "map onto loudkit.numbers.cardinal. Written by Unicode, not by us —",
+  "where we disagree, one of us is wrong, which is the point.",
+  "",
+  "Rulesets with no mapping (ordinals, oblique cases, year forms) are",
+  "declared non-coverage below, not silent omissions. Values past a",
+  "grammar's largest scale are expected to raise and are skipped by the",
+  "test with a counted reason."
+ ],
+ "not_covered": {
+  "da": [
+   "%spellout-numbering",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-common",
+   "%spellout-ordinal-neuter"
+  ],
+  "de": [
+   "%spellout-cardinal-feminine",
+   "%spellout-cardinal-feminine-accusative",
+   "%spellout-cardinal-feminine-dative",
+   "%spellout-cardinal-feminine-genitive",
+   "%spellout-cardinal-feminine-genitive-definite",
+   "%spellout-cardinal-masculine",
+   "%spellout-cardinal-masculine-accusative",
+   "%spellout-cardinal-masculine-dative",
+   "%spellout-cardinal-masculine-genitive",
+   "%spellout-cardinal-masculine-genitive-definite",
+   "%spellout-cardinal-neuter",
+   "%spellout-cardinal-neuter-accusative",
+   "%spellout-cardinal-neuter-dative",
+   "%spellout-cardinal-neuter-genitive",
+   "%spellout-cardinal-neuter-genitive-definite",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-dative-definite",
+   "%spellout-ordinal-definite",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-feminine-accusative",
+   "%spellout-ordinal-feminine-accusative-definite",
+   "%spellout-ordinal-feminine-dative",
+   "%spellout-ordinal-feminine-genitive",
+   "%spellout-ordinal-genitive-definite",
+   "%spellout-ordinal-masculine",
+   "%spellout-ordinal-masculine-accusative",
+   "%spellout-ordinal-masculine-accusative-definite",
+   "%spellout-ordinal-masculine-dative",
+   "%spellout-ordinal-masculine-genitive",
+   "%spellout-ordinal-neuter",
+   "%spellout-ordinal-neuter-accusative",
+   "%spellout-ordinal-neuter-accusative-definite",
+   "%spellout-ordinal-neuter-dative",
+   "%spellout-ordinal-neuter-genitive",
+   "%spellout-ordinal-plural",
+   "%spellout-ordinal-plural-accusative",
+   "%spellout-ordinal-plural-accusative-definite",
+   "%spellout-ordinal-plural-dative",
+   "%spellout-ordinal-plural-definite",
+   "%spellout-ordinal-plural-genitive"
+  ],
+  "en": [
+   "%spellout-cardinal",
+   "%spellout-numbering",
+   "%spellout-numbering-verbose",
+   "%spellout-numbering-year",
+   "%spellout-ordinal",
+   "%spellout-ordinal-verbose"
+  ],
+  "es": [
+   "%spellout-cardinal-masculine",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-feminine-plural",
+   "%spellout-ordinal-masculine",
+   "%spellout-ordinal-masculine-adjective",
+   "%spellout-ordinal-masculine-plural"
+  ],
+  "fi": [
+   "%spellout-cardinal-ablative",
+   "%spellout-cardinal-ablative-plural",
+   "%spellout-cardinal-adessive",
+   "%spellout-cardinal-adessive-plural",
+   "%spellout-cardinal-allative",
+   "%spellout-cardinal-allative-plural",
+   "%spellout-cardinal-elative",
+   "%spellout-cardinal-elative-plural",
+   "%spellout-cardinal-essive",
+   "%spellout-cardinal-essive-plural",
+   "%spellout-cardinal-genitive",
+   "%spellout-cardinal-genitive-plural",
+   "%spellout-cardinal-illative",
+   "%spellout-cardinal-illative-plural",
+   "%spellout-cardinal-inessive",
+   "%spellout-cardinal-inessive-plural",
+   "%spellout-cardinal-partitive",
+   "%spellout-cardinal-partitive-plural",
+   "%spellout-cardinal-plural",
+   "%spellout-cardinal-translative",
+   "%spellout-cardinal-translative-plural",
+   "%spellout-numbering",
+   "%spellout-numbering-year",
+   "%spellout-ordinal",
+   "%spellout-ordinal-ablative",
+   "%spellout-ordinal-ablative-plural",
+   "%spellout-ordinal-adessive",
+   "%spellout-ordinal-adessive-plural",
+   "%spellout-ordinal-allative",
+   "%spellout-ordinal-allative-plural",
+   "%spellout-ordinal-elative",
+   "%spellout-ordinal-elative-plural",
+   "%spellout-ordinal-essive",
+   "%spellout-ordinal-essive-plural",
+   "%spellout-ordinal-genitive",
+   "%spellout-ordinal-genitive-plural",
+   "%spellout-ordinal-illative",
+   "%spellout-ordinal-illative-plural",
+   "%spellout-ordinal-inessive",
+   "%spellout-ordinal-inessive-plural",
+   "%spellout-ordinal-partitive",
+   "%spellout-ordinal-partitive-plural",
+   "%spellout-ordinal-plural",
+   "%spellout-ordinal-translative",
+   "%spellout-ordinal-translative-plural"
+  ],
+  "fr": [
+   "%spellout-cardinal-feminine",
+   "%spellout-cardinal-masculine",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-feminine-plural",
+   "%spellout-ordinal-masculine",
+   "%spellout-ordinal-masculine-plural"
+  ],
+  "it": [
+   "%spellout-cardinal-feminine",
+   "%spellout-cardinal-masculine",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-feminine-plural",
+   "%spellout-ordinal-masculine",
+   "%spellout-ordinal-masculine-plural"
+  ],
+  "nl": [
+   "%spellout-cardinal-stressed",
+   "%spellout-numbering",
+   "%spellout-numbering-year",
+   "%spellout-ordinal"
+  ],
+  "no": [
+   "%spellout-cardinal-feminine",
+   "%spellout-numbering",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-masculine",
+   "%spellout-ordinal-neuter",
+   "%spellout-ordinal-plural"
+  ],
+  "pl": [
+   "%spellout-cardinal-feminine-accusative",
+   "%spellout-cardinal-feminine-dative",
+   "%spellout-cardinal-feminine-genitive",
+   "%spellout-cardinal-feminine-instrumental",
+   "%spellout-cardinal-feminine-locative",
+   "%spellout-cardinal-masculine",
+   "%spellout-cardinal-masculine-accusative",
+   "%spellout-cardinal-masculine-accusative-animate",
+   "%spellout-cardinal-masculine-accusative-personal",
+   "%spellout-cardinal-masculine-dative",
+   "%spellout-cardinal-masculine-genitive",
+   "%spellout-cardinal-masculine-instrumental",
+   "%spellout-cardinal-masculine-locative",
+   "%spellout-cardinal-neuter-accusative",
+   "%spellout-cardinal-neuter-dative",
+   "%spellout-cardinal-neuter-genitive",
+   "%spellout-cardinal-neuter-instrumental",
+   "%spellout-cardinal-neuter-locative",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-feminine-accusative",
+   "%spellout-ordinal-feminine-dative",
+   "%spellout-ordinal-feminine-genitive",
+   "%spellout-ordinal-feminine-instrumental",
+   "%spellout-ordinal-feminine-locative",
+   "%spellout-ordinal-masculine",
+   "%spellout-ordinal-masculine-accusative",
+   "%spellout-ordinal-masculine-animate-accusative",
+   "%spellout-ordinal-masculine-dative",
+   "%spellout-ordinal-masculine-genitive",
+   "%spellout-ordinal-masculine-instrumental",
+   "%spellout-ordinal-masculine-locative",
+   "%spellout-ordinal-masculine-personal-plural",
+   "%spellout-ordinal-masculine-personal-plural-accusative",
+   "%spellout-ordinal-neuter",
+   "%spellout-ordinal-neuter-accusative",
+   "%spellout-ordinal-neuter-dative",
+   "%spellout-ordinal-neuter-genitive",
+   "%spellout-ordinal-neuter-instrumental",
+   "%spellout-ordinal-neuter-locative",
+   "%spellout-ordinal-plural",
+   "%spellout-ordinal-plural-accusative",
+   "%spellout-ordinal-plural-dative",
+   "%spellout-ordinal-plural-genitive",
+   "%spellout-ordinal-plural-instrumental",
+   "%spellout-ordinal-plural-locative"
+  ],
+  "pt_PT": [
+   "%spellout-cardinal-masculine",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-masculine"
+  ],
+  "sv": [
+   "%spellout-cardinal-feminine",
+   "%spellout-cardinal-masculine",
+   "%spellout-numbering",
+   "%spellout-numbering-year",
+   "%spellout-ordinal-feminine",
+   "%spellout-ordinal-masculine",
+   "%spellout-ordinal-neuter"
+  ]
+ },
+ "cases": {
+  "da": [
+   {
+    "value": -1,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "minus et"
+   },
+   {
+    "value": 0,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nul"
+   },
+   {
+    "value": 1,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "et"
+   },
+   {
+    "value": 2,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to"
+   },
+   {
+    "value": 3,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tre"
+   },
+   {
+    "value": 4,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fire"
+   },
+   {
+    "value": 5,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fem"
+   },
+   {
+    "value": 6,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "seks"
+   },
+   {
+    "value": 7,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "syv"
+   },
+   {
+    "value": 8,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "otte"
+   },
+   {
+    "value": 9,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ni"
+   },
+   {
+    "value": 10,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ti"
+   },
+   {
+    "value": 11,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "elleve"
+   },
+   {
+    "value": 12,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tolv"
+   },
+   {
+    "value": 13,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tretten"
+   },
+   {
+    "value": 14,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fjorten"
+   },
+   {
+    "value": 15,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femten"
+   },
+   {
+    "value": 16,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "seksten"
+   },
+   {
+    "value": 17,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sytten"
+   },
+   {
+    "value": 18,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "atten"
+   },
+   {
+    "value": 19,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nitten"
+   },
+   {
+    "value": 20,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tyve"
+   },
+   {
+    "value": 21,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "enogtyve"
+   },
+   {
+    "value": 25,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femogtyve"
+   },
+   {
+    "value": 30,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tredive"
+   },
+   {
+    "value": 40,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fyrre"
+   },
+   {
+    "value": 50,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "halvtreds"
+   },
+   {
+    "value": 60,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tres"
+   },
+   {
+    "value": 70,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "halvfjerds"
+   },
+   {
+    "value": 80,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "firs"
+   },
+   {
+    "value": 90,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "halvfems"
+   },
+   {
+    "value": 99,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nioghalvfems"
+   },
+   {
+    "value": 100,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "hundrede"
+   },
+   {
+    "value": 101,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "hundrede og et"
+   },
+   {
+    "value": 199,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "hundrede og nioghalvfems"
+   },
+   {
+    "value": 200,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tohundrede"
+   },
+   {
+    "value": 201,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tohundrede og et"
+   },
+   {
+    "value": 300,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trehundrede"
+   },
+   {
+    "value": 500,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femhundrede"
+   },
+   {
+    "value": 999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "tusind"
+   },
+   {
+    "value": 1001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "tusind og et"
+   },
+   {
+    "value": 1999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to tusind"
+   },
+   {
+    "value": 2001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to tusind og et"
+   },
+   {
+    "value": 5000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "fem tusind"
+   },
+   {
+    "value": 10000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "ti tusind"
+   },
+   {
+    "value": 100000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "hundrede tusind"
+   },
+   {
+    "value": 999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en million"
+   },
+   {
+    "value": 1000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en million et"
+   },
+   {
+    "value": 1999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en million nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to millioner"
+   },
+   {
+    "value": 2000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to millioner et"
+   },
+   {
+    "value": 999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en milliard"
+   },
+   {
+    "value": 1000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en milliard et"
+   },
+   {
+    "value": 1999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en milliard nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to milliarder"
+   },
+   {
+    "value": 2000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to milliarder et"
+   },
+   {
+    "value": 999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en billion"
+   },
+   {
+    "value": 1000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en billion et"
+   },
+   {
+    "value": 1999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en billion nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billioner"
+   },
+   {
+    "value": 2000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billioner et"
+   },
+   {
+    "value": 999999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems billioner nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en billiard"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en billiard et"
+   },
+   {
+    "value": 1999999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "en billiard nihundrede og nioghalvfems billioner nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusind nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billiarder"
+   },
+   {
+    "value": 2000000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billiarder et"
+   },
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "minus en"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "nul"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "en"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "to"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tre"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "fire"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "fem"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "seks"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "syv"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "otte"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "ni"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "ti"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "elleve"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tolv"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tretten"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "fjorten"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "femten"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "seksten"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "sytten"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "atten"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "nitten"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tyve"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enogtyve"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "femogtyve"
+   },
+   {
+    "value": 29,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "niogtyve"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tredive"
+   },
+   {
+    "value": 31,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enogtredive"
+   },
+   {
+    "value": 39,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "niogtredive"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "fyrre"
+   },
+   {
+    "value": 41,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enogfyrre"
+   },
+   {
+    "value": 49,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "niogfyrre"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "halvtreds"
+   },
+   {
+    "value": 51,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enoghalvtreds"
+   },
+   {
+    "value": 59,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "nioghalvtreds"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tres"
+   },
+   {
+    "value": 61,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enogtres"
+   },
+   {
+    "value": 69,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "niogtres"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "halvfjerds"
+   },
+   {
+    "value": 71,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enoghalvfjerds"
+   },
+   {
+    "value": 79,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "nioghalvfjerds"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "firs"
+   },
+   {
+    "value": 81,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enogfirs"
+   },
+   {
+    "value": 89,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "niogfirs"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "halvfems"
+   },
+   {
+    "value": 91,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "enoghalvfems"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "nioghalvfems"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "hundrede"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "hundrede og en"
+   },
+   {
+    "value": 199,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "hundrede og nioghalvfems"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tohundrede"
+   },
+   {
+    "value": 201,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "tohundrede og en"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "trehundrede"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "femhundrede"
+   },
+   {
+    "value": 999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "expect": "nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "tusinde"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "tusinde og en"
+   },
+   {
+    "value": 1999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to tusinde"
+   },
+   {
+    "value": 2001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to tusinde og en"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "fem tusinde"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "ti tusinde"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "hundrede tusinde"
+   },
+   {
+    "value": 999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "million"
+   },
+   {
+    "value": 1000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "million en"
+   },
+   {
+    "value": 1999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "million nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to millioner"
+   },
+   {
+    "value": 2000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to millioner en"
+   },
+   {
+    "value": 999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "milliard"
+   },
+   {
+    "value": 1000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "milliard en"
+   },
+   {
+    "value": 1999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "milliard nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to milliarder"
+   },
+   {
+    "value": 2000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to milliarder en"
+   },
+   {
+    "value": 999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "billion"
+   },
+   {
+    "value": 1000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "billion en"
+   },
+   {
+    "value": 1999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "billion nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billioner"
+   },
+   {
+    "value": 2000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billioner en"
+   },
+   {
+    "value": 999999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "nihundrede og nioghalvfems billioner nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "billiard"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "billiard en"
+   },
+   {
+    "value": 1999999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "billiard nihundrede og nioghalvfems billioner nihundrede og nioghalvfems milliarder nihundrede og nioghalvfems millioner nihundrede og nioghalvfems tusinde nihundrede og nioghalvfems"
+   },
+   {
+    "value": 2000000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billiarder"
+   },
+   {
+    "value": 2000000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-common",
+    "disputed": "CLDR's common ruleset writes 'tusinde' and a bare 'million'; its neuter ruleset writes 'tusind' and 'en million' for the same values. Both cannot be right. Pending native adjudication.",
+    "expect": "to billiarder en"
+   }
+  ],
+  "de": [
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "minus eins"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "null"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eins"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zwei"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "drei"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vier"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "fünf"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sechs"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sieben"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "acht"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neun"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zehn"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "elf"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zwölf"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dreizehn"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vierzehn"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "fünfzehn"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sechzehn"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "siebzehn"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "achtzehn"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunzehn"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zwanzig"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einundzwanzig"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "fünfundzwanzig"
+   },
+   {
+    "value": 29,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunundzwanzig"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dreißig"
+   },
+   {
+    "value": 31,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einunddreißig"
+   },
+   {
+    "value": 39,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neununddreißig"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vierzig"
+   },
+   {
+    "value": 41,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einundvierzig"
+   },
+   {
+    "value": 49,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunundvierzig"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "fünfzig"
+   },
+   {
+    "value": 51,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einundfünfzig"
+   },
+   {
+    "value": 59,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunundfünfzig"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sechzig"
+   },
+   {
+    "value": 61,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einundsechzig"
+   },
+   {
+    "value": 69,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunundsechzig"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "siebzig"
+   },
+   {
+    "value": 71,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einundsiebzig"
+   },
+   {
+    "value": 79,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunundsiebzig"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "achtzig"
+   },
+   {
+    "value": 81,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einundachtzig"
+   },
+   {
+    "value": 89,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunundachtzig"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunzig"
+   },
+   {
+    "value": 91,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einundneunzig"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunundneunzig"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einhundert"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einhunderteins"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zweihundert"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dreihundert"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "fünfhundert"
+   },
+   {
+    "value": 999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunhundertneunundneunzig"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eintausend"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eintausendeins"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zweitausend"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "fünftausend"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zehntausend"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "einhunderttausend"
+   },
+   {
+    "value": 999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunhundertneunundneunzigtausendneunhundertneunundneunzig"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Million"
+   },
+   {
+    "value": 1000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Million eins"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zwei Millionen"
+   },
+   {
+    "value": 999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunhundertneunundneunzig Millionen neunhundertneunundneunzigtausendneunhundertneunundneunzig"
+   },
+   {
+    "value": 1000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Milliarde"
+   },
+   {
+    "value": 1000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Milliarde eins"
+   },
+   {
+    "value": 999999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunhundertneunundneunzig Milliarden neunhundertneunundneunzig Millionen neunhundertneunundneunzigtausendneunhundertneunundneunzig"
+   },
+   {
+    "value": 1000000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Billion"
+   },
+   {
+    "value": 1000000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Billion eins"
+   },
+   {
+    "value": 999999999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neunhundertneunundneunzig Billionen neunhundertneunundneunzig Milliarden neunhundertneunundneunzig Millionen neunhundertneunundneunzigtausendneunhundertneunundneunzig"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Billiarde"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "eine Billiarde eins"
+   }
+  ],
+  "en": [
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "minus one"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "two"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "three"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "four"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "five"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "six"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "seven"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "eight"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "nine"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "ten"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "eleven"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "twelve"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "thirteen"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "fourteen"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "fifteen"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "sixteen"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "seventeen"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "eighteen"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "nineteen"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "twenty"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "twenty-one"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "twenty-five"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "thirty"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "forty"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "fifty"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "sixty"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "seventy"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "eighty"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "ninety"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "ninety-nine"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one hundred"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one hundred and one"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "two hundred"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "three hundred"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "five hundred"
+   },
+   {
+    "value": 999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "nine hundred and ninety-nine"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one thousand"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one thousand and one"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "two thousand"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "five thousand"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "ten thousand"
+   },
+   {
+    "value": 99999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "ninety-nine thousand nine hundred and ninety-nine"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one hundred thousand"
+   },
+   {
+    "value": 100001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one hundred thousand and one"
+   },
+   {
+    "value": 999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "nine hundred and ninety-nine thousand, nine hundred and ninety-nine"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one million"
+   },
+   {
+    "value": 1000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one million and one"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "two million"
+   },
+   {
+    "value": 999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "nine hundred and ninety-nine million, nine hundred and ninety-nine thousand, nine hundred and ninety-nine"
+   },
+   {
+    "value": 1000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one billion"
+   },
+   {
+    "value": 1000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one billion and one"
+   },
+   {
+    "value": 999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "nine hundred and ninety-nine billion, nine hundred and ninety-nine million, nine hundred and ninety-nine thousand, nine hundred and ninety-nine"
+   },
+   {
+    "value": 1000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one trillion"
+   },
+   {
+    "value": 1000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one trillion and one"
+   },
+   {
+    "value": 999999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "nine hundred and ninety-nine trillion, nine hundred and ninety-nine billion, nine hundred and ninety-nine million, nine hundred and ninety-nine thousand, nine hundred and ninety-nine"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one quadrillion"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-verbose",
+    "expect": "one quadrillion and one"
+   }
+  ],
+  "es": [
+   {
+    "value": -1,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "menos una"
+   },
+   {
+    "value": 0,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cero"
+   },
+   {
+    "value": 1,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "una"
+   },
+   {
+    "value": 2,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dos"
+   },
+   {
+    "value": 3,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "tres"
+   },
+   {
+    "value": 4,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cuatro"
+   },
+   {
+    "value": 5,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cinco"
+   },
+   {
+    "value": 6,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seis"
+   },
+   {
+    "value": 7,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "siete"
+   },
+   {
+    "value": 8,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ocho"
+   },
+   {
+    "value": 9,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "nueve"
+   },
+   {
+    "value": 10,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "diez"
+   },
+   {
+    "value": 11,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "once"
+   },
+   {
+    "value": 12,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "doce"
+   },
+   {
+    "value": 13,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trece"
+   },
+   {
+    "value": 14,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "catorce"
+   },
+   {
+    "value": 15,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quince"
+   },
+   {
+    "value": 16,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dieciséis"
+   },
+   {
+    "value": 17,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "diecisiete"
+   },
+   {
+    "value": 18,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dieciocho"
+   },
+   {
+    "value": 19,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "diecinueve"
+   },
+   {
+    "value": 20,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "veinte"
+   },
+   {
+    "value": 21,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "veintiuna"
+   },
+   {
+    "value": 22,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "veintidós"
+   },
+   {
+    "value": 23,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "veintitrés"
+   },
+   {
+    "value": 25,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "veinticinco"
+   },
+   {
+    "value": 29,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "veintinueve"
+   },
+   {
+    "value": 30,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "treinta"
+   },
+   {
+    "value": 31,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "treinta y una"
+   },
+   {
+    "value": 39,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "treinta y nueve"
+   },
+   {
+    "value": 40,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cuarenta"
+   },
+   {
+    "value": 41,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cuarenta y una"
+   },
+   {
+    "value": 49,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cuarenta y nueve"
+   },
+   {
+    "value": 50,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cincuenta"
+   },
+   {
+    "value": 51,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cincuenta y una"
+   },
+   {
+    "value": 59,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cincuenta y nueve"
+   },
+   {
+    "value": 60,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sesenta"
+   },
+   {
+    "value": 61,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sesenta y una"
+   },
+   {
+    "value": 69,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sesenta y nueve"
+   },
+   {
+    "value": 70,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setenta"
+   },
+   {
+    "value": 71,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setenta y una"
+   },
+   {
+    "value": 79,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setenta y nueve"
+   },
+   {
+    "value": 80,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ochenta"
+   },
+   {
+    "value": 81,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ochenta y una"
+   },
+   {
+    "value": 89,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ochenta y nueve"
+   },
+   {
+    "value": 90,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "noventa"
+   },
+   {
+    "value": 91,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "noventa y una"
+   },
+   {
+    "value": 99,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "noventa y nueve"
+   },
+   {
+    "value": 100,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cien"
+   },
+   {
+    "value": 101,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ciento una"
+   },
+   {
+    "value": 102,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ciento dos"
+   },
+   {
+    "value": 199,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ciento noventa y nueve"
+   },
+   {
+    "value": 200,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "doscientas"
+   },
+   {
+    "value": 201,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "doscientas una"
+   },
+   {
+    "value": 299,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "doscientas noventa y nueve"
+   },
+   {
+    "value": 300,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trescientas"
+   },
+   {
+    "value": 301,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trescientas una"
+   },
+   {
+    "value": 399,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trescientas noventa y nueve"
+   },
+   {
+    "value": 400,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cuatrocientas"
+   },
+   {
+    "value": 401,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cuatrocientas una"
+   },
+   {
+    "value": 499,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cuatrocientas noventa y nueve"
+   },
+   {
+    "value": 500,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quinientas"
+   },
+   {
+    "value": 501,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quinientas una"
+   },
+   {
+    "value": 599,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quinientas noventa y nueve"
+   },
+   {
+    "value": 600,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seiscientas"
+   },
+   {
+    "value": 601,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seiscientas una"
+   },
+   {
+    "value": 699,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seiscientas noventa y nueve"
+   },
+   {
+    "value": 700,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setecientas"
+   },
+   {
+    "value": 701,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setecientas una"
+   },
+   {
+    "value": 799,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setecientas noventa y nueve"
+   },
+   {
+    "value": 800,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ochocientas"
+   },
+   {
+    "value": 801,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ochocientas una"
+   },
+   {
+    "value": 899,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "ochocientas noventa y nueve"
+   },
+   {
+    "value": 900,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecientas"
+   },
+   {
+    "value": 901,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecientas una"
+   },
+   {
+    "value": 999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecientas noventa y nueve"
+   },
+   {
+    "value": 1000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "mil"
+   },
+   {
+    "value": 1001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "mil una"
+   },
+   {
+    "value": 1999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "mil novecientas noventa y nueve"
+   },
+   {
+    "value": 2000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dos mil"
+   },
+   {
+    "value": 2001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dos mil una"
+   },
+   {
+    "value": 5000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cinco mil"
+   },
+   {
+    "value": 10000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "diez mil"
+   },
+   {
+    "value": 100000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cien mil"
+   },
+   {
+    "value": 999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecientos noventa y nueve mil novecientas noventa y nueve"
+   },
+   {
+    "value": 1000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "un millón"
+   },
+   {
+    "value": 1000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "un millón una"
+   },
+   {
+    "value": 1999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "un millón novecientos noventa y nueve mil novecientas noventa y nueve"
+   },
+   {
+    "value": 2000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dos millones"
+   },
+   {
+    "value": 2000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dos millones una"
+   },
+   {
+    "value": 999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecientos noventa y nueve mil novecientos noventa y nueve millones novecientos noventa y nueve mil novecientas noventa y nueve"
+   },
+   {
+    "value": 1000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "un billón"
+   },
+   {
+    "value": 1000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "un billón una"
+   },
+   {
+    "value": 1999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "un billón novecientos noventa y nueve mil novecientos noventa y nueve millones novecientos noventa y nueve mil novecientas noventa y nueve"
+   },
+   {
+    "value": 2000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dos billones"
+   },
+   {
+    "value": 2000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dos billones una"
+   },
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "menos uno"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cero"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "uno"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dos"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "tres"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cuatro"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinco"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "seis"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "siete"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ocho"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "nueve"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diez"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "once"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "doce"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trece"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "catorce"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quince"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dieciséis"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diecisiete"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dieciocho"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diecinueve"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veinte"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veintiuno"
+   },
+   {
+    "value": 22,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veintidós"
+   },
+   {
+    "value": 23,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veintitrés"
+   },
+   {
+    "value": 24,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veinticuatro"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veinticinco"
+   },
+   {
+    "value": 26,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veintiséis"
+   },
+   {
+    "value": 27,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veintisiete"
+   },
+   {
+    "value": 28,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veintiocho"
+   },
+   {
+    "value": 29,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "veintinueve"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "treinta"
+   },
+   {
+    "value": 31,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "treinta y uno"
+   },
+   {
+    "value": 39,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "treinta y nueve"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cuarenta"
+   },
+   {
+    "value": 41,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cuarenta y uno"
+   },
+   {
+    "value": 49,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cuarenta y nueve"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cincuenta"
+   },
+   {
+    "value": 51,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cincuenta y uno"
+   },
+   {
+    "value": 59,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cincuenta y nueve"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sesenta"
+   },
+   {
+    "value": 61,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sesenta y uno"
+   },
+   {
+    "value": 69,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sesenta y nueve"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "setenta"
+   },
+   {
+    "value": 71,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "setenta y uno"
+   },
+   {
+    "value": 79,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "setenta y nueve"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ochenta"
+   },
+   {
+    "value": 81,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ochenta y uno"
+   },
+   {
+    "value": 89,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ochenta y nueve"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "noventa"
+   },
+   {
+    "value": 91,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "noventa y uno"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "noventa y nueve"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cien"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ciento uno"
+   },
+   {
+    "value": 102,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ciento dos"
+   },
+   {
+    "value": 199,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ciento noventa y nueve"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "doscientos"
+   },
+   {
+    "value": 201,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "doscientos uno"
+   },
+   {
+    "value": 299,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "doscientos noventa y nueve"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trescientos"
+   },
+   {
+    "value": 301,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trescientos uno"
+   },
+   {
+    "value": 399,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trescientos noventa y nueve"
+   },
+   {
+    "value": 400,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cuatrocientos"
+   },
+   {
+    "value": 401,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cuatrocientos uno"
+   },
+   {
+    "value": 499,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cuatrocientos noventa y nueve"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quinientos"
+   },
+   {
+    "value": 501,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quinientos uno"
+   },
+   {
+    "value": 599,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quinientos noventa y nueve"
+   },
+   {
+    "value": 600,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "seiscientos"
+   },
+   {
+    "value": 601,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "seiscientos uno"
+   },
+   {
+    "value": 699,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "seiscientos noventa y nueve"
+   },
+   {
+    "value": 700,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "setecientos"
+   },
+   {
+    "value": 701,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "setecientos uno"
+   },
+   {
+    "value": 799,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "setecientos noventa y nueve"
+   },
+   {
+    "value": 800,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ochocientos"
+   },
+   {
+    "value": 801,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ochocientos uno"
+   },
+   {
+    "value": 899,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ochocientos noventa y nueve"
+   },
+   {
+    "value": 900,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecientos"
+   },
+   {
+    "value": 901,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecientos uno"
+   },
+   {
+    "value": 999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecientos noventa y nueve"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mil"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mil uno"
+   },
+   {
+    "value": 1999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mil novecientos noventa y nueve"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dos mil"
+   },
+   {
+    "value": 2001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dos mil uno"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinco mil"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diez mil"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cien mil"
+   },
+   {
+    "value": 999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecientos noventa y nueve mil novecientos noventa y nueve"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un millón"
+   },
+   {
+    "value": 1000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un millón uno"
+   },
+   {
+    "value": 1999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un millón novecientos noventa y nueve mil novecientos noventa y nueve"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dos millones"
+   },
+   {
+    "value": 2000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dos millones uno"
+   },
+   {
+    "value": 999999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecientos noventa y nueve mil novecientos noventa y nueve millones novecientos noventa y nueve mil novecientos noventa y nueve"
+   },
+   {
+    "value": 1000000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un billón"
+   },
+   {
+    "value": 1000000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un billón uno"
+   },
+   {
+    "value": 1999999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un billón novecientos noventa y nueve mil novecientos noventa y nueve millones novecientos noventa y nueve mil novecientos noventa y nueve"
+   },
+   {
+    "value": 2000000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dos billones"
+   },
+   {
+    "value": 2000000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dos billones uno"
+   }
+  ],
+  "fi": [
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "miinus yksi"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "nolla"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksi"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksi"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kolme"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "neljä"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "viisi"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kuusi"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "seitsemän"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kahdeksan"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yhdeksän"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kymmenen"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksitoista"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksitoista"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kolmetoista"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "neljätoista"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "viisitoista"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kuusitoista"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "seitsemäntoista"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kahdeksantoista"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yhdeksäntoista"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksikymmentä"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksikymmentäyksi"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksikymmentäviisi"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kolmekymmentä"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "neljäkymmentä"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "viisikymmentä"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kuusikymmentä"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "seitsemänkymmentä"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kahdeksankymmentä"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yhdeksänkymmentä"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "sata"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "satayksi"
+   },
+   {
+    "value": 199,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "satayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksisataa"
+   },
+   {
+    "value": 201,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksisataayksi"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kolmesataa"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "viisisataa"
+   },
+   {
+    "value": 999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tuhat"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "tuhatyksi"
+   },
+   {
+    "value": 1999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "tuhatyhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksituhatta"
+   },
+   {
+    "value": 2001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "kaksituhattayksi"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "viisituhatta"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kymmenentuhatta"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "satatuhatta"
+   },
+   {
+    "value": 999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "yhdeksänsataayhdeksänkymmentäyhdeksäntuhattayhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksi miljoona"
+   },
+   {
+    "value": 1000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksi miljoona yksi"
+   },
+   {
+    "value": 1999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "yksi miljoona yhdeksänsataayhdeksänkymmentäyhdeksäntuhattayhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksi miljoonaa"
+   },
+   {
+    "value": 2000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksi miljoonaa yksi"
+   },
+   {
+    "value": 999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "yhdeksänsataayhdeksänkymmentäyhdeksän miljoonaa yhdeksänsataayhdeksänkymmentäyhdeksäntuhattayhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 1000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksi miljardi"
+   },
+   {
+    "value": 1000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksi miljardi yksi"
+   },
+   {
+    "value": 1999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "yksi miljardi yhdeksänsataayhdeksänkymmentäyhdeksän miljoonaa yhdeksänsataayhdeksänkymmentäyhdeksäntuhattayhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 2000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksi miljardia"
+   },
+   {
+    "value": 2000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksi miljardia yksi"
+   },
+   {
+    "value": 999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "yhdeksänsataayhdeksänkymmentäyhdeksän miljardia yhdeksänsataayhdeksänkymmentäyhdeksän miljoonaa yhdeksänsataayhdeksänkymmentäyhdeksäntuhattayhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 1000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksi biljoona"
+   },
+   {
+    "value": 1000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "yksi biljoona yksi"
+   },
+   {
+    "value": 1999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "disputed": "CLDR joins the thousands group solid to its remainder (kaksituhattayksi); Kotus and Kielikello prescribe the space (kaksituhatta yksi), with Korpela's handbook agreeing. The grammar follows the national authority over CLDR.",
+    "expect": "yksi biljoona yhdeksänsataayhdeksänkymmentäyhdeksän miljardia yhdeksänsataayhdeksänkymmentäyhdeksän miljoonaa yhdeksänsataayhdeksänkymmentäyhdeksäntuhattayhdeksänsataayhdeksänkymmentäyhdeksän"
+   },
+   {
+    "value": 2000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksi biljoonaa"
+   },
+   {
+    "value": 2000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "kaksi biljoonaa yksi"
+   }
+  ],
+  "fr": [
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "moins un"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zéro"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "deux"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trois"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quatre"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinq"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "six"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sept"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "huit"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "neuf"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dix"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "onze"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "douze"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "treize"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quatorze"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quinze"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "seize"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dix-sept"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dix-huit"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dix-neuf"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vingt"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vingt-et-un"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vingt-cinq"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trente"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quarante"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinquante"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "soixante"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "soixante-dix"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quatre-vingts"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quatre-vingt-dix"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quatre-vingt-dix-neuf"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cent"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cent un"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "deux cents"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trois cents"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinq cents"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mille"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mille un"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "deux mille"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinq mille"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dix mille"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cent mille"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un million"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "deux millions"
+   }
+  ],
+  "it": [
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "meno uno"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "uno"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "due"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "tre"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quattro"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinque"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sei"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sette"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "otto"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "nove"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dieci"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "undici"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dodici"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "tredici"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quattordici"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quindici"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sedici"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diciassette"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diciotto"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diciannove"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "venti"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ventuno"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "venticinque"
+   },
+   {
+    "value": 29,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ventinove"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trenta"
+   },
+   {
+    "value": 31,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trentuno"
+   },
+   {
+    "value": 39,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trentanove"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quaranta"
+   },
+   {
+    "value": 41,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quarantuno"
+   },
+   {
+    "value": 49,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quarantanove"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinquanta"
+   },
+   {
+    "value": 51,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinquantuno"
+   },
+   {
+    "value": 59,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinquantanove"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sessanta"
+   },
+   {
+    "value": 61,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sessantuno"
+   },
+   {
+    "value": 69,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sessantanove"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "settanta"
+   },
+   {
+    "value": 71,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "settantuno"
+   },
+   {
+    "value": 79,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "settantanove"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ottanta"
+   },
+   {
+    "value": 81,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ottantuno"
+   },
+   {
+    "value": 89,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "ottantanove"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novanta"
+   },
+   {
+    "value": 91,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novantuno"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novantanove"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cento"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "centouno"
+   },
+   {
+    "value": 199,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "centonovantanove"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "duecento"
+   },
+   {
+    "value": 201,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "duecentouno"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trecento"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinquecento"
+   },
+   {
+    "value": 999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecentonovantanove"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mille"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "milleuno"
+   },
+   {
+    "value": 1999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "millenovecentonovantanove"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "duemila"
+   },
+   {
+    "value": 2001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "duemilauno"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinquemila"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "diecimila"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "centomila"
+   },
+   {
+    "value": 999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecentonovantanovemilanovecentonovantanove"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un milione"
+   },
+   {
+    "value": 1000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un milione uno"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "due milioni"
+   },
+   {
+    "value": 999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecentonovantanove milioni novecentonovantanovemilanovecentonovantanove"
+   },
+   {
+    "value": 1000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un miliardo"
+   },
+   {
+    "value": 1000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un miliardo uno"
+   },
+   {
+    "value": 999999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecentonovantanove miliardi novecentonovantanove milioni novecentonovantanovemilanovecentonovantanove"
+   },
+   {
+    "value": 1000000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un bilione"
+   },
+   {
+    "value": 1000000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un bilione uno"
+   },
+   {
+    "value": 999999999999999,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "novecentonovantanove bilioni novecentonovantanove miliardi novecentonovantanove milioni novecentonovantanovemilanovecentonovantanove"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un biliardo"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "un biliardo uno"
+   },
+   {
+    "value": 9007199254740991,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "nove biliardi sette bilioni centonovantanove miliardi duecentocinquantaquattro milioni settecentoquarantamilanovecentonovantuno"
+   }
+  ],
+  "nl": [
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "min een"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "nul"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "twee"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "drie"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "vier"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "vijf"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "zes"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "zeven"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "acht"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negen"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tien"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "elf"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "twaalf"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "dertien"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "veertien"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "vijftien"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "zestien"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "zeventien"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "achttien"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negentien"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "twintig"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenentwintig"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "vijfentwintig"
+   },
+   {
+    "value": 29,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenentwintig"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "dertig"
+   },
+   {
+    "value": 31,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenendertig"
+   },
+   {
+    "value": 39,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenendertig"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "veertig"
+   },
+   {
+    "value": 41,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenenveertig"
+   },
+   {
+    "value": 49,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenenveertig"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "vijftig"
+   },
+   {
+    "value": 51,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenenvijftig"
+   },
+   {
+    "value": 59,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenenvijftig"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "zestig"
+   },
+   {
+    "value": 61,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenenzestig"
+   },
+   {
+    "value": 69,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenenzestig"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "zeventig"
+   },
+   {
+    "value": 71,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenenzeventig"
+   },
+   {
+    "value": 79,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenenzeventig"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tachtig"
+   },
+   {
+    "value": 81,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenentachtig"
+   },
+   {
+    "value": 89,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenentachtig"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negentig"
+   },
+   {
+    "value": 91,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "eenennegentig"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenennegentig"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "honderd"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "honderdeen"
+   },
+   {
+    "value": 199,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "honderdnegenennegentig"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tweehonderd"
+   },
+   {
+    "value": 201,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tweehonderdeen"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "driehonderd"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "vijfhonderd"
+   },
+   {
+    "value": 999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenhonderdnegenennegentig"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "duizend"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "duizendeen"
+   },
+   {
+    "value": 1999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "duizendnegenhonderdnegenennegentig"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tweeduizend"
+   },
+   {
+    "value": 2001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tweeduizendeen"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "vijfduizend"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "tienduizend"
+   },
+   {
+    "value": 99999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenennegentigduizendnegenhonderdnegenennegentig"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "honderdduizend"
+   },
+   {
+    "value": 100001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "honderdduizendeen"
+   },
+   {
+    "value": 999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenhonderdnegenennegentigduizendnegenhonderdnegenennegentig"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een miljoen"
+   },
+   {
+    "value": 1000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een miljoen een"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "twee miljoen"
+   },
+   {
+    "value": 999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenhonderdnegenennegentig miljoen negenhonderdnegenennegentigduizendnegenhonderdnegenennegentig"
+   },
+   {
+    "value": 1000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een miljard"
+   },
+   {
+    "value": 1000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een miljard een"
+   },
+   {
+    "value": 999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenhonderdnegenennegentig miljard negenhonderdnegenennegentig miljoen negenhonderdnegenennegentigduizendnegenhonderdnegenennegentig"
+   },
+   {
+    "value": 1000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een biljoen"
+   },
+   {
+    "value": 1000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een biljoen een"
+   },
+   {
+    "value": 999999999999999,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "negenhonderdnegenennegentig biljoen negenhonderdnegenennegentig miljard negenhonderdnegenennegentig miljoen negenhonderdnegenennegentigduizendnegenhonderdnegenennegentig"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een biljard"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal",
+    "expect": "een biljard een"
+   }
+  ],
+  "no": [
+   {
+    "value": -1,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "minus ett"
+   },
+   {
+    "value": 0,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "null"
+   },
+   {
+    "value": 1,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ett"
+   },
+   {
+    "value": 2,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to"
+   },
+   {
+    "value": 3,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tre"
+   },
+   {
+    "value": 4,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fire"
+   },
+   {
+    "value": 5,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fem"
+   },
+   {
+    "value": 6,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "seks"
+   },
+   {
+    "value": 7,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sju"
+   },
+   {
+    "value": 8,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "åtte"
+   },
+   {
+    "value": 9,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ni"
+   },
+   {
+    "value": 10,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ti"
+   },
+   {
+    "value": 11,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "elleve"
+   },
+   {
+    "value": 12,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tolv"
+   },
+   {
+    "value": 13,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tretten"
+   },
+   {
+    "value": 14,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fjorten"
+   },
+   {
+    "value": 15,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femten"
+   },
+   {
+    "value": 16,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "seksten"
+   },
+   {
+    "value": 17,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sytten"
+   },
+   {
+    "value": 18,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "atten"
+   },
+   {
+    "value": 19,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nitten"
+   },
+   {
+    "value": 20,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tjue"
+   },
+   {
+    "value": 21,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tjueett"
+   },
+   {
+    "value": 25,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tjuefem"
+   },
+   {
+    "value": 29,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tjueni"
+   },
+   {
+    "value": 30,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tretti"
+   },
+   {
+    "value": 31,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trettiett"
+   },
+   {
+    "value": 39,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trettini"
+   },
+   {
+    "value": 40,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "førti"
+   },
+   {
+    "value": 41,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "førtiett"
+   },
+   {
+    "value": 49,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "førtini"
+   },
+   {
+    "value": 50,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femti"
+   },
+   {
+    "value": 51,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femtiett"
+   },
+   {
+    "value": 59,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femtini"
+   },
+   {
+    "value": 60,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "seksti"
+   },
+   {
+    "value": 61,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sekstiett"
+   },
+   {
+    "value": 69,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sekstini"
+   },
+   {
+    "value": 70,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sytti"
+   },
+   {
+    "value": 71,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "syttiett"
+   },
+   {
+    "value": 79,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "syttini"
+   },
+   {
+    "value": 80,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "åtti"
+   },
+   {
+    "value": 81,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "åttiett"
+   },
+   {
+    "value": 89,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "åttini"
+   },
+   {
+    "value": 90,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nitti"
+   },
+   {
+    "value": 91,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nittiett"
+   },
+   {
+    "value": 99,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nittini"
+   },
+   {
+    "value": 100,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "hundre"
+   },
+   {
+    "value": 101,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "hundre og ett"
+   },
+   {
+    "value": 199,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "hundre og nittini"
+   },
+   {
+    "value": 200,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to hundre"
+   },
+   {
+    "value": 201,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to hundre og ett"
+   },
+   {
+    "value": 300,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tre hundre"
+   },
+   {
+    "value": 500,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fem hundre"
+   },
+   {
+    "value": 999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ni hundre og nittini"
+   },
+   {
+    "value": 1000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tusen"
+   },
+   {
+    "value": 1001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tusen og ett"
+   },
+   {
+    "value": 1999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tusen ni hundre og nittini"
+   },
+   {
+    "value": 2000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to tusen"
+   },
+   {
+    "value": 2001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to tusen og ett"
+   },
+   {
+    "value": 5000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fem tusen"
+   },
+   {
+    "value": 10000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ti tusen"
+   },
+   {
+    "value": 100000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "hundre tusen"
+   },
+   {
+    "value": 999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 1000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én million"
+   },
+   {
+    "value": 1000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én million ett"
+   },
+   {
+    "value": 1999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én million ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 2000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to millioner"
+   },
+   {
+    "value": 2000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to millioner ett"
+   },
+   {
+    "value": 999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ni hundre og nittini millioner ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 1000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én milliard"
+   },
+   {
+    "value": 1000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én milliard ett"
+   },
+   {
+    "value": 1999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én milliard ni hundre og nittini millioner ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 2000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to milliarder"
+   },
+   {
+    "value": 2000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to milliarder ett"
+   },
+   {
+    "value": 999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ni hundre og nittini milliarder ni hundre og nittini millioner ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 1000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én billion"
+   },
+   {
+    "value": 1000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én billion ett"
+   },
+   {
+    "value": 1999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én billion ni hundre og nittini milliarder ni hundre og nittini millioner ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 2000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to billioner"
+   },
+   {
+    "value": 2000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to billioner ett"
+   },
+   {
+    "value": 999999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ni hundre og nittini billioner ni hundre og nittini milliarder ni hundre og nittini millioner ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én billiard"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én billiard ett"
+   },
+   {
+    "value": 1999999999999999,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "én billiard ni hundre og nittini billioner ni hundre og nittini milliarder ni hundre og nittini millioner ni hundre og nittini tusen ni hundre og nittini"
+   },
+   {
+    "value": 2000000000000000,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to billiarder"
+   },
+   {
+    "value": 2000000000000001,
+    "gender": "neuter",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "to billiarder ett"
+   },
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "minus én"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "null"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "én"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "to"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tre"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "fire"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "fem"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "seks"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "sju"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "åtte"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "ni"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "ti"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "elleve"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tolv"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tretten"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "fjorten"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "femten"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "seksten"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "sytten"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "atten"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "nitten"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tjue"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tjueén"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tjuefem"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tretti"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "førti"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "femti"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "seksti"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "sytti"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "åtti"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "nitti"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "nittini"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "hundre"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "hundre og én"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "to hundre"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tre hundre"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "fem hundre"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tusen"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "tusen og én"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "to tusen"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "fem tusen"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "ti tusen"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "hundre tusen"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "én million"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-masculine",
+    "expect": "to millioner"
+   }
+  ],
+  "pl": [
+   {
+    "value": -1,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "minus jedno"
+   },
+   {
+    "value": 0,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "jedno"
+   },
+   {
+    "value": 2,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwa"
+   },
+   {
+    "value": 3,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trzy"
+   },
+   {
+    "value": 4,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "cztery"
+   },
+   {
+    "value": 5,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "pięć"
+   },
+   {
+    "value": 6,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sześć"
+   },
+   {
+    "value": 7,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "siedem"
+   },
+   {
+    "value": 8,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "osiem"
+   },
+   {
+    "value": 9,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dziewięć"
+   },
+   {
+    "value": 10,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dziesięć"
+   },
+   {
+    "value": 11,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "jedenaście"
+   },
+   {
+    "value": 12,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwanaście"
+   },
+   {
+    "value": 13,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trzynaście"
+   },
+   {
+    "value": 14,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "czternaście"
+   },
+   {
+    "value": 15,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "piętnaście"
+   },
+   {
+    "value": 16,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "szesnaście"
+   },
+   {
+    "value": 17,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "siedemnaście"
+   },
+   {
+    "value": 18,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "osiemnaście"
+   },
+   {
+    "value": 19,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dziewiętnaście"
+   },
+   {
+    "value": 20,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwadzieścia"
+   },
+   {
+    "value": 21,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwadzieścia jeden"
+   },
+   {
+    "value": 25,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwadzieścia pięć"
+   },
+   {
+    "value": 30,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trzydzieści"
+   },
+   {
+    "value": 40,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "czterdzieści"
+   },
+   {
+    "value": 50,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "pięćdziesiąt"
+   },
+   {
+    "value": 60,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sześćdziesiąt"
+   },
+   {
+    "value": 70,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "siedemdziesiąt"
+   },
+   {
+    "value": 80,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "osiemdziesiąt"
+   },
+   {
+    "value": 90,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dziewięćdziesiąt"
+   },
+   {
+    "value": 99,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 100,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sto"
+   },
+   {
+    "value": 101,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sto jeden"
+   },
+   {
+    "value": 200,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwieście"
+   },
+   {
+    "value": 300,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trzysta"
+   },
+   {
+    "value": 500,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "pięćset"
+   },
+   {
+    "value": 1000,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tysiąc"
+   },
+   {
+    "value": 1001,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tysiąc jeden"
+   },
+   {
+    "value": 2000,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwa tysiące"
+   },
+   {
+    "value": 5000,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "pięć tysięcy"
+   },
+   {
+    "value": 10000,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dziesięć tysięcy"
+   },
+   {
+    "value": 100000,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sto tysięcy"
+   },
+   {
+    "value": 1000000,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "milion"
+   },
+   {
+    "value": 2000000,
+    "gender": "n",
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "dwa miliony"
+   },
+   {
+    "value": -1,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "minus jedna"
+   },
+   {
+    "value": 0,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "jedna"
+   },
+   {
+    "value": 2,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwie"
+   },
+   {
+    "value": 3,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trzy"
+   },
+   {
+    "value": 4,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cztery"
+   },
+   {
+    "value": 5,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "pięć"
+   },
+   {
+    "value": 6,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sześć"
+   },
+   {
+    "value": 7,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "siedem"
+   },
+   {
+    "value": 8,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "osiem"
+   },
+   {
+    "value": 9,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięć"
+   },
+   {
+    "value": 10,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziesięć"
+   },
+   {
+    "value": 11,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "jedenaście"
+   },
+   {
+    "value": 12,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwanaście"
+   },
+   {
+    "value": 13,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trzynaście"
+   },
+   {
+    "value": 14,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "czternaście"
+   },
+   {
+    "value": 15,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "piętnaście"
+   },
+   {
+    "value": 16,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "szesnaście"
+   },
+   {
+    "value": 17,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "siedemnaście"
+   },
+   {
+    "value": 18,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "osiemnaście"
+   },
+   {
+    "value": 19,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewiętnaście"
+   },
+   {
+    "value": 20,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwadzieścia"
+   },
+   {
+    "value": 21,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwadzieścia jeden"
+   },
+   {
+    "value": 25,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwadzieścia pięć"
+   },
+   {
+    "value": 30,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trzydzieści"
+   },
+   {
+    "value": 40,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "czterdzieści"
+   },
+   {
+    "value": 50,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "pięćdziesiąt"
+   },
+   {
+    "value": 60,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sześćdziesiąt"
+   },
+   {
+    "value": 70,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "siedemdziesiąt"
+   },
+   {
+    "value": 80,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "osiemdziesiąt"
+   },
+   {
+    "value": 90,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięćdziesiąt"
+   },
+   {
+    "value": 99,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 100,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sto"
+   },
+   {
+    "value": 101,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sto jeden"
+   },
+   {
+    "value": 199,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sto dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 200,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwieście"
+   },
+   {
+    "value": 201,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwieście jeden"
+   },
+   {
+    "value": 299,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwieście dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 300,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trzysta"
+   },
+   {
+    "value": 301,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trzysta jeden"
+   },
+   {
+    "value": 499,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "czterysta dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 500,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "pięćset"
+   },
+   {
+    "value": 501,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "pięćset jeden"
+   },
+   {
+    "value": 999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 1000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "tysiąc"
+   },
+   {
+    "value": 1001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "tysiąc jeden"
+   },
+   {
+    "value": 1999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "tysiąc dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 2000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa tysiące"
+   },
+   {
+    "value": 2001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa tysiące jeden"
+   },
+   {
+    "value": 5000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "pięć tysięcy"
+   },
+   {
+    "value": 10000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziesięć tysięcy"
+   },
+   {
+    "value": 100000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sto tysięcy"
+   },
+   {
+    "value": 999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 1000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "milion"
+   },
+   {
+    "value": 1000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "milion jeden"
+   },
+   {
+    "value": 1999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "milion dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 2000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa miliony"
+   },
+   {
+    "value": 2000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa miliony jeden"
+   },
+   {
+    "value": 999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 1000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "miliard"
+   },
+   {
+    "value": 1000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "disputed": "CLDR agrees the trailing 1 of 'tysiąc jeden' and 'milion jeden' does not inflect, then inflects it in 'miliard jedna'. The uninflected form follows CLDR's own majority rule.",
+    "expect": "miliard jedna"
+   },
+   {
+    "value": 1999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "miliard dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 2000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa miliardy"
+   },
+   {
+    "value": 2000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa miliardy jeden"
+   },
+   {
+    "value": 999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć miliardów dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 1000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "bilion"
+   },
+   {
+    "value": 1000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "bilion jedna"
+   },
+   {
+    "value": 1999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "bilion dziewięćset dziewięćdziesiąt dziewięć miliardów dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 2000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa biliony"
+   },
+   {
+    "value": 2000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa biliony jeden"
+   },
+   {
+    "value": 999999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć bilionów dziewięćset dziewięćdziesiąt dziewięć miliardów dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięćset dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "biliard"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "biliard jeden"
+   },
+   {
+    "value": 1999999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "biliard dziewięciuset dziewięćdziesięciu dziewięciu bilionów dziewięciuset dziewięćdziesięciu dziewięciu miliardów dziewięciuset dziewięćdziesięciu dziewięciu milionów dziewięciuset dziewięćdziesięciu dziewięciu tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 2000000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa biliardy"
+   },
+   {
+    "value": 2000000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dwa biliardy jeden"
+   },
+   {
+    "value": -1,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "minus jeden"
+   },
+   {
+    "value": 0,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "jeden"
+   },
+   {
+    "value": 2,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwaj"
+   },
+   {
+    "value": 3,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "trzej"
+   },
+   {
+    "value": 4,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "czterej"
+   },
+   {
+    "value": 5,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "pięciu"
+   },
+   {
+    "value": 6,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "sześciu"
+   },
+   {
+    "value": 7,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "siedmiu"
+   },
+   {
+    "value": 8,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "ośmiu"
+   },
+   {
+    "value": 9,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięciu"
+   },
+   {
+    "value": 10,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziesięciu"
+   },
+   {
+    "value": 11,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "jedenastu"
+   },
+   {
+    "value": 12,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwunastu"
+   },
+   {
+    "value": 13,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "trzynastu"
+   },
+   {
+    "value": 14,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "czternastu"
+   },
+   {
+    "value": 15,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "piętnastu"
+   },
+   {
+    "value": 16,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "szesnastu"
+   },
+   {
+    "value": 17,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "siedemnastu"
+   },
+   {
+    "value": 18,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "osiemnastu"
+   },
+   {
+    "value": 19,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewiętnastu"
+   },
+   {
+    "value": 20,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwudziestu"
+   },
+   {
+    "value": 21,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwudziestu jeden"
+   },
+   {
+    "value": 25,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwudziestu pięciu"
+   },
+   {
+    "value": 30,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "trzydziestu"
+   },
+   {
+    "value": 40,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "czterdziestu"
+   },
+   {
+    "value": 50,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "pięćdziesięciu"
+   },
+   {
+    "value": 60,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "sześćdziesięciu"
+   },
+   {
+    "value": 70,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "siedemdziesięciu"
+   },
+   {
+    "value": 80,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "osiemdziesięciu"
+   },
+   {
+    "value": 90,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięćdziesięciu"
+   },
+   {
+    "value": 99,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 100,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "stu"
+   },
+   {
+    "value": 101,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "stu jeden"
+   },
+   {
+    "value": 200,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwustu"
+   },
+   {
+    "value": 300,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "trzystu"
+   },
+   {
+    "value": 500,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "pięciuset"
+   },
+   {
+    "value": 999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 1000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "tysiąc"
+   },
+   {
+    "value": 1001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "tysiąc jeden"
+   },
+   {
+    "value": 1999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "tysiąc dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 2000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa tysiące"
+   },
+   {
+    "value": 2001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa tysiące jeden"
+   },
+   {
+    "value": 5000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "pięć tysięcy"
+   },
+   {
+    "value": 10000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziesięć tysięcy"
+   },
+   {
+    "value": 100000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "sto tysięcy"
+   },
+   {
+    "value": 999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 1000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "milion"
+   },
+   {
+    "value": 1000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "milion jeden"
+   },
+   {
+    "value": 1999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "milion dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 2000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa miliony"
+   },
+   {
+    "value": 2000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa miliony jeden"
+   },
+   {
+    "value": 999999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 1000000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "miliard"
+   },
+   {
+    "value": 1000000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "miliard jeden"
+   },
+   {
+    "value": 1999999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "disputed": "CLDR's 999999 keeps scale multipliers plain in the virile series, then inflects them at 1999999999. The plain form follows CLDR's own majority rule.",
+    "expect": "miliard dziewięciuset dziewięćdziesięciu dziewięciu milionów dziewięciuset dziewięćdziesięciu dziewięciu tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 2000000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa miliardy"
+   },
+   {
+    "value": 2000000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa miliardy jeden"
+   },
+   {
+    "value": 999999999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć miliardów dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 1000000000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "bilion"
+   },
+   {
+    "value": 1000000000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "bilion jeden"
+   },
+   {
+    "value": 1999999999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "bilion dziewięciuset dziewięćdziesięciu dziewięciu miliardów dziewięciuset dziewięćdziesięciu dziewięciu milionów dziewięciuset dziewięćdziesięciu dziewięciu tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 2000000000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa biliony"
+   },
+   {
+    "value": 2000000000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa biliony jeden"
+   },
+   {
+    "value": 999999999999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dziewięćset dziewięćdziesiąt dziewięć bilionów dziewięćset dziewięćdziesiąt dziewięć miliardów dziewięćset dziewięćdziesiąt dziewięć milionów dziewięćset dziewięćdziesiąt dziewięć tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "biliard"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "biliard jeden"
+   },
+   {
+    "value": 1999999999999999,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "biliard dziewięciuset dziewięćdziesięciu dziewięciu bilionów dziewięciuset dziewięćdziesięciu dziewięciu miliardów dziewięciuset dziewięćdziesięciu dziewięciu milionów dziewięciuset dziewięćdziesięciu dziewięciu tysięcy dziewięciuset dziewięćdziesięciu dziewięciu"
+   },
+   {
+    "value": 2000000000000000,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa biliardy"
+   },
+   {
+    "value": 2000000000000001,
+    "gender": "virile",
+    "ruleset": "%spellout-cardinal-masculine-personal",
+    "expect": "dwa biliardy jeden"
+   },
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "minus jeden"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "jeden"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwa"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trzy"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cztery"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "pięć"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sześć"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "siedem"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "osiem"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dziewięć"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dziesięć"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "jedenaście"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwanaście"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trzynaście"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "czternaście"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "piętnaście"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "szesnaście"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "siedemnaście"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "osiemnaście"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dziewiętnaście"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwadzieścia"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwadzieścia jeden"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwadzieścia pięć"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trzydzieści"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "czterdzieści"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "pięćdziesiąt"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sześćdziesiąt"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "siedemdziesiąt"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "osiemdziesiąt"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dziewięćdziesiąt"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dziewięćdziesiąt dziewięć"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sto"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sto jeden"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwieście"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trzysta"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "pięćset"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "tysiąc"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "tysiąc jeden"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwa tysiące"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "pięć tysięcy"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dziesięć tysięcy"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sto tysięcy"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "milion"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dwa miliony"
+   }
+  ],
+  "pt": [
+   {
+    "value": -1,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "menos uma"
+   },
+   {
+    "value": 0,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "uma"
+   },
+   {
+    "value": 2,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "duas"
+   },
+   {
+    "value": 3,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "três"
+   },
+   {
+    "value": 4,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quatro"
+   },
+   {
+    "value": 5,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cinco"
+   },
+   {
+    "value": 6,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seis"
+   },
+   {
+    "value": 7,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sete"
+   },
+   {
+    "value": 8,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "oito"
+   },
+   {
+    "value": 9,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "nove"
+   },
+   {
+    "value": 10,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dez"
+   },
+   {
+    "value": 11,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "onze"
+   },
+   {
+    "value": 12,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "doze"
+   },
+   {
+    "value": 13,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "treze"
+   },
+   {
+    "value": 14,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "catorze"
+   },
+   {
+    "value": 15,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quinze"
+   },
+   {
+    "value": 16,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dezasseis"
+   },
+   {
+    "value": 17,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dezassete"
+   },
+   {
+    "value": 18,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dezoito"
+   },
+   {
+    "value": 19,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dezanove"
+   },
+   {
+    "value": 20,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "vinte"
+   },
+   {
+    "value": 21,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "vinte e uma"
+   },
+   {
+    "value": 25,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "vinte e cinco"
+   },
+   {
+    "value": 29,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "vinte e nove"
+   },
+   {
+    "value": 30,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trinta"
+   },
+   {
+    "value": 31,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trinta e uma"
+   },
+   {
+    "value": 39,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trinta e nove"
+   },
+   {
+    "value": 40,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quarenta"
+   },
+   {
+    "value": 41,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quarenta e uma"
+   },
+   {
+    "value": 49,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quarenta e nove"
+   },
+   {
+    "value": 50,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cinquenta"
+   },
+   {
+    "value": 51,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cinquenta e uma"
+   },
+   {
+    "value": 59,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cinquenta e nove"
+   },
+   {
+    "value": 60,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sessenta"
+   },
+   {
+    "value": 61,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sessenta e uma"
+   },
+   {
+    "value": 69,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "sessenta e nove"
+   },
+   {
+    "value": 70,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setenta"
+   },
+   {
+    "value": 71,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setenta e uma"
+   },
+   {
+    "value": 79,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setenta e nove"
+   },
+   {
+    "value": 80,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "oitenta"
+   },
+   {
+    "value": 81,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "oitenta e uma"
+   },
+   {
+    "value": 89,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "oitenta e nove"
+   },
+   {
+    "value": 90,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "noventa"
+   },
+   {
+    "value": 91,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "noventa e uma"
+   },
+   {
+    "value": 99,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "noventa e nove"
+   },
+   {
+    "value": 100,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cem"
+   },
+   {
+    "value": 101,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cento e uma"
+   },
+   {
+    "value": 102,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cento e duas"
+   },
+   {
+    "value": 199,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cento e noventa e nove"
+   },
+   {
+    "value": 200,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "duzentas"
+   },
+   {
+    "value": 201,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "duzentas e uma"
+   },
+   {
+    "value": 299,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "duzentas e noventa e nove"
+   },
+   {
+    "value": 300,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trezentas"
+   },
+   {
+    "value": 301,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trezentas e uma"
+   },
+   {
+    "value": 399,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "trezentas e noventa e nove"
+   },
+   {
+    "value": 400,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quatrocentas"
+   },
+   {
+    "value": 401,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quatrocentas e uma"
+   },
+   {
+    "value": 499,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quatrocentas e noventa e nove"
+   },
+   {
+    "value": 500,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quinhentas"
+   },
+   {
+    "value": 501,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quinhentas e uma"
+   },
+   {
+    "value": 599,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "quinhentas e noventa e nove"
+   },
+   {
+    "value": 600,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seiscentas"
+   },
+   {
+    "value": 601,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seiscentas e uma"
+   },
+   {
+    "value": 699,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "seiscentas e noventa e nove"
+   },
+   {
+    "value": 700,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setecentas"
+   },
+   {
+    "value": 701,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setecentas e uma"
+   },
+   {
+    "value": 799,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "setecentas e noventa e nove"
+   },
+   {
+    "value": 800,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "oitocentas"
+   },
+   {
+    "value": 801,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "oitocentas e uma"
+   },
+   {
+    "value": 899,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "oitocentas e noventa e nove"
+   },
+   {
+    "value": 900,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecentas"
+   },
+   {
+    "value": 901,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecentas e uma"
+   },
+   {
+    "value": 999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecentas e noventa e nove"
+   },
+   {
+    "value": 1000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "mil"
+   },
+   {
+    "value": 1001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "mil e uma"
+   },
+   {
+    "value": 1999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "mil novecentas e noventa e nove"
+   },
+   {
+    "value": 2000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "duas mil"
+   },
+   {
+    "value": 2001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "duas mil e uma"
+   },
+   {
+    "value": 5000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cinco mil"
+   },
+   {
+    "value": 10000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dez mil"
+   },
+   {
+    "value": 100000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "cem mil"
+   },
+   {
+    "value": 999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecentas e noventa e nove mil novecentas e noventa e nove"
+   },
+   {
+    "value": 1000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um milhão"
+   },
+   {
+    "value": 1000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um milhão e uma"
+   },
+   {
+    "value": 2000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "dois milhões"
+   },
+   {
+    "value": 999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecentos e noventa e nove milhões novecentas e noventa e nove mil novecentas e noventa e nove"
+   },
+   {
+    "value": 1000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um mil milhões"
+   },
+   {
+    "value": 1000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um mil milhões e uma"
+   },
+   {
+    "value": 999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecentos e noventa e nove mil milhões novecentos e noventa e nove milhões novecentas e noventa e nove mil novecentas e noventa e nove"
+   },
+   {
+    "value": 1000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um bilião"
+   },
+   {
+    "value": 1000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um bilião e uma"
+   },
+   {
+    "value": 999999999999999,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "novecentos e noventa e nove biliões novecentos e noventa e nove mil milhões novecentos e noventa e nove milhões novecentas e noventa e nove mil novecentas e noventa e nove"
+   },
+   {
+    "value": 1000000000000000,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um mil biliões"
+   },
+   {
+    "value": 1000000000000001,
+    "gender": "f",
+    "ruleset": "%spellout-cardinal-feminine",
+    "expect": "um mil biliões e uma"
+   },
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "menos um"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "zero"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "um"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dois"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "três"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quatro"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinco"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "seis"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sete"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "oito"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "nove"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dez"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "onze"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "doze"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "treze"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "catorze"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quinze"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dezasseis"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dezassete"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dezoito"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dezanove"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vinte"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vinte e um"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "vinte e cinco"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trinta"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quarenta"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinquenta"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "sessenta"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "setenta"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "oitenta"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "noventa"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "noventa e nove"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cem"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cento e um"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "duzentos"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "trezentos"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "quinhentos"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mil"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "mil e um"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dois mil"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cinco mil"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dez mil"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "cem mil"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "um milhão"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-numbering",
+    "expect": "dois milhões"
+   }
+  ],
+  "sv": [
+   {
+    "value": -1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "minus ett"
+   },
+   {
+    "value": 0,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "noll"
+   },
+   {
+    "value": 1,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ett"
+   },
+   {
+    "value": 2,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "två"
+   },
+   {
+    "value": 3,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tre"
+   },
+   {
+    "value": 4,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fyra"
+   },
+   {
+    "value": 5,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fem"
+   },
+   {
+    "value": 6,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sex"
+   },
+   {
+    "value": 7,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sju"
+   },
+   {
+    "value": 8,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "åtta"
+   },
+   {
+    "value": 9,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nio"
+   },
+   {
+    "value": 10,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tio"
+   },
+   {
+    "value": 11,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "elva"
+   },
+   {
+    "value": 12,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tolv"
+   },
+   {
+    "value": 13,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tretton"
+   },
+   {
+    "value": 14,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fjorton"
+   },
+   {
+    "value": 15,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femton"
+   },
+   {
+    "value": 16,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sexton"
+   },
+   {
+    "value": 17,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sjutton"
+   },
+   {
+    "value": 18,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "arton"
+   },
+   {
+    "value": 19,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nitton"
+   },
+   {
+    "value": 20,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tjugo"
+   },
+   {
+    "value": 21,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tjugoett"
+   },
+   {
+    "value": 25,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tjugofem"
+   },
+   {
+    "value": 30,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trettio"
+   },
+   {
+    "value": 40,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "fyrtio"
+   },
+   {
+    "value": 50,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femtio"
+   },
+   {
+    "value": 60,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sextio"
+   },
+   {
+    "value": 70,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "sjuttio"
+   },
+   {
+    "value": 80,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "åttio"
+   },
+   {
+    "value": 90,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nittio"
+   },
+   {
+    "value": 99,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "nittionio"
+   },
+   {
+    "value": 100,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "etthundra"
+   },
+   {
+    "value": 101,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "etthundraett"
+   },
+   {
+    "value": 200,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tvåhundra"
+   },
+   {
+    "value": 300,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "trehundra"
+   },
+   {
+    "value": 500,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femhundra"
+   },
+   {
+    "value": 1000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ettusen"
+   },
+   {
+    "value": 1001,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "ettusen ett"
+   },
+   {
+    "value": 2000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tvåtusen"
+   },
+   {
+    "value": 5000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "femtusen"
+   },
+   {
+    "value": 10000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "tiotusen"
+   },
+   {
+    "value": 100000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "etthundratusen"
+   },
+   {
+    "value": 1000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "en miljon"
+   },
+   {
+    "value": 2000000,
+    "gender": null,
+    "ruleset": "%spellout-cardinal-neuter",
+    "expect": "två miljoner"
+   }
+  ]
+ }
+}

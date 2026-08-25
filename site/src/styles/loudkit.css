@@ -1,0 +1,1328 @@
+/*
+  loudkit — site theme.
+
+  loudkit is LoudReader's engine, so the site carries LoudReader's ethos:
+  light, editorial, calm. Cream page, near-black ink, warm-gray body copy,
+  typography doing the talking. No glows, no neon, no heavy chrome. The only
+  strong shape on the page is a black pill button.
+
+  Light is the primary theme. Starlight's dark toggle still has to look
+  deliberate, so dark is the same palette inverted into warm ink rather than
+  a separate design.
+
+  This file only sets Starlight's own custom properties plus a small set of
+  `lk-` prefixed classes used by the landing page. No Starlight component is
+  overridden, so the sidebar, the search dialog, the theme toggle and the
+  generated docs pages keep working exactly as they did.
+*/
+
+/* ------------------------------------------------------------------ *
+ * Tokens
+ * ------------------------------------------------------------------ */
+
+:root {
+  /* Typography, taken from loudreader.io: Inter carries everything, body
+     and headline alike, and Space Grotesk appears only as an accent face on
+     eyebrows and the wordmark. Both are bundled — see astro.config.mjs.
+     Starlight composes --sl-font / --sl-font-mono into --__sl-font itself. */
+  --sl-font: 'Inter Variable', Inter, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --sl-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco,
+    Consolas, 'Liberation Mono', monospace;
+  --lk-font-display: 'Inter Variable', Inter, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --lk-font-accent: 'Space Grotesk', 'Inter Variable', Inter, system-ui,
+    sans-serif;
+
+  --lk-radius: 14px;
+  --lk-radius-sm: 10px;
+}
+
+/* --- Light: the primary theme -------------------------------------- */
+
+:root,
+:root[data-theme='light'],
+::backdrop,
+[data-theme='light'] ::backdrop {
+  /* `white` is Starlight's strongest text colour, so in light mode it is
+     the ink — loudreader.io's #111827. `black` is the page, their #f7f5f2.
+     Body copy is their #1a1a1a, which Starlight reads as gray-2. */
+  --sl-color-white: #111827;
+  --sl-color-gray-1: #16202f;
+  --sl-color-gray-2: #1a1a1a;
+  --sl-color-gray-3: #5f5b57;
+  --sl-color-gray-4: #8c8781;
+  --sl-color-gray-5: #d9d4cd;
+  --sl-color-gray-6: #ece8e2;
+  --sl-color-gray-7: #f2efea;
+  --sl-color-black: #f7f5f2;
+
+  /* One restrained accent for links, pulled down from the same hue as the
+     #111827 ink so it reads as the ink rather than as a brand colour.
+     Clears 7:1 on the cream page. */
+  --sl-color-accent-low: #dfe5f2;
+  --sl-color-accent: hsl(221 55% 36%);
+  --sl-color-accent-high: hsl(221 58% 26%);
+
+  --sl-color-hairline-light: #e4e0d9;
+  --sl-color-hairline: #ebe7e0;
+  --sl-color-bg-inline-code: #ece8e2;
+  --sl-color-backdrop-overlay: hsl(30 8% 40% / 0.55);
+
+  /* The CTA is pure black on white text, as on loudreader.io. */
+  --lk-ink: #000;
+  --lk-on-ink: #fff;
+  --lk-surface: #fdfcfa;
+  --lk-surface-tint: #f1eee9;
+  --lk-border: #e2ded7;
+  --lk-border-soft: #ebe7e0;
+  --lk-shadow: 0 1px 2px hsl(30 10% 20% / 0.04),
+    0 8px 24px -18px hsl(30 10% 20% / 0.3);
+
+  color-scheme: light;
+}
+
+/* --- Dark: the same palette as warm ink, not pure black ------------ */
+
+:root[data-theme='dark'],
+[data-theme='dark'] ::backdrop {
+  /* Derived from the light palette rather than invented: the page takes
+     the #111827 ink's hue and drops it to a deep slate, and the cream
+     becomes the text. Not pure black, as asked. */
+  --sl-color-white: hsl(40 24% 96%);
+  --sl-color-gray-1: hsl(38 12% 89%);
+  --sl-color-gray-2: hsl(36 8% 78%);
+  --sl-color-gray-3: hsl(34 6% 61%);
+  --sl-color-gray-4: hsl(30 6% 45%);
+  --sl-color-gray-5: hsl(222 10% 27%);
+  --sl-color-gray-6: hsl(222 15% 16%);
+  --sl-color-black: hsl(222 20% 10%);
+
+  --sl-color-accent-low: hsl(221 40% 22%);
+  --sl-color-accent: hsl(218 70% 74%);
+  --sl-color-accent-high: hsl(218 72% 85%);
+
+  --sl-color-hairline-light: hsl(222 12% 28%);
+  --sl-color-hairline: hsl(222 14% 19%);
+  --sl-color-bg-inline-code: hsl(222 14% 18%);
+  --sl-color-backdrop-overlay: hsl(222 22% 6% / 0.7);
+
+  /* The CTA inverts: white pill, ink text. */
+  --lk-ink: #fff;
+  --lk-on-ink: hsl(222 22% 9%);
+  /* Two steps above the page's 10%, not one: at 13%/16% the cards read as
+     outlines on flat black where the light theme reads as paper on cream. */
+  --lk-surface: hsl(222 16% 15%);
+  --lk-surface-tint: hsl(222 15% 18%);
+  --lk-border: hsl(222 12% 23%);
+  --lk-border-soft: hsl(222 13% 19%);
+  --lk-shadow: 0 1px 2px hsl(0 0% 0% / 0.25),
+    0 8px 24px -18px hsl(0 0% 0% / 0.6);
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------ *
+ * Chrome: header, sidebar, headings
+ * ------------------------------------------------------------------ */
+
+body {
+  background: var(--sl-color-bg);
+}
+
+/* Keep any future Starlight announcement quiet: tinted surface, body-gray
+   text and a hairline rule instead of the stock solid accent bar. */
+:root {
+  --sl-color-banner-bg: var(--lk-surface-tint);
+  --sl-color-banner-text: var(--sl-color-gray-2);
+}
+
+.sl-banner {
+  background: var(--lk-surface-tint);
+  color: var(--sl-color-gray-2);
+  border-block-end: 1px solid var(--lk-border-soft);
+  box-shadow: none;
+  font-size: var(--sl-text-sm);
+  font-weight: 400;
+}
+
+.sl-banner a {
+  color: var(--sl-color-white);
+}
+
+header.header {
+  background: color-mix(in srgb, var(--sl-color-bg) 82%, transparent);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  border-bottom: 1px solid var(--lk-border-soft);
+}
+
+:root {
+  --sl-color-bg-nav: transparent;
+  --sl-color-bg-sidebar: transparent;
+}
+
+/* Space Grotesk earns its keep on the wordmark and the section eyebrows,
+   and nowhere else. Inter carries the rest of the site. */
+.site-title {
+  font-family: var(--lk-font-accent);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  /* It is an anchor, so it otherwise inherits the link accent. */
+  color: var(--sl-color-white);
+}
+
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.sl-markdown-content h4,
+.content-panel h1,
+.hero h1 {
+  font-family: var(--lk-font-display);
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
+.sl-markdown-content h2 {
+  padding-block-end: 0.3em;
+  border-block-end: 1px solid var(--lk-border-soft);
+}
+
+.sl-markdown-content blockquote:not(:where(.not-content *)) {
+  border-inline-start-color: var(--lk-border);
+}
+
+/* Sidebar: quiet, with a single ink rule marking the current page. */
+.sidebar-content a {
+  border-radius: var(--lk-radius-sm);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+  background: var(--lk-surface-tint);
+  color: var(--sl-color-white);
+  box-shadow: inset 2px 0 0 var(--sl-color-white);
+}
+
+site-search button[data-open-modal] {
+  border-radius: 999px;
+  border-color: var(--lk-border);
+  background: var(--lk-surface);
+  transition: border-color 0.18s ease;
+}
+site-search button[data-open-modal]:hover {
+  border-color: var(--sl-color-gray-4);
+}
+
+.expressive-code .frame pre,
+.sl-markdown-content pre {
+  border-radius: var(--lk-radius-sm);
+}
+
+.sl-markdown-content a:not(:where(.not-content *)) {
+  text-underline-offset: 0.2em;
+}
+
+/* Links that leave the site say so.
+ *
+ * Most of the repository's markdown links resolve to a page here, but the
+ * ones pointing at source, schemas, the licence or docs/design/ resolve to a
+ * GitHub blob instead (see src/plugins/remark-repo-links.mjs, which also
+ * gives each of them a `title` of "on GitHub"). The arrow is the visible half
+ * of that, scoped to page bodies so the header's GitHub icon keeps its own
+ * shape. The empty alt text after the slash keeps a screen reader from
+ * announcing "north east arrow" on every such link; the title carries the
+ * meaning there. */
+.sl-markdown-content a[href^="https://github.com"]:not(:where(.not-content *))::after {
+  content: '\2197' / '';
+  display: inline-block;
+  margin-inline-start: 0.15em;
+  font-size: 0.85em;
+  text-decoration: none;
+  color: var(--sl-color-gray-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * Landing page
+ * ------------------------------------------------------------------ */
+
+/* The landing page wants the full width; docs pages keep 45rem. */
+:root:has(.lk-landing) {
+  --sl-content-width: 64rem;
+}
+
+/* Splash pages put 1.5rem between top-level blocks. The landing page
+   controls its own rhythm. */
+.lk-landing {
+  margin-top: 0 !important;
+}
+/* Starlight's markdown stylesheet puts `margin-top: 1rem` between any two
+   adjacent elements at any depth inside .sl-markdown-content. That is right
+   for prose and wrong for a page laid out with grid gaps — it shifted every
+   card except the first one in each row. Reset it and let the rules below
+   put back the margins this page actually wants. This is unlayered, so it
+   beats Starlight's layered rule regardless of specificity, and it has to
+   stay above them so source order resolves the ties. */
+.lk-landing :where(*) {
+  margin-top: 0;
+}
+
+.lk-landing section {
+  padding-block: clamp(3.5rem, 8vw, 6.5rem);
+  border-block-start: 1px solid var(--lk-border-soft);
+}
+
+.lk-eyebrow {
+  font-family: var(--lk-font-accent);
+  font-weight: 500;
+  font-size: var(--sl-text-2xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  margin-block-end: 1rem;
+}
+
+.lk-section-head {
+  max-width: 44rem;
+  margin-block-end: 2.5rem;
+}
+
+.lk-section-head h2 {
+  font-family: var(--lk-font-display);
+  font-size: clamp(1.9rem, 1rem + 3vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  color: var(--sl-color-white);
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.lk-section-head h2 {
+  text-wrap: balance;
+}
+
+/* Sections are short: headline plus two sentences. A lede set at 58ch and
+   left to break where it lands ends on a two-word orphan line. `pretty`
+   fixes the last line and nothing else; `balance` is the fallback for
+   engines that only have that. The measure is tighter for the same
+   reason — a shorter line has fewer ways to end badly. */
+/* The lede, not every paragraph: .lk-eyebrow is a <p> here too, and this
+   rule outranked its own font-size and rendered it at 18px. */
+.lk-section-head p:not(.lk-eyebrow) {
+  margin-block-start: 0.9rem;
+  color: var(--sl-color-gray-3);
+  font-size: var(--sl-text-lg);
+  line-height: 1.6;
+  max-width: 52ch;
+  text-wrap: balance;
+  text-wrap: pretty;
+}
+
+/* One line under a section, explaining a unit the figures above all use. */
+.lk-section-foot {
+  margin-block-start: 1.25rem;
+  font-size: var(--sl-text-xs);
+  line-height: 1.65;
+  color: var(--sl-color-gray-3);
+  max-width: 70ch;
+}
+
+/* --- Pills --------------------------------------------------------- */
+
+.lk-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.32rem 0.85rem;
+  border-radius: 999px;
+  background: var(--lk-surface-tint);
+  border: 1px solid var(--lk-border-soft);
+  font-size: var(--sl-text-xs);
+  font-weight: 500;
+  color: var(--sl-color-gray-2);
+  white-space: nowrap;
+}
+
+/* Middot separators between the words inside one pill. */
+.lk-pill i {
+  font-style: normal;
+  color: var(--sl-color-gray-4);
+}
+
+/* --- Hero ---------------------------------------------------------- */
+
+.hero {
+  padding-block: clamp(2.5rem, 9vmin, 6rem) clamp(2rem, 6vmin, 4.5rem) !important;
+  grid-template-columns: 100% !important;
+}
+
+/* The headline is the design. Very large, heavy, tight, near-black, and
+   short enough to break onto three lines on a wide screen. */
+/* loudreader.io's headline spec: Inter 700, 72px at desktop, -0.025em,
+   line-height 0.95, in the #111827 ink. */
+.hero h1 {
+  font-family: var(--lk-font-display);
+  font-weight: 700;
+  font-size: clamp(2.5rem, 1rem + 5.6vw, 4.5rem) !important;
+  letter-spacing: -0.025em;
+  line-height: 0.95;
+  color: var(--sl-color-white);
+  max-width: 17ch;
+  text-wrap: balance;
+}
+
+/* Starlight caps every hero-copy child at 50ch. The lede wants that cap;
+   the pill row underneath it does not, so the cap moves inward. */
+.hero .copy > .tagline {
+  max-width: none;
+  width: 100%;
+}
+
+.hero .tagline .lk-lede {
+  margin-block: 0;
+  margin-inline: auto;
+  font-size: clamp(1.05rem, 0.95rem + 0.45vw, 1.3rem);
+  line-height: 1.6;
+  color: var(--sl-color-gray-3);
+  /* 42ch, not 48ch: the wider measure left "it on." alone on a third line. */
+  max-width: 42ch;
+  text-wrap: balance;
+  text-wrap: pretty;
+}
+
+.lk-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  align-items: center;
+  justify-content: center;
+  margin-block-start: 1.4rem;
+}
+
+@media (min-width: 50rem) {
+  .hero .tagline .lk-lede {
+    margin-inline: 0;
+  }
+  .lk-hero-meta {
+    justify-content: flex-start;
+  }
+}
+
+/* One black rounded-rect CTA; everything else is plain text. */
+.hero .actions {
+  align-items: center;
+}
+
+.hero .actions a {
+  border-radius: var(--lk-radius);
+  font-weight: 600;
+  transition: opacity 0.18s ease, background-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.hero .actions a.primary,
+.hero .actions a.primary:hover {
+  background: var(--lk-ink);
+  border-color: var(--lk-ink);
+  color: var(--lk-on-ink);
+  padding: 0.75rem 1.5rem;
+  box-shadow: var(--lk-shadow);
+}
+
+.hero .actions a.primary:hover {
+  opacity: 0.86;
+}
+
+.hero .actions a.minimal {
+  padding-inline: 0.25rem;
+  color: var(--sl-color-gray-2);
+  text-decoration: underline;
+  text-decoration-color: var(--sl-color-gray-4);
+  text-underline-offset: 0.25em;
+}
+
+.hero .actions a.minimal:hover {
+  color: var(--sl-color-white);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-card:hover,
+  .lk-link:hover,
+  .hero .actions a:hover {
+    transform: none;
+  }
+}
+
+/* --- Platform cards ------------------------------------------------ */
+
+/* CUDA takes the whole first row and the other three share the second, so
+   there is no orphan card and the featured backend is unmissable. */
+.lk-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 52rem) {
+  .lk-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.lk-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.5rem 1.5rem 1.6rem;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius);
+  background: var(--lk-surface);
+  box-shadow: var(--lk-shadow);
+  transition: border-color 0.22s ease, transform 0.22s ease;
+}
+
+.lk-card:hover {
+  border-color: var(--lk-border);
+  transform: translateY(-2px);
+}
+
+.lk-card h3 {
+  margin: 0;
+  font-family: var(--lk-font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+  line-height: 1.2;
+}
+
+.lk-card p {
+  margin: 0;
+  font-size: var(--sl-text-sm);
+  line-height: 1.65;
+  color: var(--sl-color-gray-3);
+}
+
+.lk-landing code {
+  font-size: 0.85em;
+}
+
+.lk-card .lk-req {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+  letter-spacing: 0.01em;
+  color: var(--sl-color-gray-3);
+}
+
+/* The measured figure is the point of the card, so it is set like one:
+   number on its own line, caption underneath rather than beside it, which
+   is the only way the caption does not wrap into a column of scraps. */
+.lk-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  margin-block: 0.2rem 0.1rem;
+  font-family: var(--lk-font-display);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-size: 2.4rem;
+  line-height: 0.95;
+  color: var(--sl-color-white);
+}
+
+.lk-metric span {
+  font-family: var(--sl-font);
+  font-weight: 500;
+  font-size: var(--sl-text-2xs);
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--sl-color-gray-3);
+}
+
+/* CUDA gets the full first row and the tinted ground — the owner's ask,
+   and also where the fastest measured row lives. */
+.lk-card--feature {
+  grid-column: 1 / -1;
+  background: var(--lk-surface-tint);
+  border-color: var(--lk-border);
+}
+
+.lk-card--feature .lk-metric {
+  font-size: 3.4rem;
+}
+
+@media (min-width: 52rem) {
+  .lk-card--feature {
+    padding: 1.75rem 1.75rem 1.85rem;
+  }
+}
+
+/* --- The CUDA card's host table ------------------------------------- */
+
+/* One table, every measured host, both execution modes side by side. It used
+   to be two tabs — graphs hosts in one, eager hosts in the other — and a
+   reader owning a Pascal card could not find their hardware anywhere: the
+   1080 Ti measures eager 1.95x while its graphs run falls back to eager, so
+   it belonged to both lists and sat in neither cleanly. */
+.lk-bench {
+  /* Starlight's markdown CSS gives tables `display: block`, which lets the
+     rows shrink to min-content inside a full-width box. */
+  display: table;
+  width: 100%;
+  margin-block-start: 1.35rem;
+  border-collapse: collapse;
+  font-size: var(--sl-text-xs);
+}
+
+.lk-bench th {
+  padding: 0.3rem 0.5rem;
+  border-block-end: 1px solid var(--lk-border);
+  text-align: left;
+  font-family: var(--lk-font-accent);
+  font-weight: 500;
+  font-size: var(--sl-text-2xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+.lk-bench td {
+  padding: 0.42rem 0.5rem;
+  color: var(--sl-color-gray-3);
+}
+
+.lk-bench td:first-child {
+  color: var(--sl-color-gray-2);
+}
+
+.lk-bench th:nth-child(n + 2),
+.lk-bench td:nth-child(n + 2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.lk-bench-note {
+  margin: 0.45rem 0 0;
+  font-size: var(--sl-text-2xs);
+  color: var(--sl-color-gray-3);
+}
+
+/* --- Batch throughput strip ---------------------------------------- */
+
+/* This is a second, incompatible family of measurement — generator-only,
+   aggregated over N utterances — and docs/benchmarks.md is careful to keep
+   the families apart. On the card it is its own labelled segment, carrying
+   the sentence that says what it counts, rather than a figure standing next
+   to a latency number as if the two were one scale. */
+
+/* The batch figures sit under the host table, so they get a rule and a label
+   of their own. The label names the host and the mode the batch numbers were
+   measured with. The grouping is presentational; the attribution is not. */
+.lk-batch {
+  margin-block-start: 1.6rem;
+  padding-block-start: 1.2rem;
+  border-block-start: 1px solid var(--lk-border);
+}
+
+.lk-batch-label {
+  margin: 0 0 0.5rem;
+  font-family: var(--lk-font-accent);
+  font-weight: 500;
+  font-size: var(--sl-text-2xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+.lk-batch-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  margin-block-start: 0.85rem;
+}
+
+.lk-batch-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface);
+  border: 1px solid var(--lk-border-soft);
+}
+
+.lk-batch-step b {
+  font-family: var(--lk-font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  color: var(--sl-color-white);
+}
+
+.lk-batch-step span {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+  color: var(--sl-color-gray-3);
+}
+
+/* Batch 32 upward is where the eye should land, so those two steps get a
+   drawn border and a full-ink caption while the rest stay quiet. */
+.lk-batch-step:nth-child(n + 4) {
+  border-color: var(--sl-color-gray-4);
+}
+
+.lk-batch-step:nth-child(n + 4) span {
+  color: var(--sl-color-gray-3);
+}
+
+.lk-batch-note {
+  margin-block-start: 0.85rem;
+  font-size: var(--sl-text-2xs);
+  line-height: 1.65;
+  color: var(--sl-color-gray-3);
+  max-width: 92ch;
+}
+
+@media (max-width: 40rem) {
+  .lk-batch-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- SDK strip ----------------------------------------------------- */
+
+.lk-sdks {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.lk-sdk {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface);
+  transition: border-color 0.2s ease;
+}
+
+.lk-sdk:hover {
+  border-color: var(--lk-border);
+}
+
+.lk-sdk strong {
+  font-family: var(--lk-font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+}
+
+.lk-sdk span {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+  color: var(--sl-color-gray-3);
+}
+
+.lk-sdk em {
+  font-style: normal;
+  font-size: var(--sl-text-2xs);
+  font-family: var(--sl-font-mono);
+  color: var(--sl-color-gray-2);
+}
+
+/* --- Samples ------------------------------------------------------- */
+
+.lk-samples {
+  display: grid;
+  gap: 1.75rem;
+  align-items: center;
+  grid-template-columns: 1fr;
+  padding: 1.75rem;
+  border: 1px solid var(--lk-border);
+  border-radius: var(--lk-radius);
+  background: var(--lk-surface);
+}
+
+@media (min-width: 48rem) {
+  .lk-samples {
+    grid-template-columns: 1fr auto;
+    padding: 2.25rem 2.5rem;
+  }
+}
+
+.lk-samples p {
+  margin: 0;
+  color: var(--sl-color-gray-3);
+  font-size: var(--sl-text-sm);
+  line-height: 1.7;
+  max-width: 58ch;
+}
+
+.lk-samples h3 {
+  margin: 0 0 0.6rem;
+  font-family: var(--lk-font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+}
+
+/* Two playable samples as one A/B pair: side by side where there is room,
+   stacked where there is not. The players keep their card look; the pair
+   owns the vertical rhythm, so the players drop their own margins. */
+.lk-sample-pair {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 1fr;
+  margin-block: 1.1rem;
+}
+
+@media (min-width: 40rem) {
+  .lk-sample-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.lk-sample-pair .lk-sample {
+  margin-block: 0;
+}
+
+/* The playable sample. The button itself is `.lk-voice-play`, styled with
+   the roster grid further down, so all players look the same. */
+.lk-sample {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-block: 1.1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface-tint);
+}
+
+.lk-sample-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.lk-sample-body strong {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+
+.lk-sample-meta {
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+}
+
+.lk-sample-meta i {
+  font-style: normal;
+  color: var(--sl-color-gray-4);
+  padding-inline: 0.2em;
+}
+
+/* Two classes deep, because `.lk-samples p` above would otherwise win. */
+.lk-sample .lk-sample-line {
+  margin: 0.15rem 0 0;
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+}
+
+/* --- Next steps ---------------------------------------------------- */
+
+.lk-links {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+
+.lk-link {
+  display: block;
+  padding: 1.2rem 1.3rem;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface);
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.lk-link:hover {
+  border-color: var(--lk-border);
+  transform: translateY(-2px);
+}
+
+.lk-link strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: var(--lk-font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+}
+
+.lk-link strong::after {
+  content: '\2192';
+  color: var(--sl-color-gray-4);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.lk-link:hover strong::after {
+  transform: translateX(3px);
+  color: var(--sl-color-white);
+}
+
+.lk-link span {
+  display: block;
+  margin-block-start: 0.35rem;
+  font-size: var(--sl-text-xs);
+  line-height: 1.65;
+  color: var(--sl-color-gray-3);
+}
+
+/* --- Install tabs on the landing page ------------------------------ */
+
+.lk-landing starlight-tabs {
+  display: block;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius);
+  background: var(--lk-surface);
+  box-shadow: var(--lk-shadow);
+  overflow: hidden;
+}
+
+.lk-landing starlight-tabs .tablist-wrapper > ul {
+  border-block-end-color: var(--lk-border-soft);
+  padding-inline: 0.5rem;
+  margin: 0;
+}
+
+.lk-landing starlight-tabs .tab > [role='tab'][aria-selected='true'] {
+  color: var(--sl-color-white);
+  border-block-end-color: var(--sl-color-white);
+}
+
+.lk-landing starlight-tabs [role='tabpanel'] {
+  margin-block-start: 0;
+  padding: 0.75rem 1rem 1rem;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tables
+ * ------------------------------------------------------------------ */
+
+/* These documents carry wide reference tables — the voice roster is six
+   columns, the benchmark tables are seven — and a 45rem column is not wide
+   enough for them. Squeezing is the wrong answer: it wraps every cell to one
+   word per line and drives the row heights up until the table is unreadable.
+   So the columns keep a floor, the table keeps its natural widths, and the
+   overflow becomes a horizontal scroll on the wrapper that
+   src/plugins/rehype-table-scroll.mjs adds. */
+
+.sl-markdown-content .lk-table-scroll {
+  margin-block: 1.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface);
+}
+
+.sl-markdown-content .lk-table-scroll > table {
+  margin: 0;
+  width: 100%;
+  /* Without this the table stops at the wrapper's width and the columns that
+     cannot wrap spill outside their cells with no scrollbar to reach them —
+     the content is simply cut off. `min-content` on a table is the sum of the
+     columns' own minimums, which is exactly the width being asked for. */
+  min-width: min-content;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+}
+
+.sl-markdown-content .lk-table-scroll th,
+.sl-markdown-content .lk-table-scroll td {
+  /* 0.75rem, not 0.9rem: at 0.9rem the voice roster overflowed its wrapper
+     by a few pixels and grew a scrollbar for nothing. */
+  padding: 0.55rem 0.75rem;
+  vertical-align: top;
+  text-align: start;
+  border: 0;
+  border-block-end: 1px solid var(--lk-border-soft);
+}
+
+.sl-markdown-content .lk-table-scroll thead th {
+  position: sticky;
+  inset-block-start: 0;
+  background: var(--lk-surface-tint);
+  border-block-end: 1px solid var(--lk-border);
+  font-weight: 600;
+  font-size: var(--sl-text-xs);
+  letter-spacing: 0.02em;
+  color: var(--sl-color-gray-2);
+  white-space: nowrap;
+}
+
+.sl-markdown-content .lk-table-scroll tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+/* Written by src/plugins/rehype-table-scroll.mjs on every cell of a column
+   whose longest entry is short. Those columns take their natural width, the
+   prose column takes the rest, and the wrapper scrolls if the total still
+   does not fit. */
+.sl-markdown-content .lk-table-scroll .lk-nowrap {
+  white-space: nowrap;
+}
+
+/* Written by the same plugin on every cell of a column whose body cells are
+   all figures. Right-aligned tabular numerals, so a column of 2.16x / 8.12x
+   ranks at a glance, the way the landing page's .lk-bench already does. */
+.sl-markdown-content .lk-table-scroll th.lk-num,
+.sl-markdown-content .lk-table-scroll td.lk-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Written by the same plugin on a column headed "notes". The notes carry the
+   caveats, not the result, so they step back: smaller, quieter, and capped so
+   the numeric columns lead the row. The width is a preferred width in the
+   table's auto layout, not a hard cap, which is all the cap needs to be. */
+.sl-markdown-content .lk-table-scroll td.lk-notes {
+  width: 24rem;
+  font-size: var(--sl-text-xs);
+  line-height: 1.55;
+  color: var(--sl-color-gray-3);
+}
+
+.sl-markdown-content .lk-table-scroll td.lk-notes code {
+  font-size: 0.85em;
+}
+
+.sl-markdown-content .lk-table-scroll td:first-child {
+  color: var(--sl-color-gray-2);
+}
+
+.sl-markdown-content .lk-table-scroll td code {
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Voice grid
+ * ------------------------------------------------------------------ */
+
+.lk-voices {
+  margin-block: 1.75rem 2.5rem;
+}
+
+.lk-voices-heading {
+  margin: 0 0 0.5rem;
+  font-family: var(--lk-font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--sl-color-white);
+}
+
+.lk-voices-note {
+  margin: 0;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+}
+
+.lk-voice-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-block: 1.1rem 1.25rem;
+}
+
+.lk-voice-filter {
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--lk-border-soft);
+  background: var(--lk-surface);
+  color: var(--sl-color-gray-2);
+  font: inherit;
+  font-size: var(--sl-text-xs);
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.lk-voice-filter span {
+  color: var(--sl-color-gray-3);
+}
+
+.lk-voice-filter:hover {
+  border-color: var(--sl-color-gray-4);
+}
+
+/* The selected filter is the one strong shape in this block, so it takes the
+   same ink pill the hero CTA uses. */
+.lk-voice-filter[aria-pressed='true'] {
+  background: var(--lk-ink);
+  border-color: var(--lk-ink);
+  color: var(--lk-on-ink);
+}
+
+.lk-voice-filter[aria-pressed='true'] span {
+  color: var(--lk-on-ink);
+  opacity: 0.65;
+}
+
+.lk-voice-grid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lk-voice {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface);
+  transition: border-color 0.2s ease;
+}
+
+.lk-voice:hover {
+  border-color: var(--lk-border);
+}
+
+.lk-voice[hidden] {
+  display: none;
+}
+
+.lk-voice-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--lk-border);
+  background: var(--lk-surface-tint);
+  color: var(--sl-color-white);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.lk-voice-play:hover {
+  border-color: var(--sl-color-gray-4);
+}
+
+/* Play is a triangle drawn with a border; stop is a square. One element,
+   two shapes, no icon font and no inline SVG per card. */
+.lk-voice-icon {
+  width: 0;
+  height: 0;
+  margin-inline-start: 0.18em;
+  border-block: 0.4rem solid transparent;
+  border-inline-start: 0.62rem solid currentColor;
+  border-inline-end: 0;
+}
+
+.lk-voice-play.is-playing {
+  background: var(--lk-ink);
+  border-color: var(--lk-ink);
+  color: var(--lk-on-ink);
+}
+
+.lk-voice-play.is-playing .lk-voice-icon {
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-inline-start: 0;
+  border: 0;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.lk-voice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.lk-voice-body strong {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+
+.lk-voice-meta {
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+}
+
+.lk-voice-meta i {
+  font-style: normal;
+  color: var(--sl-color-gray-4);
+  padding-inline: 0.2em;
+}
+
+.lk-voices-foot {
+  margin-block-start: 1rem;
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-voice,
+  .lk-voice-filter,
+  .lk-voice-play {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Reference-and-generated pairs
+ *
+ * One card per voice, holding two players of equal weight. Neither clip is
+ * the subject: the pair is. The two clips therefore share one row and one
+ * width, and the text they read sits under both rather than under either.
+ * ------------------------------------------------------------------ */
+
+.lk-pairs {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr));
+  margin-block: 1.75rem 2rem;
+}
+
+.lk-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.1rem 1.2rem 1.2rem;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface);
+}
+
+.lk-pair-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.lk-pair-head strong {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+
+.lk-pair-clips {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.lk-pair-clip {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--lk-border-soft);
+  border-radius: var(--lk-radius-sm);
+  background: var(--lk-surface-tint);
+}
+
+.lk-pair-clip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.lk-pair-clip-body strong {
+  font-size: var(--sl-text-xs);
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+
+.lk-pair-clip-body span {
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+}
+
+/* The sentence both clips speak. Set larger than the labels around it,
+   because it is the only content on the card a reader also hears. */
+.lk-pair-text {
+  margin: 0;
+  font-size: var(--sl-text-sm);
+  line-height: 1.6;
+  color: var(--sl-color-gray-2);
+}
+
+.lk-pair-work,
+.lk-pair-similarity {
+  margin: 0;
+  font-size: var(--sl-text-xs);
+  line-height: 1.6;
+  color: var(--sl-color-gray-3);
+}
+
+.lk-pair-similarity {
+  padding-block-start: 0.7rem;
+  border-block-start: 1px solid var(--lk-border-soft);
+}
+
+.lk-pair-number {
+  font-family: var(--sl-font-mono);
+  font-weight: 600;
+  color: var(--sl-color-white);
+  margin-inline-end: 0.35em;
+}
+
+/* --- Colophon ------------------------------------------------------ *
+ * A quiet line closing the landing page, not a card. It states who ships
+ * the engine, which is context a reader weighing the project can use. It
+ * shares the closing band with "Responsible use" so the page ends once,
+ * not twice.
+ * ------------------------------------------------------------------- */
+
+.lk-colophon {
+  margin-block-start: 2.25rem;
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--lk-border-soft);
+  font-size: var(--sl-text-sm);
+  line-height: 1.7;
+  color: var(--sl-color-gray-3);
+  max-width: 44rem;
+}

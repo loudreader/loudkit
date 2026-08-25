@@ -1,0 +1,36 @@
+# Everything the image does not need. The build context is otherwise the whole
+# monorepo — four other language implementations, 1.1 GB of node_modules, the
+# docs and the benchmark output — and every byte of it is sent to the daemon
+# before the first layer is built.
+.git
+.github
+.venv
+.build
+.swiftpm
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+
+# The other four implementations. The image runs the Python one.
+swift/
+go/
+rust/
+js/
+Package.swift
+
+# Weights are never baked in: 1.27 GB versioned separately from the code, so a
+# new checkpoint would mean a new image. Mounted or fetched at run time.
+*.safetensors
+checkpoints/
+dist/
+out/
+jobs/
+
+docs/
+notebooks/
+Examples/
+openspec/
+tests/
+tools/

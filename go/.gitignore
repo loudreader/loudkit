@@ -1,0 +1,4 @@
+# Go build/test artifacts
+/loudkit
+*.test
+*.out

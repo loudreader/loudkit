@@ -1,0 +1,143 @@
+---
+/*
+  Reference in, generated out — for a few voices, as pairs.
+
+  The voice grid answers "what do the twenty sound like". It cannot answer
+  "what did the model get to hear first", because a grid of forty buttons is
+  unreadable. This component answers that one for a handful of voices: the
+  enrollment reference on the left, the seeded render on the right, the text
+  that was read underneath.
+
+  Every field is read at build time from docs/voices/roster/provenance.json —
+  the durations, the sentences, the works, the seeds and the speaker
+  similarities. Nothing on this page is written by hand, so a page claim
+  cannot outlive the roster it describes. A voice with no measured similarity
+  simply omits that line.
+
+  Both clips are files in the repository. Nothing is synthesized in the
+  browser. The audio is copied into the build by scripts/sync-docs.mjs, which
+  writes site/public/voices/*.opus and site/public/voices/refs/*.opus and is
+  gitignored.
+
+  Playback is the shared module in src/scripts/voice-player.ts, so a press
+  here stops a voice started anywhere else on the page — including the grid
+  further down the same page.
+*/
+import rosterJson from '../../../docs/voices/roster/provenance.json';
+
+interface Props {
+  /** Roster names, in the order they should be shown. */
+  voices: string[];
+}
+
+const { voices: wanted } = Astro.props;
+
+const roster = rosterJson as Array<{
+  name: string;
+  language: string;
+  language_id: string;
+  gender: string;
+  speaker_similarity?: number | null;
+  reference: { duration_s: number; construction: string };
+  sample: { seed: number; text: string; work: string; audio: string };
+}>;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+const pairs = wanted.map((name) => {
+  const v = roster.find((entry) => entry.name === name);
+  if (!v) throw new Error(`VoicePairs: no voice named "${name}" in the roster`);
+
+  const file = v.sample.audio.split('/').pop();
+
+  return {
+    name: v.name,
+    language: v.language,
+    languageId: v.language_id,
+    gender: v.gender === 'F' ? 'female' : 'male',
+    // One decimal: the roster records hundredths, which is more precision
+    // than a label about a ten-second clip can use.
+    duration: v.reference.duration_s.toFixed(1),
+    construction: v.reference.construction,
+    seed: v.sample.seed,
+    text: v.sample.text,
+    // "Title (Author) — public domain" in the roster; the licence tail is a
+    // provenance fact, not a caption — twenty repetitions of it teach nothing.
+    // SamplePlayer trims the same way.
+    work: v.sample.work.split('—')[0].trim(),
+    similarity: v.speaker_similarity ?? null,
+    referenceAudio: `${base}/voices/refs/${file}`,
+    generatedAudio: `${base}/voices/${file}`,
+  };
+});
+---
+
+<div class="lk-pairs not-content">
+  {
+    pairs.map((v) => (
+      <article class="lk-pair">
+        <header class="lk-pair-head">
+          <strong>{v.name}</strong>
+          <span class="lk-voice-meta">
+            {v.language} <i>&middot;</i> {v.gender}
+          </span>
+        </header>
+
+        <div class="lk-pair-clips">
+          <div class="lk-pair-clip">
+            <button
+              type="button"
+              class="lk-voice-play"
+              data-src={v.referenceAudio}
+              data-name={`the ${v.name} reference`}
+              aria-label={`Play the ${v.name} enrollment reference`}
+            >
+              <span class="lk-voice-icon" aria-hidden="true" />
+            </button>
+            <div class="lk-pair-clip-body">
+              <strong>Reference, {v.duration}&nbsp;s</strong>
+              <span>the enrollment input</span>
+            </div>
+          </div>
+
+          <div class="lk-pair-clip">
+            <button
+              type="button"
+              class="lk-voice-play"
+              data-src={v.generatedAudio}
+              data-name={`the ${v.name} sample`}
+              aria-label={`Play the generated ${v.name} sample`}
+            >
+              <span class="lk-voice-icon" aria-hidden="true" />
+            </button>
+            <div class="lk-pair-clip-body">
+              <strong>Generated, seed {v.seed}</strong>
+              <span>from the profile enrolled above</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="lk-pair-text" lang={v.languageId}>
+          {v.text}
+        </p>
+        <p class="lk-pair-work">{v.work}</p>
+
+        {v.similarity !== null && (
+          <p class="lk-pair-similarity">
+            {/* The space is explicit: the margin on .lk-pair-number separates the
+                two visually, and a screen reader reads the text, not the margin. */}
+            <span class="lk-pair-number">{v.similarity.toFixed(3)}</span>{' '}
+            speaker similarity: the cosine similarity between the speaker embedding of
+            the reference and the speaker embedding of the generated clip.
+          </p>
+        )}
+      </article>
+    ))
+  }
+</div>
+
+<script>
+  // The one player for the page, shared with the grid below and with the
+  // landing page's single sample.
+  import '../scripts/voice-player.ts';
+</script>

@@ -1,0 +1,53 @@
+---
+title: Demo
+description: >-
+  The full twenty-voice roster, playable. Enrollment reference next to
+  generated speech for six voices. The three lines that clone a new one.
+editUrl: https://github.com/loudreader/loudkit/edit/main/site/src/handwritten/demo.mdx
+---
+
+import VoicePairs from '../../components/VoicePairs.astro';
+import VoiceGrid from '../../components/VoiceGrid.astro';
+
+## Listen
+
+Twenty voices across ten languages, one seeded sample each. Filter by
+language, then press a name.
+
+<VoiceGrid />
+
+### From a recording to speech
+
+Each voice below is enrolled from one short recording. Press the left clip to
+hear that recording. Press the right clip to hear the same speaker read a
+sentence the recording never contained.
+
+Both clips are files in this repository. Nothing is generated in your browser.
+The reference is the audio the voice profile was enrolled from, at 48&nbsp;kHz
+mono. The generated clip is one seeded render on the reference path, so the
+same text, voice and seed are repeatable on the same build and backend.
+Different backends are checked against the project's measured parity bands.
+
+<VoicePairs voices={['joe', 'dave', 'henri', 'kerstin', 'paola', 'ines']} />
+
+Where a card shows a speaker similarity, that number is measured for the exact
+two clips the card plays. It is not measured for every voice, so the line is
+absent where there is no measurement. The figures, the sources, the licences and
+the hashes are in [Voices](/loudkit/voices/).
+
+### Voice cloning
+
+Ten seconds of clean audio is enough. A cloned voice is a file of tensors around
+150 KB, not a model.
+
+```python
+import loudkit as lk
+
+mine = lk.enroll("my-recording.wav", "loudreader/loudr-1", name="my-voice")
+mine.save("voices/my-voice.safetensors")
+```
+
+The weights this needs are published, so the snippet runs today. The method,
+the audio requirements and the measured similarity are in
+[Cloning a voice](/loudkit/guides/03-cloning-a-voice/). Consent is yours to
+obtain: [Responsible use](/loudkit/responsible-use/).

@@ -1,0 +1,7 @@
+# These files participate in the cross-language algorithm fingerprint. Git's
+# Windows checkout must not rewrite LF to CRLF, or the same release reports a
+# different algorithm identity on Windows than it does on Linux and macOS.
+python/loudkit/models/data/*.json text eol=lf
+go/speechtext/*.json text eol=lf
+rust/src/*.json text eol=lf
+swift/LoudKitText/Resources/*.json text eol=lf

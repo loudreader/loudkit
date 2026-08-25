@@ -1,0 +1,921 @@
+# CI for loudkit.
+#
+# Two layers, split by what they need rather than by what they run.
+#
+# `check` needs nothing — no weights, no GPU, no network — so it runs on every
+# push, on three operating systems, and it is the gate for a pull request. It
+# covers the algorithm layer: the sampler, the RNG against its published
+# vectors, the config split, chunking, and the engine's own control flow.
+#
+# `parity` needs every runtime and the public model release. It runs on an
+# isolated, hosted Apple-silicon runner and downloads a pinned Hugging Face
+# revision through LoudKit's own selective downloader. LOUDKIT_REQUIRE_ASSETS
+# turns any missing file or runtime into a failure instead of a skip. This is
+# slower than a private machine, but reproducible by anyone and gives public
+# workflow code no access to a maintainer's host or untracked model files.
+#
+# Third-party actions are pinned to commit SHAs rather than tags. A tag is a
+# movable pointer in someone else's repository: `@v4` before and after a
+# compromise are the same string and different code. The tag it was pinned
+# from is in the comment, so an upgrade stays a readable diff.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege, the same as release.yml. Nothing in this workflow
+# writes to the repository; the default token grants more than that.
+permissions:
+  contents: read
+
+# onnxruntime-node 1.27 bundles the CPU runtime but its postinstall also tries
+# to fetch optional CUDA libraries from a NuGet feed. CI exercises the portable
+# CPU package; a second registry download is both unrelated and a source of
+# timeouts after `npm ci` has already resolved the dependency tree.
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  check:
+    name: check (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Every version `requires-python = ">=3.10"` promises, not a sample of
+        # them. 3.10 is the floor. 3.13 is what a newcomer's `python3` most
+        # likely is, and the two in between are claimed by the range like any
+        # other. 3.14 is here because a range with an open top end whose
+        # newest admitted interpreter is never built is a promise nobody
+        # checked, and 3.14 is what a developer picking up this repository
+        # today already has: `.[dev]` resolves on it for all three runner
+        # platforms (numpy 2.3.5 under the `<2.4` cap, plus torch, tokenizers,
+        # safetensors, mcp and soundfile, all with cp314 wheels), and the
+        # no-weights suite runs there.
+        #
+        # `requires-python` stays open above 3.14 rather than being capped:
+        # this package has three runtime dependencies and a cap turns a
+        # working install into a resolver error the day 3.15 ships. What this
+        # matrix adds is the part a range cannot state on its own: that its
+        # newest admitted interpreter is one CI has actually run.
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          cache: pip
+          python-version: ${{ matrix.python }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check python tests tools integrations/speech-dispatcher
+
+      - name: Format check
+        run: ruff format --check python tests tools integrations/speech-dispatcher
+
+      - name: Types
+        run: mypy python/loudkit && mypy --config-file tools/mypy.ini tools/
+
+      - name: Tests
+        if: matrix.os != 'ubuntu-latest' || matrix.python != '3.12'
+        # -m "not slow" keeps this honest about what it covers: the weighted
+        # suites are the parity job's business, and pretending otherwise here
+        # would report green for tests that never ran.
+        run: pytest -m "not slow" -q
+
+      - name: Tests and coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        run: pytest -m "not slow" -q --cov --cov-report=term-missing
+        # `--cov` reads its floor from `[tool.coverage.report]`: 80,
+        # against 83 measured. pytest-cov was in the dev extra and nothing
+        # invoked it, so the number was nobody's and could only drift down.
+
+  clean-install:
+    # The editable install above shares the checkout's working directory, so a
+    # test can pass by reading a file the wheel does not ship. This job is the
+    # newcomer's path: build the wheel, install it in a bare environment, and
+    # import and run it from a directory that contains nothing else. What it
+    # catches is the class of failure that reads as "broken install" — a
+    # missing package-data entry, a protobuf stub newer than the pinned
+    # runtime, an import that only resolves inside the repo.
+    name: clean install
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist-ci .
+
+      - name: Install it where the repo is not
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install --upgrade pip
+          /tmp/clean/bin/pip install "$(ls dist-ci/*.whl)[server,grpc]"
+
+      - name: Import and run from an empty directory
+        working-directory: /tmp
+        run: |
+          /tmp/clean/bin/python -c "
+          import loudkit
+          import loudkit.transports.http
+          import loudkit.transports.grpc
+          import loudkit.proto.loudkit_pb2
+          from loudkit.errors import error_code
+          "
+          /tmp/clean/bin/loudkit --help
+          /tmp/clean/bin/loudkit speak --help
+
+  swift:
+    name: swift (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - name: Lint
+        # `swift build` and `swift test` and nothing else, so a force unwrap
+        # on a path the process does not control was nobody's job.
+        # `.swiftlint.yml` says why each rule is on or off: the first run's
+        # 227 findings turned out to be 178 idiomatic test force-unwraps and
+        # seven `try!` over literal regex patterns, which is correct Swift.
+        run: |
+          brew install swiftlint
+          swiftlint lint --quiet
+
+      - name: Build
+        run: swift build
+      - name: Test
+        # Every test target, not `--filter Conformance`: that filter ran
+        # LoudKitTests only, so `LoudKitText` — which carries the speech
+        # funnel and the respelling lexicon the other four ports are
+        # bit-parity ports *of* — was never even built here. All of it is
+        # weight-free; the parts needing a checkpoint skip themselves.
+        run: swift test
+
+  js:
+    name: js (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+    defaults:
+      run:
+        working-directory: js
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - run: npm ci
+      # The port had `tsc` and no linter, so what the type system does not
+      # object to was nobody's job. Its first run found two dead
+      # assignments, an unused import and a dead test helper.
+      - run: npm run lint
+      # Weight-free conformance: the fixture is resolved relative to the test
+      # file (not the CWD), so this passes from the js-ts dir or anywhere else.
+      - run: npm test
+
+      # `npm pack` from a clean checkout used to produce a two-file tarball —
+      # README and package.json, 1148 bytes — because `main`/`types` point at
+      # generated, gitignored directories and nothing built them first. It
+      # installs fine and fails at the first import, and no test of the source
+      # tree can see it. `prepack` builds and then refuses to pack a package
+      # missing dist/ or the respelling lexicon.
+      - name: The published tarball is importable
+        run: |
+          set -euo pipefail
+          npm pack --silent
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          npm init -y >/dev/null
+          npm install --silent "$GITHUB_WORKSPACE"/js/loudkit-*.tgz
+          node --input-type=module -e "
+            import { Engine } from 'loudkit';
+            import { lexicalRespelling } from 'loudkit';
+            if (typeof Engine !== 'function') throw new Error('Engine missing from the package');
+            if (lexicalRespelling('download', 'pl') !== 'dałnloud')
+              throw new Error('the Polish lexicon did not ship');
+            console.log('installed tarball OK');
+          "
+
+  go:
+    name: go (${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # go.mod declares 1.25 (x/text v0.40 requires it); testing anything
+        # older would fail on `go vet` before a single test ran.
+        go: ["1.25"]
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: ${{ matrix.go }}
+          # GOMODCACHE and the build cache, keyed on the module file. Off by
+          # default in this action's v5 unless a dependency path is given.
+          cache-dependency-path: go/go.sum
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        run: go vet ./...
+      # ./... rather than a hand-listed pair: the list silently skipped
+      # ./config/ and ./windowing/, so the regression tests guarding the
+      # recipe_version fallback and the pad-token error were never run by CI.
+      # Every package here is weight-free; the ones that need a checkpoint
+      # skip themselves.
+      - name: Weight-free conformance
+        run: go test ./... -v
+
+  rust:
+    name: rust (stable)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
+        with:
+          components: clippy, rustfmt
+      # `rust-toolchain` installs a toolchain and caches nothing, so every run
+      # re-downloaded the registry and rebuilt `ort`, `ndarray` and `regex` from
+      # source. Keyed on the lockfile: a dependency change misses, everything
+      # else hits.
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            rust/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Format check
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      # Plain `cargo test`, not `--test weightfree`: that one target skipped
+      # every #[cfg(test)] unit test in src/ (including the pad-token and
+      # recipe_version regressions) plus tests/respell.rs and
+      # tests/speechtext.rs. engine_conformance skips itself without a
+      # checkpoint, so the whole suite is weight-free.
+      #
+      # LOUDKIT_REQUIRE_ASSETS is deliberately NOT set here: this runner has no
+      # weights and the skip is honest. It IS set on the parity job, where a
+      # missing asset means a broken runner — cargo has no runtime skip, so a
+      # test that returns early reports `ok`, and without that switch an
+      # asset-less run would advertise conformance it never checked.
+      - name: Weight-free conformance
+        run: cargo test
+
+  rust-msrv:
+    # `rust-version = "1.88"` in rust/Cargo.toml is a promise made to a
+    # crates.io consumer, and every other Rust job here builds with stable,
+    # several releases above the floor. A compiler that new cannot tell a true
+    # MSRV from a number somebody typed, so the floor is the one claim in the
+    # crate's metadata that nothing in this repository is in a position to
+    # check. This job is the compiler that can.
+    #
+    # `cargo build --locked`, not `cargo test` and not `cargo clippy`. The
+    # claim is about what a consumer of `cargo add loudkit` compiles: the lib
+    # and the bin against the normal dependency tree. Dev-dependencies and
+    # clippy's lint set are this repository's own business and carry floors of
+    # their own, so failing here on either would report a broken promise that
+    # is in fact kept. `--locked` because the answer has to be about 1.88 and
+    # the resolved versions in `rust/Cargo.lock`, not about whatever the
+    # registry offers on the morning the job happens to run.
+    name: rust (msrv 1.88)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      # `toolchain:` is named rather than left to the action's default. The
+      # action is pinned by commit SHA, so there is no `@1.88` ref for it to
+      # read a version out of, and its default is `stable`: omitting the input
+      # would install the same compiler as the job above and this gate would
+      # pass by testing nothing.
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
+        with:
+          toolchain: "1.88"
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            rust/target
+          # Its own key, not the stable job's: `rust/target` holds objects
+          # built by a different compiler, and one cache serving both would
+          # hand each of them the other's.
+          key: cargo-msrv-1.88-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: cargo-msrv-1.88-${{ runner.os }}-
+      # The toolchain version lives in two files now, and the failure mode of
+      # that is silent: raise `rust-version` to 1.90 without touching this
+      # workflow and the job goes on building with 1.88, reporting green for a
+      # floor nobody tests. This step makes the two disagree out loud.
+      - name: The declared floor is the floor this builds with
+        run: |
+          set -euo pipefail
+          declared=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)
+          actual=$(rustc --version | cut -d' ' -f2)
+          echo "Cargo.toml declares $declared; this job runs rustc $actual"
+          case "$actual" in
+            "$declared"|"$declared".*) ;;
+            *)
+              echo "the toolchain pinned in ci.yml is not the MSRV Cargo.toml declares" >&2
+              exit 1
+              ;;
+          esac
+      - name: Build what a consumer of the crate builds
+        run: cargo build --locked
+
+  rust-coreml:
+    # The `coreml` cargo feature is shipped and documented, and until this job
+    # nothing compiled it: every check above builds the default feature set, so
+    # the code behind `#[cfg(feature = "coreml")]` — the provider registration,
+    # the model-format choice and the cache directory — was only ever built by
+    # hand. That has already cost this repository once, when a dead-code error
+    # behind the same gate reached a reader before it reached a compiler.
+    #
+    # macOS rather than Linux, even though `ort` gates `ep::coreml` on the
+    # feature alone and it would probably compile there: CoreML is Apple's, this
+    # is the platform a user of the feature is on, and the runner that can
+    # compile it can also run the tests behind it, which a Linux `cargo check`
+    # cannot. It is a hosted runner (the same image the `swift` job uses), so it
+    # costs a runner and no maintenance.
+    #
+    # What it still does not cover: the provider actually executing a model. The
+    # feature only lets `ort` register CoreML; whether registration succeeds
+    # depends on the `libonnxruntime` at ORT_DYLIB_PATH carrying the provider at
+    # runtime, and this job deliberately does not download the weights. Actual
+    # execution belongs to the hosted `parity` job; this is the faster compile
+    # and unit-test gate below it.
+    name: rust (coreml)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
+        with:
+          components: clippy
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            rust/target
+          # `runner.os` is in the key, so this is a separate cache from the
+          # Linux `rust` job's rather than a competitor for it: the two hold
+          # objects for different hosts and different feature sets.
+          key: cargo-coreml-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: cargo-coreml-${{ runner.os }}-
+      # --all-targets so the tests and benches behind the gate are compiled too,
+      # and -D warnings because an unused import or a dead helper reachable only
+      # with this feature on is exactly the class of breakage nobody sees.
+      - name: Clippy with the feature on
+        run: cargo clippy --all-targets --features coreml -- -D warnings
+      # The suite is weight-free and the CoreML-specific unit tests
+      # (`coreml_cache_dir`, `is_compiled`) only assert anything when the
+      # feature is on, so this is the one run in which they mean something.
+      - name: Weight-free conformance with the feature on
+        run: cargo test --features coreml
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    # `npm audit` ran only when somebody typed it, and the Python, Go and Rust
+    # trees were checked by hand across four rounds of review — which is
+    # evidence about those afternoons, not about next month. Dependabot
+    # (`.github/dependabot.yml`) proposes upgrades; this says whether one is
+    # overdue.
+    #
+    # Each ecosystem's own auditor rather than one action over all of them:
+    # these four are the tools their communities actually maintain, they need
+    # no third-party action pinned by a hash nobody in this repo can verify,
+    # and each names the advisory in the language of the manifest it read.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5
+        with:
+          go-version: "1.25"
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4
+        with:
+          node-version: "22"
+      - name: Python
+        run: |
+          set -euo pipefail
+          # pip is upgraded because the resolver below is pip's, and a runner
+          # image's pip is as old as the image. pip-audit is the auditor, and
+          # nothing else is installed here on purpose: this step audits a
+          # resolved dependency set, not the interpreter it runs in.
+          python -m pip install --upgrade pip pip-audit
+          # What the job has to answer is "does anything a user installs carry
+          # a known advisory". Auditing the job's own environment answers that
+          # only if the project is in it, and installing loudkit with its heavy
+          # extras costs a torch wheel on every push, for an environment nobody
+          # ships.
+          #
+          # So resolve instead of install. `--dry-run --report` runs the real
+          # resolver over pyproject.toml and writes every package and version
+          # it would install, using PEP 658 metadata from the index rather than
+          # downloading the wheels: the full closure below is 77 packages,
+          # torch and onnxruntime and coremltools and grpcio among them, and it
+          # resolves in about 15 seconds.
+          #
+          # The extras named are every public one. `coreml` is among them even
+          # though this runner is Linux and coremltools drives Apple hardware:
+          # `pip install "loudkit[coreml]"` is a command a user can type, so
+          # that closure is part of this project's supply chain wherever the
+          # auditor happens to run. Resolving is not running — the resolver
+          # needs an index and a set of tags, not a Neural Engine — and
+          # coremltools publishes a manylinux wheel, so the resolve on Linux
+          # returns the same three added packages (coremltools, cattrs, pyaml)
+          # that it returns on a Mac. What this job still cannot say is whether
+          # they *work* on Apple hardware; an advisory database does not need
+          # them to.
+          #
+          # `dev` remains out, and for a different reason: its packages are this
+          # repo's test tooling and never reach a user's environment. Dependabot
+          # is what watches them.
+          python -m pip install --dry-run --ignore-installed --quiet \
+            --report /tmp/pip-resolve.json \
+            '.[torch,hub,enroll,onnx,audio,server,mcp,grpc,coreml]'
+          # loudkit itself is dropped from the set: it resolves from this
+          # checkout, is not on PyPI, and asking an advisory database about a
+          # name it has never seen is the one lookup guaranteed to say nothing.
+          # `--skip-editable` is not the lever for this: it filters editable
+          # installs out of an *environment*, and there is no environment to
+          # filter when the audit reads a requirements file.
+          python - <<'PY' > /tmp/requirements-audit.txt
+          import json
+
+          report = json.load(open("/tmp/pip-resolve.json"))
+          pins = sorted(
+              f"{i['metadata']['name']}=={i['metadata']['version']}"
+              for i in report["install"]
+              if i["metadata"]["name"].lower().replace("_", "-") != "loudkit"
+          )
+          # A resolver that returned nothing would make the audit below pass
+          # while comparing zero packages, which is the failure this step is
+          # here to not have.
+          assert len(pins) > 10, f"the resolve produced {len(pins)} packages"
+          print("\n".join(pins))
+          PY
+          # `--no-deps`: the file is already the complete transitive closure, so
+          # re-resolving it would only ask the index the same question twice.
+          pip-audit --desc --no-deps -r /tmp/requirements-audit.txt
+      - name: JavaScript
+        working-directory: js
+        run: |
+          npm ci
+          npm audit --audit-level=high
+      - name: Go
+        working-directory: go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+      - name: Rust
+        working-directory: rust
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+
+  fuzz-parity:
+    name: fuzz parity (no weights)
+    runs-on: ubuntu-latest
+    # The strongest tool in this repository and it ran nowhere. It needs no
+    # checkpoint -- the funnel is weight-free -- so it belongs on every PR
+    # rather than beside the job that needs a GPU. Its first run found a crash
+    # in Go, a second in Rust, and a rule ported to four implementations of
+    # five; four rounds of human review had found none of the three.
+    #
+    # Two seeds, not one: the generator is deterministic, so a single seed is a
+    # fixed test set with extra steps. Each run costs about thirty seconds.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5
+        with:
+          go-version: "1.25"
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: |
+          python -m pip install -e ".[dev]"
+          cd js && npm ci && npm run build && cd ..
+      - name: Fuzz the funnels against each other
+        # Gating, as of the day the family closed.
+        #
+        # This step carried `continue-on-error: true` while one known family was
+        # red: a grouped digit run next to a word, where a backtracking engine
+        # and RE2 disagree about which match to prefer, plus the mixed-script
+        # tokens behind it. That family is closed -- all five funnels now refuse
+        # the same shapes rather than speaking half a token -- so the flag is
+        # gone and a divergence fails the build.
+        #
+        # Swift is deliberately not in `--ports` here, and it is not an
+        # oversight: `LoudKitText` imports CryptoKit and OSLog, `LoudKit`
+        # imports CoreML, and none of the three exist on Linux, so `swift test`
+        # cannot run on a hosted ubuntu runner at all. It is fuzzed on macOS
+        # before merge and is green on the same seeds. The macOS `parity` job
+        # could run it, but that job downloads the model and excludes forks;
+        # hanging a weight-free gate off a weight-bearing job would cover less
+        # than this does, not more.
+        run: |
+          python tools/fuzz_parity.py --cases 300 --seed 1 --ports go,rust,js
+          python tools/fuzz_parity.py --cases 300 --seed 2 --ports go,rust,js
+
+  parity:
+    name: parity (hosted macOS, pinned public release)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    # Also on pull requests from this repository, which is the change: it ran
+    # only on `main` and on demand, so every weights regression reached `main`
+    # before anything measured it -- the one job that can catch a weights
+    # regression, arriving after the merge that caused it.
+    #
+    # Forks are deliberately excluded even though the runner and weights are
+    # public: downloading and exercising roughly 4 GB for arbitrary fork pushes
+    # is an avoidable denial-of-service surface. A fork's parity is checked when
+    # a maintainer opens the PR from a branch here, or by `workflow_dispatch`.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.ref == 'refs/heads/main'
+      || (github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository)
+    env:
+      # A missing asset is a broken runner, not a reason to report success.
+      LOUDKIT_REQUIRE_ASSETS: "1"
+      # Model bytes are part of this test's input, so a moving branch is not a
+      # test input. Raise this pin only after the replacement bundle passes its
+      # own release verification and update the cache key with it automatically.
+      LOUDKIT_HF_REVISION: "0fe297e449ba4f31113977f6c7f8c438fdfd1be3"
+      PIP_NO_CACHE_DIR: "1"
+      HF_XET_CHUNK_CACHE_SIZE_BYTES: "0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+
+      # The final conformance step invokes all three tools directly. Hosted
+      # images are not a toolchain contract: the first public run reached that
+      # step after 27 minutes and failed before one test with `go: command not
+      # found`. Pin the same versions and actions as their dedicated jobs.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: go/go.sum
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
+
+      # The release is public and immutable at the revision above. Caching it
+      # avoids moving 4 GB on every main push; running `loudkit download` below
+      # even on a cache hit still checks the remote revision, SHA256SUMS and the
+      # complete backend inventories before any test can use the files.
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+        with:
+          path: ${{ runner.temp }}/loudr-1
+          key: loudr-1-${{ runner.os }}-${{ env.LOUDKIT_HF_REVISION }}
+
+      - name: Install every measured runtime
+        run: |
+          python -m venv .venv
+          # `audio` is file I/O; the enrollment path imports torchaudio from
+          # the separate `enroll` extra and is exercised later in this job.
+          .venv/bin/pip install -e ".[dev,hub,torch,audio,enroll,coreml,onnx]"
+
+      - name: Fetch and verify the pinned public release
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/loudr-1"
+          # The Swift engine compiles each .mlpackage and caches the .mlmodelc
+          # beside it (Renderer.loadModel) — inside this snapshot, which the
+          # post-job cache then saves. On the next restore `loudkit download`
+          # correctly refuses the unlisted files. Drop the compile droppings
+          # before verification so a polluted cache heals instead of failing.
+          find "$root/coreml" -maxdepth 1 -name '*.mlmodelc' \
+            -exec rm -rf {} + 2>/dev/null || true
+          for backend in torch onnx coreml; do
+            .venv/bin/loudkit download loudreader/loudr-1 \
+              --revision "$LOUDKIT_HF_REVISION" \
+              --for "$backend" --with-cloning --local-dir "$root"
+          done
+          {
+            echo "LOUDKIT_ASSET_ROOT=$root"
+            echo "LOUDKIT_CKPT=$root/loudr-1.safetensors"
+            echo "LOUDKIT_CHECKPOINT=$root/loudr-1.safetensors"
+          } >> "$GITHUB_ENV"
+          du -sh "$root"
+
+      # Resolved once, here, and written to $GITHUB_ENV so every later step
+      # inherits them. They used to be exported inside the last step of the
+      # job, where an `export` lives and dies in that one shell: the Python
+      # and Swift steps run before it and never saw a single one, so they fell
+      # back to tests/assets.py's own defaults and measured whatever this
+      # machine happened to have rather than the checkpoint this job names.
+      #
+      # Every path is checked for existence below. LOUDKIT_REQUIRE_ASSETS says
+      # a missing asset is a broken runner, and the earliest place to say so
+      # is before anything has run.
+      - name: Resolve the asset paths
+        run: |
+          set -euo pipefail
+          if [ "$(uname -m)" != "arm64" ]; then
+            echo "parity requires the Apple-silicon hosted image, got $(uname -m)" >&2
+            exit 1
+          fi
+          .venv/bin/python -c \
+            'import platform, torch; print(platform.platform()); print("torch", torch.__version__); print("mps", torch.backends.mps.is_available())'
+          # Two names, two meanings, and every reader honours the split:
+          # _DIR is the conformance directory, LOUDKIT_FIXTURE is the
+          # vectors.json file inside it. The weight-free suites (Go, Rust, JS)
+          # read LOUDKIT_FIXTURE as a file; the speech-funnel suites read
+          # LOUDKIT_FIXTURE_DIR and join their own filename onto it. A reader
+          # that joins a filename onto LOUDKIT_FIXTURE asks the OS for
+          # vectors.json/speechtext.json and dies with "not a directory",
+          # which is deterministic and therefore only ever seen on the one
+          # runner that gets this far.
+          fixture_dir="$PWD/tests/data/conformance"
+          # The preceding step wrote the exact public release directory. Do
+          # not fall back to a checkout-relative path: hosted runners have no
+          # untracked assets, and a fallback would turn a broken download into
+          # a misleading missing-file error here.
+          root="${LOUDKIT_ASSET_ROOT:?download step did not set LOUDKIT_ASSET_ROOT}"
+          if [ ! -d "$root" ]; then
+            echo "downloaded asset directory is absent: $root" >&2
+            exit 1
+          fi
+
+          # A split release has two checkpoint containers. The download step
+          # names the synthesis half explicitly rather than globbing and then
+          # treating the expected enrollment half as an ambiguity.
+          ckpt="${LOUDKIT_CKPT:?download step did not set LOUDKIT_CKPT}"
+
+          # Both spellings are exported on purpose. Go, Rust and JS read
+          # LOUDKIT_CKPT; tests/assets.py and tests/LoudKitTests/Fixture.swift
+          # read LOUDKIT_CHECKPOINT. One variable never drove all of them, and
+          # while the comment here said it did, Python and Swift were quietly
+          # falling back to a sibling checkout of chatterbox-apple.
+          onnx_dir="${LOUDKIT_ONNX_DIR:-$root/onnx}"
+          voice="${LOUDKIT_VOICE:-$PWD/tests/data/reference/testvoice.voice.safetensors}"
+          tokenizer="${LOUDKIT_TOKENIZER:-$root/tokenizer.json}"
+          # The utterance encoder is the only extra file Python enrollment
+          # reads. The reference clip itself is a checked-in float fixture, the
+          # same input consumed by the Go, Rust and JS conformance tests.
+          voice_encoder="${LOUDKIT_VOICE_ENCODER:-$root/ve.safetensors}"
+
+          for path in "$fixture_dir" "$fixture_dir/vectors.json" \
+                      "$ckpt" "$onnx_dir" "$voice" "$tokenizer" \
+                      "$voice_encoder" \
+                      "$onnx_dir/s3_tokenizer.onnx" "$onnx_dir/camp.onnx" \
+                      "$onnx_dir/voice_encoder.onnx"; do
+            if [ ! -e "$path" ]; then
+              echo "asset missing: $path" >&2
+              exit 1
+            fi
+          done
+
+          {
+            echo "LOUDKIT_FIXTURE_DIR=$fixture_dir"
+            echo "LOUDKIT_FIXTURE=$fixture_dir/vectors.json"
+            echo "LOUDKIT_ASSET_ROOT=$root"
+            echo "LOUDKIT_CKPT=$ckpt"
+            echo "LOUDKIT_CHECKPOINT=$ckpt"
+            echo "LOUDKIT_ONNX_DIR=$onnx_dir"
+            # The enrollment-graph tests take their own override name;
+            # pointed at the same directory so every reader measures the
+            # same graphs. LOUDKIT_ONNX_ASSETS is deliberately NOT exported:
+            # the Python ONNX backend already resolves the graphs beside the
+            # checkpoint ($root/onnx), and test_onnx.py's missing-assets
+            # test needs the variable unset to prove the error names it.
+            echo "LOUDKIT_ENROLL_ONNX=$onnx_dir"
+            echo "LOUDKIT_VOICE=$voice"
+            echo "LOUDKIT_TOKENIZER=$tokenizer"
+            echo "LOUDKIT_VOICE_ENCODER=$voice_encoder"
+          } >> "$GITHUB_ENV"
+          echo "measuring $ckpt"
+
+      # The Go and Rust suites load libonnxruntime at runtime: Go through
+      # LOUDKIT_ONNXRUNTIME_LIB, Rust (built with `load-dynamic`) through
+      # ORT_DYLIB_PATH. Neither was ever exported, so both bindings failed on
+      # a runner that had every weight. Resolved from the venv the step above
+      # just created — the onnxruntime wheel carries the dylib — so the
+      # library measured is the one the job installed, not whatever the
+      # machine happens to hold. This step must run after Install and cannot
+      # fold into the resolve step above.
+      - name: Resolve the onnxruntime shared library
+        run: |
+          set -euo pipefail
+          lib="${LOUDKIT_ONNXRUNTIME_LIB:-}"
+          if [ -z "$lib" ]; then
+            found=$(find .venv -name 'libonnxruntime.*.dylib' -o -name 'libonnxruntime.dylib' | sort | head -1)
+            if [ -z "$found" ]; then
+              echo "no libonnxruntime in .venv; the [onnx] extra did not install one" >&2
+              exit 1
+            fi
+            lib="$PWD/${found#./}"
+          fi
+          if [ ! -f "$lib" ]; then
+            echo "asset missing: $lib" >&2
+            exit 1
+          fi
+          {
+            echo "LOUDKIT_ONNXRUNTIME_LIB=$lib"
+            echo "ORT_DYLIB_PATH=$lib"
+          } >> "$GITHUB_ENV"
+          echo "onnxruntime library: $lib"
+
+      # test_onnx.py is named explicitly: its whole module is marked `slow`,
+      # so `-m "not slow"` on the check job deselects it and nothing else ever
+      # invoked it. The ONNX generator loop is a hand-written numpy mirror of
+      # the torch decode loop; it was running in no job at all.
+      #
+      # test_coreml_lifetime.py is named for the same reason and one more: it
+      # is `slow`, it needs the checkpoint and the CoreML packages, and it is
+      # the only automated proof that a CoreML synthesis does not kill its
+      # host process a second later (the `_PinnedInputs` regression). This is
+      # the one job with the assets and an Apple-silicon runner, and
+      # LOUDKIT_REQUIRE_ASSETS=1 in the job env turns its skips into
+      # failures, so it cannot quietly stop running again.
+      # test_enroll_onnx.py is named because it is `slow` and needs the three
+      # enrollment graphs, which this job now resolves and exports
+      # (LOUDKIT_ENROLL_ONNX); before that, no job anywhere invoked it.
+      - name: Parity and conformance
+        run: |
+          # Each backend gets a fresh process. Besides bounding memory on the
+          # 7 GB hosted M1, this enforces the project's own rule that torch must
+          # not decode after coremltools has entered the process.
+          .venv/bin/pytest \
+            tests/test_parity.py::TestGeneratorParity \
+            tests/test_parity.py::TestRendererParity -q
+          .venv/bin/pytest tests/test_parity.py::TestMPS -q
+          .venv/bin/pytest tests/test_parity.py::TestCoreML -q
+          .venv/bin/pytest \
+            tests/test_parity.py::TestEnrollmentParity \
+            tests/test_parity.py::TestEnrollmentRoundTrip -q
+          .venv/bin/pytest tests/test_conformance.py -q
+          .venv/bin/pytest tests/test_onnx.py -q
+          .venv/bin/pytest tests/test_enroll_onnx.py -q
+          .venv/bin/pytest tests/test_coreml_lifetime.py -q
+          .venv/bin/pytest \
+            tests/test_docs.py::test_published_voice_profile_digests_match_the_roster \
+            tests/test_docs.py::test_public_docs_quote_the_measured_voice_profile_size -q
+
+      - name: Swift conformance against the same fixture
+        run: swift test
+
+      # The bindings' asset-backed conformance, after the same public release
+      # has been resolved for every port. LOUDKIT_REQUIRE_ASSETS makes a missing
+      # failure: these tests self-skip, and a skip is indistinguishable from a
+      # pass in a summary line.
+      #
+      # **JS is here now.** Its README claims free-run tokens and the render
+      # band against the checkpoint; nothing anywhere invoked `test:fixture`,
+      # so that claim rested on a manual run — and the runner it names could
+      # not read the LOUDKIT_* variables the documentation prefixes it with
+      # (fixed alongside this). Rust's engine_conformance is `#[ignore]` by
+      # default, because libtest reports an early return as `ok`; `--ignored`
+      # is how the job with the assets asks for it.
+      - name: Go, Rust and JS conformance against the same fixture
+        run: |
+          set -euo pipefail
+          # The LOUDKIT_* paths come from the "Resolve the asset paths" step
+          # above, through $GITHUB_ENV, so this step and the Python and Swift
+          # steps before it all measure the same checkpoint.
+          (cd go && go test ./...)
+          (cd rust && cargo test && cargo test -- --ignored)
+          (cd js && npm ci --silent && npm run test:all)
+
+  packaging:
+    name: packaging (wheel + sdist)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          cache: pip
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build
+
+      - name: Build wheel and sdist
+        run: python -m build --sdist --wheel --outdir /tmp/lk-dist
+
+      - name: sdist contains only the source allowlist
+        run: |
+          set -euo pipefail
+          # A file is out of scope if its path escapes python/, the five
+          # top-level documents, or pyproject.toml. The other four
+          # implementations (go/, rust/, js/, swift/), the OS integrations,
+          # examples, docs and tooling must not ship.
+          # `.gitignore` and `PKG-INFO` are both really there: hatchling carries
+          # the first with the tree despite the sdist target's `exclude`, and
+          # writes the second itself. Verified against a built sdist rather than
+          # reasoned about — an allowlist arm removed on the strength of an
+          # argument is how a green check starts meaning nothing.
+          #
+          # `exit 1` inside the loop leaves the *subshell* the pipe created, not
+          # this script, so the loop is read into a variable and the verdict
+          # taken after it.
+          offenders=$(tar -tzf /tmp/lk-dist/*.tar.gz | sed 's|^[^/]*/||' | grep -v '^$' | while read -r f; do
+            case "$f" in
+              python/*) ;;
+              README.md|LICENSE|NOTICE|RESPONSIBLE_USE.md|pyproject.toml|.gitignore|PKG-INFO) ;;
+              *) echo "sdist contains out-of-scope file: $f" ;;
+            esac
+          done)
+          if [ -n "$offenders" ]; then echo "$offenders"; exit 1; fi
+          echo "sdist allowlist OK: $(tar -tzf /tmp/lk-dist/*.tar.gz | wc -l) entries"
+
+      # This job installs `build` and nothing else, and `build` does not carry
+      # pytest, so the step below ran on an interpreter with no pytest in it:
+      # `python -m pytest` cannot be doing what its name says. tests/conftest.py
+      # also monkeypatches loudkit.provenance from an autouse fixture, so the
+      # module has to import before a single test collects. Installing the
+      # wheel this job just built, rather than the checkout, keeps the job
+      # measuring the artefact. Bundle payload verification streams safetensors
+      # bytes directly, so the base wheel is sufficient. The eight tests of the
+      # maintainer-only checkpoint splitter still need PyTorch and run in the
+      # main Python matrix; this job excludes them explicitly rather than
+      # downloading a full runtime for a tool that is not shipped in the wheel.
+      - name: Install the integrity suite's runner
+        run: python -m pip install pytest "$(ls /tmp/lk-dist/*.whl)"
+
+      - name: Release integrity tests (checksums, layout)
+        run: python -m pytest tests/test_release.py -m "not requires_torch" -q
+
+      # The one check that cannot be made statically: whether the command the
+      # README prints is sufficient on a machine that has nothing. Both extras
+      # reach `loudkit.load()`, but each transport imports only its own stack.
+      # An extra that resolves but cannot import its transport or the default
+      # backend is a documented install that does not work — the failure a
+      # stranger meets first and a contributor never sees.
+      #
+      # Installed from the built wheel, not the checkout, so the extras are
+      # exercised as published. The CPU torch index keeps this to a ~200 MB
+      # wheel instead of the ~2.5 GB CUDA default.
+      - name: Documented extras are sufficient from a clean environment
+        run: |
+          set -euo pipefail
+          WHEEL=$(ls /tmp/lk-dist/*.whl)
+          for extra in server mcp; do
+            rm -rf "/tmp/venv-$extra"
+            python -m venv "/tmp/venv-$extra"
+            "/tmp/venv-$extra/bin/pip" install --quiet --upgrade pip
+            "/tmp/venv-$extra/bin/pip" install --quiet \
+              --extra-index-url https://download.pytorch.org/whl/cpu \
+              "${WHEEL}[$extra]"
+            if [ "$extra" = server ]; then
+              probe='import loudkit.transports.http'
+            else
+              probe='import loudkit.transports.mcp; import mcp.server.mcpserver'
+            fi
+            "/tmp/venv-$extra/bin/python" -c \
+              "import loudkit; import torch; $probe; print('ok:', loudkit.__version__)"
+            echo "extra '$extra' is self-sufficient"
+          done
