@@ -456,6 +456,27 @@ def test_dual_use_npm_release_never_automates_a_direct_publish() -> None:
     assert "attest-npm" in publish
 
 
+def test_crates_release_bootstraps_once_then_uses_short_lived_oidc() -> None:
+    """The first crate is manual; later tags must not need a stored token."""
+    workflow = (REPO / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    publish = workflow.split("\n  publish-crates:\n", 1)[1].split("\n  # --- the record", 1)[0]
+    assert "id-token: write" in publish
+    assert "rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18" in publish
+    assert "secrets.CARGO_REGISTRY_TOKEN" not in workflow
+    assert "steps.crates-auth.outputs.token" in publish
+    assert "version_checksum" in publish
+    assert "cargo package --locked" in publish
+    assert "name: crate-tarball" in workflow
+    assert "the checked crate has checksum" in publish
+
+
+def test_release_tags_name_the_isolated_public_branch_explicitly() -> None:
+    """Running the release commands on a private branch must not expose it."""
+    releasing = (REPO / "RELEASING.md").read_text(encoding="utf-8")
+    assert "git tag v0.1.0 public-main" in releasing
+    assert "git tag go/v0.1.0 public-main" in releasing
+
+
 def test_parity_uses_a_pinned_public_release_on_an_isolated_runner() -> None:
     """Public workflow code must not need a maintainer's machine or hidden WAV."""
     workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")

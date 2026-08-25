@@ -48,9 +48,12 @@
 #     Neither route rebuilds.
 #   - crates.io: `check-crates` runs `cargo package`, unpacks the resulting
 #     `.crate` outside the checkout, and builds and tests what a consumer of
-#     `cargo add loudkit` actually gets. crates.io has no upload-this-file
-#     call, so `publish-crates` must repackage — but it repackages *with*
-#     verification, so the tarball it uploads is built before it is sent.
+#     `cargo add loudkit` actually gets, then preserves that tarball as a
+#     workflow artifact. crates.io has no upload-this-file call, so a publish
+#     must repackage, but the job proves that copy matches the checked artifact
+#     first. Later releases authenticate with a short-lived Trusted Publishing
+#     token. The first crate is bootstrapped manually and the rerun verifies
+#     its registry checksum against the checked artifact before continuing.
 #
 # **The gate is the `release` GitHub environment**, configured to require a
 # reviewer. Every automated publish job names it, so a tag builds and verifies
@@ -69,10 +72,11 @@
 # **Every artefact is attested before publication.** Python distributions and
 # the npm tarball receive GitHub build attestations. npm also attaches its own
 # provenance when later versions are staged through its trusted publisher.
-# Version one is the registry bootstrap exception: npm cannot stage or attach a
-# trusted publisher before the package exists, while its dual-use policy
-# requires an interactive 2FA publish. RELEASING.md §7.1 publishes the exact
-# attested tarball from this run, then configures stage-only OIDC for good.
+# Version one has two registry bootstrap exceptions. npm cannot stage or attach
+# a trusted publisher before the package exists, while its dual-use policy
+# requires an interactive 2FA publish. crates.io also requires the first crate
+# to be published manually before Trusted Publishing can be configured.
+# RELEASING.md §§7.1 and 7.3 make both one-time steps explicit.
 #
 # **The GitHub Release is created last**, and only because `publish-crates`
 # succeeded. It used to be written by the build job, which meant a release a
@@ -618,14 +622,22 @@ jobs:
           RS
           cargo run
 
+      - name: Preserve the crate that passed both consumer gates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: crate-tarball
+          path: rust/target/package/loudkit-*.crate
+          if-no-files-found: error
+
   # --- publishing ------------------------------------------------------------
   #
   # Every job below needs a reviewer on the `release` environment before it
   # runs, and every one of them is irreversible once it does.
   #
-  # PyPI and npm authenticate over OIDC (Trusted Publishing): there is no token
-  # in this repository's secrets for either, so there is none to leak or
-  # rotate. crates.io has no equivalent yet and takes a token.
+  # PyPI, npm and crates.io authenticate over OIDC (Trusted Publishing). The
+  # first npm and crates.io packages are manual bootstrap exceptions because
+  # neither registry can attach trust to a package that does not exist. No
+  # long-lived registry token is stored in this repository.
   #
   # Registry-side setup is a human act and is recorded in RELEASING.md.
 
@@ -753,12 +765,80 @@ jobs:
     environment: release
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
 
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
         with:
           toolchain: stable
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: crate-tarball
+          path: crate-tarball
+
+      # A publish job may be rerun after a network failure or after the manual
+      # first-release bootstrap. Read the registry before asking for a token:
+      # an existing version is accepted only when its immutable registry
+      # checksum equals the crate this exact tag packages.
+      - name: Read the live crate state
+        id: registry
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          response="$RUNNER_TEMP/crates-version.json"
+          agent="loudkit-release/$GITHUB_SHA (https://github.com/loudreader/loudkit)"
+          status=$(curl -sS -A "$agent" -o "$response" -w '%{http_code}' \
+            "https://crates.io/api/v1/crates/loudkit/$version")
+
+          if [ "$status" = 200 ]; then
+            checksum=$(python -c \
+              'import json,sys; print(json.load(open(sys.argv[1]))["version"]["checksum"])' \
+              "$response")
+            echo "package_exists=true" >> "$GITHUB_OUTPUT"
+            echo "version_exists=true" >> "$GITHUB_OUTPUT"
+            echo "version_checksum=$checksum" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$status" != 404 ]; then
+            cat "$response" >&2
+            echo "crates.io version lookup returned HTTP $status" >&2
+            exit 1
+          fi
+
+          status=$(curl -sS -A "$agent" -o "$response" -w '%{http_code}' \
+            "https://crates.io/api/v1/crates/loudkit")
+          case "$status" in
+            200) echo "package_exists=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "package_exists=false" >> "$GITHUB_OUTPUT" ;;
+            *)
+              cat "$response" >&2
+              echo "crates.io package lookup returned HTTP $status" >&2
+              exit 1
+              ;;
+          esac
+          echo "version_exists=false" >> "$GITHUB_OUTPUT"
+
+      # crates.io cannot configure a Trusted Publisher before the crate exists.
+      # Fail after npm and PyPI have succeeded, then follow RELEASING.md §7.3:
+      # publish the exact public tag manually with a publish-new token, attach
+      # this workflow as its trusted publisher, and rerun the failed job.
+      - name: Ask for the one-time crates.io bootstrap
+        if: steps.registry.outputs.package_exists == 'false'
+        run: |
+          echo "loudkit does not exist on crates.io yet." >&2
+          echo "Publish this public tag manually with a publish-new token," >&2
+          echo "configure crates.io Trusted Publishing, then rerun this job." >&2
+          echo "See RELEASING.md §7.3. No registry token belongs in GitHub." >&2
+          exit 1
+
+      - name: Authenticate with crates.io Trusted Publishing
+        id: crates-auth
+        if: >-
+          steps.registry.outputs.package_exists == 'true'
+          && steps.registry.outputs.version_exists == 'false'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18  # v1.0.5
 
       # No `--no-verify`. crates.io has no "upload this file I already built"
       # call, so this job has to repackage rather than receive the `.crate`
@@ -773,11 +853,41 @@ jobs:
       # one run where it disagrees is the run where the checkout and the
       # tarball drifted apart, and it happens before the upload rather than
       # after, which is the only side of the upload where it can be fixed.
-      - name: Publish
+      - name: The repackaged crate is the one that passed the gates
+        if: steps.registry.outputs.version_exists == 'false'
+        working-directory: rust
+        run: |
+          set -euo pipefail
+          cargo package --locked
+          checked=$(sha256sum ../crate-tarball/*.crate | cut -d' ' -f1)
+          repacked=$(sha256sum target/package/loudkit-*.crate | cut -d' ' -f1)
+          if [ "$repacked" != "$checked" ]; then
+            echo "checked crate has checksum $checked" >&2
+            echo "publish runner repackaged checksum $repacked" >&2
+            exit 1
+          fi
+
+      - name: Publish through the short-lived token
+        if: steps.registry.outputs.version_exists == 'false'
         working-directory: rust
         run: cargo publish --locked
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+
+      - name: Verify an already-published version is the checked crate
+        if: steps.registry.outputs.version_exists == 'true'
+        env:
+          EXPECTED_CHECKSUM: ${{ steps.registry.outputs.version_checksum }}
+        run: |
+          set -euo pipefail
+          actual=$(sha256sum crate-tarball/*.crate | cut -d' ' -f1)
+          if [ "$actual" != "$EXPECTED_CHECKSUM" ]; then
+            echo "crates.io holds checksum $EXPECTED_CHECKSUM" >&2
+            echo "the checked crate has checksum $actual" >&2
+            echo "the published crate is not the artifact this run tested" >&2
+            exit 1
+          fi
+          echo "live crate matches the checked artifact: $actual"
 
   # --- the record ------------------------------------------------------------
 

@@ -1,11 +1,11 @@
 # Releasing loudkit
 
 The release workflow (`.github/workflows/release.yml`) builds and verifies the
-artefacts, attests their provenance, coordinates npm's required 2FA step and,
-after a reviewer approves the `release` environment, publishes PyPI and
-crates.io before creating the GitHub Release. The manual commands in §7 are the
-first npm bootstrap, the fallback and the record of what the jobs do. This file
-is the whole procedure, in order.
+artefacts, attests their provenance, coordinates the first npm and crates.io
+bootstraps and, after a reviewer approves the `release` environment, publishes
+PyPI before creating the GitHub Release. The manual commands in §7 are the two
+first-package bootstraps, the fallback and the record of what the jobs do. This
+file is the whole procedure, in order.
 
 Read §0 before anything else. The public history of this project begins at §5,
 in a single commit, and §5 cannot be redone.
@@ -571,8 +571,18 @@ bundle.
 Push one tag now, and only one:
 
 ```bash
-git tag v0.1.0
+git tag v0.1.0 public-main
 git push public v0.1.0
+```
+
+The explicit `public-main` target is a security boundary, not decoration. The
+maintainer checkout may be on a private development branch whose history must
+never become reachable from the public repository. Before pushing, both of
+these must print the same commit:
+
+```bash
+git rev-parse v0.1.0^{}
+git ls-remote public refs/heads/main | cut -f1
 ```
 
 **Do not create or push `go/v0.1.0` yet.** That tag is the Go release, and it
@@ -591,8 +601,9 @@ subdirectory module.
 **First release only:** when the run reaches the `release` environment wall,
 complete the interactive npm bootstrap in §7.1 before approving it. npm cannot
 stage or configure trust for a package that does not exist, and its dual-use
-policy requires 2FA for the first direct publish. An early GitHub approval
-fails safely without publishing PyPI or crates.io.
+policy requires 2FA for the first direct publish. After approval, npm and PyPI
+publish, then crates.io stops safely and asks for its own first-package
+bootstrap in §7.3. No long-lived registry token is stored in GitHub.
 
 Wait for `release.yml` to go green. It does the following:
 
@@ -666,9 +677,14 @@ at the authentication step rather than publishing something wrong.
       the exact sequence. These requirements come from npm's
       [Dual-Use Content Policy](https://docs.npmjs.com/policies/dual-use/) and
       [staged publishing](https://docs.npmjs.com/staged-publishing/) contract.
-- [ ] **crates.io** — create an API token scoped to publish and store it as
-      the `CARGO_REGISTRY_TOKEN` repository secret. crates.io has no OIDC
-      equivalent.
+- [ ] **crates.io** — no repository secret. The first crate must exist before
+      crates.io lets it trust a workflow, so §7.3 uses a short-lived token with
+      only the `publish-new` endpoint scope, logs out and revokes it. Then add
+      a GitHub Actions Trusted Publisher for owner `loudreader`, repository
+      `loudkit`, workflow `release.yml` and environment `release`, and require
+      Trusted Publishing for later versions. The workflow obtains a temporary
+      token through `rust-lang/crates-io-auth-action` and that action revokes it
+      when the job ends.
 - [ ] **GitHub** — create the `release` environment under Settings →
       Environments and add at least one required reviewer. Without the
       reviewer the wall is not there, and a mistaken tag publishes to three
@@ -776,9 +792,43 @@ Gate: `pip install loudkit==0.1.0` in a fresh venv, run the README block.
 
 ### 7.3 crates.io
 
-```bash
-cd rust && cargo publish
-```
+crates.io also cannot attach a Trusted Publisher before the package exists.
+Unlike npm, it has no staged first publish, so the workflow deliberately stops
+here after npm and PyPI are live. The failed job prints the same procedure.
+
+1. Create an API token at <https://crates.io/settings/tokens/new> with a short
+   expiry and only the `publish-new` endpoint scope. Do not add it to GitHub.
+2. Check out the exact public tag in a clean worktree. Never publish from the
+   private development branch:
+
+   ```bash
+   REPO=$(git rev-parse --show-toplevel)
+   CRATE_TREE=$(mktemp -d)
+   git -C "$REPO" worktree add --detach "$CRATE_TREE" v0.1.0
+   cd "$CRATE_TREE/rust"
+   cargo login
+   cargo publish --locked
+   cargo logout
+   ```
+
+   Paste the `publish-new` token only into `cargo login`'s prompt. It does not
+   enter shell history. Whether the publish succeeds or fails, run
+   `cargo logout` and revoke the token on crates.io immediately afterwards.
+3. On the new `loudkit` crate, configure GitHub Actions Trusted Publishing:
+   owner `loudreader`, repository `loudkit`, workflow `release.yml`,
+   environment `release`. Enable the setting that requires Trusted Publishing
+   for new versions.
+4. Rerun the failed `publish-crates` job. It compares crates.io's immutable
+   checksum with the `.crate` artifact that passed both consumer gates before
+   anything was published, and creates the GitHub Release only if those exact
+   bytes match:
+
+   ```bash
+   gh run rerun PASTE_RELEASE_RUN_ID --repo loudreader/loudkit --failed
+   ```
+
+From `0.1.1` onward, the job obtains a short-lived crates.io token through
+OIDC and runs `cargo publish --locked` itself. No manual token is involved.
 
 Rollback: none. `cargo yank --version 0.1.0` stops **new** dependents from
 selecting it; it does not delete anything, existing lockfiles keep resolving
@@ -792,7 +842,7 @@ Push it only now, with the workflow green, the approval given and the three
 registries published:
 
 ```bash
-git tag go/v0.1.0
+git tag go/v0.1.0 public-main
 git push public go/v0.1.0
 ```
 
