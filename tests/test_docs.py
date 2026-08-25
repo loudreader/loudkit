@@ -11,6 +11,7 @@ real symbol.
 
 from __future__ import annotations
 
+import os
 import posixpath
 import re
 import subprocess
@@ -199,13 +200,19 @@ def test_roster_audio_files_exist() -> None:
     assert not missing, f"roster entries whose sample audio is missing: {missing}"
 
 
-def test_roster_paths_and_digests_name_the_bytes_we_publish() -> None:
-    """Every public path resolves, and every published digest matches its bytes.
+def test_roster_paths_and_committed_digests_are_complete() -> None:
+    """Every public path is exact, and committed previews match their digests.
 
     The roster used to name ``voices/profiles/<name>`` although the model repo
     has always shipped ``voices/<name>``.  It also called an unpublished source
     WAV an ``hf_path``.  A provenance record may identify an unpublished input,
     but it cannot claim that input is available at a path where it is not.
+
+    Voice profiles are model artefacts and deliberately not in git. Their byte
+    check is a separate slow test below, run by the asset-backed parity lane.
+    Keeping the static half here means a fresh source checkout still validates
+    every claim it actually contains instead of failing because private local
+    files happened not to be present.
     """
     import hashlib as _hashlib
     import json as _json
@@ -221,11 +228,13 @@ def test_roster_paths_and_digests_name_the_bytes_we_publish() -> None:
         name = voice["name"]
         profile = voice["profile"]
         expected_profile = f"voices/{name}.safetensors"
-        profile_path = REPO / "assets" / expected_profile
         if profile.get("hf_path") != expected_profile:
             problems.append(f"{name}: profile path is {profile.get('hf_path')!r}")
-        elif not profile_path.is_file() or digest(profile_path) != profile.get("sha256"):
-            problems.append(f"{name}: profile digest does not match {expected_profile}")
+        profile_digest = profile.get("sha256", "")
+        if len(profile_digest) != 64 or any(
+            c not in "0123456789abcdef" for c in profile_digest
+        ):
+            problems.append(f"{name}: profile digest is not a SHA-256")
 
         sample = voice["sample"]
         sample_path = provenance.parent / sample["audio"]
@@ -249,9 +258,42 @@ def test_roster_paths_and_digests_name_the_bytes_we_publish() -> None:
     )
 
 
+def _voice_profiles() -> list[Path]:
+    root = Path(os.environ.get("LOUDKIT_ASSET_ROOT", str(REPO / "assets")))
+    return sorted((root / "voices").glob("*.safetensors"))
+
+
+@pytest.mark.slow
+def test_published_voice_profile_digests_match_the_roster() -> None:
+    """The twenty model artefacts match the provenance committed beside them."""
+    import hashlib as _hashlib
+    import json as _json
+
+    profiles = _voice_profiles()
+    if not profiles:
+        from .assets import skip_or_fail
+
+        skip_or_fail("no voice profiles under LOUDKIT_ASSET_ROOT/voices")
+    assert len(profiles) == 20, f"expected 20 voice profiles, found {len(profiles)}"
+
+    provenance = REPO / "docs" / "voices" / "roster" / "provenance.json"
+    voices = _json.loads(provenance.read_text(encoding="utf-8"))
+    expected = {v["profile"]["hf_path"]: v["profile"]["sha256"] for v in voices}
+    actual = {
+        f"voices/{path.name}": _hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in profiles
+    }
+    assert actual == expected, "voice profile bytes disagree with the provenance roster"
+
+
+@pytest.mark.slow
 def test_public_docs_quote_the_measured_voice_profile_size() -> None:
     """The shipped profiles average about 150 KB, not the old 300 KB estimate."""
-    profiles = sorted((REPO / "assets" / "voices").glob("*.safetensors"))
+    profiles = _voice_profiles()
+    if not profiles:
+        from .assets import skip_or_fail
+
+        skip_or_fail("no voice profiles under LOUDKIT_ASSET_ROOT/voices")
     assert len(profiles) == 20
     average = sum(path.stat().st_size for path in profiles) / len(profiles)
     assert 100_000 <= average <= 200_000

@@ -1422,6 +1422,7 @@ def _split(src: Path, out_dir: Path, *args: str) -> subprocess.CompletedProcess[
     )
 
 
+@pytest.mark.requires_torch
 def test_the_split_is_disjoint_complete_and_byte_identical(tmp_path: Path) -> None:
     """The whole contract of the tool, on a checkpoint small enough to check.
 
@@ -1478,6 +1479,7 @@ def test_the_split_is_disjoint_complete_and_byte_identical(tmp_path: Path) -> No
     )
 
 
+@pytest.mark.requires_torch
 def test_the_split_refuses_a_tensor_it_cannot_route(tmp_path: Path) -> None:
     """A group this tool has never seen is a decision, not a silent drop.
 
@@ -1494,6 +1496,7 @@ def test_the_split_refuses_a_tensor_it_cannot_route(tmp_path: Path) -> None:
     assert not (tmp_path / "split" / "loudr-1.safetensors").exists()
 
 
+@pytest.mark.requires_torch
 def test_the_split_will_not_write_over_the_packed_original(tmp_path: Path) -> None:
     """``--out-dir`` cannot be the checkpoint's own directory.
 
@@ -1562,6 +1565,7 @@ class TestTheBytesAreCheckedNotJustTheHeaders:
         assert any("not a sha256" in p for p in problems), problems
 
 
+@pytest.mark.requires_torch
 class TestTheSplitterWontVouchForWhatItCannotCheck:
     """A source digest the tool never verified must not be stamped onto halves.
 

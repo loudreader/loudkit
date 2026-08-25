@@ -285,7 +285,7 @@ def _intra_package_deps(path: Path, module: str) -> set[str]:
 def _iter_modules() -> list[tuple[Path, str]]:
     out = []
     for path in sorted(ROOT.rglob("*.py")):
-        if "/proto/" in str(path) and path.name.startswith("loudkit_pb2"):
+        if "proto" in path.relative_to(ROOT).parts and path.name.startswith("loudkit_pb2"):
             continue  # generated; guarded by test_grpc's regeneration check
         out.append((path, _module_name(path)))
     return out

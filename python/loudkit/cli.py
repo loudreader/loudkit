@@ -1034,15 +1034,7 @@ def _verify_safetensors(path: Path) -> int:
         if not recorded:
             print("  payload digest: not recorded by this checkpoint")
             return 0
-        try:
-            import torch  # noqa: F401
-        except ModuleNotFoundError:
-            print(
-                "  payload digest: recorded, not checked — the check loads every "
-                "tensor and needs torch (pip install 'loudkit[torch]')"
-            )
-            return 0
-        print("  hashing the tensor payload (loads every tensor, takes a moment) ...")
+        print("  hashing the tensor payload (streams every tensor, takes a moment) ...")
         actual = _payload_sha256(path)
         if actual == recorded:
             print("  payload digest: verified — the tensors are the tensors it names")
@@ -1059,22 +1051,12 @@ def _payload_sha256(path: Path) -> str:
     """sha256 over (name, dtype, shape, raw bytes) in sorted key order.
 
     The same recipe that writes ``tensor_payload_sha256`` in a packed
-    checkpoint, so the two digests are comparable. Through torch tensors for
-    the same reason: the digest covers the dtype's *torch* spelling.
+    checkpoint, so the two digests are comparable. The reader maps the stored
+    safetensors dtype to the recipe's PyTorch spelling without importing torch.
     """
-    import hashlib
+    from .checkpoint import _tensor_payload_sha256
 
-    from safetensors.torch import load_file
-
-    tensors = load_file(str(path))
-    h = hashlib.sha256()
-    for name in sorted(tensors):
-        t = tensors[name].contiguous()
-        h.update(name.encode())
-        h.update(str(t.dtype).encode())
-        h.update(str(tuple(t.shape)).encode())
-        h.update(t.numpy().tobytes())
-    return h.hexdigest()
+    return _tensor_payload_sha256(path)
 
 
 def _cmd_describe(args: argparse.Namespace) -> int:

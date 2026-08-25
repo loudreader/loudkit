@@ -157,7 +157,10 @@ def _releasable(root) -> dict[str, str]:
     import json
 
     body = json.dumps({"profile": "full-0.1", "verified": True}) + "\n"
-    (root / "release.json").write_text(body, encoding="utf-8")
+    # Exact bytes: text-mode writes translate LF to CRLF on Windows, while the
+    # digest below is over UTF-8 with LF. A fixture must not disagree with
+    # itself because of the host's newline convention.
+    (root / "release.json").write_bytes(body.encode())
     return {"release.json": _sha256(body.encode())}
 
 
@@ -389,7 +392,7 @@ class TestSingleFileIntegrity:
         voice = tmp_path / "kathleen.safetensors"
         voice.write_bytes(b"profile")
         body = json.dumps({"profile": "full-0.1", "verified": False}) + "\n"
-        (tmp_path / "release.json").write_text(body, encoding="utf-8")
+        (tmp_path / "release.json").write_bytes(body.encode())
         _write_sums(
             tmp_path,
             {
@@ -641,7 +644,7 @@ class TestOfficialReleasesMustBeReleasable:
         (tmp_path / "loudr-1.safetensors").write_bytes(b"weights")
         entries = {"loudr-1.safetensors": _sha256(b"weights")}
         if release is not None:
-            (tmp_path / "release.json").write_text(release, encoding="utf-8")
+            (tmp_path / "release.json").write_bytes(release.encode())
             entries["release.json"] = _sha256(release.encode())
         _write_sums(tmp_path, entries)
 

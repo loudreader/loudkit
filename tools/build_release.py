@@ -967,15 +967,7 @@ def _payload_agreement(out: Path) -> list[str]:
     once per build and once per ``--verify-only``, rather than in the preflight
     that exists to refuse cheaply.
     """
-    try:
-        import torch
-        from safetensors.torch import load_file
-    except ImportError as exc:  # pragma: no cover - depends on extras
-        return [
-            f"cannot verify tensor payloads: {exc}. Install the torch extra, "
-            "or the bundle ships with its tensors unchecked"
-        ]
-    del torch
+    from loudkit.checkpoint import _tensor_payload_sha256
 
     problems: list[str] = []
     for name in (CHECKPOINT_NAME, ENROLLMENT_CHECKPOINT_NAME):
@@ -998,7 +990,7 @@ def _payload_agreement(out: Path) -> list[str]:
             )
             continue
         try:
-            actual = _payload_sha256(load_file(str(path)))
+            actual = _tensor_payload_sha256(path)
         except Exception as exc:  # noqa: BLE001 - any reader failure is a finding
             problems.append(f"{name}: cannot read its tensors ({exc})")
             continue
@@ -1008,19 +1000,6 @@ def _payload_agreement(out: Path) -> list[str]:
                 f"{recorded[:12]}…; these are not the bytes the split produced"
             )
     return problems
-
-
-def _payload_sha256(tensors: dict[str, Any]) -> str:
-    """The recipe tools/split_checkpoint.py and the research packer both use:
-    sha256 over (name, dtype, shape, raw bytes) in sorted key order."""
-    h = hashlib.sha256()
-    for name in sorted(tensors):
-        t = tensors[name].contiguous()
-        h.update(name.encode())
-        h.update(str(t.dtype).encode())
-        h.update(str(tuple(t.shape)).encode())
-        h.update(t.numpy().tobytes())
-    return h.hexdigest()
 
 
 def _allowlist_agreement(out: Path) -> list[str]:
@@ -1237,9 +1216,41 @@ def _staging_dir(out: Path) -> Path:
 def _alive(pid: int) -> bool:
     """Whether that pid is still running, including one owned by somebody else.
 
-    ``EPERM`` means the process exists and is not ours to signal, which for
-    this question is the same answer as yes.
+    On POSIX, ``EPERM`` means the process exists and is not ours to signal.
+    Windows is queried through a process handle because its ``os.kill`` is not
+    a harmless existence probe.
     """
+    if os.name == "nt":
+        # Windows' os.kill is not POSIX kill(2): non-console signals call
+        # TerminateProcess, so using signal 0 as a probe is not a harmless
+        # existence check there. Ask the process handle whether it is signaled
+        # instead. Any uncertainty is treated as alive, because this answer
+        # gates deletion of another build's staging directory.
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+
+        synchronize = 0x00100000
+        wait_object_0 = 0x00000000
+        handle = kernel32.OpenProcess(synchronize, False, pid)
+        if not handle:
+            # ERROR_INVALID_PARAMETER means there is no such PID. Access
+            # denied means there is a process, just not one this user may
+            # inspect. Unknown errors stay conservative and keep the tree.
+            return int(ctypes.get_last_error()) != 87  # type: ignore[attr-defined]
+        try:
+            state = int(kernel32.WaitForSingleObject(handle, 0))
+            return state != wait_object_0
+        finally:
+            kernel32.CloseHandle(handle)
+
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -1304,7 +1315,7 @@ def _swap(a: Path, b: Path) -> bool:
     renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
     renamex_np.restype = ctypes.c_int
     rename_swap = 0x2  # RENAME_SWAP, from Darwin's <stdio.h>
-    return renamex_np(os.fsencode(a), os.fsencode(b), rename_swap) == 0
+    return int(renamex_np(os.fsencode(a), os.fsencode(b), rename_swap)) == 0
 
 
 def _commit(staging: Path, out: Path) -> None:

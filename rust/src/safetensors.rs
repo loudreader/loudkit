@@ -134,15 +134,17 @@ impl File {
         match t.dtype.as_str() {
             "F32" => {
                 let mut out = Vec::with_capacity(t.data.len() / 4);
-                for chunk in t.data.chunks_exact(4) {
-                    out.push(f32::from_le_bytes(chunk.try_into().unwrap()));
+                for chunk in t.data.as_chunks::<4>().0 {
+                    out.push(f32::from_le_bytes(*chunk));
                 }
                 Ok(out)
             }
             "F16" => Ok(t
                 .data
-                .chunks_exact(2)
-                .map(|c| half_to_f32(u16::from_le_bytes([c[0], c[1]])))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| half_to_f32(u16::from_le_bytes(*c)))
                 .collect()),
             other => Err(format!("{name}: expected F32/F16, got {other}")),
         }
@@ -158,8 +160,10 @@ impl File {
             return Err(format!("{name}: expected I64, got {}", t.dtype));
         }
         Ok(t.data
-            .chunks_exact(8)
-            .map(|c| i64::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| i64::from_le_bytes(*c))
             .collect())
     }
 }

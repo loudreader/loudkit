@@ -19,6 +19,7 @@ dependency) are asserted as exit codes and stderr text.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -1328,8 +1329,6 @@ class TestRevisionFlag:
             seen["ref"] = ref
             seen["revision"] = revision
             seen["backend"] = backend
-            from pathlib import Path
-
             return Path("/cache/snapshots/a1b2c3d/loudr-1.safetensors")
 
         monkeypatch.setattr(loudkit.hub, "resolve_checkpoint", capture_resolve)
@@ -1351,7 +1350,7 @@ class TestRevisionFlag:
         )
         assert seen["ref"] == "loudreader/loudr-1"
         assert seen["revision"] == "a1b2c3d"
-        assert seen["served"] == "/cache/snapshots/a1b2c3d/loudr-1.safetensors"
+        assert seen["served"] == str(Path("/cache/snapshots/a1b2c3d/loudr-1.safetensors"))
 
     def test_a_path_is_passed_through_untouched(self, fake_ckpt) -> None:
         """A path names its bytes already. Passed through rather than refused,

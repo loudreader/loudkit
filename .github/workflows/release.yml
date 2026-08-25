@@ -117,6 +117,12 @@ on:
 permissions:
   contents: read
 
+# The npm package uses the CPU files bundled by onnxruntime-node. Its optional
+# CUDA postinstall fetch is not part of this artefact and would make release
+# acceptance depend on a second registry being reachable.
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   # The job always runs so `needs: tag-gate` never skips the graph, and its
   # steps only bite on a `v*` tag: a `workflow_dispatch` build has no tag to

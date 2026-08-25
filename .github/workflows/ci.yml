@@ -35,6 +35,13 @@ concurrency:
 permissions:
   contents: read
 
+# onnxruntime-node 1.27 bundles the CPU runtime but its postinstall also tries
+# to fetch optional CUDA libraries from a NuGet feed. CI exercises the portable
+# CPU package; a second registry download is both unrelated and a source of
+# timeouts after `npm ci` has already resolved the dependency tree.
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   check:
     name: check (${{ matrix.os }}, py${{ matrix.python }})
@@ -83,9 +90,14 @@ jobs:
         run: mypy python/loudkit && mypy --config-file tools/mypy.ini tools/
 
       - name: Tests
+        if: matrix.os != 'ubuntu-latest' || matrix.python != '3.12'
         # -m "not slow" keeps this honest about what it covers: the weighted
         # suites are the parity job's business, and pretending otherwise here
         # would report green for tests that never ran.
+        run: pytest -m "not slow" -q
+
+      - name: Tests and coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         run: pytest -m "not slow" -q --cov --cov-report=term-missing
         # `--cov` reads its floor from `[tool.coverage.report]`: 80,
         # against 83 measured. pytest-cov was in the dev extra and nothing
@@ -525,7 +537,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install -e ".[dev]"
-          cd js && npm ci && npx tsc && cd ..
+          cd js && npm ci && npm run build && cd ..
       - name: Fuzz the funnels against each other
         # Gating, as of the day the family closed.
         #
@@ -726,7 +738,9 @@ jobs:
         run: |
           .venv/bin/pytest \
             tests/test_parity.py tests/test_conformance.py tests/test_onnx.py \
-            tests/test_enroll_onnx.py tests/test_coreml_lifetime.py -q
+            tests/test_enroll_onnx.py tests/test_coreml_lifetime.py \
+            tests/test_docs.py::test_published_voice_profile_digests_match_the_roster \
+            tests/test_docs.py::test_public_docs_quote_the_measured_voice_profile_size -q
 
       - name: Swift conformance against the same fixture
         run: swift test
@@ -801,13 +815,16 @@ jobs:
       # also monkeypatches loudkit.provenance from an autouse fixture, so the
       # module has to import before a single test collects. Installing the
       # wheel this job just built, rather than the checkout, keeps the job
-      # measuring the artefact; the base install is enough, because
-      # test_release.py reads manifests and checksums and synthesises nothing.
+      # measuring the artefact. Bundle payload verification streams safetensors
+      # bytes directly, so the base wheel is sufficient. The eight tests of the
+      # maintainer-only checkpoint splitter still need PyTorch and run in the
+      # main Python matrix; this job excludes them explicitly rather than
+      # downloading a full runtime for a tool that is not shipped in the wheel.
       - name: Install the integrity suite's runner
         run: python -m pip install pytest "$(ls /tmp/lk-dist/*.whl)"
 
       - name: Release integrity tests (checksums, layout)
-        run: python -m pytest tests/test_release.py -q
+        run: python -m pytest tests/test_release.py -m "not requires_torch" -q
 
       # The one check that cannot be made statically: whether the command the
       # README prints is sufficient on a machine that has nothing. Both extras

@@ -28,7 +28,10 @@ torch in.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
+import struct
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -45,6 +48,94 @@ __all__ = [
     "read_manifest",
     "resolve_dtype",
 ]
+
+_SAFETENSORS_TORCH_DTYPES: dict[str, tuple[str, int]] = {
+    "BOOL": ("torch.bool", 1),
+    "U8": ("torch.uint8", 1),
+    "I8": ("torch.int8", 1),
+    "U16": ("torch.uint16", 2),
+    "I16": ("torch.int16", 2),
+    "F16": ("torch.float16", 2),
+    "BF16": ("torch.bfloat16", 2),
+    "U32": ("torch.uint32", 4),
+    "I32": ("torch.int32", 4),
+    "F32": ("torch.float32", 4),
+    "U64": ("torch.uint64", 8),
+    "I64": ("torch.int64", 8),
+    "F64": ("torch.float64", 8),
+    "F8_E4M3": ("torch.float8_e4m3fn", 1),
+    "F8_E5M2": ("torch.float8_e5m2", 1),
+}
+
+
+def _tensor_payload_sha256(path: str | Path) -> str:
+    """Hash a safetensors payload by the checkpoint manifest's recipe.
+
+    The recipe predates the runtime split and records PyTorch dtype spellings,
+    but verifying it does not require PyTorch. Safetensors already stores the
+    dtype, shape and byte offsets in its header; reading the payload directly
+    makes verification available to the base package and keeps memory bounded
+    to one 1 MiB block instead of materialising the whole checkpoint.
+    """
+    source = Path(path)
+    with source.open("rb") as stream:
+        raw_length = stream.read(8)
+        if len(raw_length) != 8:
+            raise ValueError("too short to be a safetensors file")
+        (header_length,) = struct.unpack("<Q", raw_length)
+        if not 0 < header_length <= 100 << 20:
+            raise ValueError(f"implausible safetensors header length {header_length}")
+        try:
+            header = json.loads(stream.read(header_length))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(f"unreadable safetensors header: {exc}") from exc
+        if not isinstance(header, dict):
+            raise ValueError("the safetensors header is not an object")
+
+        payload_start = 8 + header_length
+        payload_size = source.stat().st_size - payload_start
+        digest = hashlib.sha256()
+        for name in sorted(k for k in header if k != "__metadata__"):
+            entry = header[name]
+            if not isinstance(entry, dict):
+                raise ValueError(f"tensor {name!r} has no metadata object")
+            dtype = entry.get("dtype")
+            if not isinstance(dtype, str):
+                raise ValueError(f"tensor {name!r} has unsupported dtype {dtype!r}")
+            try:
+                torch_dtype, width = _SAFETENSORS_TORCH_DTYPES[dtype]
+            except KeyError:
+                raise ValueError(f"tensor {name!r} has unsupported dtype {dtype!r}") from None
+            shape = entry.get("shape")
+            offsets = entry.get("data_offsets")
+            if (
+                not isinstance(shape, list)
+                or any(isinstance(n, bool) or not isinstance(n, int) or n < 0 for n in shape)
+                or not isinstance(offsets, list)
+                or len(offsets) != 2
+                or any(isinstance(n, bool) or not isinstance(n, int) for n in offsets)
+            ):
+                raise ValueError(f"tensor {name!r} has invalid shape or data offsets")
+            begin, end = offsets
+            expected = math.prod(shape) * width
+            if begin < 0 or end < begin or end > payload_size or end - begin != expected:
+                raise ValueError(
+                    f"tensor {name!r} has invalid byte range {offsets!r} for shape {shape!r}"
+                )
+
+            digest.update(name.encode())
+            digest.update(torch_dtype.encode())
+            digest.update(str(tuple(shape)).encode())
+            stream.seek(payload_start + begin)
+            remaining = end - begin
+            while remaining:
+                block = stream.read(min(1 << 20, remaining))
+                if not block:
+                    raise ValueError(f"tensor {name!r} ends before its declared byte range")
+                digest.update(block)
+                remaining -= len(block)
+    return digest.hexdigest()
+
 
 ASSET_PREFIX = "assets."
 """Tensor-name prefix for text artefacts carried inside the checkpoint.

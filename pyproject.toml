@@ -297,6 +297,7 @@ markers = [
   "slow: needs real weights or a long run",
   "cuda: needs an NVIDIA GPU",
   "mps: needs Apple silicon",
+  "requires_torch: exercises maintainer tooling that reads or writes PyTorch tensors",
 ]
 
 [tool.coverage.run]

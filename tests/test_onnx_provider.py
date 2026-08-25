@@ -246,7 +246,7 @@ class TestCoreMLIsAPlacementNotAProvider:
     def test_the_cache_directory_has_a_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(COREML_CACHE_ENV, raising=False)
         _, options = _session_providers("coreml", "vocoder.onnx")[0]
-        assert options["ModelCacheDirectory"].endswith("loudkit/coreml")
+        assert Path(options["ModelCacheDirectory"]).parts[-2:] == ("loudkit", "coreml")
 
     def test_the_two_graph_sets_are_disjoint_and_complete(self) -> None:
         assert not (GENERATOR_GRAPHS & RENDERER_GRAPHS)

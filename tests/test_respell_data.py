@@ -1,12 +1,13 @@
 """The generated respelling lexicon must not drift across its copies.
 
 The 110k-word Polish respelling lexicon is generated once by
-``tools/gen_pl_respell.py`` and shipped in **five** places: the Python package
-(the canonical copy), the Swift package, the JS package, and embedded in the Go
-and Rust bindings. A regeneration that changes the file must update all five or
-be caught here — a drift between the Python engine and a binding would make
-Polish text read differently per implementation, which is exactly the defect
-this library exists to prevent.
+``tools/gen_pl_respell.py``. Four copies are committed: the Python package (the
+canonical copy), Swift, Go and Rust. JavaScript deliberately generates its
+``js/data`` copy during ``prebuild`` because that directory is package output;
+the npm tarball check verifies that fifth copy. A regeneration that changes a
+committed file must update all four or be caught here — a drift between the
+Python engine and a binding would make Polish text read differently per
+implementation, which is exactly the defect this library exists to prevent.
 
 The check is byte-level: the canonical source is authoritative, and every
 committed copy must equal it exactly.
@@ -31,7 +32,6 @@ CANONICAL = REPO / "python" / "loudkit" / "models" / "data" / "pl_en_respell.jso
 _COPIES = {
     "go": REPO / "go" / "speechtext" / "pl_en_respell.json",
     "rust": REPO / "rust" / "src" / "pl_en_respell.json",
-    "js": REPO / "js" / "data" / "pl_en_respell.json",
     "swift": REPO / "swift" / "LoudKitText" / "Resources" / "pl_en_respell.json",
 }
 
