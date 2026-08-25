@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -319,10 +320,11 @@ class VoiceProfile:
             str(path),
             metadata={"voice": json.dumps(header)},
         )
-        # Owner-only. A voice profile is derived from a recording of a person;
-        # anything group- or world-readable has wider reach than the consent
-        # that covered the recording.
-        path.chmod(0o600)
+        # POSIX can make this owner-only directly. Windows has no equivalent
+        # group/world mode bits; keep the ACL inherited from the destination
+        # directory instead of pretending chmod(0600) tightened it.
+        if os.name == "posix":
+            path.chmod(0o600)
         return path
 
     @classmethod

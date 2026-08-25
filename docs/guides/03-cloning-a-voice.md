@@ -28,8 +28,9 @@ loudkit clone my-recording.wav --checkpoint loudreader/loudr-1 \
   --name my-voice --language en
 ```
 
-That writes `voices/my-voice.safetensors`, mode `0600`, and prints the `speak`
-command that reads it. A repo id needs the `hub` extra as well:
+That writes `voices/my-voice.safetensors` and prints the `speak` command that
+reads it. The file is mode `0600` on POSIX; on Windows it inherits the target
+directory's ACL. A repo id needs the `hub` extra as well:
 `pip install "loudkit[torch,audio,enroll,hub]"`.
 
 The command reads **one local WAV or FLAC file**. It does not record, fetch a

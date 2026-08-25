@@ -75,10 +75,9 @@ server = ["loudkit[torch]", "fastapi>=0.110", "uvicorn>=0.29", "soundfile>=0.12"
 # MCP rides on the server's engine but is a separate extra: it is only useful
 # to agent hosts, and the SDK is heavier than the core package wants.
 #
-# It carries ``torch`` because ``load()`` defaults to that backend; the
-# ``VoiceLibrary`` and ``render_bytes`` — sharing the one synthesis path is
-# deliberate, and it means the MCP extra inherits fastapi whether or not an
-# agent host ever serves HTTP.
+# It carries ``torch`` because ``load()`` defaults to that backend. The shared
+# ``VoiceLibrary`` and ``render_bytes`` live below the transport layer, so an
+# agent host does not install FastAPI unless it also asks for ``[server]``.
 # Floor at the 2.0.0 release, not the alpha it was pinned to while 2.0 was
 # unreleased: `>=2.0.0a1` keeps accepting pre-releases forever, and this SDK has
 # shipped security advisories. Capped below 3 because the tool-registration API

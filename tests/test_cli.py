@@ -19,6 +19,7 @@ dependency) are asserted as exit codes and stderr text.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -1745,6 +1746,7 @@ class TestCloneCommand:
         assert out.is_file()
         assert not (tmp_path / "voices").exists()
 
+    @pytest.mark.skipif(os.name != "posix", reason="0600 is a POSIX mode, not a Windows ACL")
     def test_the_written_profile_is_owner_only(
         self, recording, fake_ckpt, tmp_path, monkeypatch
     ) -> None:

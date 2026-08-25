@@ -28,15 +28,19 @@ fn skip(reason: &str) {
 
 fn read_f32(path: &PathBuf) -> Vec<f32> {
     let buf = std::fs::read(path).unwrap();
-    buf.chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+    buf.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
         .collect()
 }
 
 fn read_i64(path: &PathBuf) -> Vec<i64> {
     let buf = std::fs::read(path).unwrap();
-    buf.chunks_exact(8)
-        .map(|c| i64::from_le_bytes(c.try_into().unwrap()))
+    buf.as_chunks::<8>()
+        .0
+        .iter()
+        .map(|c| i64::from_le_bytes(*c))
         .collect()
 }
 

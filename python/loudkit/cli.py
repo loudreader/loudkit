@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import shlex
 import sys
 import time
@@ -493,11 +494,11 @@ def _save_voice_atomically(profile: VoiceProfile, output: Path) -> Path:
     complaint about shapes. Same directory, so ``os.replace`` stays inside one
     filesystem and is the atomic rename it promises.
 
-    ``VoiceProfile.save`` chmods the file it writes to ``0600`` and
+    On POSIX, ``VoiceProfile.save`` chmods the file it writes to ``0600`` and
     ``os.replace`` carries the mode across, so the profile is owner-only from
-    the first moment it exists under its own name — a voice is derived from a
-    recording of a person, and a world-readable one has wider reach than the
-    consent that covered the recording.
+    the first moment it exists under its own name. On Windows the temporary and
+    final files inherit the destination directory's ACL; Unix mode bits cannot
+    express that policy there.
 
     ``mkstemp`` creates the temp file, so the name comes from the OS and is
     unique against every other caller, in this process and any other. A name
@@ -606,7 +607,10 @@ def _cmd_clone(args: argparse.Namespace) -> int:
     )
     _save_voice_atomically(profile, output)
 
-    print(f"{output}  ({output.stat().st_size} bytes, language {profile.language}, mode 0600)")
+    permissions = "mode 0600" if os.name == "posix" else "directory ACL inherited"
+    print(
+        f"{output}  ({output.stat().st_size} bytes, language {profile.language}, {permissions})"
+    )
     print(
         f"speak with:\n  loudkit speak --checkpoint {checkpoint} "
         f'--voice {output} "hello"\n'

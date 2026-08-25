@@ -828,9 +828,10 @@ jobs:
 
       # The one check that cannot be made statically: whether the command the
       # README prints is sufficient on a machine that has nothing. Both extras
-      # reach `loudkit.load()`, so an extra that resolves but cannot import the
-      # server or the backend is a documented install that does not work — the
-      # failure a stranger meets first and a contributor never sees.
+      # reach `loudkit.load()`, but each transport imports only its own stack.
+      # An extra that resolves but cannot import its transport or the default
+      # backend is a documented install that does not work — the failure a
+      # stranger meets first and a contributor never sees.
       #
       # Installed from the built wheel, not the checkout, so the extras are
       # exercised as published. The CPU torch index keeps this to a ~200 MB
@@ -838,13 +839,6 @@ jobs:
       - name: Documented extras are sufficient from a clean environment
         run: |
           set -euo pipefail
-          # Import what the entry point imports. No synthesis: there are no
-          # weights here. This asserts the extra gets as far as needing them.
-          printf '%s\n' \
-            'import loudkit' \
-            'import loudkit.transports.http  # fastapi + pydantic + soundfile' \
-            'import torch           # the backend loudkit.load() picks by default' \
-            'print("ok:", loudkit.__version__)' > /tmp/extra_smoke.py
           WHEEL=$(ls /tmp/lk-dist/*.whl)
           for extra in server mcp; do
             rm -rf "/tmp/venv-$extra"
@@ -853,8 +847,12 @@ jobs:
             "/tmp/venv-$extra/bin/pip" install --quiet \
               --extra-index-url https://download.pytorch.org/whl/cpu \
               "${WHEEL}[$extra]"
-            "/tmp/venv-$extra/bin/python" /tmp/extra_smoke.py
+            if [ "$extra" = server ]; then
+              probe='import loudkit.transports.http'
+            else
+              probe='import loudkit.transports.mcp; import mcp.server.mcpserver'
+            fi
+            "/tmp/venv-$extra/bin/python" -c \
+              "import loudkit; import torch; $probe; print('ok:', loudkit.__version__)"
             echo "extra '$extra' is self-sufficient"
           done
-          # [mcp] additionally needs the SDK its module imports lazily.
-          /tmp/venv-mcp/bin/python -c "import mcp.server.mcpserver; print('mcp SDK ok')"

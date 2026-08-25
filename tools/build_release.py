@@ -1303,7 +1303,7 @@ def _swap(a: Path, b: Path) -> bool:
     the filesystem cannot, and the caller falls back to the two renames whose
     window its docstring describes.
     """
-    if sys.platform != "darwin":
+    if os.name != "posix" or sys.platform != "darwin":
         return False
     import ctypes
 

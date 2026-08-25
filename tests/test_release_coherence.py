@@ -230,7 +230,7 @@ _BACKTICKED = re.compile(r"`(.+)`", re.S)
 
 def _section_nine_rows() -> set[tuple[str, str]]:
     """§9's table as ``(path, marker)``, the shape ``PRERELEASE_BANNERS`` has."""
-    text = (REPO / "RELEASING.md").read_text()
+    text = (REPO / "RELEASING.md").read_text(encoding="utf-8")
     start = text.index("## 9.")
     nxt = text.find("\n## ", start + 1)
     section = text[start : nxt if nxt != -1 else len(text)]

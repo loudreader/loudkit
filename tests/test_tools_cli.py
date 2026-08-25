@@ -124,7 +124,7 @@ class TestAcceptance:
         repo = "loudreader/loudr-1"
         mod.check_speaks(bindir, tmp_path, repo)
 
-        exe = str(bindir / "loudkit")
+        exe = str(bindir / ("loudkit.exe" if sys.platform == "win32" else "loudkit"))
         assert calls == [
             [exe, "download", repo],
             [

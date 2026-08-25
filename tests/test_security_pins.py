@@ -152,6 +152,7 @@ class TestLoopbackHostPin:
 
 
 class TestProfilePermissions:
+    @pytest.mark.skipif(os.name != "posix", reason="0600 is a POSIX mode, not a Windows ACL")
     def test_a_saved_profile_is_owner_only(self, tmp_path: Path) -> None:
         """A profile derives from a recording of a person: 0600, not 0644."""
         import numpy as np

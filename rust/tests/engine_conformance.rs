@@ -79,8 +79,10 @@ fn corr(a: &[f32], b: &[f32]) -> f64 {
 
 fn read_f32(path: &PathBuf) -> Vec<f32> {
     let buf = std::fs::read(path).unwrap();
-    buf.chunks_exact(4)
-        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+    buf.as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
         .collect()
 }
 
