@@ -6,15 +6,22 @@
 
 **Natural-sounding text-to-speech for products, scripts and experiments.**
 
+[![CI](https://github.com/loudreader/loudkit/actions/workflows/ci.yml/badge.svg)](https://github.com/loudreader/loudkit/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/loudreader/loudkit/blob/main/LICENSE)
+[![Model](https://img.shields.io/badge/Model-loudr--1-FFD21E?logo=huggingface&logoColor=white)](https://huggingface.co/loudreader/loudr-1)
+[![Spaces](https://img.shields.io/badge/Spaces-Try%20it-FFD21E?logo=huggingface&logoColor=white)](https://huggingface.co/spaces/jer3mi/loudkit)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loudreader/loudkit/blob/main/notebooks/loudkit_quickstart.ipynb)
+
 loudkit runs on your own hardware. It includes twenty voices across ten
 languages, voice cloning from about ten seconds of audio, and native SDKs for
 Python, Swift, Go, Rust and TypeScript. Download the model once and run offline
 with no account, telemetry or usage bill.
 
-[![CI](https://github.com/loudreader/loudkit/actions/workflows/ci.yml/badge.svg)](https://github.com/loudreader/loudkit/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/loudreader/loudkit/blob/main/LICENSE)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loudreader/loudkit/blob/main/notebooks/loudkit_quickstart.ipynb)
+loudkit is the speech engine inside [LoudReader](https://loudreader.io), a
+reading app that speaks articles, PDFs and books on device. The engine is here
+under Apache-2.0 for anyone who wants to build with it directly.
 
+[**Try it in the browser**](https://huggingface.co/spaces/jer3mi/loudkit) |
 [**Hear all 20 voices**](https://loudreader.github.io/loudkit/demo/) |
 [**Open in Colab**](https://colab.research.google.com/github/loudreader/loudkit/blob/main/notebooks/loudkit_quickstart.ipynb) |
 [Model](https://huggingface.co/loudreader/loudr-1) |

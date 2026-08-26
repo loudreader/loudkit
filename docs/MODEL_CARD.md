@@ -33,6 +33,11 @@ loudr-1 runs on your own hardware through
 [loudkit](https://github.com/loudreader/loudkit). Download it once and work offline
 from Python, Swift, Go, Rust or TypeScript with PyTorch, ONNX Runtime or CoreML.
 
+These are the weights behind [LoudReader](https://loudreader.io), a reading app
+that speaks articles, PDFs and books on device. They are published here so the
+engine can be used and checked on its own.
+
+[**Try it in the browser**](https://huggingface.co/spaces/jer3mi/loudkit) |
 [**Hear all 20 voices**](https://loudreader.github.io/loudkit/demo/) |
 [**Open in Colab**](https://colab.research.google.com/github/loudreader/loudkit/blob/main/notebooks/loudkit_quickstart.ipynb) |
 [**GitHub**](https://github.com/loudreader/loudkit) |

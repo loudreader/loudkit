@@ -106,3 +106,44 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5
+
+      # Tell Bing what changed rather than waiting to be crawled. Bing is the
+      # index ChatGPT Search, Copilot and DuckDuckGo read, and it reported that
+      # 22% of its clicked URLs arrived through IndexNow submissions. Google
+      # ignores the protocol, which is fine: Search Console covers Google.
+      #
+      # The key cannot sit at the host root. This is a Pages *project* site, so
+      # loudreader.github.io/ belongs to the organisation and not to this
+      # repository. IndexNow allows that through `keyLocation`, provided every
+      # submitted URL sits in that folder or below it. Both hold: the site is
+      # served from /loudkit/ and the key ships in site/public/.
+      #
+      # `continue-on-error` because the pages are already live by this point.
+      # An unreachable indexing endpoint is a missed notification, not a broken
+      # publish, and it must not turn the deploy red.
+      - name: Tell IndexNow what changed
+        continue-on-error: true
+        env:
+          KEY: b1a6b35d510391e5f15b3c595994142e
+          HOST: loudreader.github.io
+        run: |
+          set -euo pipefail
+          urls=$(curl -fsS "https://$HOST/loudkit/sitemap-0.xml" \
+                 | grep -o 'https://[^<]*' \
+                 | python3 -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+          payload=$(KEY="$KEY" HOST="$HOST" URLS="$urls" python3 -c '
+          import json, os
+          host, key = os.environ["HOST"], os.environ["KEY"]
+          print(json.dumps({
+              "host": host,
+              "key": key,
+              "keyLocation": f"https://{host}/loudkit/{key}.txt",
+              "urlList": json.loads(os.environ["URLS"]),
+          }))')
+          code=$(curl -sS -o /tmp/indexnow.out -w '%{http_code}' \
+                   -X POST https://api.indexnow.org/indexnow \
+                   -H 'Content-Type: application/json; charset=utf-8' \
+                   -d "$payload")
+          # 200 accepted, 202 accepted with key validation still pending.
+          echo "IndexNow returned $code"
+          cat /tmp/indexnow.out || true
