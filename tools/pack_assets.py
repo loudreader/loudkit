@@ -9,8 +9,8 @@ copies of the lexicon kept in step by discipline, and three ports whose speech
 funnels had silently diverged.
 
 Packing closes it. The artefacts go in as `uint8` tensors under `assets.`, so
-they travel with the weights, are covered by the same file, and — the reason
-this is not a new container format — **every port already has a safetensors
+they travel with the weights, are covered by the same file, and, the reason
+this is not a new container format, **every port already has a safetensors
 reader**. Nothing new to implement in five languages.
 
     python tools/pack_assets.py \\
@@ -68,17 +68,24 @@ def pack(checkpoint: Path, out: Path, *, only: set[str] | None = None) -> dict[s
     from loudkit.checkpoint import ASSET_PREFIX, read_manifest
 
     manifest = read_manifest(checkpoint)
+    selected = set(ASSETS) if only is None else only
+    # Exactly the assets this run writes, so a re-pack is idempotent. An
+    # `assets.*` tensor `--only` did not select is carried through unchanged,
+    # keeping its manifest digest true: dropping it while leaving the digest
+    # behind wrote a checkpoint declaring a `pl_en_respell_sha256` for bytes it
+    # no longer contained.
+    replaced = {f"{ASSET_PREFIX}{name}" for name in selected}
     tensors: dict[str, np.ndarray] = {}
     with safe_open(str(checkpoint), framework="numpy") as f:
         metadata = dict(f.metadata() or {})
         for key in f.keys():  # noqa: SIM118 - the handle is not iterable
-            if key.startswith(ASSET_PREFIX):
-                continue  # replaced below, so re-packing is idempotent
+            if key in replaced:
+                continue
             tensors[key] = f.get_tensor(key)
 
     digests: dict[str, str] = {}
     for name, (source, manifest_key) in ASSETS.items():
-        if only is not None and name not in only:
+        if name not in selected:
             continue
         payload = _load(name, source, checkpoint)
         # uint8, not a metadata string: safetensors metadata is a string map
@@ -89,7 +96,11 @@ def pack(checkpoint: Path, out: Path, *, only: set[str] | None = None) -> dict[s
         manifest[manifest_key] = digest
         digests[name] = digest
 
-    manifest["packed_assets"] = sorted(digests)
+    # What the output carries, not what this run happened to write, so a
+    # subset re-pack does not un-declare the assets it left alone.
+    manifest["packed_assets"] = sorted(
+        key.removeprefix(ASSET_PREFIX) for key in tensors if key.startswith(ASSET_PREFIX)
+    )
     metadata["manifest"] = json.dumps(manifest)
     out.parent.mkdir(parents=True, exist_ok=True)
     save_file(tensors, str(out), metadata=metadata)

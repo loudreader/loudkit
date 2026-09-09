@@ -49,6 +49,16 @@ _ASSETS: dict[str, tuple[str, Path]] = {
     "voice_encoder": ("LOUDKIT_VOICE_ENCODER", _ROOT / "ve.safetensors"),
 }
 
+_ASSETS["turbo_checkpoint"] = (
+    "LOUDKIT_TURBO_CHECKPOINT",
+    (
+        _ROOT
+        if "LOUDKIT_ASSET_ROOT" in os.environ
+        else Path(__file__).resolve().parents[1] / "dist/loudr-1-turbo"
+    )
+    / "loudr-1-turbo.safetensors",
+)
+
 
 # With the switch on, a missing named asset is a broken runner even when a
 # test module gates on the path itself (a plain ``skipif(not path.exists())``

@@ -69,11 +69,8 @@ const EXCLUDE = new Set([
  */
 const EXCLUDE_DIRS = ['docs/design/'];
 
-/** docs/README.md and docs/guides/README.md are indexes, not "README" pages. */
-const RENAME = new Map([
-  ['docs/README.md', 'overview'],
-  ['docs/guides/README.md', 'guides/index'],
-]);
+/** docs/README.md is the index, not a "README" page. */
+const RENAME = new Map([['docs/README.md', 'overview']]);
 
 /**
  * Pages that get a site component spliced in above their own body.
@@ -248,7 +245,7 @@ const untitled = [];
 // the build down with it.
 const routeDigest = crypto
   .createHash('sha256')
-  .update(sources.map((rel) => `${rel} ${routeId(rel)}`).join('\n'))
+  .update(sources.map((rel) => `${rel}\0${routeId(rel)}`).join('\n'))
   .digest('hex')
   .slice(0, 12);
 
@@ -280,7 +277,9 @@ for (const rel of sources) {
 
 // The voice audio, copied into a gitignored directory for the same reason
 // the pages are: one copy of the audio in the tree.
+writeIfChanged(path.join(SITE_DIR, 'public/loudkit.png'), fs.readFileSync(path.join(REPO, 'assets/logo-mark-flat.png')));
 const audio = copyDir(AUDIO_FROM, AUDIO_TO);
+copyDir(path.join(REPO, 'docs/voices/preview'), path.join(AUDIO_TO, 'preview'));
 const refs = audio.filter((f) => f.startsWith('refs/'));
 const samples = audio.filter((f) => !refs.includes(f));
 

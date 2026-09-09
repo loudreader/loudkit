@@ -3,7 +3,7 @@
 The numbers that justify loudkit live in test docstrings, gate constants and
 `docs/platforms/apple.md`. A reader deciding whether to trust the thing has to go and
 find them, and a number that is only ever quoted in prose drifts from the
-number the suite actually enforces — which is the failure mode this whole
+number the suite actually enforces, which is the failure mode this whole
 repository is organised against.
 
 So the table is **generated from a run**, not typed. Each row carries the gate
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import platform
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -126,7 +126,7 @@ def _sampler_row(report: Report, vectors: dict[str, Any]) -> None:
         # Two shapes, both of which the ports already consume: an explicit
         # logits row repeated `repeat_logits` times (so the repetition penalty
         # has something to bite on), or a `logits_recipe` that generates a
-        # full-vocabulary row per step from the RNG — the fixture carries the
+        # full-vocabulary row per step from the RNG; the fixture carries the
         # recipe rather than 24 x 8194 floats.
         if "logits_recipe" in case:
             from loudkit.rng import uniforms
@@ -163,7 +163,7 @@ def _sampler_row(report: Report, vectors: dict[str, Any]) -> None:
 
 
 def _funnel_row(report: Report, speechtext: dict[str, Any]) -> None:
-    from loudkit.frontend.polish import speech_text
+    from loudkit.frontend.speechtext import speech_text
 
     row = report.add(
         Row(
@@ -200,6 +200,8 @@ def _chunking_row(report: Report, speechtext: dict[str, Any]) -> None:
             max_tokens=case["max_tokens"],
             prefix_tokens=case["prefix_tokens"],
             split_on=tuple(case["split_on"]),
+            abbreviations=tuple(case["abbreviations"]),
+            mid_sentence_period=case["mid_sentence_period"],
         )
         if split_text(case["text"], cfg) != case["chunks"]:
             bad += 1
@@ -390,7 +392,7 @@ def measure_against_reference(  # noqa: PLR0915 - one block per measured row
     """The rows that compare this engine to the implementation that shipped."""
     if not REFERENCE.exists() or not (REFERENCE / "meta.json").exists():
         report.notes.append(
-            "reference dumps absent — the torch-vs-reference rows were not measured"
+            "reference dumps absent: the torch-vs-reference rows were not measured"
         )
         _placeholder_reference_rows(report)
         return
@@ -442,9 +444,10 @@ def measure_against_reference(  # noqa: PLR0915 - one block per measured row
     free = report.add(
         Row(
             "Token generator, free-running",
-            "reference implementation",
+            "committed reference stream",
             "exact",
-            detail="same law, same seed — a mismatch means the logits moved",
+            detail="same law, same seed; pins generator and sampler stability, "
+            "against the committed free-running reference",
         )
     )
     matched = total = 0
@@ -523,7 +526,7 @@ def _placeholder_reference_rows(report: Report) -> None:
 # The ONNX graphs are exported fp32 only (EXP-015: fp16 not worth a second
 # artefact; EXP-017: int8 blocked), while the fixture's `execution` block
 # records the CoreML precision map. Handing the fp16 map to ONNX is a refusal,
-# not a measurement — the same explicit map `test_render_band_onnx` uses.
+# not a measurement, the same explicit map `test_render_band_onnx` uses.
 _ONNX_PRECISION: dict[str, Precision] = {
     "token_generator": "fp32",
     "mel_decoder.estimator": "fp32",
@@ -534,12 +537,13 @@ _ONNX_PRECISION: dict[str, Precision] = {
 
 def measure_backend(report: Report, checkpoint: Path, device: Device, label: str) -> None:
     """One non-torch backend against the same fixture the others are gated on."""
-    cases = (
-        json.loads((FIXTURE / "vectors.json").read_text(encoding="utf-8")).get("end_to_end")
-        or []
-    )
+    from loudkit.checkpoint import decode_mode, read_manifest
+
+    mode = decode_mode(read_manifest(checkpoint))
+    filename = "vectors.json" if mode == "single" else f"vectors_{mode}.json"
+    cases = json.loads((FIXTURE / filename).read_text(encoding="utf-8")).get("end_to_end") or []
     # Read from the fixture, not restated here. This row's whole claim is that a
-    # second backend is held to "the same fixture the others are gated on" — and
+    # second backend is held to "the same fixture the others are gated on", and
     # it was restating the bar instead, as a literal that had drifted from the
     # one the fixture declares and Swift's end-to-end test enforces. A gate
     # asserted in two places is a gate that eventually means two things, and the
@@ -571,7 +575,7 @@ def measure_backend(report: Report, checkpoint: Path, device: Device, label: str
         execution = ExecutionConfig(device=device, precision=precision, onnx_provider="cpu")
         engine = loudkit.load(str(checkpoint), device=device, execution=execution)
         voice = VoiceProfile.load(FIXTURE / cases[0]["voice"])
-    except Exception as exc:  # noqa: BLE001 - a missing backend is a note, not a crash
+    except Exception as exc:  # a missing backend is a note, not a crash
         report.notes.append(f"{label}: not measured ({type(exc).__name__}: {exc})")
         return
 
@@ -600,15 +604,19 @@ def render(report: Report, environment: str) -> str:
     lines = [
         "# Parity, measured",
         "",
-        "The companion to [`parity.md`](design/parity.md), which is written by hand and",
-        "explains *what the reference is* and how it was produced. This file is the",
-        "other half: the current numbers, regenerated rather than remembered.",
-        "",
         "Generated by `tools/parity_table.py`. Every row is a comparison the test",
         "suite enforces; `gate` is the threshold that fails the build, `measured` is",
         "what this run actually observed. A row that says *not measured* was not run",
-        "in this environment — it is left in rather than dropped, because a table",
+        "in this environment. It is left in rather than dropped, because a table",
         "quietly missing a row reads as a table with nothing to hide.",
+        "",
+        "The rows are measured from Python: the weight-free rows against the shared",
+        "fixtures in `tests/data/conformance/`, the weighted rows against the",
+        "reference dumps in `tests/data/reference/` and the release checkpoint. A row",
+        "that names the four ports is held for them by their own harnesses over the",
+        "same fixture files: `go test ./...`, `cargo test`, `npm run test:all` and",
+        "`swift test`, which the parity job in CI runs. Never hand-type a number here;",
+        "run the generator with `--checkpoint` on a machine that holds the weights.",
         "",
         f"Environment: {environment}",
         "",
@@ -619,11 +627,12 @@ def render(report: Report, environment: str) -> str:
         mark = "" if row.ok is None else ("✓ " if row.ok else "✗ ")
         lines.append(f"| {row.stage} | {row.against} | `{row.gate}` | {mark}{row.measured} |")
     lines.append("")
+    lines += [*_free_running_scope(report), ""]
 
     detailed = [r for r in report.rows if r.detail]
     if detailed:
         lines += ["## Why each gate is where it is", ""]
-        lines += [f"- **{r.stage}** — {r.detail}" for r in detailed]
+        lines += [f"- **{r.stage}**: {r.detail}" for r in detailed]
         lines.append("")
 
     if report.notes:
@@ -631,6 +640,25 @@ def render(report: Report, environment: str) -> str:
         lines += [f"- {n}" for n in report.notes]
         lines.append("")
     return "\n".join(lines)
+
+
+def _free_running_scope(report: Report) -> list[str]:
+    """The hardware scope of the free-running row, under the table: the
+    figure is exact for one architecture and one BLAS at a time."""
+    free = next((r for r in report.rows if r.stage == "Token generator, free-running"), None)
+    if free is None:
+        return []
+    here = platform.machine()
+    if free.ok is None:
+        this_run = f"This run ({here}) did not measure it."
+    else:
+        this_run = f"The figure in the row above is what this machine ({here}) reproduces."
+    return [
+        "Exactness of a free-running stream is per architecture and per BLAS: the",
+        "sampling law is the same everywhere, and the logits under it move at the",
+        "last bit between machines, which can flip a sampled token.",
+        this_run,
+    ]
 
 
 def _environment() -> str:
@@ -647,29 +675,22 @@ def _environment() -> str:
         bits.append(f"onnxruntime {onnxruntime.__version__}")
     except ImportError:
         bits.append("onnxruntime absent")
-    try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=REPO,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        bits.append(f"loudkit {commit}")
-    except (subprocess.CalledProcessError, FileNotFoundError):  # pragma: no cover
-        pass
+    from loudkit._version import __version__
+
+    bits.append(f"loudkit {__version__}")
     return ", ".join(bits)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--checkpoint", help="packed .safetensors; weighted rows need it")
+    parser.add_argument(
+        "--checkpoint", action="append", help="packed .safetensors; weighted rows need it"
+    )
     parser.add_argument(
         "--out",
         default="docs/parity-measured.md",
-        help="'-' for stdout. Never docs/design/parity.md — that is the hand-written "
-        "report, with the provenance and the experiment references this file "
-        "deliberately does not carry.",
+        help="'-' for stdout. The whole file is rewritten; never point it at a page "
+        "that carries hand-written prose.",
     )
     args = parser.parse_args()
 
@@ -677,13 +698,19 @@ def main() -> int:
     measure_weight_free(report)
 
     if args.checkpoint:
-        checkpoint = Path(args.checkpoint)
-        measure_against_reference(report, checkpoint)
-        measure_backend(report, checkpoint, "onnx", "ONNX")
-        measure_backend(report, checkpoint, "coreml", "CoreML")
+        for path in args.checkpoint:
+            checkpoint = Path(path)
+            from loudkit.checkpoint import decode_mode, read_manifest
+
+            mode = decode_mode(read_manifest(checkpoint))
+            if mode == "single":
+                measure_against_reference(report, checkpoint)
+            label = "" if mode == "single" else f"{checkpoint.stem} "
+            measure_backend(report, checkpoint, "onnx", f"{label}ONNX")
+            measure_backend(report, checkpoint, "coreml", f"{label}CoreML")
     else:
         report.notes.append(
-            "no --checkpoint given — every weighted row was skipped, so this table "
+            "no --checkpoint given: every weighted row was skipped, so this table "
             "covers the algorithm layer only"
         )
         _placeholder_reference_rows(report)

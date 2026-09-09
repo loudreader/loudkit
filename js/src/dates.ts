@@ -7,13 +7,14 @@
  * arrives as *onest*, because the number pass expands the digits and leaves the
  * suffix stuck to them.
  *
- * Every rule is data from the shared numbers.json — month names, day forms, the
+ * Every rule is data from the shared numbers.json: month names, day forms, the
  * infixes Spanish and Portuguese speak between the parts, the German oblique
  * triggers, the ordinal tables. What is code here is the *shape*: which written
  * forms are dates at all, and how each language reads a year.
  *
  * Two refusals are as deliberate as anything it does. A yearless `12.3.` is
- * never matched — its closing period is indistinguishable from a sentence's, so
+ * never matched, because its closing period is indistinguishable from a
+ * sentence's, so
  * `Die Zahl ist 3.5.` would otherwise come out as *dritte Mai*. And `3/12/2026` is left alone in
  * English, where it is March twelfth to half the world and the third of December
  * to the other half: a listener recovers from hearing digits, not from a
@@ -21,8 +22,8 @@
  * Python reference: `loudkit/frontend/dates.py`.
  */
 
-import grammarData from "../data/numbers.json" with { type: "json" };
 import { cardinal } from "./numbers.js";
+import { grammarLanguages } from "./textconfig.js";
 
 /** Above this a four-digit run is an identifier, not a year. */
 const MAX_YEAR = 2999;
@@ -67,9 +68,7 @@ const RULES: Record<string, Rules> = (() => {
     return out;
   };
   const out: Record<string, Rules> = {};
-  const languages =
-    (grammarData as { languages: Record<string, any> }).languages ?? {};
-  for (const [lang, entry] of Object.entries(languages)) {
+  for (const [lang, entry] of Object.entries(grammarLanguages())) {
     const d = entry?.dates;
     if (!d) continue;
     const o = entry?.ordinals ?? {};
@@ -112,7 +111,7 @@ export function monthName(month: number, language: string): string | null {
 /**
  * The day-of-month word, in whatever form this language's dates take.
  *
- * `oblique` is German only — the `-en` ending that `am`/`den`/`vom` select.
+ * `oblique` is German only: the `-en` ending that `am`/`den`/`vom` select.
  */
 export function ordinalDay(
   day: number,
@@ -133,7 +132,7 @@ export function ordinalDay(
  * A year, read the way this language reads years.
  *
  * English and Norwegian split it; German, Dutch and Swedish group it in
- * hundreds; the rest say one plain cardinal. Spanish is the explicit case — the
+ * hundreds; the rest say one plain cardinal. Spanish is the explicit case: the
  * RAE writes that a year is read as its cardinal and *not* in two-figure blocks
  * as in English, so 2021 is *dos mil veintiuno*.
  */
@@ -159,7 +158,7 @@ function yearEnglish(year: number): string {
   if ((year > 1000 && year < 2000) || year >= 2100) {
     const century = Math.floor(year / 100), rest = year % 100;
     if (rest === 0) return `${card(century, "en")} hundred`;
-    // "nineteen oh five" — never "nineteen five", which nobody says.
+    // "nineteen oh five", never "nineteen five", which nobody says.
     if (rest < 10) return `${card(century, "en")} oh ${card(rest, "en")}`;
     return `${card(century, "en")} ${card(rest, "en")}`;
   }
@@ -214,8 +213,9 @@ function yearPolish(year: number, r: Rules): string {
   const lead = head !== 0 ? card(head * 100, "pl") : "";
   if (rest === 0) return lead;
   let tail: string;
-  if (r.yearTeens[rest]) {
-    tail = r.yearTeens[rest]!;
+  const teen = r.yearTeens[rest];
+  if (teen) {
+    tail = teen;
   } else {
     tail = [r.yearTens[Math.floor(rest / 10) * 10] ?? "", r.yearUnits[rest % 10] ?? ""]
       .filter(Boolean)
@@ -248,13 +248,44 @@ function spoken(
   return parts.join(" ");
 }
 
-const ISO = /(?<![\d.,:/-])([12][0-9]{3})-([01][0-9])-([0-3][0-9])(?![\d-])/g;
+/** `(?![\p{L}\p{N}_])`, not `\b`: ECMAScript's `\b` is ASCII-only, so a CJK
+ * ideograph glued to the year read as a boundary here and as a word character
+ * in Python, Rust and Swift -- this port spoke `12.03.2026\u4e00` as a date and
+ * the other three left it written, one string with two readings under one
+ * fingerprint. The class is the one `DIGIT_RUN` guards with in `numbers.ts`:
+ * every letter and every numeral, which is what Python's `\w` covers. `\p{Nd}`
+ * alone leaves `½` and `Ⅰ` outside it, and `12 marca 2026½` then reads as a
+ * date here and as prose there. */
+const NOT_WORD_AFTER = "(?![\\p{L}\\p{N}_])";
+/** The same class in front, for the same reason: an accented letter in front of
+ * the day made a date here of what Python, guarding with a Unicode `\w`, leaves
+ * written. */
+const NOT_WORD_BEFORE = "(?<![\\p{L}\\p{N}_])";
+/** ISO. Unambiguous by definition, and the Swedish norm. The `T` before a clock
+ * time is taken with the date: it is a field separator and not a letter, and
+ * left behind it glues to the last word of the date.
+ *
+ * A written date is bounded by a word boundary, and not by digits alone: a run
+ * that continues into a letter is an identifier, and `25/03/2026x` is no more a
+ * date than `x25/03/2026` is. All three numeric forms carry `NOT_WORD_BEFORE`
+ * and `NOT_WORD_AFTER` as well as the separators each form names. */
+const ISO = new RegExp(
+  `${NOT_WORD_BEFORE}(?<![.,:/-])([12][0-9]{3})-([01][0-9])-([0-3][0-9])` +
+    `(?:(T)(?=[0-2][0-9]:[0-5][0-9])|(?![-])${NOT_WORD_AFTER})`,
+  "gu",
+);
 /** With the year, which is what makes it a date rather than a guess. The
- * yearless `12.3.` is deliberately not matched — see the module note. */
-const DOTTED = /(?<![\d.,:/-])([0-3]?[0-9])\.([01]?[0-9])\.([12][0-9]{3})\b/g;
+ * yearless `12.3.` is deliberately not matched; see the module note. */
+const DOTTED = new RegExp(
+  `${NOT_WORD_BEFORE}(?<![.,:/-])([0-3]?[0-9])\\.([01]?[0-9])\\.([12][0-9]{3})${NOT_WORD_AFTER}`,
+  "gu",
+);
 /** Day-first in every language here; English is handled in the callback, where
  * the field order is genuinely ambiguous. */
-const SLASHED = /(?<![\d.,:/-])([0-3]?[0-9])\/([01]?[0-9])\/([12][0-9]{3})(?![\d/])/g;
+const SLASHED = new RegExp(
+  `${NOT_WORD_BEFORE}(?<![.,:/-])([0-3]?[0-9])/([01]?[0-9])/([12][0-9]{3})(?![/])${NOT_WORD_AFTER}`,
+  "gu",
+);
 
 /**
  * Every written date in `text`, said the way `language` says it.
@@ -269,7 +300,12 @@ export function expandDates(text: string, language: string): string {
   let out = replace(text, ISO, (g, at, whole) => {
     const [y, m, d] = [Number(g[1]), Number(g[2]), Number(g[3])];
     if (!valid(d, m, y)) return null;
-    return spoken(d, m, y, language, isOblique(whole, at, r));
+    const said = spoken(d, m, y, language, isOblique(whole, at, r));
+    if (said === null) return null;
+    // The separator becomes the space that keeps the date and the time two
+    // spoken units. A word for it would be a per-language fact this grammar
+    // does not carry, and a plainer reading is not a wrong one.
+    return g[4] ? `${said} ` : said;
   });
   out = replace(out, DOTTED, (g, at, whole) => {
     // Swedish marks an ordinal with a colon (`1:a`), never a trailing period, so
@@ -293,7 +329,7 @@ export function expandDates(text: string, language: string): string {
 }
 
 /**
- * `12 marca 2026`, `12. März 2026`, `March 12, 2026` — a written month name
+ * `12 marca 2026`, `12. März 2026`, `March 12, 2026`: a written month name
  * beside a bare day. The name is the disambiguator, so this runs for every
  * language including English.
  */
@@ -307,8 +343,9 @@ function textual(text: string, language: string, r: Rules): string {
   const yinfix = r.monthYearInfix ? `(?:\\s+${esc(r.monthYearInfix)})?` : "";
 
   const dayFirst = new RegExp(
-    `(?<![\\w])([0-3]?[0-9])\\.?${infix}\\s+(${names})(?:${yinfix}\\s+([12][0-9]{3}))?(?!\\w)`,
-    "gi"
+    `${NOT_WORD_BEFORE}([0-3]?[0-9])\\.?${infix}\\s+(${names})` +
+      `(?:${yinfix}\\s+([12][0-9]{3}))?${NOT_WORD_AFTER}`,
+    "giu"
   );
   let out = replace(text, dayFirst, (g, at, whole) => {
     const d = Number(g[1]);
@@ -323,7 +360,12 @@ function textual(text: string, language: string, r: Rules): string {
       if (head === null || monthWord === null) return null;
       const rest = [monthWord];
       if (y !== null) rest.push(sayYear(y, language));
-      const prefix = r.dayFirstPrefix ? `${r.dayFirstPrefix} ` : "";
+      // The sentence may already carry the article: "the 3 April minutes" is a
+      // noun phrase whose determiner is written, and a second one is a stammer.
+      const prefix =
+        r.dayFirstPrefix && !wordBefore(whole, at, r.dayFirstPrefix)
+          ? `${r.dayFirstPrefix} `
+          : "";
       const join = r.dayFirstInfix ? ` ${r.dayFirstInfix} ` : " ";
       return `${prefix}${head}${join}${rest.join(" ")}`;
     }
@@ -334,8 +376,9 @@ function textual(text: string, language: string, r: Rules): string {
   // it would be inventing a construction nobody used.
   if (!r.dayFirstInfix) return out;
   const monthFirst = new RegExp(
-    `(?<![\\w])(${names})\\s+([0-3]?[0-9])(?:(?:st|nd|rd|th)\\b)?,?(?:\\s+([12][0-9]{3}))?(?!\\w)`,
-    "gi"
+    `${NOT_WORD_BEFORE}(${names})\\s+([0-3]?[0-9])(?:(?:st|nd|rd|th)${NOT_WORD_AFTER})?,?` +
+      `(?:\\s+([12][0-9]{3}))?${NOT_WORD_AFTER}`,
+    "giu"
   );
   out = replace(out, monthFirst, (g) => {
     const m = monthIndex(g[1] ?? "", r);
@@ -358,6 +401,21 @@ function monthIndex(name: string, r: Rules): number | null {
     if (r.months[i].toLowerCase() === lowered) return i + 1;
   }
   return null;
+}
+
+/**
+ * Whether `word` is what stands immediately before the match.
+ *
+ * Reads the string the pass is substituting over, so the neighbour is the
+ * previous pass's output rather than the original text, and compares folded
+ * case because a sentence may open with the article.
+ */
+function wordBefore(whole: string, at: number, word: string): boolean {
+  const before = whole.slice(0, at).replace(/\s+$/, "");
+  if (!before) return false;
+  const fields = before.split(/\s+/);
+  const last = fields[fields.length - 1];
+  return last.toLowerCase().replace(/^[,;:]+|[,;:]+$/g, "") === word.toLowerCase();
 }
 
 /** German only: `am`/`den`/`vom` before the day select the `-en` ending. */
@@ -412,7 +470,10 @@ function twoDigitOrdinal(value: number, r: Rules): string | null {
 export function expandOrdinals(text: string, language: string): string {
   const r = RULES[language];
   if (!r || r.ordSuffixes.length === 0) return text;
-  const re = new RegExp(`\\b([0-9]+)(${r.ordSuffixes.join("|")})\\b`, "gi");
+  const re = new RegExp(
+    `${NOT_WORD_BEFORE}([0-9]+)(${r.ordSuffixes.join("|")})${NOT_WORD_AFTER}`,
+    "giu",
+  );
   return replace(text, re, (g) => ordinal(Number(g[1]), language));
 }
 
@@ -420,7 +481,7 @@ export function expandOrdinals(text: string, language: string): string {
  * Rewrite every match, right to left so earlier offsets stay valid.
  *
  * The callback gets the capture groups (index 0 is the whole match), the match
- * offset, and the string being scanned — the last two because the German oblique
+ * offset, and the string being scanned, the last two because the German oblique
  * test reads the word *before* the date. Returning `null` leaves that match
  * exactly as written, which is this module's answer whenever evidence runs out.
  */

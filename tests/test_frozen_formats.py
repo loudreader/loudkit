@@ -59,11 +59,16 @@ def test_the_error_catalog_on_the_page_is_the_whole_catalog(page: str) -> None:
 def test_the_checkpoint_manifest_row_names_the_format_the_loader_accepts(page: str) -> None:
     from loudkit import checkpoint
 
-    row = re.search(
-        r"\|\s*checkpoint manifest\s*\|[^|]*\|\s*`([a-z-]+)`\s*/\s*`(\d+)`\s*\|", page
-    )
+    row = re.search(r"\|\s*checkpoint manifest\s*\|[^|]*\|\s*`([a-z-]+)`\s*/\s*([^|]+)\|", page)
     assert row is not None, "the frozen-formats table has no checkpoint manifest row"
-    name, version = row.group(1), int(row.group(2))
+    name = row.group(1)
     source = Path(checkpoint.__file__).read_text(encoding="utf-8")
     assert f'"{name}"' in source, f"{name!r} is not the format string the loader checks"
-    assert str(version) in source
+    # Every version the loader accepts, not merely one of them: a reader
+    # trusting this page needs to know that a file it has never seen may
+    # arrive, and which engines will hand it back.
+    documented = tuple(int(v) for v in re.findall(r"`(\d+)`", row.group(2)))
+    assert documented == checkpoint.SUPPORTED_FORMAT_VERSIONS, (
+        f"the page says {documented} and the loader accepts "
+        f"{checkpoint.SUPPORTED_FORMAT_VERSIONS}"
+    )

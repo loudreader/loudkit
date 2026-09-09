@@ -6,14 +6,14 @@
  * graphs, and this is the practical unit anyway: the feature is a slice and a
  * range check, and the engine's part of it is passing the result to the same `prefix`
  * argument the streaming loop uses. There is deliberately no second
- * conditioning mechanism to test — a request boundary and a chunk boundary are
+ * conditioning mechanism to test: a request boundary and a chunk boundary are
  * the same join.
  *
  * What this therefore does NOT cover is the wiring: if the helper's result
  * stopped being handed to the generator's prefix, every assertion here would
  * still pass. That half is pinned in Python, by
  * tests/test_engine.py::TestCrossRequestContext, against a fake generator that
- * records the context it was given — building an equivalent seam in four more
+ * records the context it was given. Building an equivalent seam in four more
  * languages would cost four engine refactors to re-assert one fact.
  */
 
@@ -62,7 +62,7 @@ test("an id outside the acoustic codebook is refused, and named", () => {
 test("the whole history is checked, not only the slice that will be used", () => {
   // An id out of range means the sequence was built wrong. Reporting that only
   // when the bad id happens to land in the last six tokens would make the
-  // failure depend on how long the caller's text was — the kind of bug that is
+  // failure depend on how long the caller's text was: the kind of bug that is
   // reproducible on one paragraph and not on the next.
   const history = [99_999, 1, 2, 3, 4, 5, 6, 7];
   assert.throws(() => carryFrom(history, PREFIX, START_SPEECH), /99999/);

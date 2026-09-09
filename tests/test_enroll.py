@@ -27,8 +27,13 @@ import pytest
 
 from loudkit.models.enroll import TorchVoiceEnroller, _CAMPPlus, _S3Tokenizer, _VoiceEncoder
 
-pytest.importorskip("torchaudio")
-pytest.importorskip("librosa")
+from .assets import needs_module
+
+# `needs_module`, not `importorskip`: `LOUDKIT_REQUIRE_ASSETS` must turn this
+# into a failure. A plain skip here is how the whole enrollment contract ran
+# nowhere while the `check` job installed a `.[dev]` that carried no torchaudio.
+needs_module("torchaudio")
+needs_module("librosa")
 
 
 @pytest.fixture
@@ -57,7 +62,7 @@ def clip() -> np.ndarray:
 
 
 class TestDeterminism:
-    def test_same_clip_same_profile(self, enroller, clip) -> None:  # type: ignore[no-untyped-def]
+    def test_same_clip_same_profile(self, enroller, clip) -> None:
         a = enroller.enroll(clip, 24_000, name="voice")
         b = enroller.enroll(clip, 24_000, name="voice")
         for field in (
@@ -71,7 +76,7 @@ class TestDeterminism:
 
 
 class TestProfileShape:
-    def test_profile_carries_every_renderer_field(self, enroller, clip) -> None:  # type: ignore[no-untyped-def]
+    def test_profile_carries_every_renderer_field(self, enroller, clip) -> None:
         profile = enroller.enroll(clip, 24_000, name="voice")
         assert profile.name == "voice"
         assert profile.speaker_embedding.shape == (256,)
@@ -83,17 +88,17 @@ class TestProfileShape:
         # tokens and mel frames stay aligned at exactly 2 frames per token
         assert profile.prompt_mel.shape[1] == 2 * len(profile.prompt_tokens)
 
-    def test_profile_is_small_enough_to_be_a_file(self, enroller, clip) -> None:  # type: ignore[no-untyped-def]
+    def test_profile_is_small_enough_to_be_a_file(self, enroller, clip) -> None:
         profile = enroller.enroll(clip, 24_000)
         assert profile.n_bytes < 1_000_000, "a voice is a file, not a model"
 
 
 class TestValidation:
-    def test_non_mono_audio_is_refused(self, enroller) -> None:  # type: ignore[no-untyped-def]
+    def test_non_mono_audio_is_refused(self, enroller) -> None:
         with pytest.raises(ValueError, match="mono"):
             enroller.enroll(np.zeros((2, 100), np.float32), 24_000)
 
-    def test_enrollment_without_voice_encoder_names_the_argument(self, clip) -> None:  # type: ignore[no-untyped-def]
+    def test_enrollment_without_voice_encoder_names_the_argument(self, clip) -> None:
         import torch
 
         enroller = TorchVoiceEnroller(
@@ -105,11 +110,11 @@ class TestValidation:
         with pytest.raises(RuntimeError, match="voice_encoder_weights"):
             enroller.enroll(clip, 24_000)
 
-    def test_source_sample_rate_is_recorded(self, enroller, clip) -> None:  # type: ignore[no-untyped-def]
+    def test_source_sample_rate_is_recorded(self, enroller, clip) -> None:
         profile = enroller.enroll(clip, 16_000)
         assert profile.source_sample_rate == 16_000
 
-    def test_read_only_audio_never_reaches_torch(self, enroller, clip) -> None:  # type: ignore[no-untyped-def]
+    def test_read_only_audio_never_reaches_torch(self, enroller, clip) -> None:
         read_only = clip.copy()
         read_only.setflags(write=False)
 

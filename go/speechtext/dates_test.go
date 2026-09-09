@@ -8,7 +8,7 @@ import "testing"
 // the two literal runes `\` and `d`, so no digit ever matched and every guard
 // was blind to exactly the character it was written for. `42.3.2026` reached
 // the German dotted-date reading as a date with a stray digit welded in front
-// of it — and a wrong day, since the match began at the `2`.
+// of it, and a wrong day, since the match began at the `2`.
 func TestADigitBesideADateRefusesIt(t *testing.T) {
 	cases := []struct{ text, lang, want string }{
 		{"42.3.2026", "de", "42.3.2026"},

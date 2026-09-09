@@ -1,12 +1,12 @@
 /**
- * Numbers, said out loud — the TypeScript half of `loudkit.frontend.numbers`.
+ * Numbers, said out loud: the TypeScript half of `loudkit.frontend.numbers`.
  *
  * The grammar is data and only the interpreter is code: this module reads the
  * same numbers.json every other implementation reads, so a rule lives once.
  * The composition mirrors loudkit/frontend/numbers.py function for function; the
  * reasons behind the odd-looking behaviours (joiners carrying their own
  * spacing, per-value agreement scopes, a scale noun with its own gender) live
- * in the Python docstrings and docs/reference/preprocess.md, and the hand-written
+ * in the Python docstrings and docs/design/preprocess.md, and the hand-written
  * fixture plus the 1300-row CLDR differential pin them.
  * Python reference: `loudkit/frontend/numbers.py`.
  */
@@ -14,7 +14,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-import grammarData from "../data/numbers.json" with { type: "json" };
+import { NumberGrammarError } from "./errors.js";
+import { GRAMMAR_URL, NUMERALS_URL, RESPELL_URL, grammarLanguages } from "./textconfig.js";
 
 interface Scale {
   value: number;
@@ -101,9 +102,7 @@ function parseGrammar(e: any): Grammar {
  
 
 const GRAMMARS: Record<string, Grammar> = Object.fromEntries(
-  Object.entries(
-    (grammarData as { languages: Record<string, unknown> }).languages
-  ).map(([lang, entry]) => [lang, parseGrammar(entry)])
+  Object.entries(grammarLanguages()).map(([lang, entry]) => [lang, parseGrammar(entry)])
 );
 
 /** Language ids `cardinal` can verbalize, sorted. */
@@ -131,17 +130,17 @@ function gendered(
 
 /**
  * `value` as words. An empty gender gives the citation form. An unknown
- * language or a value past the grammar's largest scale throws — silently
+ * language or a value past the grammar's largest scale throws, because silently
  * reading digits back would be indistinguishable from success.
  */
 export function cardinal(value: number, language: string, gender = ""): string {
   const g = GRAMMARS[language];
   if (g === undefined) {
-    throw new Error(`no number grammar for ${language}`);
+    throw new NumberGrammarError(`no number grammar for ${language}`);
   }
   const ceiling = g.scales.length > 0 ? g.scales[0].value * 1000 : 1000;
   if (Math.abs(value) >= ceiling) {
-    throw new Error(
+    throw new NumberGrammarError(
       `${value} is past the largest scale ${language} has a word for`
     );
   }
@@ -285,40 +284,49 @@ function belowHundred(
   return `${tenWord}${joiner}${unitW}`;
 }
 
-// ASCII digits only, explicitly — see the Python module for why.
 /**
  * The funnel's code version, bumped when the passes change what they emit for
  * text they already handled. A new language or table moves the digest instead.
  */
-export const TEXT_RECIPE = "funnel-2";
+export const TEXT_RECIPE = "funnel-6";
 
 /**
  * First 16 hex characters of the SHA-256 of the grammar file followed by the
- * respelling lexicon, as raw bytes — like every other implementation, so the
+ * respelling lexicon, as raw bytes, like every other implementation, so the
  * five agree only when they ship the same files.
  *
  * The lexicon is hashed alongside the grammar because it is a funnel input
  * exactly as the grammar is and it changes the spoken tokens, so both files
  * hash into the fingerprint. Leaving the lexicon out covers 55 KB of rules but
  * not 6.5 MB of vocabulary.
+ *
+ * Every byte in these files is data the funnel reads, so nothing that is not
+ * read belongs in them: a sentence of prose corrected inside one moves this
+ * digest and the fingerprint above it while every sample renders identically.
+ * Descriptions live beside the data, in `numbers.about.md` and
+ * `numerals.provenance.json`, neither hashed nor copied into `data/`.
  */
+let cachedDigest: string | null = null;
+
 export function grammarDigest(): string {
   if (cachedDigest === null) {
-    const grammar = readFileSync(new URL("../data/numbers.json", import.meta.url));
-    const respell = readFileSync(new URL("../data/pl_en_respell.json", import.meta.url));
+    const grammar = readFileSync(GRAMMAR_URL);
+    const respell = readFileSync(RESPELL_URL);
+    // And the numeral table, for the same reason: it decides the words a
+    // numeral becomes, and it pins the Unicode version the fold uses.
+    const numerals = readFileSync(NUMERALS_URL);
     cachedDigest = createHash("sha256")
       .update(grammar)
       .update(respell)
+      .update(numerals)
       .digest("hex")
       .slice(0, 16);
   }
   return cachedDigest;
 }
 
-let cachedDigest: string | null = null;
-
 /**
- * Python's `_DIGIT_RUN` — JS has lookbehind, so the shape ports over; only the
+ * Python's `_DIGIT_RUN`. JS has lookbehind, so the shape ports over; only the
  * word class is spelled out rather than abbreviated.
  *
  * The three parts of the pattern are each audible: a run glued to a
@@ -331,6 +339,10 @@ let cachedDigest: string | null = null;
  * character there is. That difference was the whole of a parity break: `é2`
  * read as *étwo* here and stayed written in the other four, and `zł200 000`
  * read as *złdoscientos mil*.
+ *
+ * The digits are `[0-9]` and not `\d` for the mirror of the same reason: `\d`
+ * is Unicode in Python and Rust and ASCII in Go and JS, and a character class
+ * that differs per implementation is a cross-port divergence waiting to happen.
  */
 const DIGIT_RUN =
   /(?<![\p{L}\p{N}_])(-(?=[0-9]))?([0-9]{1,3}(?: [0-9]{3})+(?! ?[0-9])|[0-9]+)((?:[.,][0-9]+)*)(?![\p{L}\p{N}_])/gu;
@@ -339,13 +351,13 @@ const DIGIT_RUN =
 const WALK_LETTER = /\p{L}/u;
 
 /**
- * What the walks step over: Python's `str.isalnum() or c in "_.,-+"` — the
+ * What the walks step over: Python's `str.isalnum() or c in "_.,-+"`, the
  * characters an identifier puts between its letters and its digits.
  */
 const WALK_CHAR = /[\p{L}\p{N}_.,\-+]/u;
 
 /**
- * Whether three digits start at `i` — the shape `DIGIT_RUN` binds as a group
+ * Whether three digits start at `i`: the shape `DIGIT_RUN` binds as a group
  * after the first, and so the shape a space in front of them may be grouping.
  */
 function startsAGroup(text: string, i: number): boolean {
@@ -361,6 +373,24 @@ function continuesAGroup(text: string, i: number): boolean {
 }
 
 /**
+ * The whole code point at `i`, not the UTF-16 unit.
+ *
+ * `text[i]` hands back a lone surrogate for anything above the BMP, and
+ * `\p{L}` does not match a lone surrogate, so both walks below stepped
+ * straight past an astral letter and read a number that Python, which iterates
+ * code points, refused: `0.\u{17000}` was *zero* here and written everywhere
+ * else. Returns `""` at a low surrogate, which is the tail of a pair the
+ * caller has already seen.
+ */
+function codePointAt(text: string, i: number): string {
+  const unit = text.charCodeAt(i);
+  if (Number.isNaN(unit)) return "";
+  if (unit >= 0xd800 && unit <= 0xdbff) return text.slice(i, i + 2);
+  if (unit >= 0xdc00 && unit <= 0xdfff) return "";
+  return text[i];
+}
+
+/**
  * Whether the token continues past the match into a letter.
  *
  * The mirror of `gluedToAWord`, needed for the same reason: `200 000x` matches
@@ -372,14 +402,15 @@ function continuesAGroup(text: string, i: number): boolean {
  */
 function gluedForward(text: string, end: number): boolean {
   for (let i = end; i < text.length; i += 1) {
-    const c = text[i];
+    const c = codePointAt(text, i);
+    if (c === "") continue; // the tail of a surrogate pair already read
     if (WALK_LETTER.test(c)) return true;
     if (WALK_CHAR.test(c)) continue;
     // Three digits after the space and the walk crosses it, a fourth digit
     // notwithstanding: `startsAGroup` where the backward walk asks
     // `continuesAGroup`. The asymmetry is the measurement. Forwards the walk
     // finishes the run the pattern *refused* to bind, and a ragged group is why
-    // it refused — `1 0023R` matched the `1` alone and read "en 0023R", half a
+    // it refused: `1 0023R` matched the `1` alone and read "en 0023R", half a
     // run spoken and the rest welded to a letter, which is the class the
     // right-hand guard exists to stop. Backwards the group is the match itself,
     // whose width the pattern already fixed, and the same looseness there
@@ -408,15 +439,20 @@ function truncatedByAFraction(text: string, end: number): boolean {
 }
 
 /**
- * Whether the digit run at `start` sits inside a token containing a letter —
- * Python's backward walk over word characters and dots, which is the question
+ * Whether the digit run at `start` sits inside a token containing a letter,
+ * which is Python's backward walk over word characters and dots, which is the question
  * its one-character lookbehind could not ask. In `v1.2.3` the scan starts at
  * the `2`, because a dot precedes it, and the version came out
  * "v1.two point three".
  */
 function gluedToAWord(text: string, start: number): boolean {
   for (let i = start - 1; i >= 0; i -= 1) {
-    const c = text[i];
+    // The code point that *ends* at `i`, so a low surrogate is read together
+    // with the high one in front of it rather than as a character of its own.
+    const low = text.charCodeAt(i);
+    const c =
+      low >= 0xdc00 && low <= 0xdfff && i > 0 ? text.slice(i - 1, i + 1) : codePointAt(text, i);
+    if (c === "") continue;
     // `-` and `+` are in the walk because an exponent puts one between the
     // letter and the digits: in `1e-3` the scan starts at the `3`, walks back
     // over `-` to `e`, and stops calling it a number.
@@ -425,10 +461,10 @@ function gluedToAWord(text: string, start: number): boolean {
     // the non-backtracking ports. `x200 000` binds as a single match in Go and
     // Rust, whose engines do not backtrack, so their lookbehind refuses the
     // whole run; a backtracking engine that matched the standalone `000` reads
-    // "x200 zero zero zero" — half a token spoken, which is the class the
+    // "x200 zero zero zero", half a token spoken, which is the class the
     // right-hand guard exists to stop.
     //
-    // Exactly three digits behind the space and no fourth — the only shape the
+    // Exactly three digits behind the space and no fourth: the only shape the
     // pattern binds across one, judged by the group the walk steps *out of*,
     // plus a digit behind the space. The looser shapes each break on a real
     // input: "a digit on each side" crosses into the `R` of `R2 5`, which is not
@@ -436,7 +472,7 @@ function gluedToAWord(text: string, start: number): boolean {
     // whose first group is legitimately one digit; dropping the digit-behind
     // test lets the walk cross space after space, so `Sold 200 000` reaches
     // "Sold" and refuses a number nothing was glued to; and admitting a fourth
-    // digit — which is what the forward walk does — reaches the `e` of
+    // digit, which is what the forward walk does, reaches the `e` of
     // `e3 1000` and welds two tokens into one.
     const groupingSpace =
       c === " " &&
@@ -470,7 +506,7 @@ export function decimalSeparator(language: string): string {
  *
  * Language-dependent for the separators, and that is not a detail. U+066B is a
  * *decimal* separator, so folding it to a dot everywhere turned `٣٫١٤` into
- * `3.14` — which in the eleven languages that write decimals with a comma is
+ * `3.14`, which in the eleven languages that write decimals with a comma is
  * the written form of a clock time, read out as *drei Uhr vierzehn*.
  */
 export function foldForeignDigits(text: string, language: string): string {
@@ -493,15 +529,15 @@ export function foldForeignDigits(text: string, language: string): string {
  * An E.164 telephone number, read digit by digit and taken before the digit
  * run, which cannot decline it: `+48 123 456 789` is a valid
  * one-to-three-then-threes grouping and read as a cardinal it is forty-eight
- * billion. The plus is the evidence — E.164 requires one and a grouped thousand
+ * billion. The plus is the evidence: E.164 requires one and a grouped thousand
  * never carries one.
  */
 const PHONE_RUN = /\+[0-9][0-9 ]*[0-9]/g;
 
-/** ISO 8601's 24:00. Admitted as an hour, and only with a zero minute. */
 /** Digits in a thousands group: every group after the first is exactly this. */
 const GROUP_DIGITS = 3;
 
+/** ISO 8601's 24:00. Admitted as an hour, and only with a zero minute. */
 const END_OF_DAY_HOUR = 24;
 
 /** Below this a plus-signed run is a delta, not a telephone number. */
@@ -516,10 +552,10 @@ const MIN_E164_DIGITS = 8;
 const UNICODE_MINUS = /[\u2212\u2010](?=[0-9])/g;
 
 /**
- * Every run of digits in `text`, said as words — the seam between the
+ * Every run of digits in `text`, said as words: the seam between the
  * verbalizer and the funnel. Never throws and never leaves digits behind: a
  * number past every scale is read digit by digit (it is almost always an
- * identifier), and only the language's own decimal mark is a decimal mark —
+ * identifier), and only the language's own decimal mark is a decimal mark:
  * the other one is grouping, and is dropped the way a reader drops it.
  */
 export function expandNumbers(text: string, language: string): string {
@@ -528,11 +564,18 @@ export function expandNumbers(text: string, language: string): string {
   // Both before anything looks for a digit run: the sign has to be ASCII by the
   // time the pattern matches one, and a phone number has to be gone before the
   // grouping rule meets a shape it cannot decline.
-  const folded = text.replace(UNICODE_MINUS, "-").replace(PHONE_RUN, (whole) => {
-    const digits = [...whole].filter((c) => c >= "0" && c <= "9");
-    if (digits.length < MIN_E164_DIGITS) return whole;
-    return digits.map((d) => cardinal(Number(d), language)).join(" ");
-  });
+  const folded = text
+    .replace(UNICODE_MINUS, "-")
+    .replace(PHONE_RUN, (whole: string, offset: number, source: string) => {
+      // The same two guards the digit run answers to, for the same reason: a
+      // run inside a word is part of an identifier, and `+12345678abc` is not a
+      // telephone number in any country.
+      if (gluedToAWord(source, offset) || gluedForward(source, offset + whole.length))
+        return whole;
+      const digits = [...whole].filter((c) => c >= "0" && c <= "9");
+      if (digits.length < MIN_E164_DIGITS) return whole;
+      return digits.map((d) => cardinal(Number(d), language)).join(" ");
+    });
   return folded.replace(
     DIGIT_RUN,
     (
@@ -562,7 +605,7 @@ export function expandNumbers(text: string, language: string): string {
  *
  * `1.2.3`, `192.168.0.1` and `12.03.2026` all match the digit-run pattern and
  * none is a quantity. Reading one as a quantity says "nineteen million two
- * hundred sixteen thousand eight hundred one" for an IP address — and in the
+ * hundred sixteen thousand eight hundred one" for an IP address, and in the
  * Python reference is a hard crash.
  *
  * A run is a quantity when it has at most one separator, or when its separators
@@ -612,7 +655,7 @@ function sayNumber(literal: string, g: Grammar, language: string): string {
   const parts = [sayInteger(whole, language)];
   if (fraction) {
     parts.push(g.decimalWord);
-    // Digit by digit — "point four nine", never "point forty-nine": leading
+    // Digit by digit, "point four nine" and never "point forty-nine": leading
     // zeros carry meaning there that a cardinal would eat.
     parts.push(...digitByDigit(fraction, language));
   }
@@ -639,23 +682,141 @@ function digitByDigit(digits: string, language: string): string[] {
   return [...digits].map((ch) => cardinal(ch.charCodeAt(0) - 48, language));
 }
 
+/**
+ * A Roman numeral written with I, V and X, and nothing else.
+ *
+ * L, C, D and M are left out, and that is the whole rule rather than an
+ * optimisation of it. Every two-letter initialism that is also a valid Roman
+ * numeral needs one of them -- CD, CV, DC, MC, MD, XL, CM -- and so does the
+ * only common English word that is one, MIX. What remains is 2 to 39, which is
+ * where chapter, act, volume, war and regnal numbers live.
+ */
+const ROMAN_RUN = /(?<![0-9A-Za-z])([IVX]{2,})(?![0-9A-Za-z])/g;
+
+/**
+ * The only spellings 2 to 39 has. Matched whole, so `IIX` and `VV` are refused.
+ *
+ * They are letters that happen to be in the alphabet rather than numbers, and a
+ * token this refuses is a token the acronym pass still sees.
+ */
+const ROMAN_CANONICAL = /^(X{0,3})(IX|IV|V?I{0,3})$/;
+
+/** `numeral` as a number, or `null` when it is not one. */
+function romanValue(numeral: string): number | null {
+  const matched = ROMAN_CANONICAL.exec(numeral);
+  if (matched === null) return null;
+  const tail = matched[2];
+  let units: number;
+  if (tail === "IX") units = 9;
+  else if (tail === "IV") units = 4;
+  else units = (tail.startsWith("V") ? 5 : 0) + [...tail].filter((c) => c === "I").length;
+  return matched[1].length * 10 + units;
+}
+
+/**
+ * `Chapter IV` and `World War II`, said as numbers.
+ *
+ * A no-op for a language with no number grammar, which is the only thing that
+ * could say the value.
+ */
+export function expandRomanNumerals(text: string, language: string): string {
+  if (GRAMMARS[language] === undefined) return text;
+  return text.replace(ROMAN_RUN, (whole: string, numeral: string) => {
+    const value = romanValue(numeral);
+    return value === null ? whole : cardinal(value, language);
+  });
+}
+
+/**
+ * The letters a price abbreviates its magnitude with, longest first.
+ *
+ * Only beside a currency mark, which is what makes them unambiguous: a bare
+ * `5m` is five metres as readily as five million, and `20k` is a race distance.
+ * `$5m` is a sum of money in every convention that writes it.
+ */
+const SCALE_SUFFIXES: readonly (readonly [string, number])[] = [
+  ["bn", 1_000_000_000],
+  ["tn", 1_000_000_000_000],
+  ["k", 1_000],
+  ["m", 1_000_000],
+  ["b", 1_000_000_000],
+  ["t", 1_000_000_000_000],
+];
+
+/**
+ * The suffixes above as one alternation, either case, for the funnel's pattern.
+ *
+ * Each letter is written as its own two-character class rather than asked of a
+ * case-insensitive flag: JavaScript has no inline flag group, and a pattern that
+ * needs one is a pattern the five implementations cannot share.
+ */
+export const SCALE_SUFFIX_PATTERN = SCALE_SUFFIXES.map(([spelling]) =>
+  [...spelling].map((c) => `[${c}${c.toUpperCase()}]`).join("")
+).join("|");
+
+/**
+ * The scale noun `suffix` abbreviates, in the form `count` of them takes.
+ *
+ * Undefined where the language has no noun for that magnitude, which leaves the
+ * letter written rather than guessing at a word for it.
+ */
+export function scaleSuffixWord(
+  suffix: string,
+  count: number,
+  language: string
+): string | undefined {
+  const g = GRAMMARS[language];
+  if (g === undefined) return undefined;
+  const lowered = suffix.toLowerCase();
+  for (const [spelling, value] of SCALE_SUFFIXES) {
+    if (spelling !== lowered) continue;
+    for (const sc of g.scales) {
+      if (sc.value === value) return scaleWord(count, sc.forms);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Every form of every scale noun this language has, longest first.
+ *
+ * Longest first because they go into an alternation, where a shorter form that
+ * prefixes a longer one would match first and leave the rest of the word behind.
+ */
+export function scaleNouns(language: string): string[] {
+  const g = GRAMMARS[language];
+  if (g === undefined) return [];
+  const forms = new Set<string>();
+  for (const sc of g.scales) {
+    for (const form of sc.forms) {
+      if (form) forms.add(form);
+    }
+  }
+  return [...forms].sort(
+    (a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0)
+  );
+}
 
 // The lookarounds are the point: `\b` alone let this match *inside* a longer
-// dotted run, so `12.03.2026` — the ordinary written date of German, Polish,
-// Danish, Finnish and Norwegian — matched `12.03` and was read as twelve
+// dotted run, so `12.03.2026`, the ordinary written date of German, Polish,
+// Danish, Finnish and Norwegian, matched `12.03` and was read as twelve
 // o'clock three with the year trailing behind it. A time is a time only when
 // nothing is attached to either end; `14:30.` at the end of a sentence still
 // matches, because what follows the dot is not a digit.
-const TIME_RUN = /(?<![\d.,:])([01]?[0-9]|2[0-4]):([0-5][0-9])(?![.,:]?\d)/g;
+//
+// The seconds are optional and the guard sits behind them, so `10:30:45` reads
+// and `10:30:45:60` stays written.
+const TIME_RUN =
+  /(?<![0-9.,:])([01]?[0-9]|2[0-4]):([0-5][0-9])(?::([0-5][0-9]))?(?![.,:]?[0-9])/g;
 
 /**
  * `14.30`, which is a clock time in some of these languages and a decimal in
- * others — applied only where the language says it is a time.
+ * others. Applied only where the language says it is a time.
  *
  * A language that writes clock times with a dot does not use the dot as its
  * decimal separator. German writes `14.30 Uhr` and `2,50 €`; English writes
  * `2:30` and `$2.50`. So this applies exactly where `decimalSeparator` is not
- * `.`, which today means everywhere but English — before which every English
+ * `.`, which today means everywhere but English. Before that guard, every English
  * decimal with two fraction digits read as the clock (`$0.49` as *zero
  * forty-nine*, `3.14` as *three fourteen*), and the shared fixture pinned one
  * of them, so all five implementations agreed on it.
@@ -666,21 +827,25 @@ const DOTTED_TIME_RUN = /(?<![\d.,:])([01]?[0-9]|2[0-4])\.([0-5][0-9])(?![.,:]?\
  * The two clock-time patterns, extended to consume a written infix word.
  *
  * German writes the time *with* the word the spoken form also carries:
- * `um 14.30 Uhr`. The reading puts the infix where it belongs — between hour
- * and minutes, *vierzehn Uhr dreißig* — so the written `Uhr` is that same
+ * `um 14.30 Uhr`. The reading puts the infix where it belongs, between hour
+ * and minutes (*vierzehn Uhr dreißig*), so the written `Uhr` is that same
  * spoken token, not an additional one, and leaving it standing said it twice.
- * When the source carries the infix immediately after the time, the match
- * swallows it and the normal reading supplies the one copy.
+ * When the source carries the infix after the time, the match swallows it and
+ * the normal reading supplies the one copy.
+ *
+ * The whitespace in front of the infix may be absent: a word is the same word
+ * whether or not a space was typed before it, and an infix the match does not
+ * take is an infix the reading says twice.
  *
  * Every piece is spelled out because five implementations must match
  * identically: the whitespace run is ASCII space and tab (regex engines
  * disagree on what `\s` covers), the guard refuses an ASCII letter or digit
- * so *Uhrzeit* keeps its word whole, and case matters — the grammar data says
+ * so *Uhrzeit* keeps its word whole, and case matters because the grammar data says
  * `Uhr` and this rule does not reach past that.
  */
 function timePatterns(timeInfix: string): { timeRun: RegExp; dottedTimeRun: RegExp } {
   const suffix = timeInfix
-    ? `(?:[ \\t]+${escapeRegex(timeInfix)}(?![0-9A-Za-z]))?`
+    ? `(?:[ \\t]*${escapeRegex(timeInfix)}(?![0-9A-Za-z]))?`
     : "";
   return {
     timeRun: new RegExp(TIME_RUN.source + suffix, "g"),
@@ -688,41 +853,96 @@ function timePatterns(timeInfix: string): { timeRun: RegExp; dottedTimeRun: RegE
   };
 }
 
-/** Clock times as words — see the Python module for the shape. */
+/** Clock times as words; see the Python module for the shape. */
 export function expandTimes(text: string, language: string): string {
   const g = GRAMMARS[language];
   if (g === undefined) return text;
   const { timeRun, dottedTimeRun } = g.timeInfix
     ? timePatterns(g.timeInfix)
     : { timeRun: TIME_RUN, dottedTimeRun: DOTTED_TIME_RUN };
-  const say = (whole: string, h: string, m: string): string => {
+  const say = (
+    whole: string,
+    h: string,
+    m: string,
+    s: string | undefined,
+    offset: number,
+    source: string
+  ): string => {
+    const hour = Number(h);
+    const minute = Number(m);
+    // A zero seconds field says nothing the hour and minute have not already
+    // said, so `10:30:00` reads exactly as `10:30` does.
+    const seconds = s ? Number(s) : 0;
     // 24 is admitted only with a zero minute: ISO 8601 writes end-of-day as
     // 24:00, and without it the two halves were read as unrelated numbers with
     // the colon left standing between them. 24:30 is not a time in any
     // convention and stays as written.
-    if (Number(h) === END_OF_DAY_HOUR && Number(m) !== 0) return whole;
-    const words = [cardinal(Number(h), language)];
+    if (hour === END_OF_DAY_HOUR && (minute !== 0 || seconds !== 0)) return whole;
+    const words = [cardinal(hour, language)];
     if (g.timeInfix) words.push(g.timeInfix);
-    if (Number(m) !== 0) words.push(cardinal(Number(m), language));
-    return words.join(" ");
+    // A zero minute is dropped from `14:00` and kept in `14:00:45`, where
+    // dropping it would move the seconds into the minutes' place.
+    if (minute !== 0 || seconds !== 0) words.push(cardinal(minute, language));
+    if (seconds !== 0) words.push(cardinal(seconds, language));
+    const spoken = words.join(" ");
+    // The reading is words, and a word is not written against the letters that
+    // followed the digits: `3:45pm` is "three forty-five pm", the reading the
+    // spaced form already got.
+    return asciiLetterAt(source, offset + whole.length) ? `${spoken} ` : spoken;
   };
   const out = text.replace(timeRun, say);
-  // A dot means a time only where it does not already mean a decimal point.
-  return g.decimalSeparator === "." ? out : out.replace(dottedTimeRun, say);
+  // A dot means a time only where it does not already mean a decimal point, and
+  // a dotted time carries no seconds: `10.30.45` is a version string as readily
+  // as a timestamp, where `10:30:45` is a timestamp in every convention.
+  if (g.decimalSeparator === ".") return out;
+  // Two groups rather than three, so the trailing arguments arrive one place to
+  // the left of the colon form's.
+  return out.replace(
+    dottedTimeRun,
+    (whole: string, h: string, m: string, offset: number, source: string) =>
+      say(whole, h, m, undefined, offset, source)
+  );
 }
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** The authority-listed abbreviations, written out — see the Python module. */
+/**
+ * Whether an ASCII letter stands at `at`. The class the written infix is
+ * already guarded against, so the two rules that decide where a spoken time
+ * ends answer to one alphabet in all five implementations rather than to five
+ * spellings of `\w`.
+ */
+function asciiLetterAt(text: string, at: number): boolean {
+  const c = text.charCodeAt(at);
+  return (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a);
+}
+
+/**
+ * The authority-listed abbreviations, written out, see the Python module.
+ *
+ * The guards spell the word class out for the reason `DIGIT_RUN` does: JS `\w`
+ * is `[A-Za-z0-9_]` and stays ASCII even under the `u` flag, so `éz.B.` was
+ * expanded here and left written in the other four ports, one string with two
+ * readings under one grammar digest.
+ *
+ * Lookarounds rather than consuming guards, so two abbreviations that touch are
+ * both read: the consumed separator moved the scan past the second one.
+ *
+ * `spoken` is data, so it goes through a callback: a `$` inside it would be
+ * read as a replacement template.
+ */
 export function expandAbbreviations(text: string, language: string): string {
   const g = GRAMMARS[language];
   if (g === undefined || g.abbreviations.length === 0) return text;
   let out = text;
   for (const [written, spoken] of g.abbreviations) {
-    const re = new RegExp(`(^|[^\\w.])${escapeRegex(written)}($|[^\\w.])`, "g");
-    out = out.replace(re, `$1${spoken}$2`);
+    const re = new RegExp(
+      `(?<![\\p{L}\\p{N}_.])${escapeRegex(written)}(?![\\p{L}\\p{N}_.])`,
+      "gu"
+    );
+    out = out.replace(re, () => spoken);
   }
   return out;
 }

@@ -1,30 +1,6 @@
-"""Where each chunk — and, approximately, each word — lands in the waveform.
+"""Where each chunk, and, approximately, each word, lands in the waveform.
 
-A reading app highlights the sentence it is speaking. That needs two different
-kinds of answer, and this module is careful to keep them apart, because
-conflating them is how a feature like this becomes a lie:
-
-**Chunk times are exact.** The engine renders each chunk to its own waveform and
-concatenates them, so it knows every chunk's sample offset and sample length
-without estimating anything. :class:`ChunkTiming` reports those, converted to
-seconds. Chunk *k*'s ``end`` is bit-identical to chunk *k+1*'s ``start``: both
-are the same integer sample offset divided by the same sample rate, so a
-highlight driven by them can neither gap nor overlap.
-
-**Word times are estimated.** The model emits speech tokens, not an alignment;
-nothing in this pipeline knows where a word begins. :class:`WordTiming`
-distributes a chunk's real duration across its words in proportion to how long
-each word is in characters, and that is all it is. It is right often enough to
-be useful for a highlight at sentence scale and wrong in the ways you would
-expect: a long word said fast, a short word held, a pause before a clause. The
-error grows with the length of the chunk, because a single bad guess early
-shifts everything after it — one sentence is usually fine, a long paragraph read
-as one chunk is not. If you need real alignment, you need a forced aligner; this
-is not one, and pretending otherwise would be worse than the estimate.
-
-Both are computed *after* any time-stretch, on the waveform the caller actually
-receives, so :class:`~loudkit.engine.Result.speed` needs no correction applied
-to them.
+See ``docs/design/engine-pipeline.md``.
 """
 
 from __future__ import annotations
@@ -57,7 +33,7 @@ class WordTiming:
 
     **Estimated, by proportional allocation.** The chunk's real duration is
     divided among its words in proportion to their length in characters. There
-    is no alignment model here and no per-word measurement — see the module
+    is no alignment model here and no per-word measurement, see the module
     docstring for what that costs you.
     """
 
@@ -83,7 +59,7 @@ class ChunkTiming:
     """
 
     text: str
-    """The chunk's text after the speech funnel — what was tokenised, which is
+    """The chunk's text after the speech funnel, what was tokenised, which is
     not always what the caller passed in (Polish respells embedded English, and
     numbers are read as words)."""
 
@@ -97,9 +73,16 @@ class ChunkTiming:
 
     end: float
     tokens: int
-    """Speech tokens this chunk generated. Duration over tokens is the pacing
-    the postprocess detectors measure against, which is the other reason to
-    carry it."""
+    """Speech tokens this chunk generated.
+
+    Not a pace on its own. A chunk's audio is this count times the frame
+    rate, so duration over tokens is the same number for every chunk and a
+    tolerance around it can never be exceeded. The drift measure
+    :func:`loudkit.postprocess.pacing_outliers` compares is speech tokens
+    over *text* tokens, which needs the chunk's text tokenised as well.
+    Nothing in the engine computes it, so a caller that wants the measure
+    builds the ratios from this number and its own.
+    """
 
     words: tuple[WordTiming, ...] = ()
 
@@ -123,12 +106,7 @@ class ChunkTiming:
 def timeline(spans: Sequence[ChunkSpan], *, sample_rate: int) -> tuple[ChunkTiming, ...]:
     """Lay rendered chunks end to end and time them.
 
-    Offsets accumulate in **samples**, not seconds, and are divided by the rate
-    once at the end. Accumulating seconds instead would make chunk *k*'s ``end``
-    and chunk *k+1*'s ``start`` two different sums of the same floats, differing
-    in the last bit — a gap or an overlap of a few nanoseconds, invisible in a
-    test that compares with a tolerance and visible as a flicker in a highlight
-    that switches on ``time >= start``.
+    See ``docs/design/engine-pipeline.md``.
     """
     out: list[ChunkTiming] = []
     at = 0
@@ -151,17 +129,7 @@ def timeline(spans: Sequence[ChunkSpan], *, sample_rate: int) -> tuple[ChunkTimi
 def estimate_words(text: str, *, start: float, end: float) -> tuple[WordTiming, ...]:
     """Split ``text`` on whitespace and share ``[start, end]`` out by length.
 
-    The allocation is by **character count**, not by token count or by any
-    acoustic measure: a word's characters are the only thing known here, and
-    they correlate with duration well enough at sentence scale to drive a
-    highlight. Whitespace itself is not charged for — the gap between two words
-    belongs to whichever side of the boundary the caller's player is on, and
-    splitting it would only invent a third kind of span.
-
-    Boundaries are computed from a running character total rather than by adding
-    per-word durations, so the spans cannot drift: the first ``start`` is exactly
-    ``start``, the last ``end`` is exactly ``end``, and every interior boundary
-    is shared by the two words that meet at it.
+    See ``docs/design/engine-pipeline.md``.
     """
     words = text.split()
     lengths = [len(w) for w in words]

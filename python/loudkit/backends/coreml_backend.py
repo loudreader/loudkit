@@ -1,57 +1,37 @@
-"""The CoreML backend: the Apple renderer graphs, driven from Python.
+"""The CoreML backend: native generation and rendering, driven from Python.
 
-This backend runs the CoreML stage packages exported by
-``tools/export_coreml.py`` — ``flow_encoder`` (CPU, fp32),
-``flow_estimator`` (CPU + Neural Engine, fp16 pipeline), ``vocoder`` (CPU,
-fp32) — behind the loudkit ``MelDecoder`` and ``Vocoder`` protocols. The
-graph geometry is exactly the one the iOS app ships (query 255 / prompt 238,
-T986 mel, 510-frame HiFT); the weights are re-exported from the packed
-checkpoint so provenance is one file, not archaeology. It exists so that
-"matches the shipped engine" is a table produced by this repo rather than a
-belief.
-
-**The token generator stays on torch (CPU).** The app's T3 runs through a
-stateful multi-function CoreML package whose Python-side validation was
-explicitly not achieved (torch/CoreML same-process instability, documented in
-the 2026-07-26 sample wall under "Not covered: T3 on the ANE"); a backend row
-produced from an unvalidated export would be worse than no row. The renderer
-is the part where the ANE recipe questions live, and it is fully covered.
-
-The static graphs make the window recipe non-negotiable: this backend refuses
-an :class:`AlgorithmConfig` whose window does not match the exported geometry,
-because "pad differently and hope" is precisely the defect class
-(mel corr 0.975–0.993) the recipe moved into configuration to end.
-
-Asset resolution: a ``coreml/`` directory beside the checkpoint, or the
-``LOUDKIT_COREML_ASSETS`` environment variable. Missing assets fail with the
-expected filenames, not with a fallback to a different engine.
-
-Every predict goes through :class:`_PinnedInputs`, which is what keeps this
-backend from killing its host a second after it succeeds; its docstring carries
-the mechanism.
+See ``docs/design/execution-config.md``.
 """
 
 from __future__ import annotations
 
-import math
 import os
 import threading
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
-from ..checkpoint import Checkpoint
+from ..checkpoint import TOKENIZER_FILENAME, Checkpoint
 from ..config import AlgorithmConfig, ExecutionConfig
-from ..contracts import Mel, SpeechTokens, Waveform
+from ..contracts import TokenGenerator
 from ..engine import Engine
-from ..models.flow import FLOW_NOISE_STREAM, frame_windows, time_grid
-from ..models.noise import gaussian_field, symmetric_uniforms
-from ..models.vocoder import VOCODER_NOISE_STREAM, VOCODER_PHASE_STREAM
-from ..voice import VoiceProfile
+from ..frontend.text import GraphemeTextFrontend
+from ..release import EXPORT_RECORD
 from . import register_backend
+from .onnx_backend import (
+    _F32,
+    ONNXMelDecoder,
+    ONNXTokenGenerator,
+    ONNXVocoder,
+    _GraphSession,
+    _Tokens,
+    graph_names,
+)
+from .onnx_backend import _require_static_window as require_static_window
 
 __all__ = ["CoreMLMelDecoder", "CoreMLVocoder", "build_coreml_engine"]
 
@@ -60,9 +40,19 @@ ENCODER_PACKAGE = "flow_encoder.mlpackage"
 ESTIMATOR_PACKAGE = "flow_estimator.mlpackage"
 HIFT_PACKAGE = "vocoder.mlpackage"
 
-_MEL_BINS = 80
-_N_HARMONICS = 9
-_UPSAMPLE_PER_FRAME = 480
+_COMPUTE_UNITS = {
+    ENCODER_PACKAGE: "CPU_ONLY",
+    ESTIMATOR_PACKAGE: "CPU_AND_NE",
+    HIFT_PACKAGE: "CPU_ONLY",
+}
+"""Which processors each renderer package is allowed to run on.
+
+The placement ``docs/design/execution-config.md`` documents and the export was
+measured against: the encoder and the vocoder are fp32 on the CPU, the
+estimator is the fp16 pipeline the Neural Engine runs. Changing a unit here
+changes both the speed and the numerics of a render, so it is written once
+rather than three times at the call sites.
+"""
 
 
 class _MLModelLike(Protocol):
@@ -80,39 +70,14 @@ class _MLModelLike(Protocol):
 class _PinnedInputs:
     """A model whose input arrays live as long as it does.
 
-    coremltools wraps each input array without copying: ``PybindCompatibleArray``
-    (``coremlpython/CoreMLPythonArray.mm``) builds the ``MLMultiArray`` over the
-    caller's numpy buffer and keeps the ``py::array`` as an Objective-C ivar.
-    CoreML does not drop that reference when ``predict`` returns. The MLE5
-    execution stream lingers and resets itself about a second later on
-    ``com.apple.coreml.MLE5ExecutionStream.resetQueue``, and *that* is where
-    ``-[MLFeatureValue dealloc]`` runs. The compiler-generated ``.cxx_destruct``
-    then releases the ``py::array`` on a dispatch thread that holds no GIL and
-    has no thread state; if the interpreter's reference was the last one, the
-    release reaches ``_PyObject_Free`` and corrupts pymalloc's arenas. The host
-    process dies about a second after a perfectly successful synthesis, inside
-    whatever it does next (upstream: apple/coremltools#2827, open and unfixed
-    through 9.0).
-
-    So the interpreter keeps a reference of its own, for the model's lifetime,
-    and every predict copies into that same buffer. CoreML's release then only
-    ever takes the count from two to one, and the actual free happens here, on a
-    thread that holds the GIL. The buffers are bounded rather than leaked
-    because the exported graphs are static (:func:`_require_static_window`):
-    one buffer per input, reallocated never. Reusing them is safe because
-    ``predict`` is synchronous: the lingering stream holds the reference, not
-    the data. Measured: waveform bit-identical to the unpinned path, and the
-    copy does not show above run-to-run noise (2.09 s against 2.06 s median of
-    four, one 4.96 s sentence on an M3 Pro).
-
-    The lock is what makes reuse safe under ``Engine.stream``, whose renderer
-    runs on its own thread; two callers sharing one buffer would otherwise
-    interleave a fill with a predict.
+    See ``docs/design/execution-config.md``.
     """
 
     def __init__(self, model: Any) -> None:
         self._model = model
         self._buffers: dict[str, NDArray[Any]] = {}
+        self._storage: dict[str, NDArray[Any]] = {}
+        self._views: dict[tuple[str, int, tuple[int, ...]], NDArray[Any]] = {}
         self._lock = threading.Lock()
 
     def predict(self, data: Mapping[str, Any]) -> dict[str, Any]:
@@ -122,14 +87,18 @@ class _PinnedInputs:
                 arr = np.ascontiguousarray(value)
                 buf = self._buffers.get(name)
                 if buf is None or buf.shape != arr.shape or buf.dtype != arr.dtype:
-                    # A replaced buffer is *retained*, under a new key, rather
-                    # than dropped: a stream lingering over the old one would
-                    # free it on the reset queue, which is the crash this class
-                    # exists to prevent. The static geometry means this branch
-                    # runs once per input and never again.
-                    if buf is not None:
-                        self._buffers[f"{name}#{len(self._buffers)}"] = buf
-                    buf = np.empty(arr.shape, dtype=arr.dtype)
+                    # Retain the array headers CoreML may still reference. Views
+                    # share geometric storage, so growing KV caches stay linear.
+                    storage = self._storage.get(name)
+                    if storage is None or storage.size < arr.size or storage.dtype != arr.dtype:
+                        capacity = 1 << max(0, arr.size - 1).bit_length()
+                        storage = np.empty(capacity, dtype=arr.dtype)
+                        self._storage[name] = storage
+                    key = (name, id(storage), arr.shape)
+                    buf = self._views.get(key)
+                    if buf is None:
+                        buf = storage[: arr.size].reshape(arr.shape)
+                        self._views[key] = buf
                     self._buffers[name] = buf
                 np.copyto(buf, arr)
                 pinned[name] = buf
@@ -146,24 +115,75 @@ def _load_model(path: Path, compute_units: str) -> _MLModelLike:
     return _PinnedInputs(ct.models.MLModel(str(path), compute_units=units))
 
 
+class _GeneratorSession:
+    def __init__(self, path: Path) -> None:
+        import coremltools as ct
+
+        self._model = _load_model(path, "CPU_ONLY")
+
+        spec = ct.utils.load_spec(str(path))
+        names_in = {item.name for item in spec.description.input}
+        primary = {
+            "t3_cond": ["speaker_emb", "prompt_tokens", "emotion"],
+            "t3_prefill": ["embeds", "positions"],
+            "t3_step": ["embeds", "position"],
+            "t3_pair_step": ["pair_ids", "speech_position", "position"],
+            "t3_head2": ["hidden", "first_id"],
+        }[path.stem]
+        self._inputs = primary + sorted(
+            names_in - set(primary),
+            key=lambda name: (int(name.rsplit("_", 1)[1]), "_v_" in name),
+        )
+        names = {item.name for item in spec.description.output}
+        ordered = [name for name in ("logits", "hidden") if name in names]
+        cache = names - set(ordered)
+        # Cache names use paired layer indices, independent of protobuf ordering.
+        ordered += (
+            sorted(cache, key=lambda name: (int(name.rsplit("_", 1)[1]), "_v_" in name))
+            if ordered
+            else [item.name for item in spec.description.output]
+        )
+        self._outputs = ordered
+
+    def run_positional(self, values: Any) -> list[NDArray[Any]]:
+        feed = {
+            name: np.asarray(
+                value, dtype=np.int32 if np.asarray(value).dtype.kind in "iu" else np.float32
+            )
+            for name, value in zip(self._inputs, values, strict=True)
+        }
+        result = self._model.predict(feed)
+        return [np.asarray(result[name]) for name in self._outputs]
+
+
+class CoreMLTokenGenerator(ONNXTokenGenerator):
+    @staticmethod
+    def _load_session(directory: Path, name: str, execution: ExecutionConfig) -> _GraphSession:
+        del execution
+        return _GeneratorSession(directory / name.replace(".onnx", ".mlpackage"))
+
+
 def _first_output(prediction: Mapping[str, Any]) -> NDArray[np.float32]:
     return np.asarray(next(iter(prediction.values())), dtype=np.float32)
 
 
 def _require_static_window(config: AlgorithmConfig) -> tuple[int, int]:
-    w = config.window
-    if w.static_length != 255 or w.static_prompt_tokens != 238:
-        raise ValueError(
-            "the exported CoreML graphs are static at query 255 / prompt 238; "
-            f"this AlgorithmConfig frames {w.static_length}/{w.static_prompt_tokens}. "
-            "A different window is a different algorithm — re-export the graphs "
-            "rather than silently reframing here."
-        )
-    return w.static_length, w.static_prompt_tokens
+    """Refuse a window the exported packages were not built for.
+
+    See ``docs/design/execution-config.md``.
+    """
+    return require_static_window(config, "CoreML")
 
 
-class CoreMLMelDecoder:
-    """``MelDecoder`` over the shipped encoder + estimator packages."""
+class CoreMLMelDecoder(ONNXMelDecoder):
+    """``MelDecoder`` over the shipped encoder + estimator packages.
+
+    The framing, the speaker affine and the Euler loop are the ONNX renderer's;
+    only the token dtype and the two session calls are CoreML's.
+    """
+
+    _TOKEN_DTYPE = np.int32
+    _BUILDER = "build_coreml_engine"
 
     def __init__(
         self, config: AlgorithmConfig, encoder: _MLModelLike, estimator: _MLModelLike
@@ -174,97 +194,58 @@ class CoreMLMelDecoder:
                 "cfg_dual_path would apply guidance twice (EXP-016)"
             )
         self.config = config
-        self._encoder = encoder
-        self._estimator = estimator
+        # Named apart from the base class's ONNX sessions rather than shadowing
+        # them: a loaded package and a loaded graph are different objects with
+        # different feeds, and only the seams below ever touch either.
+        self._encoder_package = encoder
+        self._estimator_package = estimator
         self._spk_weight: NDArray[np.float32] | None = None
         self._spk_bias: NDArray[np.float32] | None = None
 
-    def attach_speaker_affine(
-        self, weight: NDArray[np.float32], bias: NDArray[np.float32]
-    ) -> None:
-        """The 192->80 speaker projection is part of the torch flow module and
-        was baked into neither exported graph; the backend hands its weights
-        over so the CoreML path computes the identical ``spks``."""
-        self._spk_weight = weight
-        self._spk_bias = bias
+    def _prompt_length(self, row: NDArray[np.int64]) -> int:
+        # Not `static_prompt_tokens or half the row`: the packages are traced
+        # at one geometry, so a window they were not built for is refused here
+        # rather than reframed.
+        del row
+        return _require_static_window(self.config)[1]
 
-    def decode(self, tokens: SpeechTokens, voice: VoiceProfile, *, seed: int) -> Mel:
-        if self._spk_weight is None or self._spk_bias is None:
-            raise RuntimeError("speaker affine not attached; build via build_coreml_engine")
-        _, prompt_len = _require_static_window(self.config)
-        row, cond, prompt_frames, n = frame_windows(self.config, tokens, voice)
-        t_mel = 2 * row.shape[1]
-        prompt = row[:, :prompt_len].astype(np.int32)
-        query = row[:, prompt_len:].astype(np.int32)
+    def _encode(self, prompt: _Tokens, query: _Tokens) -> _F32:
+        return _first_output(
+            self._encoder_package.predict({"prompt_token": prompt, "speech_tokens": query})
+        )
 
-        mu = _first_output(
-            self._encoder.predict({"prompt_token": prompt, "speech_tokens": query})
-        ).reshape(1, _MEL_BINS, t_mel)
-
-        emb = np.asarray(voice.flow_embedding, dtype=np.float32)
-        emb = emb / np.linalg.norm(emb)
-        spks = (self._spk_weight @ emb + self._spk_bias)[None].astype(np.float32)
-
-        grid = time_grid(self.config)
-        x = gaussian_field(seed, FLOW_NOISE_STREAM, _MEL_BINS, t_mel)[None]
-        for t0, t1 in zip(grid[:-1], grid[1:], strict=False):
-            v = _first_output(
-                self._estimator.predict(
-                    {
-                        "x": x,
-                        "mu": mu,
-                        "t": np.array([t0], dtype=np.float32),
-                        "spks": spks,
-                        "cond": cond,
-                    }
-                )
-            ).reshape(1, _MEL_BINS, t_mel)
-            # np.float32 keeps the step in fp32 (identical arithmetic — NEP 50
-            # rounds a weak python float to the array dtype anyway) and keeps
-            # numpy's stubs from promoting the whole state to float64
-            x = x + np.float32(t1 - t0) * v
-        return x[0, :, prompt_frames : prompt_frames + 2 * n].astype(np.float32)
+    def _estimate(self, x: _F32, mu: _F32, t: _F32, spks: _F32, cond: _F32) -> _F32:
+        return _first_output(
+            self._estimator_package.predict(
+                {"x": x, "mu": mu, "t": t, "spks": spks, "cond": cond}
+            )
+        )
 
 
-class CoreMLVocoder:
+class CoreMLVocoder(ONNXVocoder):
     """``Vocoder`` over the shipped fp32 HiFT package (static 510-frame mel)."""
 
     def __init__(self, config: AlgorithmConfig, hift: _MLModelLike) -> None:
         _require_static_window(config)
         self.config = config
-        self._hift = hift
+        self._hift_package = hift
 
-    def synthesize(self, mel: Mel, voice: VoiceProfile, *, seed: int) -> Waveform:
-        del voice  # timbre already lives in the mel; see TorchVocoder
-        frames = 2 * self.config.window.max_speech_tokens
-        n_frames = min(int(mel.shape[1]), frames)
-        padded = np.zeros((1, _MEL_BINS, frames), dtype=np.float32)
-        padded[0, :, :n_frames] = mel[:, :n_frames]
-
-        n_samples = frames * _UPSAMPLE_PER_FRAME
-        phase = np.zeros((1, _N_HARMONICS, 1), dtype=np.float32)
-        phase[0, 1:, 0] = symmetric_uniforms(
-            seed, VOCODER_PHASE_STREAM, _N_HARMONICS - 1, math.pi
+    def _vocode(self, padded: _F32, phase: _F32, noise: _F32) -> _F32:
+        return _first_output(
+            self._hift_package.predict({"mel": padded, "phase": phase, "noise": noise})
         )
-        noise = gaussian_field(seed, VOCODER_NOISE_STREAM, _N_HARMONICS, n_samples)[None]
-
-        wav = _first_output(
-            self._hift.predict({"mel": padded, "phase": phase, "noise": noise})
-        ).reshape(-1)
-        return wav[: n_frames * _UPSAMPLE_PER_FRAME].astype(np.float32)
 
 
-def _assets_dir(ckpt: Checkpoint) -> Path:
-    """The first candidate directory holding **all three** packages.
+def _assets_dir(ckpt: Checkpoint, algorithm: AlgorithmConfig | None = None) -> Path:
+    """The first candidate directory holding the required packages.
 
-    Testing only for the estimator accepted a partial export and stopped
-    looking, so a stale or half-written directory named by the environment
-    variable shadowed a complete one beside the checkpoint — and the failure
-    surfaced later, as a missing encoder or vocoder, naming a file rather than
-    the directory choice that caused it. The ONNX backend has always required
-    the full set; this matches it, and reports what each candidate was missing.
+    See ``docs/design/execution-config.md``.
     """
-    required = (ENCODER_PACKAGE, ESTIMATOR_PACKAGE, HIFT_PACKAGE)
+    required = (
+        tuple(name.replace(".onnx", ".mlpackage") for name in graph_names(algorithm))
+        if algorithm is not None
+        else (ENCODER_PACKAGE, ESTIMATOR_PACKAGE, HIFT_PACKAGE)
+    )
     env = os.environ.get(ASSETS_ENV)
     candidates = [Path(env)] if env else []
     candidates.append(ckpt.path.parent / "coreml")
@@ -283,45 +264,103 @@ def _assets_dir(ckpt: Checkpoint) -> Path:
     )
 
 
+EXPORT_PROVENANCE = EXPORT_RECORD
+"""What `tools/export_coreml.py` writes beside the packages it traced."""
+
+
+def _check_provenance(assets: Path, ckpt: Checkpoint, algorithm: AlgorithmConfig) -> None:
+    """The export record beside the packages must name this checkpoint."""
+    from . import check_export_record
+
+    check_export_record(
+        assets,
+        ckpt,
+        algorithm,
+        block="packages",
+        members=tuple(name.replace(".onnx", ".mlpackage") for name in graph_names(algorithm)),
+        tool="tools/export_coreml.py",
+    )
+
+
 @register_backend("coreml")
 def build_coreml_engine(
     ckpt: Checkpoint, execution: ExecutionConfig, algorithm: AlgorithmConfig
 ) -> Engine:
-    """Torch T3 on the CPU, the shipped CoreML graphs for the renderer.
+    """Native graphs, or torch generation explicitly placed on the CPU."""
+    precision = execution.precision_map()["token_generator"]
+    if precision not in ("fp32", "fp16"):
+        raise ValueError("CoreML generation supports native fp32 or PyTorch fp16")
+    use_torch = execution.generator_device == "cpu"
+    try:
+        assets = _assets_dir(ckpt, None if use_torch else algorithm)
+    except FileNotFoundError:
+        # A renderer-only release ships no generator packages.
+        # Never mask a partially installed generator or a missing turbo export.
+        assets = _assets_dir(ckpt)
+        if algorithm.decode != "single" or any(assets.glob("t3_*.mlpackage")):
+            raise
+        record = assets / EXPORT_PROVENANCE
+        if record.is_file():
+            import json
 
-    The mixed build is the honest one: it is exactly the split the sample wall
-    validated (renderer end-to-end, T3 export not yet validated from Python).
-    """
-    from .torch_backend import build_torch_frontend_and_generator
+            try:
+                packages = json.loads(record.read_text())["packages"]
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ValueError(f"{record}: unreadable export record") from exc
+            if any(name.startswith("t3_") for name in packages):
+                raise
+        use_torch = True
+    generator: TokenGenerator
+    if use_torch:
+        from . import check_export_record
 
-    assets = _assets_dir(ckpt)
-    cpu_exec = ExecutionConfig(
-        device="cpu",
-        precision=execution.precision,
-        deterministic=execution.deterministic,
-        num_threads=execution.num_threads,
-    )
-    # Only the stages this backend actually keeps. Building a whole torch
-    # engine here loaded the mel decoder and vocoder — several hundred MB —
-    # and then discarded them for the CoreML packages below, on the device
-    # where CoreML is supposed to be the lightweight option.
-    frontend, generator = build_torch_frontend_and_generator(ckpt, cpu_exec, algorithm)
+        try:
+            from .torch_backend import build_torch_frontend_and_generator
+        except ModuleNotFoundError as exc:
+            if exc.name != "torch":
+                raise
+            raise ImportError(
+                "fp16 or renderer-only CoreML generation needs PyTorch; "
+                "install loudkit[torch] or use a complete native CoreML release"
+            ) from exc
+
+        check_export_record(
+            assets,
+            ckpt,
+            algorithm,
+            block="packages",
+            members=(ENCODER_PACKAGE, ESTIMATOR_PACKAGE, HIFT_PACKAGE),
+            tool="tools/export_coreml.py",
+        )
+        frontend, generator = build_torch_frontend_and_generator(
+            ckpt, replace(execution, generator_device="cpu"), algorithm
+        )
+    else:
+        if precision != "fp32":
+            raise ValueError(
+                "Native CoreML generation requires fp32; set generator_device='cpu' "
+                "to use PyTorch with a different precision."
+            )
+        _check_provenance(assets, ckpt, algorithm)
+        frontend = GraphemeTextFrontend(
+            ckpt.resolve_asset(TOKENIZER_FILENAME, manifest_key="tokenizer_sha256")
+        )
+        generator = CoreMLTokenGenerator(algorithm, ckpt, assets, execution=execution)
 
     mel_decoder = CoreMLMelDecoder(
         algorithm,
-        _load_model(assets / ENCODER_PACKAGE, "CPU_ONLY"),
-        _load_model(assets / ESTIMATOR_PACKAGE, "CPU_AND_NE"),
+        _load_model(assets / ENCODER_PACKAGE, _COMPUTE_UNITS[ENCODER_PACKAGE]),
+        _load_model(assets / ESTIMATOR_PACKAGE, _COMPUTE_UNITS[ESTIMATOR_PACKAGE]),
     )
-    # The 192->80 speaker affine is read from the checkpoint, not fished out
-    # of torch_engine.mel_decoder: the MelDecoder protocol deliberately does
-    # not expose module internals (mypy confirmed the hole), and the packed
-    # file is the same provenance the torch module loaded these weights from.
+    # The speaker projection is outside the renderer graphs.
     affine = ckpt.tensors("s3gen.flow.spk_embed_affine_layer.")
     mel_decoder.attach_speaker_affine(
         np.asarray(affine["weight"], dtype=np.float32),
         np.asarray(affine["bias"], dtype=np.float32),
     )
-    vocoder = CoreMLVocoder(algorithm, _load_model(assets / HIFT_PACKAGE, "CPU_ONLY"))
+    vocoder = CoreMLVocoder(
+        algorithm, _load_model(assets / HIFT_PACKAGE, _COMPUTE_UNITS[HIFT_PACKAGE])
+    )
 
     return Engine(
         frontend=frontend,
@@ -329,7 +368,8 @@ def build_coreml_engine(
         mel_decoder=mel_decoder,
         vocoder=vocoder,
         algorithm=algorithm,
-        execution=execution,
+        execution=replace(execution, generator_device="cpu" if use_torch else "coreml"),
         backend="coreml",
         checkpoint_sha256=ckpt.file_digest,
+        checkpoint_path=str(ckpt.path),
     )

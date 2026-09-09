@@ -1,4 +1,4 @@
-// Command loudkit speaks a line of text through the Go engine — the CLI of
+// Command loudkit speaks a line of text through the Go engine: the CLI of
 // the Go binding, used by the conformance runner and by hand.
 package main
 
@@ -15,8 +15,8 @@ import (
 	"github.com/loudreader/loudkit/go/voice"
 )
 
-// usage is what this binary takes, and — because someone comparing the two
-// ports will reach for both — how it differs from the Rust CLI.
+// usage is what this binary takes, and, because someone comparing the two
+// ports will reach for both: how it differs from the Rust CLI.
 //
 // The two argv surfaces are deliberately not the same: each grew around what
 // that port needed in order to be driven by hand. Saying so here is the
@@ -30,7 +30,20 @@ A dev tool for driving this port by hand. The Rust CLI (rust/src/main.rs) is
 deliberately a different surface: it carries --language and --json, which this
 one has no equivalent for, and not -timestamps, which this one has.`
 
+// libraryEnv is the same name loudkit.LibraryEnv carries, spelled again
+// rather than importing the front door into a CLI that deliberately loads by
+// path and never downloads.
+const libraryEnv = "LOUDKIT_ONNXRUNTIME_LIB"
+
 func main() {
+	os.Exit(run())
+}
+
+// run is main's body, handing back an exit code instead of calling os.Exit
+// itself: os.Exit runs no deferred function, so an error path that took it
+// would leave the engine's sessions open and the onnxruntime environment
+// standing.
+func run() int {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, usage)
 		fmt.Fprintln(os.Stderr)
@@ -43,7 +56,7 @@ func main() {
 	seed := flag.Uint64("seed", 0, "seed")
 	tokensOnly := flag.Bool("tokens", false, "print tokens only")
 	// 1.0 is the default here as it is everywhere else, and it is a bypass
-	// rather than a stretch of factor one — a run without -speed produces the
+	// rather than a stretch of factor one: a run without -speed produces the
 	// vocoder's own bytes, so this flag existing changes no existing output.
 	speed := flag.Float64("speed", 1.0, "playback speed in [0.5, 2.0]; pitch is preserved")
 	timestamps := flag.Bool("timestamps", false, "print per-chunk spans and estimated word times")
@@ -57,12 +70,12 @@ func main() {
 
 	if *ckpt == "" || *onnxDir == "" || *voicePath == "" || *text == "" {
 		flag.Usage()
-		os.Exit(2)
+		return 2
 	}
-	lib := os.Getenv("LOUDKIT_ONNXRUNTIME_LIB")
+	lib := os.Getenv(libraryEnv)
 	if lib == "" {
-		fmt.Fprintln(os.Stderr, "set LOUDKIT_ONNXRUNTIME_LIB to the onnxruntime shared library")
-		os.Exit(2)
+		fmt.Fprintln(os.Stderr, "set "+libraryEnv+" to the onnxruntime shared library")
+		return 2
 	}
 	// Through the onnx package, not the binding: it records which library was
 	// loaded, so a "provider not available" message can name the file whose
@@ -70,7 +83,7 @@ func main() {
 	onnx.SetSharedLibraryPath(lib)
 	if err := onnx.InitializeEnvironment(); err != nil {
 		fmt.Fprintln(os.Stderr, "init:", err)
-		os.Exit(1)
+		return 1
 	}
 	defer onnx.DestroyEnvironment()
 
@@ -86,7 +99,7 @@ func main() {
 		config.ExecutionConfig{ONNXProvider: *provider})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load:", err)
-		os.Exit(1)
+		return 1
 	}
 	defer eng.Close()
 	// On stderr, so a caller parsing the result line keeps parsing it, and on
@@ -97,21 +110,18 @@ func main() {
 	v, err := voice.Load(*voicePath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "voice:", err)
-		os.Exit(1)
+		return 1
 	}
 
-	// SynthesizeLong, not Synthesize: the single-window path refuses anything
-	// longer than one window, so the CLI could not speak a paragraph. Text
-	// that fits one window takes the same route through a single chunk.
-	// Empty language, not "en": the engine resolves the argument, then the
-	// voice, then English, so a Polish voice reads Polish without a flag this
-	// CLI does not have. No previous tokens: each invocation of a CLI is its own
-	// utterance, and there is nothing before it to continue from.
-	audio, tokens, _, chunks, sr, capped, err := eng.SynthesizeLong(*text, v, *seed, "", *speed, nil, nil)
+	// Empty language: the engine resolves the argument, then the voice, then
+	// English, so a Polish voice reads Polish without a flag this CLI does not
+	// have.
+	out, err := eng.Synthesize(*text, v, engine.Options{Seed: *seed, Speed: *speed})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "synthesize:", err)
-		os.Exit(1)
+		return 1
 	}
+	audio, tokens, chunks, sr, capped := out.Audio, out.Tokens, out.Chunks, out.SampleRate, out.HitTokenCap
 	if capped {
 		// The flag exists so truncation cannot pass silently: the audio is
 		// real but incomplete. Same warning the Python CLI prints.
@@ -119,17 +129,9 @@ func main() {
 	}
 	if *tokensOnly {
 		// The stream from the long-form path, so `-tokens` in this CLI names
-		// the same thing as `--tokens` in the Rust one. A single-window
-		// generate here would stop at 255 speech tokens on text that the
-		// synthesis path reads as several chunks, which reads as a port
-		// disagreeing with the others when only the flag disagreed. The seed
-		// travels into SynthesizeLong, so `-tokens -seed 7` is the stream for
-		// seed 7 and not for seed 0, and token identity under a named seed is
-		// the whole point of this mode. Language stays empty for the same
-		// reason as below: the engine resolves the voice's own tag, so a
-		// Polish voice does not print the ids of an English read.
+		// the same thing as `--tokens` in the Rust one.
 		fmt.Println(tokens)
-		return
+		return 0
 	}
 	fmt.Printf("tokens=%d audio=%d samples @ %d Hz = %.2fs peak=%.3f\n",
 		len(tokens), len(audio), sr, float64(len(audio))/float64(sr), maxAbs(audio))
@@ -144,6 +146,7 @@ func main() {
 			}
 		}
 	}
+	return 0
 }
 
 func maxAbs(a []float32) float32 {

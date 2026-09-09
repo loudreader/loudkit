@@ -1,4 +1,4 @@
-//! Polish lexical respelling — bit-parity checks against the Python/JS/Go
+//! Polish lexical respelling: bit-parity checks against the Python/JS/Go
 //! ports. The expected values are the ones the Swift/Python ear tests approved.
 
 use loudkit::letters::spell_acronyms;
@@ -53,13 +53,41 @@ fn decimals_read_whole_comma_fraction() {
     assert_eq!(lexical_respelling("2.5", "pl"), "dwa przecinek pięć");
 }
 
-/// The respeller no longer owns this decision. It saw one word at a time, so it
-/// could not tell an initialism from a shout and spelled "TO JEST WAŻNE" letter
-/// by letter. `spell_acronyms` decides for all twelve languages while the
-/// surrounding capitals are still visible; the respeller now sees the
+/// The digit branch is guarded on "no character is a letter", not on "every
+/// character is a digit".
+///
+/// The word collector keeps `'` and `’` inside a word, because "deadline'u" is
+/// one token to a Polish reader and its ending has to survive the respelling.
+/// A quoted number therefore arrives as `'192`: letterless, and not all
+/// digits. Under the digits guard it fell through every branch and came back
+/// written, where the reference, JS and Swift all read it. A quoted IP address
+/// or version number in Polish text is the shape that reaches it.
+#[test]
+fn a_quoted_number_is_read_the_way_a_bare_one_is() {
+    assert_eq!(
+        speech_text("Wpisz '192.168.0.1' w przeglądarce.", "pl"),
+        "Wpisz ' jeden dziewięć dwa.sto sześćdziesiąt osiem przecinek zero.jeden ' w przeglądarce."
+    );
+    assert_eq!(
+        speech_text("wersja '10.15.7' systemu", "pl"),
+        "wersja ' jeden zero.piętnaście.siedem ' systemu"
+    );
+    // Digit by digit, because the quotes make the token something other than a
+    // plain number: but never to *nothing*, so a character the table has no
+    // word for stands for itself rather than being dropped.
+    assert_eq!(lexical_respelling("'192'", "pl"), "' jeden dziewięć dwa '");
+    assert_eq!(lexical_respelling("'07", "pl"), "' zero siedem");
+    // The apostrophe the collector exists for still belongs to its word.
+    assert_eq!(lexical_respelling("deadline'u", "pl"), "dedlajnu");
+}
+
+/// The respeller does not own this decision. It sees one word at a time, so it
+/// cannot tell an initialism from a shout and would spell "TO JEST WAŻNE"
+/// letter by letter. `spell_acronyms` decides for all twelve languages while
+/// the surrounding capitals are still visible; the respeller sees the
 /// already-spelled lowercase form and leaves it alone.
 #[test]
-fn acronyms_are_spelled_earlier_in_the_funnel_now() {
+fn acronyms_are_spelled_earlier_in_the_funnel() {
     assert_eq!(spell_acronyms("GPT", "pl"), "gie-pe-te");
     assert_eq!(spell_acronyms("USB", "pl"), "u-es-be");
     // word-acronyms keep their word form

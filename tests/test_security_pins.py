@@ -63,7 +63,6 @@ class TestSnapshotVerification:
         (tmp_path / "loudr-1.safetensors").write_bytes(payload)
         _write_sums(tmp_path, {"loudr-1.safetensors": _digest(payload)})
         _verify_sha256sums(tmp_path)
-        assert (tmp_path / ".loudkit-verified").is_file()
 
     def test_a_substituted_file_fails(self, tmp_path: Path) -> None:
         (tmp_path / "loudr-1.safetensors").write_bytes(b"evil")
@@ -84,45 +83,20 @@ class TestSnapshotVerification:
         )
         _verify_sha256sums(tmp_path)
 
-    def test_the_marker_makes_a_cached_snapshot_hash_once(self, tmp_path: Path) -> None:
+    def test_every_call_reads_the_bytes(self, tmp_path: Path) -> None:
+        """No marker and no trust on first use: a verification is a hash of
+        what is on disk now, so a file rewritten under its own size and
+        timestamp is caught the next time the snapshot is fetched."""
         payload = b"checkpoint bytes"
         target = tmp_path / "loudr-1.safetensors"
         target.write_bytes(payload)
         _write_sums(tmp_path, {"loudr-1.safetensors": _digest(payload)})
         _verify_sha256sums(tmp_path)
-        # The cache semantics: verification happened once, and a snapshot whose
-        # manifest, sizes and mtimes are unchanged is not re-hashed on every
-        # load(). Written here with the size and the timestamp restored, which
-        # is the only way a mutation stays invisible — the bytes differ, and
-        # they are not read.
         before = target.stat()
         target.write_bytes(b"y" * len(payload))
         os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
-        _verify_sha256sums(tmp_path)  # must not raise
-
-    def test_a_file_whose_stat_moved_is_hashed_again(self, tmp_path: Path) -> None:
-        """Trust-on-first-use, minus the failures a stat can see.
-
-        Truncation, replacement and rewriting all move the size or the mtime;
-        the marker records both, so a sealed cache does not hide them.
-        """
-        payload = b"checkpoint bytes"
-        target = tmp_path / "loudr-1.safetensors"
-        target.write_bytes(payload)
-        _write_sums(tmp_path, {"loudr-1.safetensors": _digest(payload)})
-        _verify_sha256sums(tmp_path)
-        target.write_bytes(b"truncated")
         with pytest.raises(ValueError, match="failed the release checksum"):
             _verify_sha256sums(tmp_path)
-
-    def test_a_new_manifest_invalidates_the_marker(self, tmp_path: Path) -> None:
-        payload = b"checkpoint bytes"
-        (tmp_path / "loudr-1.safetensors").write_bytes(payload)
-        _write_sums(tmp_path, {"loudr-1.safetensors": _digest(payload)})
-        _verify_sha256sums(tmp_path)
-        (tmp_path / "loudr-1.safetensors").write_bytes(b"changed after verification")
-        _write_sums(tmp_path, {"loudr-1.safetensors": _digest(b"changed after verification")})
-        _verify_sha256sums(tmp_path)  # new manifest, re-verified, marker refreshed
 
 
 class TestLoopbackHostPin:
@@ -175,11 +149,11 @@ class TestProfilePermissions:
 
 
 class TestTokenPrecedence:
-    def test_the_flag_wins_over_the_environment(self, tmp_path, monkeypatch):  # type: ignore[no-untyped-def]
+    def test_the_flag_wins_over_the_environment(self, tmp_path, monkeypatch):
         import loudkit.transports.http as server_mod
 
         monkeypatch.setenv("LOUDKIT_TOKEN", "from-env")
-        captured: dict[str, str | None] = {}
+        captured: dict[str, object] = {}
         original = server_mod.serve
 
         def capture(*args: object, **kwargs: object) -> None:

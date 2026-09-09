@@ -1,29 +1,6 @@
 """A random number generator that gives the same answer everywhere.
 
-``torch.multinomial`` does not: given an identical probability vector and an
-identical generator stream it returns different samples on x86 and on arm64.
-Any sampler built on a library RNG inherits that.
-
-So the stream is defined by an algorithm instead of by a vendor:
-**Philox-4x32-10**, counter-based, from Salmon et al., *Parallel Random Numbers:
-As Easy as 1, 2, 3*. Three properties make it the right choice here.
-
-*Integer-only.* Every operation is a 32-bit multiply, xor or add. There is no
-floating-point accumulation whose rounding could vary, so a correct
-implementation in Python, Swift or Rust produces identical bits by construction
-rather than by luck.
-
-*Counter-based.* The n-th random number is a pure function of ``(seed, stream,
-step, index)``, not of how many numbers came before it. Two backends may
-therefore generate in any order — one number at a time, or a whole block ahead
-— and still agree. That freedom is what makes the sampler affordable: generated
-per token it costs 2.2 ms, more than the entire 16-layer model; generated a
-block at a time it costs under 0.01 ms, and because the numbers are addressed
-rather than streamed, the block boundary is invisible.
-
-*Verifiable.* The implementation is checked against the published known-answer
-vectors from the reference library, so a port can be validated against a
-standard rather than against this implementation.
+See ``docs/design/sampler-and-noise.md``.
 """
 
 from __future__ import annotations
@@ -103,18 +80,7 @@ def uniforms(
 ) -> NDArray[np.float64]:
     """``(n_steps, width)`` uniforms in the open interval (0, 1).
 
-    Open at both ends deliberately: the Gumbel transform takes two logarithms,
-    and a zero would produce an infinity that poisons an argmax. Adding a half
-    before scaling by 2^-32 keeps every value clear of both ends in a single
-    expression, with no branch and no clamp to get wrong.
-
-    Args:
-        seed: the user-visible seed.
-        stream: independent sub-stream, so that (say) sampling and the flow
-            prior never draw the same numbers even at the same step.
-        step0: first decode step in this block.
-        n_steps: how many steps to generate.
-        width: numbers per step — the vocabulary size, for sampling.
+    See ``docs/design/sampler-and-noise.md``.
     """
     quads = (width + 3) // 4
     idx = np.arange(quads, dtype=np.uint64)[None, :].repeat(n_steps, axis=0)
@@ -136,7 +102,7 @@ def gumbel_noise(
 
     Precomputed for a whole block because the two logarithms depend only on the
     counter. Sampling then costs one add, one mask and one argmax per token, and
-    the argmax is order-independent up to ties — which are broken by lowest
+    the argmax is order-independent up to ties, which are broken by lowest
     index, so two backends cannot disagree even there.
     """
     u = uniforms(seed, stream, step0, n_steps, width)

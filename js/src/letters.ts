@@ -2,7 +2,7 @@
  * Acronyms, spelled in the language being read.
  *
  * `CIA` is *see-eye-ay* in an English render and *ce-i-a* in a Polish one, and
- * those are not two spellings of one thing — they are what the two languages
+ * those are not two spellings of one thing: they are what the two languages
  * actually say. The engine is grapheme-based with a single language tag per
  * utterance, so the letter name has to be written in the target language's own
  * orthography: English `see` reads as /siː/ under English letter-to-sound rules,
@@ -17,7 +17,7 @@
  * language in the shared grammar file; this reads them for all twelve, out of
  * the same numbers.json every other implementation reads.
  *
- * What is not spelled: an acronym that is a word in its language stays a word —
+ * What is not spelled: an acronym that is a word in its language stays a word.
  * `NASA` and `NATO` everywhere, `SIDA` and `OVNI` in the Romance three, `PESEL`
  * and `ZUS` in Polish, `TUTKA` in Finnish. Those lists are per language because
  * the fact is: `LOT` is an airline in Poland and a common noun in English, and
@@ -25,14 +25,14 @@
  * Python reference: `loudkit/frontend/letters.py`.
  */
 
-import grammarData from "../data/numbers.json" with { type: "json" };
+import { grammarLanguages } from "./textconfig.js";
 
 const MIN_LETTERS = 2;
 
 /**
  * Above five letters an all-caps run is far more often a shout, a product name
  * or a heading than an initialism, and spelling one out is a worse error than
- * leaving it — the listener can read `SIGGRAPH`; they cannot un-hear
+ * leaving it: the listener can read `SIGGRAPH`; they cannot un-hear
  * *ess-eye-gee-gee-ar-ay-pee-aitch*.
  */
 const MAX_LETTERS = 5;
@@ -44,8 +44,7 @@ interface Table {
 
 const TABLES: Record<string, Table> = (() => {
   const out: Record<string, Table> = {};
-  const languages = (grammarData as { languages: Record<string, any> }).languages ?? {};
-  for (const [lang, entry] of Object.entries(languages)) {
+  for (const [lang, entry] of Object.entries(grammarLanguages())) {
     const names = entry?.letter_names as Record<string, string> | undefined;
     if (!names || Object.keys(names).length === 0) continue;
     out[lang] = {
@@ -75,7 +74,7 @@ export function letterName(letter: string, language: string): string | null {
 /**
  * `word` as spelled-out letters, or `null` if it should be left alone.
  *
- * `null` — "not an acronym, or not one I can spell" — for a word that is not
+ * `null`, meaning "not an acronym, or not one I can spell", for a word that is not
  * all-caps, is too short or too long, is a word in this language, or contains a
  * letter this language has no name for.
  */
@@ -92,7 +91,7 @@ export function spellAcronym(word: string, language: string): string | null {
     // Checked *before* the length cap, and the order matters: the cap is about
     // how long a thing may be before spelling it
     // becomes worse than leaving it, and it has nothing to say about a word.
-    // With the cap first, every entry over five letters is dead — UNESCO,
+    // With the cap first, every entry over five letters is dead: UNESCO,
     // UNICEF and INTERPOL never reach this branch.
     return lowered;
   }
@@ -113,7 +112,7 @@ export function spellAcronym(word: string, language: string): string | null {
  *
  * **Shouting is left alone**, and the rule for telling it from an initialism is
  * context rather than anything inside the word. An initialism appears as a
- * single capitalised island in ordinary text — "the CIA said" — while emphasis
+ * single capitalised island in ordinary text ("the CIA said") while emphasis
  * comes in runs. That distinction is not available from the word itself: `IT` is
  * a word, an initialism and a shout depending only on what sits beside it, and
  * no table can separate those. So a capitalised word spells out only when
@@ -130,8 +129,9 @@ export function spellAcronyms(text: string, language: string): string {
   if (words.length > 1 && words.every(isAllCapsWord)) {
     // The whole text is capitals: someone pasted a shout, or a headline.
     //
-    // More than one word, though. A text that is a single capitalised token —
-    // `speechText("GPT")` — is an acronym on its own, not a shout: there is no
+    // More than one word, though. A text that is a single capitalised token,
+    // such as `speechText("GPT")`, is an acronym on its own, not a shout: there
+    // is no
     // run to read emphasis from, and refusing it would mean the one call shaped
     // exactly like "say this acronym" was the one that did not.
     return text;

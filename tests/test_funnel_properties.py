@@ -15,18 +15,25 @@ F5-TTS maps every unknown character to a space. Neither tells you.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from pathlib import Path
 
 import pytest
 
 from loudkit.frontend.chunking import ChunkConfig, split_text
-from loudkit.frontend.polish import speech_text
+from loudkit.frontend.numbers import supported_languages
+from loudkit.frontend.speechtext import speech_text
 from loudkit.frontend.text import GraphemeTextFrontend
 
 TOKENIZER = Path(__file__).parent / "data" / "conformance" / "tokenizer.json"
 
-LANGUAGES = ("en", "pl", "de", "es", "fr", "it", "pt", "nl", "da")
+# Derived, not written out: a hand-kept roster silently skips the language it
+# was not updated for, and this file holds the charset closure, where a
+# character the tokenizer cannot represent is dropped or mapped to whatever
+# index zero happens to be. Three shipped languages were already outside the
+# written list.
+LANGUAGES = supported_languages()
 
 # Ordinary prose in each language, plus the shapes that historically broke
 # something: a currency amount, a decimal, an ellipsis, a quotation, an em dash.
@@ -47,6 +54,16 @@ SAMPLES = [
     ("pt", "A luz da manhã entrava devagar pelas janelas altas."),
     ("nl", "Het ochtendlicht viel langzaam door de hoge ramen."),
     ("da", "Morgenlyset faldt langsomt ind gennem de høje vinduer."),
+    # The three shipped languages this list had no prose for. Their alphabets
+    # are the reason: Finnish carries ä and ö, Norwegian æ ø å, Swedish å ä ö,
+    # and a character the tokenizer cannot represent is dropped or mapped to
+    # whatever index zero holds, which is what the closure below refuses.
+    ("fi", "Aamuvalo tuli hitaasti korkeiden ikkunoiden läpi."),
+    ("fi", "Se maksoi 250 euroa, ehkä 300 dollaria."),
+    ("no", "Morgenlyset falt langsomt inn gjennom de høye vinduene."),
+    ("no", "Blåbærsyltetøy og rødgrøt, sa han, og lo."),
+    ("sv", "Morgonljuset föll långsamt in genom de höga fönstren."),
+    ("sv", "Räksmörgås på Öland, för ungefär 250 kronor."),
 ]
 
 
@@ -222,3 +239,76 @@ class TestProbeCorpusIsWellFormed:
             for item in items:
                 out = speech_text(item["text"], language)
                 assert out.strip(), f"{language}: funnel emptied {item['text']!r}"
+
+
+class TestTheFunnelSpellsItsCharacterClasses:
+    """No `\\d` and no `\\s` in a funnel pattern, because they are not one class.
+
+    Python and Rust read `\\d` as every Unicode decimal digit; Go's RE2 and
+    JavaScript read it as ASCII. Python's `\\s` matches four characters
+    (U+001C to U+001F) that Unicode does not call whitespace and no port
+    matches. A pattern written with either shorthand therefore matches a
+    different set of characters in each of the five implementations, which is
+    how the same text stops producing the same tokens.
+    """
+
+    def test_no_pattern_uses_a_shorthand_class(self) -> None:
+        import loudkit.frontend.numbers as numbers_mod
+        import loudkit.frontend.speechtext as speechtext_mod
+
+        offenders = []
+        for module in (numbers_mod, speechtext_mod):
+            source = Path(module.__file__).read_text(encoding="utf-8")
+            for i, line in enumerate(source.splitlines(), 1):
+                body = line.split("#", 1)[0]
+                if '"""' in body or body.strip().startswith(("*", "``")):
+                    continue
+                for shorthand in (r"\d", r"\s"):
+                    # `\\d` inside a docstring is prose about the class, not a
+                    # pattern; only a single backslash builds one.
+                    if shorthand in body and shorthand.replace("\\", "\\\\") not in body:
+                        offenders.append(f"{Path(module.__file__).name}:{i}: {body.strip()}")
+        assert not offenders, (
+            "funnel patterns must spell the class out, as `_DIGIT` and `_SPACE` do:\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_the_funnel_says_what_the_ports_say_at_the_two_classes(self) -> None:
+        """The classes are pinned above; this pins what they do to the output.
+
+        Reading `\\s` as Python does made a currency sign next to U+001C look
+        adjacent to the amount, and reading `\\d` as Python does made a digit
+        run out of characters the ports leave written. Measured over twelve
+        languages, both readings moved 48 of 96 rows away from Go, JS and Rust,
+        all three of which now agree with these values exactly.
+        """
+        from loudkit.frontend.speechtext import speech_text
+
+        for text, language, want in (
+            ("$\x1c5", "en", "five"),
+            ("$\x1d5", "da", "fem"),
+            ("$\x1f5", "pl", "pi\u0119\u0107"),
+            ("3.\u0660\u0661", "en", "three point zero one"),
+            ("3.\uff11\uff12", "en", "three point one two"),
+        ):
+            assert speech_text(text, language) == want, (
+                f"{text!r} in {language} must read as the four ports read it"
+            )
+
+    def test_the_two_classes_are_what_the_ports_match(self) -> None:
+        from loudkit.frontend.speechtext import (
+            _DIGIT,
+            _NOT_SPACE_IN_THE_PORTS,
+            _SPACE,
+            WHITE_SPACE,
+        )
+
+        assert re.fullmatch(_DIGIT, "5")
+        for other in ("٣", "³", "५"):  # Arabic-Indic, superscript, Devanagari
+            assert not re.fullmatch(_DIGIT, other), f"{other!r} is not an ASCII digit"
+        for space in WHITE_SPACE:
+            assert re.fullmatch(_SPACE, space), f"{space!r} is Unicode White_Space"
+        for not_space in _NOT_SPACE_IN_THE_PORTS:
+            assert not re.fullmatch(_SPACE, not_space), (
+                f"{not_space!r} is what Python calls whitespace and no port does"
+            )

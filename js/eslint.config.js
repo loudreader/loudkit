@@ -3,8 +3,8 @@
 // `===` was meant.
 //
 // Type-aware rules on purpose. Without a project reference this is a syntax
-// checker wearing a linter's name, and the two rules worth having here —
-// `no-floating-promises` and `no-misused-promises` — need types to see anything
+// checker wearing a linter's name, and the two rules worth having here,
+// `no-floating-promises` and `no-misused-promises`, need types to see anything
 // at all. The engine is async and its callers await it; a dropped await is the
 // bug class this exists to catch.
 import js from "@eslint/js";
@@ -23,8 +23,22 @@ export default tseslint.config(
       // Python side chose. A linter renaming them would break the one property
       // that makes five implementations reviewable side by side.
       "@typescript-eslint/naming-convention": "off",
-      // `speechText` reads JSON the fixture generator wrote; asserting its
-      // shape at every access would be noise over data this repo produces.
+    },
+  },
+  {
+    // The funnel reads JSON the fixture generator wrote; asserting its shape at
+    // every access would be noise over data this repo produces. Scoped to the
+    // files that reason describes, because package-wide it also covered the
+    // manifest reader, which reads a file the repo does not produce and must
+    // check every scalar it takes from it.
+    files: [
+      "src/dates.ts",
+      "src/frontend.ts",
+      "src/letters.ts",
+      "src/numbers.ts",
+      "src/test/**/*.ts",
+    ],
+    rules: {
       "@typescript-eslint/no-unsafe-assignment": "off",
       "@typescript-eslint/no-unsafe-member-access": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
@@ -35,11 +49,12 @@ export default tseslint.config(
     // every call through it reads as `any` to the linter. Turning the two rules
     // off for this one file is narrower than an `any` cast at each call site,
     // and the calls are three lines that a type would not make safer.
-    // The grammar readers annotate `numbers.json` as `Record<string, any>`:
-    // its value shapes differ per key by design (a scale is an object, `ones`
-    // an array, `word_join` a string), and a union that described all of them
-    // would be longer than the code reading it.
-    files: ["src/dates.ts", "src/letters.ts", "src/numbers.ts"],
+    // `textconfig.ts` annotates `numbers.json` as `Record<string, any>`: its
+    // value shapes differ per key by design (a scale is an object, `ones` an
+    // array, `word_join` a string), and a union that described all of them
+    // would be longer than the code reading it. `numbers.ts` is on the list
+    // because `parseGrammar` takes one of those blocks apart.
+    files: ["src/numbers.ts", "src/textconfig.ts"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-call": "off",
@@ -54,7 +69,7 @@ export default tseslint.config(
   },
   {
     // `node:test` is called and not awaited, by its own documented usage, so
-    // `no-floating-promises` fires on every `test(...)` in the suite — 88 of
+    // `no-floating-promises` fires on every `test(...)` in the suite, 88 of
     // them. Off here and on in `src/`, which is where a dropped await is
     // actually a bug: the engine is async and its callers await it.
     files: ["src/**/*.test.ts", "src/test/**/*.ts"],

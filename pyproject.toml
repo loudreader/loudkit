@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loudkit"
-version = "0.1.0"
+version = "0.1.1"
 description = "A small text-to-speech engine that behaves the same on every backend."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,9 +32,8 @@ classifiers = [
 ]
 
 # Deliberately small. numpy carries the sampler and every array crossing a
-# component boundary; safetensors carries checkpoints and voices. torch is the
-# reference backend and is required in practice, but it is an extra so that a
-# future runtime-only backend does not have to drag it in.
+# component boundary; safetensors carries checkpoints and voices. Each backend
+# is an extra, so ONNX and CoreML installations do not require torch.
 dependencies = [
   # <2.4: numpy 2.4's bundled __init__.pyi uses PEP 695 `type` statements
   # unconditionally, which mypy can only parse at python_version >= 3.12 —
@@ -55,7 +54,7 @@ torch = ["torch>=2.4"]
 # on an unrelated package retaining that dependency. The extra remains the
 # stable, documented capability selector even while that transitive edge exists.
 hub = ["huggingface_hub>=0.23"]
-enroll = ["torch>=2.4", "torchaudio>=2.4", "librosa>=0.10"]
+enroll = ["torch>=2.4", "torchaudio>=2.4", "librosa>=0.10", "soundfile>=0.12"]
 onnx = ["onnxruntime>=1.17"]
 coreml = ["coremltools>=8.0"]
 audio = ["soundfile>=0.12", "librosa>=0.10"]
@@ -100,6 +99,12 @@ grpc = ["loudkit[audio]", "torch", "grpcio>=1.83", "grpcio-tools>=1.83", "protob
 dev = [
   "pytest>=8.0,<10",
   "pytest-cov>=5.0",
+  # Floored, not pinned, and the gate is expected to hold across the range:
+  # `mypy>=1.10` resolves to a 2.x today, and two rules that were invisible
+  # under 1.x fire under 2.x — `exclude` not applying to a followed import, and
+  # librosa 1.0's unparseable stubs. Both are answered in `[tool.mypy]` below
+  # rather than by holding mypy back, because a type gate that only passes on
+  # an old checker is not a gate.
   "mypy>=1.10",
   # Pinned exactly, not floored: `ruff format` is a formatter, so two versions
   # that both "pass" still disagree about bytes. With `>=0.6`, CI installed
@@ -114,8 +119,8 @@ dev = [
   # floor exists to prove they could not run at all.
   'tomli>=2.0; python_version < "3.11"',
   "soundfile>=0.12",
-  # fastapi/uvicorn ship real type information, and mypy checks server.py
-  # against it — a dev environment without them cannot run the type gate.
+  # fastapi/uvicorn ship real type information, and mypy checks
+  # transports/http.py against it — a dev environment without them cannot run the type gate.
   "fastapi>=0.110",
   "uvicorn>=0.29",
   # tests/test_models.py imports torch at module scope, and CI installs
@@ -133,6 +138,31 @@ dev = [
   # that resolves a pre-release is a dev environment testing something the
   # published extra will never install.
   "mcp>=2.0.0,<3",
+  # Third time, same lesson. `models/enroll.py` carries two
+  # `# type: ignore[attr-defined]` for librosa's skipped stubs, and mypy's
+  # `warn_unused_ignores` reports an ignore that suppressed nothing — so with
+  # librosa absent, which is what `.[dev]` alone gave CI, the two comments
+  # themselves became the two errors. The gate could not pass in either
+  # environment for the same reason a gate cannot be written twice: with the
+  # ignores it failed without librosa, and without them it failed with it.
+  #
+  # The dev environment has to be the one the code is written against. Same
+  # floor as the `enroll` and `audio` extras that ship it.
+  "librosa>=0.10",
+  # Fourth and fifth time, the same lesson as `mcp` above, found by counting
+  # which tests a `.[dev]` runner actually executes. `test_grpc.py` guards its
+  # module on `grpc` and `test_enroll.py` on `torchaudio`, so the gRPC
+  # transport's 25 tests, the cross-transport "three doors, one code" test, and
+  # the fifteen `loudkit clone` tests reported themselves skipped on every
+  # matrix cell: three surfaces with no CI coverage at all.
+  #
+  # Self-references rather than a fourth copy of the version floors: the `grpc`
+  # extra pins grpcio, grpcio-tools and protobuf to what the checked-in stubs
+  # were generated with, and `enroll` pins torchaudio beside torch. A dev
+  # environment resolving different versions from the published extra is a dev
+  # environment testing something no user installs.
+  "loudkit[grpc]",
+  "loudkit[enroll]",
 ]
 
 [project.urls]
@@ -154,15 +184,6 @@ include = [
   "python/loudkit/models/data/*.json",
   "python/loudkit/proto/*.pyi",
 ]
-# `packages` takes the directory whole, so the `include` above adds nothing the
-# wheel did not already have — and the eight `models/data/dsp/*.f32` tables rode
-# in the same way. They are inputs for the Go, Rust and Swift ports, which embed
-# their own copies out of the repository; Python reads exactly two files from
-# `models/data` (`numbers.json` and `pl_en_respell.json`) and never opens a
-# `.f32`. Half a megabyte in every wheel for a consumer that cannot reach it.
-# `dsp/manifest.json` stays: it is small, and it says what the tables are.
-exclude = ["python/loudkit/models/data/dsp/*.f32"]
-
 # The sdist is what a downstream packaging tool builds a wheel from, so it must
 # contain exactly the source that produces the wheel — not the monorepo's
 # bindings, docs, Swift package or benchmark tooling. Without an explicit
@@ -190,9 +211,6 @@ only-include = [
   "NOTICE",
   "RESPONSIBLE_USE.md",
 ]
-exclude = [
-  "python/loudkit/models/data/dsp/*.f32",
-]
 
 [tool.ruff]
 # Generated by `tools/gen_proto.py` from proto/loudkit.proto. Linting a code
@@ -203,7 +221,13 @@ exclude = [
 extend-exclude = ["python/loudkit/proto"]
 line-length = 96
 target-version = "py310"
-src = ["python", "tests"]
+# `research` is an import root like the other two, not a package: its scripts
+# are run from the repository root, so the interpreter puts research/ first on
+# `sys.path` and `research/_bench.py` imports as a bare `_bench`. Without it
+# here, isort has no root to resolve that against and files the sibling module
+# under third party, next to numpy and torch, which is where a reader looks for
+# something installed from PyPI.
+src = ["python", "tests", "research"]
 
 [tool.ruff.format]
 # Markdown is prose, and the Python inside a doc block is an illustration, not a
@@ -217,7 +241,7 @@ exclude = ["*.md"]
 [tool.ruff.lint]
 # TID is deliberately absent: TID252 bans relative imports, and this package
 # uses them throughout so that a module never names the package it lives in.
-select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "RET", "SIM", "ARG", "PL"]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "RET", "SIM", "ARG", "PL", "RUF100"]
 ignore = [
   "PLR0913",  # a config-heavy library legitimately takes many arguments
   "PLR0917",  # ditto, for positional ones
@@ -252,20 +276,35 @@ files = ["python/loudkit"]
 exclude = "loudkit/proto/"
 
 [[tool.mypy.overrides]]
-# `bench` reads peak memory, which every OS reports differently, so it branches
-# on `sys.platform` and one arm is dead on any given machine — by design.
-# mypy narrows `sys.platform` to the platform it is *running* on, so with
-# `warn_unreachable` on globally, `import resource` reads as unreachable code
-# on the Windows leg of the CI matrix and the type gate went red there for a
-# module that is correct on both. The check still runs everywhere; only this
-# one module stops being asked to have no platform-specific dead code.
-module = ["loudkit.bench"]
-warn_unreachable = false
+# Generated by `tools/gen_proto.py` from `proto/loudkit.proto`, and protoc does
+# not annotate what it writes. `exclude` above drops these files from the set
+# mypy *collects*, and never applied to them, because `transports/grpc.py`
+# imports them and mypy follows imports past an exclusion. That was invisible
+# while a 1.x mypy was installed and turned `mypy python/loudkit` red on any
+# fresh environment resolving `mypy>=1.10` to a 2.x — CI included. Stated as
+# what it is: this code is generated, nobody edits it, and annotating protoc's
+# output only means the next `gen_proto.py` run undoes the work.
+module = ["loudkit.proto.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# librosa 1.0 ships type information whose `beat.pyi` uses a PEP 695 `type`
+# statement unconditionally, and mypy can only parse that at
+# `python_version >= 3.12`. This config targets 3.10 to match
+# `requires-python`, so a fresh install of the `enroll` or `audio` extra turned
+# `mypy python/loudkit` red with no code change on our side — the same trap the
+# numpy pin above describes, one dependency along. Skipped rather than pinned:
+# librosa is an extra a user chooses, and constraining what they may install to
+# keep our type gate parseable is the wrong end to fix it from. Its values
+# already enter as Any through the override below.
+module = ["librosa", "librosa.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # Third-party dependencies that ship no stubs / py.typed marker (verified per
 # package): their values enter loudkit as Any and are pinned down at the call
-# site — see docs/reference/typing.md for where those boundaries are.
+# site — see docs/design/typing.md for where those boundaries are.
 module = [
   "torch.*", "torchaudio.*", "safetensors.*", "soundfile.*", "librosa.*",
   "onnxruntime.*", "coremltools.*", "mcp.*", "grpc.*", "grpc_tools.*",

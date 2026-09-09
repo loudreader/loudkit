@@ -10,42 +10,37 @@ enum MLHelpers {
     static func loadModel(packageURL: URL, computeUnits: MLComputeUnits) throws -> MLModel {
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
-        let compiled: URL
         if packageURL.pathExtension == "mlmodelc" {
-            compiled = packageURL
-        } else {
-            // sibling .mlmodelc wins (pre-compiled cache); otherwise compile
-            let sibling = packageURL.deletingPathExtension().appendingPathExtension("mlmodelc")
-            if FileManager.default.fileExists(atPath: sibling.path) {
-                compiled = sibling
-            } else {
-                let fresh = try MLModel.compileModel(at: packageURL)
-                // best-effort cache beside the package so the next load skips
-                // compilation; falls back to the temp copy on a read-only dir
-                if (try? FileManager.default.moveItem(at: fresh, to: sibling)) != nil {
-                    compiled = sibling
-                } else {
-                    compiled = fresh
-                }
-            }
+            return try MLModel(contentsOf: packageURL, configuration: config)
         }
+        // Loading must not change the release inventory. Explicit precompiled
+        // inputs above remain supported for app bundles.
+        let compiled = try MLModel.compileModel(at: packageURL)
+        // Best effort: `compileModel` writes under the process temporary
+        // directory, so a failure here leaks one compiled model until the
+        // system reclaims that directory, and is not worth failing a load
+        // that otherwise succeeded.
+        defer { try? FileManager.default.removeItem(at: compiled) }
         return try MLModel(contentsOf: compiled, configuration: config)
     }
 
     static func floatArray(_ shape: [Int], _ data: [Float]) throws -> MLMultiArray {
         let m = try MLMultiArray(shape: shape.map { NSNumber(value: $0) }, dataType: .float32)
-        data.withUnsafeBufferPointer {
+        data.withUnsafeBufferPointer { buf in
+            // An empty array has no base address and nothing to copy.
+            guard let src = buf.baseAddress else { return }
             m.dataPointer.bindMemory(to: Float.self, capacity: data.count)
-                .update(from: $0.baseAddress!, count: data.count)
+                .update(from: src, count: data.count)
         }
         return m
     }
 
     static func intArray(_ shape: [Int], _ data: [Int32]) throws -> MLMultiArray {
         let m = try MLMultiArray(shape: shape.map { NSNumber(value: $0) }, dataType: .int32)
-        data.withUnsafeBufferPointer {
+        data.withUnsafeBufferPointer { buf in
+            guard let src = buf.baseAddress else { return }
             m.dataPointer.bindMemory(to: Int32.self, capacity: data.count)
-                .update(from: $0.baseAddress!, count: data.count)
+                .update(from: src, count: data.count)
         }
         return m
     }
@@ -66,12 +61,11 @@ enum MLHelpers {
         return floats(array)
     }
 
-    /// Stride-aware MLMultiArray -> [Float]. CoreML can return NON-CONTIGUOUS
-    /// multiarrays (padded strides); reading `dataPointer` linearly scrambles
-    /// the values — the production engine hit exactly this (2026-07-22, mu
-    /// corr 0.025 vs 1.0 once fixed; MLArrayReader.swift), and this port hit
-    /// it again on its first end-to-end run (mel corr 0.13). Every model
-    /// output goes through here.
+    /// Stride-aware MLMultiArray to `[Float]`. CoreML can return
+    /// non-contiguous multiarrays with padded strides, and reading
+    /// `dataPointer` linearly scrambles the values: measured mu corr 0.025
+    /// against 1.0 once fixed, and mel corr 0.13 on this port's first
+    /// end-to-end run. Every model output goes through here.
     static func floats(_ m: MLMultiArray) -> [Float] {
         let shape = m.shape.map { $0.intValue }
         let strides = m.strides.map { $0.intValue }
@@ -93,7 +87,7 @@ enum MLHelpers {
 
         var res = [Float](repeating: 0, count: count)
         res.withUnsafeMutableBufferPointer { rb in
-            let dst = rb.baseAddress!
+            guard let dst = rb.baseAddress else { return }
             if contiguous && !fp16 {
                 _ = memcpy(dst, base, count * 4)
                 return
@@ -161,17 +155,21 @@ public final class MelDecoder {
 
     init(config: AlgorithmConfig, encoder: MLModel, estimator: MLModel,
          spkWeight: [Float], spkBias: [Float]) throws {
+        // Second line of defence. `AlgorithmConfig.fromManifest` refuses
+        // cfg_dual_path at the door, so no checkpoint reaches here asking for
+        // it; a config built in code still can, and this is the layer that
+        // knows the exported estimator is the distilled student.
         guard config.guidance == .singlePath else {
             throw LoudKitError.manifest(
                 "the exported estimator is the guidance-distilled student; "
-                + "cfg_dual_path would apply guidance twice (EXP-016)")
+                + "cfg_dual_path would apply guidance twice")
         }
         guard config.window.staticLength == 255, config.window.staticPromptTokens == 238 else {
             throw LoudKitError.shape(
                 "the exported graphs are static at query 255 / prompt 238; this "
                 + "AlgorithmConfig frames \(String(describing: config.window.staticLength))/"
                 + "\(String(describing: config.window.staticPromptTokens)). A different "
-                + "window is a different algorithm — re-export rather than reframe.")
+                + "window is a different algorithm: re-export rather than reframe.")
         }
         self.config = config
         self.encoder = encoder
@@ -180,7 +178,7 @@ public final class MelDecoder {
         self.spkBias = spkBias
     }
 
-    /// Returns `(mel, frames)` — mel is `(80, 2n)` row-major, the prompt
+    /// Returns `(mel, frames)`, mel is `(80, 2n)` row-major, the prompt
     /// region already cut.
     public func decode(tokens: [Int], voice: VoiceProfile, seed: UInt64) throws -> ([Float], Int) {
         let w = config.window
@@ -188,7 +186,7 @@ public final class MelDecoder {
               let pad = w.padTokenId else {
             throw LoudKitError.shape("static window not configured")
         }
-        // Refused, not truncated — see Engine.stripSpecials. This site sliced
+        // Refused, not truncated, see Engine.stripSpecials. This site sliced
         // independently of that one, so a caller reaching the renderer
         // directly lost the tail of the passage with nothing raised anywhere.
         try Windowing.requireFits(tokens.count, w.maxSpeechTokens)
@@ -285,6 +283,12 @@ public final class Vocoder {
         self.hift = hift
     }
 
+    /// A mel spectrogram to a waveform, through the static HiFi-GAN graph.
+    ///
+    /// The graph takes a fixed number of frames, so the mel is padded to
+    /// `2 * maxSpeechTokens` and the output cut back to the frames that carried
+    /// signal. `seed` addresses the noise the graph is given, which is why the
+    /// same mel and the same seed give the same samples on every port.
     public func synthesize(mel: [Float], frames melFrames: Int, seed: UInt64) throws -> [Float] {
         let bins = MelDecoder.melBins
         let staticFrames = 2 * config.window.maxSpeechTokens

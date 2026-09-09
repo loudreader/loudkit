@@ -1,31 +1,14 @@
-//! Where each chunk — and, approximately, each word — lands in the waveform.
+//! Where each chunk, and, approximately, each word, lands in the waveform.
 //!
-//! A reading app highlights the sentence it is speaking. That needs two
-//! different kinds of answer, and this module keeps them apart on purpose,
-//! because conflating them is how a feature like this becomes a lie.
-//!
-//! **Chunk times are exact.** The engine renders each chunk to its own waveform
-//! and concatenates them, so it knows every chunk's sample offset and sample
-//! length without estimating anything. [`ChunkTiming`] reports those, converted
-//! to seconds. Chunk *k*'s `end` is bit-identical to chunk *k+1*'s `start`:
-//! both are the same integer sample offset divided by the same sample rate, so
-//! a highlight driven by them can neither gap nor overlap.
-//!
-//! **Word times are estimated.** The model emits speech tokens, not an
-//! alignment; nothing in this pipeline knows where a word begins.
-//! [`WordTiming`] distributes a chunk's real duration across its words in
-//! proportion to how long each word is in characters, and that is all it is. It
-//! is right often enough to be useful for a highlight at sentence scale and
-//! wrong in the ways you would expect: a long word said fast, a short word
-//! held, a pause before a clause. The error grows with the length of the chunk,
-//! because a single bad guess early shifts everything after it — one sentence is
-//! usually fine, a long paragraph read as one chunk is not. If you need real
-//! alignment you need a forced aligner; this is not one, and pretending
-//! otherwise would be worse than the estimate.
+//! [`ChunkTiming`] is exact: the engine renders each chunk to its own waveform,
+//! so it knows every sample offset without estimating. [`WordTiming`] is an
+//! estimate, distributing a chunk's real duration across its words in
+//! proportion to their length in characters. The two are kept apart on purpose;
+//! `docs/design/engine-pipeline.md` says what the estimate is worth and where
+//! it drifts.
 //!
 //! Both are computed *after* any time-stretch, on the waveform the caller
-//! actually receives, so a `speed` other than 1.0 needs no correction applied to
-//! them.
+//! actually receives, so a `speed` other than 1.0 needs no correction.
 //!
 //! Mirrors `loudkit.timing` in Python, arithmetic for arithmetic.
 
@@ -47,7 +30,7 @@ pub struct ChunkSpan {
 ///
 /// **Estimated, by proportional allocation.** The chunk's real duration is
 /// divided among its words in proportion to their length in characters. There
-/// is no alignment model here and no per-word measurement — see the module
+/// is no alignment model here and no per-word measurement: see the module
 /// documentation for what that costs you.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WordTiming {
@@ -69,7 +52,7 @@ pub struct WordTiming {
 /// impossible to reach the estimate by accident.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChunkTiming {
-    /// The chunk's text after the speech funnel — what was tokenised, which is
+    /// The chunk's text after the speech funnel: what was tokenised, which is
     /// not always what the caller passed in (Polish respells embedded English,
     /// and numbers are read as words).
     pub text: String,
@@ -78,7 +61,7 @@ pub struct ChunkTiming {
     /// Zero for the first chunk, and for every chunk handed to an
     /// [`crate::engine::Engine::stream`] callback: a streamed chunk is its own
     /// result and does not know what preceded it, so the caller stitching the
-    /// stream adds the offsets — [`ChunkTiming::shifted`] is that.
+    /// stream adds the offsets: [`ChunkTiming::shifted`] is that.
     pub start: f64,
     pub end: f64,
     /// Speech tokens this chunk generated. Duration over tokens is the pacing
@@ -125,7 +108,7 @@ impl ChunkTiming {
 /// Offsets accumulate in **samples**, not seconds, and are divided by the rate
 /// once at the end. Accumulating seconds instead would make chunk *k*'s `end`
 /// and chunk *k+1*'s `start` two different sums of the same floats, differing in
-/// the last bit — a gap or an overlap of a few nanoseconds, invisible in a test
+/// the last bit: a gap or an overlap of a few nanoseconds, invisible in a test
 /// that compares with a tolerance and visible as a flicker in a highlight that
 /// switches on `time >= start`.
 #[must_use]
@@ -153,7 +136,7 @@ pub fn timeline(spans: &[ChunkSpan], sample_rate: usize) -> Vec<ChunkTiming> {
 /// The allocation is by **character count**, not by token count or by any
 /// acoustic measure: a word's characters are the only thing known here, and they
 /// correlate with duration well enough at sentence scale to drive a highlight.
-/// Whitespace itself is not charged for — the gap between two words belongs to
+/// Whitespace itself is not charged for: the gap between two words belongs to
 /// whichever side of the boundary the caller's player is on, and splitting it
 /// would only invent a third kind of span.
 ///
@@ -162,7 +145,7 @@ pub fn timeline(spans: &[ChunkSpan], sample_rate: usize) -> Vec<ChunkTiming> {
 /// `start`, the last `end` is exactly `end`, and every interior boundary is
 /// shared by the two words that meet at it.
 ///
-/// Characters means **code points** — `chars().count()`, matching Python's
+/// Characters means **code points**, `chars().count()`, matching Python's
 /// `len(w)`, Go's `utf8.RuneCountInString` and Swift's `unicodeScalars.count`.
 /// Counting bytes instead would give Polish and Japanese text different word
 /// weights in one port than in another, for text that reads identically.

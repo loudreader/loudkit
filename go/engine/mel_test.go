@@ -4,7 +4,7 @@ import "testing"
 
 // A mel is row-major [80, frames]. Appending two flat buffers puts the second
 // chunk's bin 0 after the first chunk's bin 79, so every row but the first is
-// wrong. The audio is unaffected — each chunk is vocoded on its own — but the
+// wrong. The audio is unaffected (each chunk is vocoded on its own) but the
 // mel is the diagnostic people reach for when two backends disagree, and a
 // mis-shaped one sends them looking in the wrong place.
 func TestAppendMelAlongTime(t *testing.T) {

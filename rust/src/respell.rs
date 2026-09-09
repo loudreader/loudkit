@@ -1,6 +1,6 @@
-//! Polish lexical respelling — a bit-parity port of
-//! loudkit.frontend.polish.lexical_respelling (Python), respell.ts (JS) and
-//! speechtext/respell.go (Go) — the Swift engine's `LexicalRespelling`.
+//! Polish lexical respelling: a bit-parity port of
+//! loudkit.frontend.speechtext.lexical_respelling (Python), respell.ts (JS) and
+//! speechtext/respell.go (Go), the Swift engine's `LexicalRespelling`.
 //!
 //! English words embedded in Polish text are respelled the way a Polish reader
 //! says them: "download" → "dałnloud", "deadline'u" → "dedlajnu". Numbers
@@ -14,7 +14,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::speechtext::{ascii_digits, is_decimal_digit};
+use crate::unicode::{ascii_digits, is_decimal_digit, is_letter};
 
 /// The generated lexicon, embedded at compile time (Go uses `//go:embed`,
 /// JS loads it lazily; all three ship the same generated file).
@@ -37,7 +37,7 @@ static POLISH_SET: LazyLock<HashSet<String>> =
 static WORDS_SET: LazyLock<HashSet<String>> =
     LazyLock::new(|| PAYLOAD.words.iter().cloned().collect());
 
-// Multi-word anglicisms respelled as a unit, BEFORE the word pass — "release
+// Multi-word anglicisms respelled as a unit, BEFORE the word pass: "release
 // notes" word-by-word would read "notes" as the Polish homograph.
 const PHRASES: [(&str, &str); 5] = [
     ("release notes", "rilis nołc"),
@@ -47,44 +47,11 @@ const PHRASES: [(&str, &str); 5] = [
     ("happy hour", "hepi ałer"),
 ];
 
-// English words that are ALSO everyday Polish words — the word pass leaves
+// English words that are ALSO everyday Polish words: the word pass leaves
 // them alone, and only a phrase above may respell them.
 const KEEP_POLISH: &str = "notes pilot problem prom kit bug buga bugi bugach bugów log logi logach spam port host linux unix python ruby";
 
-// GPT → "gie-pe-te": an all-caps token is read letter by letter with POLISH
-// letter names. A short allowlist covers acronyms said as WORDS (NASA, RAM).
-const LETTER_NAMES: &[(&str, &str); 26] = &[
-    ("a", "a"),
-    ("b", "be"),
-    ("c", "ce"),
-    ("d", "de"),
-    ("e", "e"),
-    ("f", "ef"),
-    ("g", "gie"),
-    ("h", "ha"),
-    ("i", "i"),
-    ("j", "jot"),
-    ("k", "ka"),
-    ("l", "el"),
-    ("m", "em"),
-    ("n", "en"),
-    ("o", "o"),
-    ("p", "pe"),
-    ("q", "ku"),
-    ("r", "er"),
-    ("s", "es"),
-    ("t", "te"),
-    ("u", "u"),
-    ("v", "fał"),
-    ("w", "wu"),
-    ("x", "iks"),
-    ("y", "igrek"),
-    ("z", "zet"),
-];
-
-const WORD_ACRONYMS: &str = "nasa ram rom pin vat sim lot pesel nato zus nfz pit";
-
-// Polish function words that happen to spell English words — never span
+// Polish function words that happen to spell English words: never span
 // members, or a span eats the Polish conjunction after it.
 const POLISH_FUNCTION_WORDS: &str = "i a o u w z no to ta ten on ona my ja do po za na od ale czy tak nie co jak go mu je ma by się był mam dam";
 
@@ -95,67 +62,19 @@ const POLISH_ENDINGS: &[&str] = &[
     "owym",
 ];
 
-const UNITS: [&str; 10] = [
-    "",
-    "jeden",
-    "dwa",
-    "trzy",
-    "cztery",
-    "pięć",
-    "sześć",
-    "siedem",
-    "osiem",
-    "dziewięć",
-];
-const TEENS: [&str; 10] = [
-    "dziesięć",
-    "jedenaście",
-    "dwanaście",
-    "trzynaście",
-    "czternaście",
-    "piętnaście",
-    "szesnaście",
-    "siedemnaście",
-    "osiemnaście",
-    "dziewiętnaście",
-];
-const TENS: [&str; 10] = [
-    "",
-    "",
-    "dwadzieścia",
-    "trzydzieści",
-    "czterdzieści",
-    "pięćdziesiąt",
-    "sześćdziesiąt",
-    "siedemdziesiąt",
-    "osiemdziesiąt",
-    "dziewięćdziesiąt",
-];
-const HUNDREDS: [&str; 10] = [
-    "",
-    "sto",
-    "dwieście",
-    "trzysta",
-    "czterysta",
-    "pięćset",
-    "sześćset",
-    "siedemset",
-    "osiemset",
-    "dziewięćset",
-];
-
-const DIGIT_WORDS: [&str; 10] = [
-    "zero",
-    "jeden",
-    "dwa",
-    "trzy",
-    "cztery",
-    "pięć",
-    "sześć",
-    "siedem",
-    "osiem",
-    "dziewięć",
-];
+/// The ten ASCII digits as Polish words, for reading a token one character at
+/// a time.
+///
+/// ASCII only, and a table rather than ten [`crate::numbers::cardinal`] calls
+/// per token, because the callers below ask "is this a digit I can say" of
+/// every character of every word. Unicode has decimal digits well outside
+/// ASCII, `٥` and `൬` among them, and a token holding one is not a token this
+/// pass says character by character.
+static DIGIT_WORDS: LazyLock<[String; 10]> = LazyLock::new(|| {
+    std::array::from_fn(|d| {
+        crate::numbers::cardinal(d as i64, "pl", "").expect("pl says its own digits")
+    })
+});
 
 // The curated lexicon: common anglicisms → Polish phonetic respelling.
 const LEXICON: &[(&str, &str)] = &[
@@ -284,7 +203,7 @@ const LEXICON: &[(&str, &str)] = &[
     ("wow", "łał"),
 ];
 
-// Math and unit symbols the model cannot say, as Polish words — with context
+// Math and unit symbols the model cannot say, as Polish words: with context
 // guards, because "-" is also a hyphen and "/" is also a path. Rust's regex
 // has no lookbehind, so "preceded by a digit" is a capturing group restored
 // by the replacement.
@@ -304,8 +223,6 @@ const RESPEL_SYMBOL_RULES: &[(&str, &str)] = &[
 
 static KEEP_POLISH_SET: LazyLock<HashSet<String>> =
     LazyLock::new(|| KEEP_POLISH.split_whitespace().map(String::from).collect());
-static WORD_ACRONYMS_SET: LazyLock<HashSet<String>> =
-    LazyLock::new(|| WORD_ACRONYMS.split_whitespace().map(String::from).collect());
 static POLISH_FUNCTION_SET: LazyLock<HashSet<String>> = LazyLock::new(|| {
     POLISH_FUNCTION_WORDS
         .split_whitespace()
@@ -318,6 +235,17 @@ static LEXICON_MAP: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
     LEXICON
         .iter()
         .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect()
+});
+static PHRASE_RES: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
+    PHRASES
+        .iter()
+        .map(|(phrase, spoken)| {
+            (
+                Regex::new(&format!("(?i){}", regex::escape(phrase))).expect("escaped phrase"),
+                *spoken,
+            )
+        })
         .collect()
 });
 static RESPEL_SYMBOL_RES: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
@@ -349,52 +277,42 @@ fn lookup(word: &str) -> Option<String> {
     generated().get(word).cloned()
 }
 
+/// How long an all-caps token may be before this pass stops calling it an
+/// acronym.
+///
+/// [`crate::letters::spell_acronym`] reads a listed word acronym of any length
+/// as a word, which is the right answer where it is asked, at the top of the
+/// funnel with the neighbouring capitals still visible. Down here the only
+/// question is whether the English-run gate below should skip the token, and a
+/// long all-caps run is a heading or a shout far more often than an initialism.
+const MAX_ACRONYM: usize = 5;
+
+/// The acronym reading the English-run gate below asks about.
+///
+/// [`crate::letters`] owns the spelling, in one table, for all twelve
+/// languages; what this adds is the length cap that makes the question a
+/// narrower one.
 fn spelled_acronym(word: &str) -> Option<String> {
-    let n = word.chars().count();
-    if !(2..=5).contains(&n) {
+    if word.chars().count() > MAX_ACRONYM {
         return None;
     }
-    if !word.chars().all(|c| c.is_ascii_uppercase()) {
-        return None;
-    }
-    let lower = word.to_lowercase();
-    if WORD_ACRONYMS_SET.contains(&lower) {
-        return Some(lower);
-    }
-    let names: Vec<&str> = lower
-        .chars()
-        .map(|c| {
-            let s = c.to_string();
-            LETTER_NAMES.iter().find(|(l, _)| *l == s).map(|(_, r)| *r)
-        })
-        .collect::<Option<Vec<_>>>()?;
-    Some(names.join("-"))
+    crate::letters::spell_acronym(word, "pl")
 }
 
-fn under1000(n: usize) -> Vec<&'static str> {
-    let mut parts = Vec::new();
-    if n >= 100 {
-        parts.push(HUNDREDS[n / 100]);
-    }
-    let rest = n % 100;
-    if (10..=19).contains(&rest) {
-        parts.push(TEENS[rest - 10]);
-    } else {
-        if rest >= 20 {
-            parts.push(TENS[rest / 10]);
-        }
-        if !rest.is_multiple_of(10) {
-            parts.push(UNITS[rest % 10]);
-        }
-    }
-    parts
-}
+/// How many digits a bare token may carry and still be read as one number.
+///
+/// Past six the run is an identifier, an order number or a phone number far
+/// more often than a quantity, and *dziewięćset osiemdziesiąt siedem tysięcy*
+/// … is a worse reading of `9876543210` than the digits themselves.
+const MAX_SPOKEN_DIGITS: usize = 6;
 
+/// A run of digits as Polish cardinal words, or `None` to leave it alone.
+///
+/// The grammar is [`crate::numbers::cardinal`]'s; what this adds is the two
+/// refusals the respelling pass makes on top of it, a leading zero and a run
+/// too long to be a quantity, both of which read better digit by digit.
 fn number_words(token: &str) -> Option<String> {
-    if token.chars().count() > 6 {
-        return None;
-    }
-    if token.starts_with('0') && token != "0" {
+    if token.chars().count() > MAX_SPOKEN_DIGITS || (token.starts_with('0') && token != "0") {
         return None;
     }
     if !token.chars().all(is_decimal_digit) {
@@ -402,31 +320,26 @@ fn number_words(token: &str) -> Option<String> {
     }
     // Through `ascii_digits` because `str::parse` reads ASCII digits only:
     // `"١٢٣"` is a number to Python's `int()` and to this function.
-    let value: usize = ascii_digits(token)?.parse().ok()?;
-    if value == 0 {
-        return Some("zero".to_string());
-    }
-    let mut parts = Vec::new();
-    let thousands = value / 1000;
-    if thousands > 0 {
-        if thousands == 1 {
-            parts.push("tysiąc".to_string());
-        } else {
-            parts.extend(under1000(thousands).iter().map(|s| s.to_string()));
-            let last_two = thousands % 100;
-            let last = thousands % 10;
-            if (12..=14).contains(&last_two) {
-                parts.push("tysięcy".to_string());
-            } else if (2..=4).contains(&last) {
-                parts.push("tysiące".to_string());
-            } else {
-                parts.push("tysięcy".to_string());
-            }
-        }
-    }
-    parts.extend(under1000(value % 1000).iter().map(|s| s.to_string()));
-    Some(parts.join(" "))
+    let value: i64 = ascii_digits(token)?.parse().ok()?;
+    crate::numbers::cardinal(value, "pl", "").ok()
 }
+
+/// The letter names a mixed letter-digit token is spelled with.
+///
+/// The names are the grammar file's, so `GPT` is *gie-pe-te* in one place. The
+/// ASCII narrowing is this pass's own: `numbers.json` also names the nine
+/// Polish letters, and reading them here would turn `Ż1`, left written today,
+/// into *żet jeden*. That is a change in what Polish says, so it belongs to a
+/// `FUNNEL_PORTED` bump and a re-pinned fixture, not to a table move.
+static CODE_LETTER_NAMES: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
+    ('a'..='z')
+        .filter_map(|ch| {
+            let letter = ch.to_string();
+            let name = crate::letters::letter_name(&letter, "pl")?;
+            Some((letter, name))
+        })
+        .collect()
+});
 
 /// Spelling `R2` character by character is how a Polish reader says it; doing
 /// the same to an eleven-character identifier is a wall of letter names nobody
@@ -440,7 +353,7 @@ fn spelled_code_token(word: &str) -> Option<String> {
         return None;
     }
     // All or nothing. Skipping a character with no letter name turns
-    // `Müller123` into *em el el e er jeden dwa* — the `ü` gone, a name
+    // `Müller123` into *em el el e er jeden dwa*: the `ü` gone, a name
     // changed rather than mispronounced; and an eight-character cap that truncates
     // instead of refusing drops the last digits of `żelazny2024`. A token half-read
     // is worse than one left written, because the listener cannot tell that anything
@@ -451,11 +364,15 @@ fn spelled_code_token(word: &str) -> Option<String> {
     let mut parts = Vec::new();
     for c in word.chars() {
         if let Some(d) = c.to_digit(10) {
-            parts.push(DIGIT_WORDS[d as usize].to_string());
+            parts.push(DIGIT_WORDS[d as usize].clone());
         } else {
-            let s = c.to_lowercase().to_string();
-            let (_, name) = LETTER_NAMES.iter().find(|(l, _)| *l == s)?;
-            parts.push((*name).to_string());
+            // `ü`, `ż`, `é`, a letter this table has no name for. Refusing the
+            // whole token is the only answer that does not delete it silently.
+            parts.push(
+                CODE_LETTER_NAMES
+                    .get(&c.to_lowercase().to_string())?
+                    .clone(),
+            );
         }
     }
     if parts.is_empty() {
@@ -478,13 +395,13 @@ fn match_case(original: &str, respelled: &str) -> String {
 }
 
 fn respelled(word: &str) -> String {
-    // No acronym branch here any more. `crate::letters::spell_acronyms` owns
-    // that decision for all twelve languages and takes it earlier in the funnel,
-    // where the surrounding capitals are still visible — this pass sees one word
-    // at a time and so could not tell an initialism from a shout. It spelled
-    // "THIS IS FINE" as te-ha-i-es i-es ef-i-en-e, and "CIA CIA" as ce-i-a
-    // ce-i-a where the earlier pass had already decided that a run of capitals
-    // is emphasis. `spelled_acronym` stays: the English-run test below still
+    // No acronym branch here. `crate::letters::spell_acronyms` owns that
+    // decision for all twelve languages and takes it earlier in the funnel,
+    // where the surrounding capitals are still visible; this pass sees one word
+    // at a time and cannot tell an initialism from a shout. Deciding it here
+    // spells "THIS IS FINE" as te-ha-i-es i-es ef-i-en-e, and "CIA CIA" as
+    // ce-i-a ce-i-a where the earlier pass has already decided that a run of
+    // capitals is emphasis. `spelled_acronym` stays: the English-run test below
     // asks it whether a word is an acronym, which is a different question from
     // spelling one.
     if let Some(c) = spelled_code_token(word) {
@@ -494,15 +411,31 @@ fn respelled(word: &str) -> String {
     if let Some(hit) = lookup(&lower) {
         return match_case(word, &hit);
     }
-    // Digits-only tokens: cardinal words when sane, digit-by-digit when weird.
-    let all_digits = word.chars().all(is_decimal_digit);
-    if all_digits {
+    // Letterless tokens: cardinal words when sane, digit-by-digit when weird
+    // (leading zeros, longer than six digits).
+    //
+    // "No character is a letter", not "every character is a digit". The word
+    // collector above keeps `'` and `’` inside a word, because "deadline'u" is
+    // one token to a Polish reader, so a quoted number arrives here as `'192`:
+    // letterless, and not all digits. Under the digits test it fell through
+    // every branch below and was returned unchanged, and
+    // `speech_text("Wpisz '192.168.0.1' w przeglądarce.", "pl")` diverged from
+    // Python, JS and Swift, which all ask whether the token has a letter.
+    // `js/src/respell.ts:363-366` names both guards and calls them equivalent;
+    // the apostrophe is the character that separates them.
+    if !word.chars().any(is_letter) {
         if let Some(cardinal) = number_words(word) {
             return cardinal;
         }
-        let parts: Vec<&str> = word
+        // Digit by digit, but never to *nothing*: a character the table has no
+        // word for stands for itself. Dropping it deleted the apostrophe, and
+        // every non-ASCII decimal digit with it.
+        let parts: Vec<String> = word
             .chars()
-            .filter_map(|c| c.to_digit(10).map(|d| DIGIT_WORDS[d as usize]))
+            .map(|c| match c.to_digit(10) {
+                Some(d) => DIGIT_WORDS[d as usize].clone(),
+                None => c.to_string(),
+            })
             .collect();
         return parts.join(" ");
     }
@@ -548,9 +481,8 @@ fn respell_symbols(text: &str) -> String {
 
 fn respell_phrases(text: &str) -> String {
     let mut out = text.to_string();
-    for (phrase, spoken) in PHRASES {
-        let re = Regex::new(&format!("(?i){}", regex::escape(phrase))).unwrap();
-        out = re.replace_all(&out, spoken).to_string();
+    for (re, spoken) in PHRASE_RES.iter() {
+        out = re.replace_all(&out, *spoken).to_string();
     }
     out
 }
@@ -598,7 +530,7 @@ fn respell_words(text: &str) -> String {
     while i < words.len() {
         // The whole run of digit groups is measured before any of it is read,
         // because the decision belongs to the run and not to its first pair.
-        // Two groups is a decimal — "dwa przecinek pięć". Three or more is a
+        // Two groups is a decimal: "dwa przecinek pięć". Three or more is a
         // version, an address or a date, and is left exactly as written.
         //
         // Reading only the first pair turns "192.168.0.1" into "sto
@@ -650,7 +582,7 @@ fn respell_words(text: &str) -> String {
                 let whole = number_words(&words[i]).unwrap_or_else(|| words[i].clone());
                 let frac: Vec<&str> = words[i + 1]
                     .chars()
-                    .filter_map(|c| c.to_digit(10).map(|d| DIGIT_WORDS[d as usize]))
+                    .filter_map(|c| c.to_digit(10).map(|d| DIGIT_WORDS[d as usize].as_str()))
                     .collect();
                 let next_sep = seps.get(i + 2).cloned().unwrap_or_default();
                 out.push_str(&whole);
@@ -668,7 +600,7 @@ fn respell_words(text: &str) -> String {
             }
             if j - i >= 4 {
                 // Inside a detected English span every word transliterates,
-                // gate ignored — "brown" alone stays Polish, "brown" inside
+                // gate ignored: "brown" alone stays Polish, "brown" inside
                 // "the quick brown fox" becomes "brałn".
                 for k in i..j {
                     let lower = words[k].to_lowercase();

@@ -16,12 +16,13 @@ from loudkit.config import (
     AlgorithmConfig,
     ChunkConfig,
     ExecutionConfig,
-    ExecutionOverrides,
     SamplingConfig,
     WindowConfig,
 )
 from loudkit.rng import KAT_VECTORS, gumbel_noise, philox_4x32_10, selftest, uniforms
 from loudkit.sampler import LRSamplerV1
+
+from .conftest import tool
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -76,7 +77,7 @@ class TestPhilox:
 
 class TestSampler:
     def _cfg(self, **kw: object) -> SamplingConfig:
-        return SamplingConfig(**kw)  # type: ignore[arg-type]
+        return SamplingConfig(**kw)
 
     def test_picks_the_dominant_token(self) -> None:
         s = LRSamplerV1(self._cfg(), seed=1)
@@ -152,23 +153,49 @@ class TestSampler:
             f"{penalised:.3f} vs {clean:.3f}"
         )
 
-    def test_silence_tokens_are_exempt(self) -> None:
-        """A reader pauses repeatedly; penalising silence removes pauses. This
-        was measured at pause ratio 0.112 -> 0.085 on a pause-heavy sentence."""
+    def test_silence_is_penalised_like_everything_else(self) -> None:
+        """The interior-stall fix. Silence ids were exempt from the penalty;
+        together with the min_p exemption that made a silence run absorbing
+        (zero escapes in 1,031 instrumented trap steps, a >1 s hole in 33.0%
+        of long-form paragraphs). The penalty now covers every seen token, so
+        a listed silence id ties its unlisted twin instead of dominating it."""
         logits = np.zeros(32, dtype=np.float32)
         logits[[3, 4]] = 10.0
         seen = np.zeros(32, bool)
         seen[[3, 4]] = True
 
-        exempt = LRSamplerV1(self._cfg(silence_token_ids=(3,)), seed=5, block=4096)
-        rate_exempt = self._rate(exempt, logits, seen, 3)
+        listed = LRSamplerV1(self._cfg(silence_token_ids=(3,)), seed=5, block=4096)
+        rate_listed = self._rate(listed, logits, seen, 3)
         plain = LRSamplerV1(self._cfg(), seed=5, block=4096)
         rate_plain = self._rate(plain, logits, seen, 3)
 
-        # Exempt: token 3 keeps its logit while 4 is divided down, so it should
-        # dominate. Not exempt: both are penalised equally, so it should be even.
-        assert rate_exempt > 0.7, f"exempt silence token chosen only {rate_exempt:.3f}"
-        assert 0.35 < rate_plain < 0.65, f"unexempt tokens should tie, got {rate_plain:.3f}"
+        assert 0.35 < rate_listed < 0.65, (
+            f"a listed silence token must be penalised like its twin, got {rate_listed:.3f}"
+        )
+        assert 0.35 < rate_plain < 0.65, f"unlisted tokens should tie, got {rate_plain:.3f}"
+
+    def test_silence_keeps_the_min_p_exemption(self) -> None:
+        """The one exemption silence keeps: a pause token is the only way to
+        pause, and dropping this one was measured catastrophic (median
+        long-form gap 2.46 s -> 4.64 s)."""
+        logits = np.full(32, -30.0, dtype=np.float32)
+        logits[5] = 10.0
+        logits[[3, 4]] = 8.0  # both fall below min_p against token 5
+        seen = np.zeros(32, bool)
+
+        sampler = LRSamplerV1(self._cfg(min_p=0.5, silence_token_ids=(3,)), seed=9, block=4096)
+        rate_silence = self._rate(sampler, logits, seen, 3)
+        sampler = LRSamplerV1(self._cfg(min_p=0.5, silence_token_ids=(3,)), seed=9, block=4096)
+        rate_speech_twin = self._rate(sampler, logits, seen, 4)
+
+        # The listed id survives the cutoff and is still drawn now and then;
+        # its unlisted twin at the same logit is removed outright.
+        assert rate_silence > 0.01, (
+            f"the silence id should survive min_p, drawn {rate_silence:.4f}"
+        )
+        assert rate_speech_twin == 0.0, (
+            f"an unlisted id below min_p must never be drawn, got {rate_speech_twin:.4f}"
+        )
 
     def test_distribution_matches_the_reference_law(self) -> None:
         """Same law, different stream: the counts must agree within noise."""
@@ -189,6 +216,279 @@ class TestSampler:
 
         tv = np.abs(got - p).sum() / 2
         assert tv < 0.02, f"total variation {tv:.4f} — the law drifted, not just the stream"
+
+
+class TestRaggedVocoderDeclaration:
+    """The ragged vocoder changes shipped bytes, so what it promises is pinned.
+
+    None of this needs a checkpoint: it is about the declaration, which is the
+    part a reader of `COMPATIBILITY.md` relies on and the part that was silently
+    wrong twice — once in the CLI, which forced it off for anyone who asked for
+    CUDA graphs, and once in the backend, which enabled it on the CPU reference
+    path.
+    """
+
+    def test_an_explicit_single_hashes_like_an_absent_block(self) -> None:
+        """Equal audible decisions must give equal fingerprints, or comparing
+        two of them means nothing."""
+        from loudkit.manifest import decode_from
+
+        base = AlgorithmConfig()
+        explicit = AlgorithmConfig(decode_mode=decode_from({"mode": "single"}))
+        assert explicit.fingerprint() == base.fingerprint()
+        fused = AlgorithmConfig(decode_mode=decode_from({"mode": "fusion_mtp2"}))
+        assert fused.fingerprint() != base.fingerprint()
+
+    def test_no_flag_names_a_knob_its_caller_did_not(self) -> None:
+        """`--cuda-graphs` alone must not name `vocoder_ragged`, or `compile_model`:
+        an explicit False over a default of True is how every benchmark in one
+        campaign measured the padded vocoder while reporting the ragged one."""
+        import argparse
+        from dataclasses import fields
+
+        bench = tool("bench")
+        every = {"cuda_graphs", "compile_model", "vocoder_ragged"}
+        for flag, expected in (
+            ("cuda_graphs", "cuda_graphs"),
+            ("compile", "compile_model"),
+            ("vocoder_ragged", "vocoder_ragged"),
+        ):
+            args = argparse.Namespace(
+                cuda_graphs=False,
+                compile=False,
+                vocoder_ragged=None,
+                device="cuda",
+                provider=None,
+            )
+            setattr(args, flag, True)
+            execution = bench.execution_for(args)
+            named = {
+                f.name
+                for f in fields(execution)
+                if f.name in every and getattr(execution, f.name) is not None
+            }
+            assert named == {expected}, f"--{flag} also named {named - {expected}}"
+
+    def test_the_padded_vocoder_has_a_spelling(self) -> None:
+        """`--no-vocoder-ragged` is the only way to measure the padded vocoder,
+        and it reaches the reproduce line."""
+        import argparse
+
+        bench = tool("bench")
+        ap = argparse.ArgumentParser()
+        bench.add_engine_flags(ap)
+        ap.add_argument("--texts", nargs="*", default=None)
+        common = ["--checkpoint", "c", "--voice", "v"]
+
+        off = ap.parse_args([*common, "--no-vocoder-ragged"])
+        assert bench.execution_for(off).vocoder_ragged is False
+        assert "--no-vocoder-ragged" in bench.command_line(off)
+
+        on = ap.parse_args([*common, "--vocoder-ragged"])
+        assert bench.execution_for(on).vocoder_ragged is True
+        assert "--vocoder-ragged" in bench.command_line(on)
+
+        bare = ap.parse_args(common)
+        assert bench.execution_for(bare).vocoder_ragged is None
+        assert "vocoder-ragged" not in bench.command_line(bare)
+
+
+class TestReportedExecutionIsRunExecution:
+    """`describe()` is the answer to "which engine actually ran".
+
+    It exists because the defect that shaped this library survived an entire
+    optimisation campaign for want of exactly this line, and `loudkit bench`
+    records it verbatim as the run's `execution` field. A flag it reports that
+    the backend declined to build is the same failure wearing the fix's
+    clothes.
+    """
+
+    def test_ragged_is_claimed_only_where_it_runs(self) -> None:
+        from loudkit.config import ExecutionConfig
+
+        # CUDA is the only renderer the torch backend builds a ragged vocoder
+        # for, and the graph backends have no TorchVocoder at all.
+        assert ExecutionConfig(device="cuda").resolved_vocoder_ragged() is True
+        for device in ("cpu", "mps", "onnx", "coreml"):
+            execution = ExecutionConfig(device=device)
+            assert execution.resolved().vocoder_ragged is True, device
+            assert execution.resolved_vocoder_ragged() is False, device
+            assert "ragged-vocoder" not in execution.describe(), device
+
+    def test_a_split_engine_is_judged_on_its_renderer(self) -> None:
+        """`--device mps` puts the generator on the CPU and the renderer on the
+        GPU; the vocoder is a renderer stage, so the renderer decides."""
+        from loudkit.config import ExecutionConfig
+
+        split = ExecutionConfig(device="cpu", renderer_device="cuda")
+        assert split.resolved_vocoder_ragged() is True
+        assert (
+            ExecutionConfig(device="cuda", renderer_device="cpu").resolved_vocoder_ragged()
+            is False
+        )
+
+    def test_turning_it_off_is_reported(self) -> None:
+        from loudkit.config import ExecutionConfig
+
+        off = ExecutionConfig(device="cuda", vocoder_ragged=False)
+        assert off.resolved_vocoder_ragged() is False
+        assert "ragged-vocoder" not in off.describe()
+
+    def test_the_decode_mode_is_named(self) -> None:
+        """Two engines running different decode loops printed the same line.
+
+        A version-1 loop run over fusion weights speaks fluent nonsense rather
+        than failing, which is the failure this project treats as worse than a
+        crash — so the mode belongs on the line a bug report pastes.
+        """
+        from loudkit.manifest import decode_from
+
+        single = AlgorithmConfig()
+        fused = AlgorithmConfig(decode_mode=decode_from({"mode": "fusion_mtp2"}))
+        assert "decode=fusion_mtp2" in fused.describe()
+        # Absent for the default, like the manifest block: every 0.1.0 log line
+        # is the one without it.
+        assert "decode=" not in single.describe()
+
+
+class TestDeviceNoise:
+    """The device draw and the NumPy draw are the same draw.
+
+    Philox is integer arithmetic, so the counter-to-bits half is exact by
+    construction and is checked against the published known-answer vectors
+    below. The Box-Muller half is not bound that tightly — `log` and `cos` are
+    where two libms are free to differ in the last bit — so the agreement is
+    measured rather than argued. It has held exactly on CPU and CUDA; if a
+    future toolchain breaks that, this says so instead of the waveform
+    changing quietly.
+    """
+
+    def test_the_philox_core_matches_the_published_vectors(self) -> None:
+        torch = pytest.importorskip("torch")
+        from loudkit.models.noise import _philox_torch
+        from loudkit.rng import KAT_VECTORS
+
+        for ctr, key, want in KAT_VECTORS:
+            lanes = [torch.tensor([v], dtype=torch.int64) for v in ctr]
+            got = _philox_torch(lanes[0], lanes[1], lanes[2], lanes[3], key[0], key[1])
+            assert tuple(int(x[0]) for x in got) == want
+
+    @pytest.mark.parametrize(("rows", "cols"), [(9, 4096), (80, 510), (3, 7)])
+    def test_the_field_matches_numpy(self, rows: int, cols: int) -> None:
+        pytest.importorskip("torch")
+        from loudkit.models.noise import gaussian_field, gaussian_field_torch
+
+        want = gaussian_field(7, 4, rows, cols)
+        got = np.asarray(gaussian_field_torch(7, 4, rows, cols, "cpu"))
+        np.testing.assert_array_equal(got, want)
+
+
+class TestDeviceSampler:
+    """The device form of the law must choose what the host form chooses.
+
+    Run on CPU torch, which is where a difference in the *arithmetic* shows up;
+    a difference in the *hardware* is a separate question and the CUDA-graph
+    decode's own gate. The point of these is that a second implementation of a
+    sampling law is a second thing that can drift, so the drift is measured
+    rather than assumed absent.
+    """
+
+    def _pair(self, **kw: object):
+        cfg = SamplingConfig(
+            temperature=0.8,
+            repetition_penalty=1.2,
+            min_p=0.05,
+            silence_token_ids=tuple(range(90, 96)),
+            **kw,
+        )
+        host = LRSamplerV1(cfg, seed=5, stop_token=90, eos_floor=4)
+        mirror = LRSamplerV1(cfg, seed=5, stop_token=90, eos_floor=4)
+        return host, mirror, mirror.on_device("cpu")
+
+    def test_chooses_the_same_tokens(self) -> None:
+        torch = pytest.importorskip("torch")
+        width = 128
+        host, _mirror, dev = self._pair()
+        seen = np.zeros(width, bool)
+        dev.prepare(width, seen, floor=4, step=0)
+        rng = np.random.default_rng(3)
+        for step in range(120):
+            logits = (rng.normal(size=width) * 4.0).astype(np.float32)
+            if step < 4:
+                logits[90] = -np.inf  # the floor, as the decode loop applies it
+            want = host(logits, step=step, seen=seen)
+            seen[want] = True
+            dev.advance_to(step)
+            got = int(dev.select(torch.from_numpy(logits).reshape(1, -1)).item())
+            assert got == want, f"step {step}: device chose {got}, host chose {want}"
+
+    def test_the_eos_observation_agrees_to_the_last_bits(self) -> None:
+        """Not bit-identical, and this is the one place that is true.
+
+        The observation divides by a sum over the survivors, taken left to
+        right on the host and as a parallel reduction here. The step it picks
+        must still be the same step, and the probability must agree to within
+        floating-point noise rather than merely being close.
+        """
+        torch = pytest.importorskip("torch")
+        width = 128
+        host, mirror, dev = self._pair()
+        seen = np.zeros(width, bool)
+        dev.prepare(width, seen, floor=4, step=0)
+        rng = np.random.default_rng(11)
+        for step in range(120):
+            logits = (rng.normal(size=width) * 4.0).astype(np.float32)
+            if step < 4:
+                logits[90] = -np.inf
+            seen[host(logits, step=step, seen=seen)] = True
+            dev.advance_to(step)
+            dev.select(torch.from_numpy(logits).reshape(1, -1))
+        dev.flush_peak()
+        host_at, host_prob = host.eos_peak
+        dev_at, dev_prob = mirror.eos_peak
+        assert host_at == dev_at
+        assert abs(host_prob - dev_prob) <= 1e-12 * max(host_prob, 1e-300)
+
+    def test_the_floor_holds_even_with_no_eos_observation(self) -> None:
+        """`Engine` builds the sampler without a stop token when the postprocess
+        rules are off, and that must not disarm the EOS floor.
+
+        The floor and the observation are different things that happen to name
+        the same id: the floor is applied by every host loop regardless, while
+        the observation is what postprocess reads. Tying the mask to the
+        optional one let the stop token win from the second token onward on a
+        build with `postprocess.mode="off"` — a short utterance, on the one path
+        where the floor is all that holds the decode open.
+        """
+        torch = pytest.importorskip("torch")
+        width = 32
+        cfg = SamplingConfig(temperature=0.8, repetition_penalty=1.0, min_p=0.0)
+        host = LRSamplerV1(cfg, seed=5, stop_token=None, eos_floor=6)
+        dev = host.on_device("cpu")
+        seen = np.zeros(width, bool)
+        dev.prepare(width, seen, floor=6, step=0, stop_token=3)
+
+        logits = np.full(width, -8.0, dtype=np.float32)
+        logits[3] = 40.0  # the stop token dominates everything
+        for step in range(6):
+            dev.advance_to(step)
+            got = int(dev.select(torch.from_numpy(logits).reshape(1, -1)).item())
+            assert got != 3, f"step {step} chose the stop token below the floor"
+        dev.advance_to(6)
+        assert int(dev.select(torch.from_numpy(logits).reshape(1, -1)).item()) == 3
+
+    def test_a_block_that_would_split_a_pair_is_refused(self) -> None:
+        """A fused pair draws twice from one replay, and the second draw's step
+        is advanced on the device — so both must be in the resident block. Out
+        of range there is a bad read inside a captured graph, which surfaces
+        later as an error naming nothing."""
+        pytest.importorskip("torch")
+        cfg = SamplingConfig(silence_token_ids=())
+        dev = LRSamplerV1(cfg, seed=1, block=8).on_device("cpu")
+        dev.prepare(16, np.zeros(16, bool), floor=0, step=0)
+        dev.advance_to(6, draws=2)  # 6 and 7 are both inside the first block
+        with pytest.raises(ValueError, match="cannot hold draws"):
+            dev.advance_to(7, draws=2)  # 8 is not
 
 
 class TestAlgorithmConfig:
@@ -259,14 +559,14 @@ class TestExecutionConfig:
     def test_explicit_attention_is_respected(self) -> None:
         assert ExecutionConfig(device="mps", attention="sdpa").resolved_attention() == "sdpa"
 
-    def test_pre_ampere_cuda_falls_back_to_eager(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def test_pre_ampere_cuda_falls_back_to_eager(self, monkeypatch) -> None:
         """SDPA lowers to flash-attention, which does not exist before Ampere
         (compute 6.x Pascal, 7.x Volta/Turing). On such a GPU the fused path
         raises mid-decode with a traceback naming none of this code; ``auto``
         must choose eager instead of letting the caller crash."""
         import torch
 
-        def cap(*args, **kwargs):  # type: ignore[no-untyped-def]
+        def cap(*args, **kwargs):
             del args, kwargs
             return (6, 1)
 
@@ -274,10 +574,10 @@ class TestExecutionConfig:
         monkeypatch.setattr(torch.cuda, "get_device_capability", cap)
         assert ExecutionConfig(device="cuda").resolved_attention() == "eager"
 
-    def test_ampere_cuda_keeps_sdpa(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def test_ampere_cuda_keeps_sdpa(self, monkeypatch) -> None:
         import torch
 
-        def cap(*args, **kwargs):  # type: ignore[no-untyped-def]
+        def cap(*args, **kwargs):
             del args, kwargs
             return (8, 6)
 
@@ -312,33 +612,19 @@ class TestExecutionConfig:
         )
 
     def test_partial_override_preserves_defaults(self) -> None:
-        """A caller who names one execution field must not silently reset the
-        others to their dataclass defaults — in particular the manifest's fp16
-        dtype map, which is what the benchmarks were measured in."""
-        from loudkit.backends import _resolve_execution
-
-        merged = _resolve_execution(
-            self._shipping_defaults(), ExecutionOverrides(cuda_graphs=True)
-        )
+        """Naming one execution field must not reset the others: the manifest's fp16
+        map is what the benchmarks were measured in."""
+        merged = ExecutionConfig(cuda_graphs=True).resolved(self._shipping_defaults())
         assert merged.cuda_graphs is True
         assert merged.device == "cuda"
+        assert merged.precision is not None
         assert merged.precision["token_generator"] == "fp16", (
             "a partial override must inherit the manifest's fp16 map"
         )
 
-    def test_override_equal_to_the_dataclass_default_still_applies(self) -> None:
-        """ "Unset" and "set to the default value" are different requests.
-
-        The old merge compared each field against ``ExecutionConfig()`` and
-        treated equality as "not specified". So a conformance run that asked
-        for an all-fp32 map — which *is* the dataclass default — silently got
-        the manifest's fp16 generator and reported fp32, and ``device="cpu"``
-        over a CUDA default was ignored for the same reason. Both are the
-        single most damaging failure this library can have: a measurement that
-        names a configuration it did not run.
-        """
-        from loudkit.backends import _resolve_execution
-
+    def test_override_equal_to_the_fallback_still_applies(self) -> None:
+        """Unset and "set to the value that happens to be the fallback" are different
+        requests: an explicit all-fp32 map over an fp16 default must win."""
         defaults = self._shipping_defaults()
         all_fp32 = {
             "token_generator": "fp32",
@@ -346,50 +632,45 @@ class TestExecutionConfig:
             "mel_decoder.encoder": "fp32",
             "vocoder": "fp32",
         }
-        # Every value below equals ExecutionConfig()'s default for its field.
-        merged = _resolve_execution(
-            defaults,
-            ExecutionOverrides(device="cpu", precision=all_fp32, deterministic=True),
+        merged = ExecutionConfig(device="cpu", precision=all_fp32, deterministic=True).resolved(
+            defaults
         )
         assert merged.device == "cpu"
-        assert dict(merged.precision) == all_fp32
+        assert dict(merged.precision or {}) == all_fp32
         assert merged.deterministic is True
 
     def test_precision_override_merges_per_module(self) -> None:
-        """Naming one module changes that module and no other.
-
-        Replacing the whole map instead would make ``{"vocoder": "fp32"}`` mean
-        "and reset the generator to whatever a bare dict lacks", which is how a
-        partial dict silently drops a dtype.
-        """
-        from loudkit.backends import _resolve_execution
-
-        merged = _resolve_execution(
-            self._shipping_defaults(), ExecutionOverrides(precision={"vocoder": "fp16"})
+        """Naming one module changes that module and no other."""
+        merged = ExecutionConfig(precision={"vocoder": "fp16"}).resolved(
+            self._shipping_defaults()
         )
+        assert merged.precision is not None
         assert merged.precision["vocoder"] == "fp16"
         assert merged.precision["token_generator"] == "fp16"
         assert merged.precision["mel_decoder.encoder"] == "fp32"
 
-    def test_a_full_execution_config_is_taken_as_complete(self) -> None:
-        """``ExecutionConfig`` is the configuration; ``ExecutionOverrides`` is a patch.
-
-        Passing the former means "run exactly this", which is what a
-        conformance fixture replaying a recorded execution needs. Nothing is
-        inherited, so nothing can be inherited by surprise.
-        """
-        from loudkit.backends import _resolve_execution
-
-        exact = ExecutionConfig(device="cpu")
-        assert _resolve_execution(self._shipping_defaults(), exact) is exact
-
     def test_unset_fields_are_left_alone(self) -> None:
-        """An empty override changes nothing at all."""
-        from loudkit.backends import _resolve_execution
+        """An empty config changes nothing at all, and every field comes back filled."""
+        defaults = self._shipping_defaults().resolved()
+        assert ExecutionConfig().resolved(defaults) == defaults
+        assert defaults.compile_model is False
+        assert defaults.deterministic is True
 
-        defaults = self._shipping_defaults()
-        assert _resolve_execution(defaults, ExecutionOverrides()) == defaults
-        assert _resolve_execution(defaults, None) == defaults
+    def test_build_engine_resolves_against_the_manifest(self, tmp_path) -> None:
+        """What `build_engine` does with the caller's config: fill it from the
+        checkpoint's defaults, so `execution=ExecutionConfig(cuda_graphs=True)` is
+        the shipping engine plus graphs and nothing else."""
+        from loudkit.backends import _default_execution
+
+        class _Ckpt:
+            dtype_map = {"t3": "float16", "s3gen.flow.decoder.estimator": "float16"}
+
+        defaults = _default_execution(_Ckpt(), "cuda", decode="single")
+        merged = ExecutionConfig(cuda_graphs=True).resolved(defaults)
+        assert merged.cuda_graphs is True
+        assert merged.precision is not None
+        assert merged.precision["token_generator"] == "fp16"
+        assert merged.vocoder_ragged is True
 
     def test_static_cache_warns(self) -> None:
         """The static-cache path (cuda_graphs / compile_model) must warn: it is
@@ -435,6 +716,25 @@ class TestFingerprintCoversTheRecipe:
     def test_manifest_rejects_an_unknown_guidance_mode(self) -> None:
         with pytest.raises(ValueError, match="unknown guidance mode"):
             AlgorithmConfig.from_manifest({"guidance": "sorta_guided"})
+
+    def test_manifest_rejects_the_chunking_words_outside_their_two_sets(self) -> None:
+        """The two chunking laws are closed sets, and the refusal names the key.
+
+        The refusal belongs to the manifest reader, not to `ChunkConfig`: a
+        word outside the set is a claim the file makes, and the message has to
+        say which key made it.
+        """
+        with pytest.raises(ValueError, match="unknown chunking.cap_resplit 'halve'"):
+            AlgorithmConfig.from_manifest({"chunking": {"cap_resplit": "halve"}})
+        with pytest.raises(ValueError, match="unknown chunking.mid_sentence_period 'maybe'"):
+            AlgorithmConfig.from_manifest({"chunking": {"mid_sentence_period": "maybe"}})
+
+    def test_manifest_keeps_the_words_it_accepts(self) -> None:
+        cfg = AlgorithmConfig.from_manifest(
+            {"chunking": {"cap_resplit": "off", "mid_sentence_period": "break"}}
+        )
+        assert cfg.chunking.cap_resplit == "off"
+        assert cfg.chunking.mid_sentence_period == "break"
 
     def test_manifest_accepts_only_the_one_recipe(self) -> None:
         """One recipe means one accepted value, and the error names the tag.
@@ -529,7 +829,7 @@ class TestTF32IsDeclared:
     describe()."""
 
     def test_off_by_default(self) -> None:
-        assert ExecutionConfig().allow_tf32 is False
+        assert ExecutionConfig().resolved().allow_tf32 is False
 
     def test_appears_in_describe_either_way(self) -> None:
         assert "tf32=off" in ExecutionConfig().describe()
@@ -706,10 +1006,7 @@ class TestPackedAssets:
         the input is never rewritten — every measurement in this repository is
         stated against a specific checkpoint, and rewriting one in place
         changes what past results mean."""
-        import sys
-
-        sys.path.insert(0, str(REPO / "tools"))
-        import pack_assets
+        pack_assets = tool("pack_assets")
 
         source = self._write(tmp_path, {"tokenizer.json": b"old"})
         lexicon = tmp_path / "pl_en_respell.json"
@@ -740,3 +1037,41 @@ class TestPackedAssets:
             f"{ASSET_PREFIX}tokenizer.json",
         ], names
         assert final.manifest["packed_assets"] == ["pl_en_respell.json", "tokenizer.json"]
+
+
+class TestEdgeFadeIdentity:
+    """The 20 ms default is hashed; legacy manifests retain their 5 ms identity."""
+
+    def test_new_default_is_hashed_and_legacy_manifest_retains_its_identity(self) -> None:
+        from loudkit.config import EDGE_FADE_SECONDS
+        from loudkit.manifest import edge_fade_from
+
+        base = AlgorithmConfig()
+        explicit = AlgorithmConfig(edge_fade_seconds=edge_fade_from(EDGE_FADE_SECONDS))
+        assert explicit.fingerprint() == base.fingerprint()
+        assert '"edge_fade_seconds":"0.02"' in base.canonical_form()
+        legacy = AlgorithmConfig(edge_fade_seconds=edge_fade_from(None))
+        assert legacy.edge_fade == 0.005
+        assert "edge_fade_seconds" not in legacy.canonical_form()
+        assert legacy.fingerprint() != base.fingerprint()
+        assert base.edge_fade == EDGE_FADE_SECONDS
+
+    def test_another_ramp_moves_the_fingerprint_where_the_ports_expect_it(self) -> None:
+        base = AlgorithmConfig()
+        other = AlgorithmConfig(edge_fade_seconds=0.008)
+        assert other.fingerprint() != base.fingerprint()
+        assert other.edge_fade == 0.008
+        # The exact bytes every port must emit, at the position sorted keys give.
+        want = base.canonical_form().replace(
+            '"edge_fade_seconds":"0.02"', '"edge_fade_seconds":"0.008"', 1
+        )
+        assert other.canonical_form() == want
+        assert "fade=0.008s" in other.describe()
+        assert "fade=" not in base.describe()
+
+    def test_the_ramp_is_bounded(self) -> None:
+        """At least a millisecond: a port whose zero value means unset can then
+        never mistake a real ramp for an absent one."""
+        for bad in (0.5, 0.0):
+            with pytest.raises(ValueError, match="edge_fade_seconds"):
+                AlgorithmConfig(edge_fade_seconds=bad)

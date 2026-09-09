@@ -4,18 +4,18 @@ The enrollment filterbanks need the same mel filters and windows in all five
 languages, and the Python reference computes them through three libraries
 (librosa's Slaney mel, torch's Hann windows, torchaudio's Kaldi mel) with
 conventions that differ per path. A filterbank built from the wrong window
-does not fail to build — it returns numbers and a voice comes out, quietly
+does not fail to build, it returns numbers and a voice comes out, quietly
 worse, with nothing to point at. So the tables are materialised once, here,
 and every port loads the same float32 values.
 
 Dumped (all raw little-endian float32, shapes in the manifest):
 
   s3_mel_filters.f32      (128, 201)  the tokenizer's filters, from the checkpoint
-  s3_hann400.f32          (400,)      torch.hann_window(400) — periodic
+  s3_hann400.f32          (400,)      torch.hann_window(400), periodic
   matcha_mel_filters.f32  (80, 961)   librosa Slaney mel @ 24 kHz
-  matcha_hann1920.f32     (1920,)     torch.hann_window(1920) — periodic
+  matcha_hann1920.f32     (1920,)     torch.hann_window(1920), periodic
   voiceenc_mel_filters.f32 (40, 201)  librosa Slaney mel @ 16 kHz
-  voiceenc_hann400.f32    (400,)      scipy symmetric hann — librosa.stft's default
+  voiceenc_hann400.f32    (400,)      scipy symmetric hann, librosa.stft's default
   kaldi_mel_filters.f32   (80, 257)   torchaudio's Kaldi mel banks
   kaldi_povey400.f32      (400,)      torch.hann_window(400, periodic=False) ** 0.85
 
@@ -39,7 +39,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 
-from loudkit.checkpoint import Checkpoint  # noqa: E402
+from loudkit.checkpoint import Checkpoint
 
 OUT = Path(__file__).resolve().parent.parent / "python" / "loudkit" / "models" / "data" / "dsp"
 
@@ -64,12 +64,8 @@ def main() -> None:
 
     import librosa
 
-    matcha_filters = librosa.filters.mel(  # type: ignore[attr-defined]
-        sr=24_000, n_fft=1920, n_mels=80, fmin=0, fmax=8000
-    )
-    voiceenc_filters = librosa.filters.mel(  # type: ignore[attr-defined]
-        sr=16_000, n_fft=400, n_mels=40, fmin=0, fmax=8000
-    )
+    matcha_filters = librosa.filters.mel(sr=24_000, n_fft=1920, n_mels=80, fmin=0, fmax=8000)
+    voiceenc_filters = librosa.filters.mel(sr=16_000, n_fft=400, n_mels=40, fmin=0, fmax=8000)
 
     matcha_hann = torch.hann_window(1920).numpy()
 

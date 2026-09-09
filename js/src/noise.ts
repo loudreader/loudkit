@@ -1,5 +1,5 @@
 /**
- * Render randomness as data — a port of `loudkit.models.noise`.
+ * Render randomness as data: a port of `loudkit.models.noise`.
  *
  * The flow prior and the vocoder excitation are *inputs* that happen to be
  * random. They come from the Philox counter, so the same seed produces the

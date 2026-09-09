@@ -3,7 +3,7 @@
 #
 # Opt-in rules are where the value is: the defaults mostly police formatting,
 # and this package is already formatted consistently by hand. What is worth
-# catching is the class the compiler allows and a reviewer misses — a force
+# catching is the class the compiler allows and a reviewer misses: a force
 # unwrap on a file the process does not control, an empty `catch`, a `first(
 # where:) != nil` that reads as a search and means a test.
 included:
@@ -31,6 +31,16 @@ disabled_rules:
   # struct to satisfy a member count would rename the reference implementation's
   # vocabulary and buy nothing.
   - large_tuple
+  # Formatting the package already settles by hand, and settles the other way.
+  # A trailing comma in a multi-line literal is how every table in the funnel is
+  # written, so the next entry is a one-line diff.
+  - trailing_comma
+  # A multi-line condition puts its `{` on its own line here, aligned with the
+  # `if`, because the last clause and the first statement are otherwise one
+  # unbroken block of text.
+  - opening_brace
+  # `else` on its own line, for the same reason.
+  - statement_position
 
 opt_in_rules:
   - empty_count

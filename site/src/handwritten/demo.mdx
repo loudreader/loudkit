@@ -1,39 +1,22 @@
 ---
-title: Demo
+title: Voice gallery
 description: >-
-  The full twenty-voice roster, playable. Enrollment reference next to
-  generated speech for six voices. The three lines that clone a new one.
+  Search and compare named voices, hear their source recordings, and download
+  voice profiles.
 editUrl: https://github.com/loudreader/loudkit/edit/main/site/src/handwritten/demo.mdx
 ---
 
-import VoicePairs from '../../components/VoicePairs.astro';
 import VoiceGrid from '../../components/VoiceGrid.astro';
 
 ## Listen
 
-Twenty voices across ten languages, one seeded sample each. Filter by
-language, then press a name.
+Press play on any voice. Filter by language or presentation, search by name,
+and expand a card to hear the original recording, see its licence, or copy the
+line that loads the voice. All 28 voices are included in both model downloads and load by name. Every card has one play button and starts with
+loudr-1. Use the English model selector above the gallery to hear the same
+story with turbo, with seed 7 and matched loudness. Other languages play loudr-1.
 
 <VoiceGrid />
-
-### From a recording to speech
-
-Each voice below is enrolled from one short recording. Press the left clip to
-hear that recording. Press the right clip to hear the same speaker read a
-sentence the recording never contained.
-
-Both clips are files in this repository. Nothing is generated in your browser.
-The reference is the audio the voice profile was enrolled from, at 48&nbsp;kHz
-mono. The generated clip is one seeded render on the reference path, so the
-same text, voice and seed are repeatable on the same build and backend.
-Different backends are checked against the project's measured parity bands.
-
-<VoicePairs voices={['joe', 'dave', 'henri', 'kerstin', 'paola', 'ines']} />
-
-Where a card shows a speaker similarity, that number is measured for the exact
-two clips the card plays. It is not measured for every voice, so the line is
-absent where there is no measurement. The figures, the sources, the licences and
-the hashes are in [Voices](/loudkit/voices/).
 
 ### Voice cloning
 

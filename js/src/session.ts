@@ -16,6 +16,7 @@ export class Session {
   private sess: OrtInferenceSession;
   inNames: string[];
   outNames: string[];
+  private released = false;
 
   private constructor(sess: OrtInferenceSession) {
     this.sess = sess;
@@ -28,7 +29,7 @@ export class Session {
    *
    * The provider is required rather than defaulted, because the default before
    * this argument existed was "whatever onnxruntime picks", which is the CPU
-   * provider on every build — the silent 1.2x this option exists to end.
+   * provider on every build: the silent 1.2x this option exists to end.
    */
   static async create(path: string, provider: ResolvedONNXProvider): Promise<Session> {
     return new Session(
@@ -48,8 +49,8 @@ export class Session {
    * garbage collector cannot reclaim it: dropping the last reference frees the
    * wrapper and leaks the graph. Go's binding has `Engine.Close`
    * and Rust's `Session` drops with its owner; without a release path here, a
-   * caller who built a second engine — a worker pool, a
-   * model reload, a test per case — could not get the first one's six graphs
+   * caller who built a second engine (a worker pool, a
+   * model reload, a test per case) could not get the first one's six graphs
    * back.
    *
    * Idempotent, because the interesting call sites are error paths that cannot
@@ -60,8 +61,6 @@ export class Session {
     this.released = true;
     await this.sess.release();
   }
-
-  private released = false;
 }
 
 /**
@@ -72,7 +71,7 @@ export class Session {
  * * A graph that fails to open unwinds the ones already open. Written as a
  *   loop with an explicit unwind rather than `Promise.all` over an object
  *   literal, because there every session already created is abandoned when a
- *   later one throws — a missing or corrupt graph file leaves up to five
+ *   later one throws: a missing or corrupt graph file leaves up to five
  *   native sessions with no reference and no way to release them.
  * * An `"auto"` request that fails on its first choice tries the next one and
  *   warns. This is the case onnxruntime cannot answer by inspection: the
@@ -81,7 +80,7 @@ export class Session {
  *   have skipped, so "does this build offer cuda" and "can this machine run
  *   cuda" are different questions and only opening a session asks the second.
  *   The fallback is announced, not silent, and an explicit request never gets
- *   one — `resolveOnnxProvider` hands back a single candidate for it.
+ *   one, since `resolveOnnxProvider` hands back a single candidate for it.
  */
 export async function openSessions(
   graphs: ReadonlyArray<readonly [name: string, path: string]>,

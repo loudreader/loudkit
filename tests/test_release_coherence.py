@@ -85,7 +85,7 @@ PRERELEASE_BANNERS = (
 )
 
 
-def _tomllib():  # type: ignore[no-untyped-def]
+def _tomllib():
     """``tomllib``, or ``tomli`` on 3.10, which the CI matrix still runs."""
     try:
         import tomllib
@@ -239,9 +239,9 @@ def _section_nine_rows() -> set[tuple[str, str]]:
         row = _ROW.match(line.strip())
         if row is None:
             continue
-        cells = [_BACKTICKED.search(c.strip()) for c in row.groups()]
-        if all(cells):
-            rows.add((cells[0].group(1), cells[1].group(1)))  # type: ignore[union-attr]
+        path, marker = (_BACKTICKED.search(c.strip()) for c in row.groups()[:2])
+        if path is not None and marker is not None:
+            rows.add((path.group(1), marker.group(1)))
     return rows
 
 

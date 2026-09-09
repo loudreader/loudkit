@@ -1,5 +1,5 @@
 /**
- * Enrollment: reference audio to a voice profile — a bit-parity port of
+ * Enrollment: reference audio to a voice profile, a bit-parity port of
  * `loudkit.models.enroll` over the exported enrollment ONNX graphs.
  *
  * The DSP (resampler, filterbanks, trim) is implemented here and held to the
@@ -12,6 +12,9 @@ import { type ExecutionOptions, type ResolvedONNXProvider } from "./execution.js
 import { ort } from "./ort.js";
 import { Session, openSessions } from "./session.js";
 import { DSP_B64, decodeF32 } from "./dspData.js";
+import type { VoiceProfile } from "./types.js";
+import { decodeWav } from "./wav.js";
+import { readWav } from "./wavFile.js";
 
 const MEL_SR = 24000;
 const S3_SR = 16000;
@@ -26,6 +29,102 @@ const MATCHA_HOP = 480;
 
 const PARTIAL_FRAMES = 160;
 const PARTIAL_STEP = 77;
+
+// ------------------------------------------------------- reference recording
+
+/**
+ * Shortest clip a speaker can be estimated from. The utterance encoder's first
+ * partial alone covers 1.6 s and is zero-padded under it, so a sub-second clip
+ * enrolls mostly padding.
+ */
+const MIN_ENROLL_SECONDS = 1.0;
+
+/**
+ * Longest clip the input contract stays honest over. The prompt uses the first
+ * 10 s and the speaker embedding reads the whole clip, so a five-minute
+ * recording produces a voice mostly shaped by audio the docs say is ignored.
+ * Refused rather than truncated: the user picked that recording for a reason,
+ * and silently using a different slice of it is worse than asking them to
+ * choose.
+ */
+const MAX_ENROLL_SECONDS = 30.0;
+
+/**
+ * A clip whose loudest sample is under this is silence at any playback level;
+ * there is no voice in it to enroll.
+ */
+const SILENCE_PEAK = 1e-4;
+
+const GOOD_INPUT =
+  "A good input is 5 to 10 seconds of one person speaking, clean, " +
+  "without music or a second voice.";
+
+/**
+ * `%.1e` as the reference prints it: one decimal and a signed exponent of at
+ * least two digits. `toExponential` writes `5.0e-5` where the reference writes
+ * `5.0e-05`, and the peak is inside a sentence the ports are matched on word
+ * for word.
+ */
+function exponent1(value: number): string {
+  const [mantissa, exponent] = value.toExponential(1).split("e");
+  const sign = exponent.startsWith("-") ? "-" : "+";
+  return `${mantissa}e${sign}${exponent.replace(/^[+-]/, "").padStart(2, "0")}`;
+}
+
+/**
+ * Refuse a recording the enrollment contract cannot honour.
+ *
+ * The whole preflight, before any DSP runs, with the same five sentences as
+ * `loudkit.models.enrollment_audio.validate_reference_audio`. Without it a clip
+ * shorter than 721 samples reads past the end of the reflect padding in
+ * `matchaMel`, where an out-of-range typed-array index is `undefined` and the
+ * whole prompt mel comes back NaN; a sub-second clip enrolls padding, and NaN
+ * samples poison every statistic downstream.
+ *
+ * See docs/design/models-notes.md.
+ */
+export function validateReferenceAudio(audio: Float32Array, sampleRate: number): void {
+  // A non-positive rate reaches the resampler as a division by zero, which
+  // here surfaces as `RangeError: offset is out of bounds` from a typed-array
+  // constructor, an internal error rather than a diagnosis. Callers and tests
+  // in every port match on this one message, so it stays word for word.
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
+    throw new Error(`sample rate must be positive, got ${sampleRate}`);
+  }
+  // Finiteness before anything arithmetic: one NaN poisons every statistic
+  // below and every tensor downstream.
+  for (const sample of audio) {
+    if (!Number.isFinite(sample)) {
+      throw new Error(
+        "the recording contains NaN or Inf samples, so no voice can be " +
+          `derived from it. Re-export the file. ${GOOD_INPUT}`
+      );
+    }
+  }
+  const seconds = audio.length / sampleRate;
+  if (seconds < MIN_ENROLL_SECONDS) {
+    throw new Error(
+      `the recording is ${seconds.toFixed(2)} s: too short to enroll a speaker ` +
+        `from (minimum ${MIN_ENROLL_SECONDS} s). ${GOOD_INPUT}`
+    );
+  }
+  if (seconds > MAX_ENROLL_SECONDS) {
+    throw new Error(
+      `the recording is ${seconds.toFixed(1)} s. Only the first 10 s become the ` +
+        "voice prompt, and the whole clip shapes the speaker embedding, so a long " +
+        "recording enrolls something the prompt does not carry. Trim it to the " +
+        `best 5 to 10 seconds (at most ${MAX_ENROLL_SECONDS} s). ${GOOD_INPUT}`
+    );
+  }
+  let peak = 0;
+  for (const sample of audio) peak = Math.max(peak, Math.abs(sample));
+  if (peak < SILENCE_PEAK) {
+    throw new Error(
+      `the recording is silent (peak ${exponent1(peak)}); there is no voice in ` +
+        `it to enroll. ${GOOD_INPUT}`
+    );
+  }
+}
 
 const tables = new Map<string, Float32Array>();
 function table(name: string): Float32Array {
@@ -306,13 +405,54 @@ export interface Enrolled {
   condPromptTokens: BigInt64Array;
 }
 
+/**
+ * An enrolled voice as the profile `synthesize` takes and `saveVoice` writes.
+ * `sampleRate` is the recording's own, recorded for provenance.
+ */
+export function profileFrom(
+  enrolled: Enrolled,
+  options: { name: string; language?: string; sampleRate: number }
+): VoiceProfile {
+  return {
+    name: options.name,
+    speakerEmbedding: enrolled.speakerEmbedding,
+    flowEmbedding: enrolled.flowEmbedding,
+    promptTokens: enrolled.promptTokens,
+    promptMel: enrolled.promptMel,
+    condPromptTokens: enrolled.condPromptTokens,
+    sourceSampleRate: options.sampleRate,
+    language: options.language ?? "en",
+  };
+}
+
+/**
+ * What a caller handed to `enroll`, as samples and a rate.
+ *
+ * A WAV carries its own rate, so passing one alongside it is refused rather
+ * than ignored: the two disagreeing is a mistake, and silently preferring the
+ * file's would hide it. Any rate is fine: enrollment resamples.
+ */
+export function asSamples(
+  source: Float32Array | Uint8Array | string,
+  sampleRate?: number
+): { audio: Float32Array; sampleRate: number } {
+  if (source instanceof Float32Array) {
+    if (sampleRate === undefined) throw new Error("samples need their sample rate");
+    return { audio: source, sampleRate };
+  }
+  if (sampleRate !== undefined) {
+    throw new Error("a WAV carries its own sample rate; drop the second argument");
+  }
+  return typeof source === "string" ? readWav(source) : decodeWav(source);
+}
+
 export class Enroller {
   private tokenizer: Session;
   private camp: Session;
   private ve: Session;
 
   /**
-   * The execution provider the three enrollment graphs were opened on — never
+   * The execution provider the three enrollment graphs were opened on, never
    * `"auto"`, always the one that ran.
    */
   readonly onnxProvider: ResolvedONNXProvider;
@@ -347,14 +487,26 @@ export class Enroller {
     return new Enroller(provider, sessions.tokenizer, sessions.camp, sessions.ve);
   }
 
-  async enroll(audio: Float32Array, sampleRate: number): Promise<Enrolled> {
-    // The guard the other four got and this one did not. A non-positive rate
-    // reaches the resampler as a division by zero, which here surfaces as
-    // `RangeError: offset is out of bounds` from a typed-array constructor —
-    // an internal error, not a diagnosis. Same sentence as Go's.
-    if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
-      throw new Error(`sample rate must be positive, got ${sampleRate}`);
-    }
+  /** Release the three native graph sessions. */
+  async close(): Promise<void> {
+    await Promise.all([this.tokenizer, this.camp, this.ve].map((s) => s.close()));
+  }
+
+  /**
+   * Reference audio to a voice profile.
+   *
+   * `source` is a WAV path, WAV bytes, or samples the caller already has. The
+   * two WAV forms carry their own rate, so `sampleRate` is for the third only;
+   * passing one with a WAV is refused rather than ignored, because the two
+   * disagreeing is a mistake and silently preferring the file's would hide it.
+   * A recording at any rate is fine: enrollment resamples.
+   */
+  async enroll(
+    source: Float32Array | Uint8Array | string,
+    rate?: number
+  ): Promise<Enrolled> {
+    const { audio, sampleRate } = asSamples(source, rate);
+    validateReferenceAudio(audio, sampleRate);
     const wav = Float64Array.from(audio);
     const wav24Full = sampleRate === MEL_SR ? wav : Float64Array.from(resample(audio, sampleRate, MEL_SR));
     const maxSamples = MAX_REF_SECONDS * MEL_SR;

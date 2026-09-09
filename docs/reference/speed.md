@@ -9,7 +9,7 @@ import loudkit as lk
 engine = lk.load("loudreader/loudr-1")
 voice = lk.voice("joe", repo="loudreader/loudr-1")
 
-result = engine.synthesize_long("A long passage.", voice, seed=7, speed=1.5)
+result = engine.synthesize("A long passage.", voice, seed=7, speed=1.5)
 result.speed     # 1.5
 result.duration  # two thirds of what 1.0 would give
 ```
@@ -21,11 +21,11 @@ The result carries the value it was rendered at, and
 
 | entry point | how |
 | --- | --- |
-| `Engine.synthesize`, `Engine.synthesize_long`, `Engine.stream` | `speed=1.5` |
+| `Engine.synthesize`, `Engine.stream` | `speed=1.5` |
 | CLI | `loudkit speak --speed 1.5` |
 | HTTP, both routes | `"speed": 1.5` in the request body |
 | MCP `synthesize` tool | `speed` argument |
-| gRPC | `speed` field, where `0` is read as unset |
+| gRPC | `speed` field, `optional` so an omitted one means 1.0 |
 
 Long-form and streaming stretch each chunk on its own, with the same constants.
 There is no join to hear, because a chunk is a whole utterance either way.

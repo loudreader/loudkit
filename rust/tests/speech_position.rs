@@ -6,7 +6,7 @@
 //! prefix[i]@(i+1)`, so a prefix of length P owns speech positions 1..P and the
 //! first generated token sits at P+1. This port asked for `step + 1`, a row the
 //! prefill had just written for a carried token, and never reached P+1 or
-//! above — right for a chunk with no prefix and wrong for every other one,
+//! above: right for a chunk with no prefix and wrong for every other one,
 //! which is why single-window synthesis matched Python and long-form did not.
 //! Python (`backends/onnx_backend.py:353`) and Swift
 //! (`TokenGenerator.swift:586`) have always indexed `len(prefix) + step + 1`.
@@ -15,7 +15,7 @@
 //! so the repetition penalty treated tokens said moments ago as new.
 //!
 //! Asserted against `DecodeState` rather than through `Engine::generate`,
-//! because this port has no weight-free engine seam — `Engine` holds six
+//! because this port has no weight-free engine seam, `Engine` holds six
 //! concrete `ort::session::Session` values and `Engine::load` is its only
 //! constructor, so nothing can drive the decode loop without the checkpoint, the
 //! exported graphs and the onnxruntime shared library. JS drives its `generate`
@@ -80,7 +80,7 @@ fn generation_continues_above_the_rows_the_prefill_wrote() {
 }
 
 #[test]
-fn no_prefix_is_the_single_window_behaviour_it_always_was() {
+fn no_prefix_counts_positions_from_one() {
     let state = DecodeState::new(&[], VOCAB);
     for step in 0..16 {
         assert_eq!(state.position(step), step + 1);
@@ -111,16 +111,20 @@ fn a_carried_token_is_penalised_on_the_first_step() {
     assert_eq!(unpenalised.call(&row, 0, &[false; VOCAB]), 3);
 }
 
-/// Why nothing caught this: the penalty exempts the manifest silence ids, and a
-/// tail of silence is what a chunk boundary usually carries. A seeded mask and
-/// an empty one draw the same token there.
+/// Why a missing seeding can hide: with the penalty exempting the manifest
+/// silence ids, and a tail of silence being what a chunk boundary usually
+/// carries, a seeded mask and an empty one draw the same token there. The
+/// penalty exempts nothing (a silence run with both exemptions in place is
+/// absorbing, zero escapes in 1,031 instrumented trap steps), so a carried
+/// silent tail penalises its ids like any other spoken token and the seeding
+/// changes this draw too.
 #[test]
-fn a_silent_tail_seeds_the_mask_and_changes_nothing() {
+fn a_silent_tail_seeds_the_mask_and_is_penalised() {
     let row = logits();
     let silence = vec![3, 5, 7];
     let mut sampler = Sampler::new(sampler_config(silence.clone()), 0);
     let state = DecodeState::new(&PREFIX, VOCAB);
-    assert_eq!(sampler.call(&row, 0, state.seen()), 3);
+    assert_eq!(sampler.call(&row, 0, state.seen()), 11);
 
     let mut empty = Sampler::new(sampler_config(silence), 0);
     assert_eq!(empty.call(&row, 0, &[false; VOCAB]), 3);

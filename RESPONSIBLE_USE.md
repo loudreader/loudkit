@@ -65,7 +65,7 @@ add their own signing policy and disclosure around it.
 
 ## What we ship, and what we will not
 
-We ship twenty voice profiles enrolled from recordings donated for speech
+We ship 28 voice profiles enrolled from recordings donated for speech
 technology or released under terms that permit this use. Every profile has a
 named source, licence and consent basis in the public roster. We do not ship
 profiles made from private recordings or recordings published for an unrelated
@@ -77,3 +77,7 @@ you have the right to use.
 Issues and pull requests asking for help with undisclosed impersonation, voice
 authentication bypass, or stripping provenance from generated audio will be
 closed.
+
+The same consent and attribution requirements apply to graph-based cloning
+without PyTorch and to voice profiles created by Python, Swift, Go, Rust or
+TypeScript. A portable profile can reproduce a voice in either model.

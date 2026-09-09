@@ -10,10 +10,33 @@ import LoudKitText
 /// named reason without them (LOUDKIT_REQUIRE_ASSETS=1 makes that a failure).
 final class EndToEndConformanceTests: XCTestCase {
     static var engine: Engine?
+    static var fusionEngine: Engine?
+
+    static func loadFusionEngine() throws -> Engine {
+        if let fusionEngine { return fusionEngine }
+        try Fixture.requireFusionCheckpoint()
+        let assets = Fixture.fusionCoremlURL ?? Fixture.fusionCheckpointURL.deletingLastPathComponent().appendingPathComponent("coreml")
+        let before = try FileManager.default.contentsOfDirectory(atPath: assets.path).sorted()
+        defer {
+            XCTAssertEqual(try? FileManager.default.contentsOfDirectory(atPath: assets.path).sorted(), before,
+                           "Loading must not add compiled caches to a release")
+        }
+        let loaded = try Engine.load(checkpoint: Fixture.fusionCheckpointURL,
+                                     coremlAssets: Fixture.fusionCoremlURL)
+        fusionEngine = loaded
+        return loaded
+    }
+
 
     private func loadEngine() throws -> Engine {
         if let engine = Self.engine { return engine }
         try Fixture.requireCheckpoint()
+        let assets = Fixture.coremlAssetsURL ?? Fixture.checkpointURL.deletingLastPathComponent().appendingPathComponent("coreml")
+        let before = try FileManager.default.contentsOfDirectory(atPath: assets.path).sorted()
+        defer {
+            XCTAssertEqual(try? FileManager.default.contentsOfDirectory(atPath: assets.path).sorted(), before,
+                           "Loading must not add compiled caches to a release")
+        }
         let engine = try Engine.load(
             checkpoint: Fixture.checkpointURL, coremlAssets: Fixture.coremlAssetsURL)
         Self.engine = engine
@@ -25,11 +48,21 @@ final class EndToEndConformanceTests: XCTestCase {
     }
 
     func testTokensAndWaveformAgainstPython() throws {
-        let fixture = try Fixture.vectors()
+        try checkTokensAndWaveform(Fixture.vectors(), engine: loadEngine())
+    }
+
+    func testFusionTokensAndWaveformAgainstPython() throws {
+        try checkTokensAndWaveform(Fixture.shared("vectors_fusion_mtp2.json"),
+                                   engine: Self.loadFusionEngine())
+    }
+
+    private func checkTokensAndWaveform(_ fixture: [String: Any], engine: Engine) throws {
         guard let cases = fixture["end_to_end"] as? [[String: Any]], !cases.isEmpty else {
-            throw XCTSkip("fixture has no end_to_end section")
+            // The section is committed; a missing or empty one is breakage,
+            // and a skip here is indistinguishable from a pass in a summary.
+            XCTFail("vectors.json has no end_to_end cases; nothing was compared")
+            throw XCTSkip("no end_to_end cases")
         }
-        let engine = try loadEngine()
         let voice = try voiceProfile(cases[0]["voice"] as! String)
         for kase in cases {
             let name = kase["name"] as! String
@@ -39,10 +72,14 @@ final class EndToEndConformanceTests: XCTestCase {
             let wantTokens = asInts(kase["tokens"])!
             let gates = kase["gates"] as! [String: NSNumber]
 
-            let result = try engine.synthesize(text, voice: voice, seed: seed, language: language)
+            let result = try engine.synthesizeWindow(text, voice: voice, seed: seed, language: language)
             XCTAssertFalse(result.hitTokenCap, "\(name) hit the token cap")
             XCTAssertEqual(result.tokens, wantTokens,
                            "\(name): Swift and Python sampled different tokens from seed \(seed)")
+            // The any-length path agrees: chunk 0 draws the caller's seed, so
+            // a text that fits one window renders the same tokens both ways.
+            let whole = try engine.synthesize(text, voice: voice, seed: seed, language: language)
+            XCTAssertEqual(whole.tokens, wantTokens, "\(name): synthesize against the fixture")
 
             let melMeta = kase["mel"] as! [String: Any]
             let shape = asInts(melMeta["shape"])!
@@ -59,20 +96,25 @@ final class EndToEndConformanceTests: XCTestCase {
             let waveCorr = correlation(result.audio, wavRef)
             XCTAssertGreaterThanOrEqual(waveCorr, gates["wave_corr"]!.doubleValue,
                                         "\(name) wave corr \(waveCorr)")
-            var maxDiff: Float = 0
-            for i in 0..<min(result.audio.count, wavRef.count) {
-                maxDiff = max(maxDiff, abs(result.audio[i] - wavRef[i]))
-            }
+            let level = levelDB(result.audio, wavRef)
+            XCTAssertLessThanOrEqual(abs(level), gates["wave_rms_db"]!.doubleValue,
+                                     "\(name) level \(level) dB against the reference; "
+                                     + "correlation cannot see this")
+            let peak = peakOf(result.audio)
+            XCTAssertLessThanOrEqual(peak, 1.0,
+                                     "\(name) peak \(peak) is outside the declared "
+                                     + "[-1, 1] waveform")
             print("conformance \(name): tokens \(result.tokens.count)/\(wantTokens.count) exact, "
-                  + String(format: "mel corr %.9f, wave corr %.9f, wave max|d| %.3e",
-                           melCorr, waveCorr, maxDiff))
+                  + String(format: "mel corr %.9f, wave corr %.9f, level %+.4f dB, peak %.4f",
+                           melCorr, waveCorr, level, peak))
         }
     }
 
     func testRerenderIsBitIdentical() throws {
         let fixture = try Fixture.vectors()
         guard let cases = fixture["end_to_end"] as? [[String: Any]], !cases.isEmpty else {
-            throw XCTSkip("fixture has no end_to_end section")
+            XCTFail("vectors.json has no end_to_end cases; nothing was compared")
+            throw XCTSkip("no end_to_end cases")
         }
         let engine = try loadEngine()
         let voice = try voiceProfile(cases[0]["voice"] as! String)
@@ -96,7 +138,7 @@ final class EndToEndConformanceTests: XCTestCase {
 ///
 /// `swift/LoudKit` had none: `synthesize` renders one window (~127 characters
 /// of prepared text) and refuses anything longer, so a caller with a paragraph
-/// split it themselves — and a caller who splits differently gets different
+/// split it themselves, and a caller who splits differently gets different
 /// chunk boundaries, different derived seeds, and different audio from every
 /// other port, while the fingerprint goes on declaring the chunking recipe.
 final class LongFormTests: XCTestCase {
@@ -120,8 +162,8 @@ final class LongFormTests: XCTestCase {
 
     /// The whole-passage path is the streaming path with the chunks joined. If
     /// they ever become two loops they will drift, and the drift is inaudible
-    /// until a join lands somewhere different — so the equality is asserted.
-    func testStreamAndSynthesizeLongAreOneLoop() throws {
+    /// until a join lands somewhere different, so the equality is asserted.
+    func testStreamAndSynthesizeAreOneLoop() throws {
         let engine = try Self.loadSharedEngine()
         let voice = try Self.referenceVoice()
 
@@ -135,7 +177,7 @@ final class LongFormTests: XCTestCase {
             + "The third sentence exists so that the splitter has somewhere to breathe. "
             + "The fourth sentence closes the passage without hurrying."
 
-        let whole = try engine.synthesizeLong(text, voice: voice, seed: 7)
+        let whole = try engine.synthesize(text, voice: voice, seed: 7)
 
         var pieces: [[Float]] = []
         var tokens: [Int] = []
@@ -159,7 +201,7 @@ final class LongFormTests: XCTestCase {
     /// `step + 1` are the same number and a repetition mask seeded from the
     /// prefix is the empty one. Three ports wrote the shorter form of both and
     /// the fixture passed throughout. A carried prefix is what separates them,
-    /// and this port has always indexed it the long way — so a failure here
+    /// and this port has always indexed it the long way, so a failure here
     /// means the fixture case is wrong, not that Swift is.
     ///
     /// Every chunk is asserted on its own rather than on the concatenation: a
@@ -168,16 +210,24 @@ final class LongFormTests: XCTestCase {
     /// naming the chunk.
     ///
     /// The generator's own tokens, before the postprocess trim the streaming
-    /// path applies to the terminal chunk — the same layer the fixture's
+    /// path applies to the terminal chunk, the same layer the fixture's
     /// `end_to_end` tokens are taken at.
     func testLongFormChunkTokensAgainstPython() throws {
-        let fixture = try Fixture.vectors()
+        try checkLongForm(Fixture.vectors(), engine: Self.loadSharedEngine())
+    }
+
+    func testFusionLongFormChunkTokensAgainstPython() throws {
+        try checkLongForm(Fixture.shared("vectors_fusion_mtp2.json"),
+                          engine: EndToEndConformanceTests.loadFusionEngine())
+    }
+
+    private func checkLongForm(_ fixture: [String: Any], engine: Engine) throws {
         guard let section = fixture["long_form"] as? [String: Any],
             let cases = section["cases"] as? [[String: Any]], !cases.isEmpty
         else {
-            throw XCTSkip("fixture has no long_form section")
+            XCTFail("vectors.json has no long_form cases; nothing was compared")
+            throw XCTSkip("no long_form cases")
         }
-        let engine = try Self.loadSharedEngine()
         let voice = try Self.referenceVoice()
         let prefixTokens = (section["prefix_tokens"] as! NSNumber).intValue
         XCTAssertEqual(engine.algorithm.chunking.prefixTokens, prefixTokens,
@@ -186,7 +236,7 @@ final class LongFormTests: XCTestCase {
         for kase in cases {
             let name = kase["name"] as! String
             let language = kase["language"] as! String
-            // Funnel first, then split — the order the engine uses, and the
+            // Funnel first, then split, the order the engine uses, and the
             // order the character budget assumes.
             let prepared = SpeechText.prepared(kase["text"] as! String, languageId: language)
             XCTAssertEqual(prepared, kase["prepared"] as! String,
@@ -209,25 +259,45 @@ final class LongFormTests: XCTestCase {
                 // from it.
                 if index > 0 {
                     let previous = asInts(chunks[index - 1]["tokens"])!
-                    XCTAssertEqual(prefix, Array(previous.suffix(prefixTokens)),
+                    XCTAssertEqual(prefix, try Engine.carryFrom(previous, prefixTokens: prefixTokens,
+                                                                startSpeechToken: engine.algorithm.startSpeechToken,
+                                                                decode: engine.algorithm.decode),
                                    "\(name) chunk \(index): carry")
                 }
                 // Hex: a derived 64-bit seed does not survive a JSON double.
                 let seed = UInt64((chunk["seed"] as! String).dropFirst(2), radix: 16)!
                 let ids = try engine.frontend.encode(chunk["text"] as! String, language: language)
                 let sampler = LRSamplerV1(config: engine.algorithm.sampling, seed: seed)
-                let generation = engine.tokenGenerator.generate(
+                let generation = try engine.tokenGenerator.generate(
                     textTokens: ids, voice: voice, sampler: sampler, prefix: prefix)
                 let got = generation.rawTokens.filter { $0 < engine.algorithm.startSpeechToken }
                 XCTAssertEqual(got, want, "\(name) chunk \(index)")
             }
+            // The engine's own long-form path, not the generator driven with
+            // the fixture's seeds: this holds the chunk seed law (chunk 0 the
+            // caller's seed, chunk k derive(seed, 16 + k)) and the carry to
+            // the fixture rather than the fixture to the test.
+            let whole = try engine.synthesize(
+                kase["text"] as! String, voice: voice,
+                seed: UInt64((kase["seed"] as! NSNumber).uint64Value), language: language)
+            var streamed: [[Int]] = []
+            try engine.stream(kase["text"] as! String, voice: voice,
+                              seed: (kase["seed"] as! NSNumber).uint64Value, language: language) { chunk in
+                streamed.append(chunk.tokens)
+                return true
+            }
+            XCTAssertGreaterThanOrEqual(streamed.count, 3)
+            let publicTokens = asInts(kase["public_tokens"]) ?? asInts(kase["tokens"])!
+            XCTAssertEqual(streamed.flatMap { $0 }, publicTokens)
+            XCTAssertEqual(whole.tokens, publicTokens,
+                           "\(name): synthesize against the fixture's flat list")
             print("conformance \(name): long-form tokens exact across \(chunks.count) chunks")
         }
     }
 
-    /// Stopping early must not change what was already produced: each chunk
-    /// draws from `derive(seed, 16 + index)`, so its audio does not depend on
-    /// how many chunks follow it.
+    /// Stopping early must not change what was already produced: chunk 0 draws
+    /// the caller's seed and every later chunk draws `derive(seed, 16 + index)`,
+    /// so a chunk's audio does not depend on how many chunks follow it.
     func testStoppingEarlyLeavesEarlierChunksUnchanged() throws {
         let engine = try Self.loadSharedEngine()
         let voice = try Self.referenceVoice()

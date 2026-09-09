@@ -7,7 +7,7 @@ import LoudKitText
 ///
 /// `SpeechText` and `LexicalRespelling` are the shipped
 /// implementations that the Python, Go, Rust and JS funnels are described as
-/// bit-parity ports *of* — so the one implementation nothing verified was the
+/// bit-parity ports *of*, so the one implementation nothing verified was the
 /// reference the others are measured against.
 ///
 /// Hand-written cases in five languages are five tests of five different
@@ -80,7 +80,7 @@ final class SpeechFunnelTests: XCTestCase {
     /// The funnel must not care about the case of the language tag.
     ///
     /// The tokenizer lowercases its own tag, so a caller passing `"PL"` used
-    /// to get Polish *tokens* with English spelling — half the utterance read
+    /// to get Polish *tokens* with English spelling, half the utterance read
     /// one way and half the other, with nothing to indicate it.
     func testLanguageIdIsCaseInsensitive() {
         XCTAssertEqual(

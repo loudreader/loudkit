@@ -26,7 +26,7 @@ language:
 
 # loudr-1
 
-**Natural-sounding text-to-speech with twenty voices, ten languages and voice
+**Natural-sounding text-to-speech with 28 voices, ten languages and voice
 cloning.**
 
 loudr-1 runs on your own hardware through
@@ -38,7 +38,7 @@ that speaks articles, PDFs and books on device. They are published here so the
 engine can be used and checked on its own.
 
 [**Try it in the browser**](https://huggingface.co/spaces/jer3mi/loudkit) |
-[**Hear all 20 voices**](https://loudreader.github.io/loudkit/demo/) |
+[**Hear all 28 voices**](https://loudreader.github.io/loudkit/demo/) |
 [**Open in Colab**](https://colab.research.google.com/github/loudreader/loudkit/blob/main/notebooks/loudkit_quickstart.ipynb) |
 [**GitHub**](https://github.com/loudreader/loudkit) |
 [**Documentation**](https://loudreader.github.io/loudkit/)
@@ -72,7 +72,7 @@ pip install "loudkit[torch,audio,hub]"
 import loudkit as lk
 
 engine = lk.load("loudreader/loudr-1")
-voice = lk.voice("joe", repo="loudreader/loudr-1")
+voice = engine.voice("joe")
 
 engine.synthesize("Hello from loudkit.", voice, seed=7).save("hello.wav")
 ```
@@ -95,49 +95,33 @@ mine.save("voices/my-voice.safetensors")
 The reusable profile is about 150 KB. Install
 `loudkit[torch,audio,enroll,hub]` for enrollment.
 
-## Choose your runtime
+The Swift, Go, Rust and TypeScript packages load the same repo id and fetch
+what they need themselves; the
+[README](https://github.com/loudreader/loudkit#the-same-in-swift-go-rust-and-typescript)
+shows each one.
 
-The repository contains all supported formats, but the downloader fetches only
-the runtime you select. Add `--with-cloning` when the installation also needs
-enrollment.
+## What each runtime downloads
 
-| path | command | download |
-|---|---|---:|
-| Python, synthesis | `loudkit download loudreader/loudr-1 --for torch` | 750 MB |
-| Python, with cloning | `--for torch --with-cloning` | 1.28 GB |
-| JS, Go or Rust with ONNX | `--for onnx` | 2.60 GB |
-| ONNX, with cloning | `--for onnx --with-cloning` | 3.13 GB |
-| Swift or Python with CoreML | `--for coreml` | 1.16 GB |
-| CoreML, with cloning | `--for coreml --with-cloning` | 1.69 GB |
+The repository contains every supported format. A download takes one runtime
+and leaves the rest behind. Add `--with-cloning` when the installation also
+needs enrollment.
 
-Add `--local-dir loudr-1` to create a portable directory instead of using the
-shared cache. The synthesis checkpoint will be at
-`loudr-1/loudr-1.safetensors`.
+| path | command |
+|---|---|
+| Python, synthesis | `loudkit download loudreader/loudr-1 --for torch` |
+| Python, with cloning | `--for torch --with-cloning` |
+| TypeScript, Go or Rust with ONNX Runtime | `--for onnx` |
+| ONNX Runtime, with cloning | `--for onnx --with-cloning` |
+| Swift or Python with CoreML | `--for coreml` |
+| CoreML, with cloning | `--for coreml --with-cloning` |
 
-### Measured speed
+Download size depends on the model, backend and release revision. The
+synthesis checkpoint is 747 MB; graph downloads also include backend-specific
+weights.
 
-| path | hardware | real-time factor |
-|---|---|---:|
-| PyTorch with CUDA graphs | RTX 3090 | 7.47x |
-| PyTorch with CUDA graphs | Jetson Orin Nano | 1.83x |
-| split PyTorch engine\* | Apple M3 Pro | 3.43x |
-| ONNX Runtime, CPU provider | Apple M3 Pro | 1.21x |
-| PyTorch CPU reference | Apple M3 Pro | 0.33x |
-
-\* "Split" describes device placement, not a different model or checkpoint.
-The token generator runs on the CPU while the mel and vocoder renderer runs on
-the Apple GPU through MPS. Adjacent windows can overlap across the two devices.
-
-Higher is faster, and 1.0x means real time. ONNX Runtime on the measured M3 Pro
-CPU is faster than real time. The PyTorch CPU reference path on the same machine
-is not.
-
-For batched workloads, the token generator reaches 20.1x aggregate throughput
-at batch 1 and 153.1x at batch 64 on the RTX 3090. The highest measured result
-is 170.8x on an A100 at batch 64. These are generator-only throughput numbers,
-not single-request latency or end-to-end RTF. See the
-[benchmark report](https://loudreader.github.io/loudkit/benchmarks/) for commands,
-hardware and caveats.
+Speed depends on the hardware and the backend.
+[Benchmarks](https://loudreader.github.io/loudkit/benchmarks/) has the
+measured figures, the machines and the commands.
 
 ## What ships
 
@@ -146,33 +130,36 @@ hardware and caveats.
 | `loudr-1.safetensors` | 747 MB | synthesis |
 | `loudr-1-enrollment.safetensors` | 523 MB | PyTorch enrollment |
 | `ve.safetensors` | 5.7 MB | PyTorch enrollment |
-| `onnx/` | 2.38 GB | nine graphs: six synthesis, three enrollment |
-| `coreml/` | 941 MB | six packages: three synthesis, three enrollment |
-| `voices/` | 3.1 MB | twenty voice profiles |
+| `onnx/` | varies by model | synthesis and enrollment graphs |
+| `coreml/` | varies by model | native generation, rendering and enrollment packages |
+| `voices/` | 4.3 MB | 28 voice profiles |
 | `samples/` | 108 KB | the two players above |
 | `tokenizer.json` | 70 KB | text processing |
 
 Synthesis and enrollment are separate so users who only need speech generation
-do not download the enrollment weights. ONNX and CoreML use their own enrollment
-graphs. loudkit also verifies that paired model files came from the same source
-checkpoint.
+do not download the enrollment weights. What each graph under `onnx/` takes and
+returns, and the order to call them in, is in
+[the graph signatures](design/onnx-graphs.md), which is what a runtime loudkit
+has no port for needs. ONNX and CoreML use their own enrollment
+graphs. Every download is checked against the release's `SHA256SUMS` before
+it is used.
 
 ## Voices and consent
 
-The release includes two profiles for each of these languages: English,
-Spanish, French, German, Italian, Polish, Portuguese, Dutch, Swedish and Danish.
+The release includes ten English profiles and two for each of Spanish, French,
+German, Italian, Polish, Portuguese, Dutch, Swedish and Danish.
 
 The profiles were built from recordings donated for speech technology or from
 CC0 and CC-BY speech corpora. No scraped celebrity voices ship with the model.
 [The full roster](https://github.com/loudreader/loudkit/blob/main/VOICES.md) records
 the source, licence and consent basis for every profile. The
 [voice gallery](https://loudreader.github.io/loudkit/demo/) provides a generated
-sample and enrollment preview for all twenty.
+sample and enrollment preview for all 28.
 
 The source enrollment WAVs are not redistributed in the model repository. Their
-digests, construction notes and the digests of every shipped profile and sample
+hashes, construction notes and the hashes of every shipped profile and sample
 are recorded in
-[provenance.json](https://github.com/loudreader/loudkit/blob/main/docs/voices/roster/provenance.json).
+[the roster record](https://github.com/loudreader/loudkit/blob/main/docs/voices/roster/provenance.json).
 
 ## Model lineage
 
@@ -207,9 +194,9 @@ and [measured parity report](https://loudreader.github.io/loudkit/parity-measure
   prosody.
 - Voice cloning requires consent. A recording being public does not grant
   permission to clone the speaker.
-- Saved WAVs and server responses include an unsigned C2PA Content Credentials
-  manifest by default. It records the model, voice, seed, backend and audio
-  digest in a machine-readable form.
+- Saved WAVs and server responses carry unsigned C2PA Content Credentials by
+  default, recording the model, voice, seed, backend and a hash of the audio
+  in a machine-readable form.
 
 Read [Responsible use](https://huggingface.co/loudreader/loudr-1/blob/main/RESPONSIBLE_USE.md)
 before exposing enrollment to other people.
@@ -232,3 +219,14 @@ the public roster.
 [Apache-2.0](https://huggingface.co/loudreader/loudr-1/blob/main/LICENSE).
 Upstream attributions and component licences are listed in
 [NOTICE](https://huggingface.co/loudreader/loudr-1/blob/main/NOTICE).
+
+## Download sizes for 0.1.1
+
+Approximate decimal sizes for the release files; backend weights are included.
+Cloning adds enrollment assets only when requested. Both models ship separate
+synthesis and enrollment checkpoints.
+
+| Model | Torch | Torch + cloning | ONNX | ONNX + cloning | CoreML | CoreML + cloning |
+|---|---:|---:|---:|---:|---:|---:|
+| loudr-1 | 0.75 GB | 1.28 GB | 2.60 GB | 3.13 GB | 2.46 GB | 2.99 GB |
+| loudr-1-turbo | 0.72 GB | 1.25 GB | 2.44 GB | 2.97 GB | 2.44 GB | 2.97 GB |

@@ -2,16 +2,16 @@ import Foundation
 
 /// Philox-4x32-10, the counter-based RNG every loudkit implementation shares.
 ///
-/// The stream has independent implementations — numpy in
-/// `loudkit.rng`, the CUDA-side variant in the research repo, and this one —
+/// The stream has independent implementations, numpy in
+/// `loudkit.rng`, the CUDA-side variant in the research repo, and this one,
 /// which is the entire point of choosing Philox: it is integer-only, so a
 /// correct port produces identical bits by construction, and it is checkable
 /// against the published Random123 known-answer vectors rather than against
 /// another implementation's output. `swift test` runs those
 /// vectors from the shared conformance fixture.
 ///
-/// The n-th random number is a pure function of `(seed, stream, step, index)`
-/// — not of how many numbers were drawn before it — so this side may generate
+/// The n-th random number is a pure function of `(seed, stream, step, index)`,
+/// not of how many numbers were drawn before it, so this side may generate
 /// per token while the Python side generates a block ahead, and the streams
 /// still agree.
 public enum Philox {
@@ -71,7 +71,7 @@ public enum Philox {
         return out
     }
 
-    /// `-log(-log(u))` for one block of steps — the additive form of a
+    /// `-log(-log(u))` for one block of steps, the additive form of a
     /// categorical draw. Row-major `nSteps x width`.
     public static func gumbelNoise(
         seed: UInt64, stream: UInt32, step0: UInt32, nSteps: Int, width: Int

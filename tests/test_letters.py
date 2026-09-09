@@ -89,13 +89,13 @@ class TestWordsAreNotSpelled:
 class TestThroughTheFunnel:
     @pytest.mark.parametrize(("language", "expect"), [("pl", "ce-i-a"), ("en", "see-eye-ay")])
     def test_the_funnel_spells_in_the_render_language(self, language: str, expect: str) -> None:
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
 
         assert expect in speech_text("The CIA said so.", language)
 
     def test_the_polish_respeller_no_longer_spells_shouting(self) -> None:
         # It saw one word at a time and so could not tell an initialism from a
         # shout: it spelled "TO JEST WAŻNE" as te-ha-i-es i-es …
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
 
         assert "TO JEST WAŻNE" in speech_text("TO JEST WAŻNE.", "pl")

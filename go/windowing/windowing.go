@@ -1,6 +1,6 @@
 // Package windowing mirrors loudkit.models.windowing: the renderer's pure
-// geometry — the window framing recipe, the Euler grid, the EOS floor and the
-// Philox stream ids.
+// geometry, which is the window framing recipe, the Euler grid, the EOS floor
+// and the Philox stream ids.
 package windowing
 
 import (
@@ -12,15 +12,30 @@ import (
 	"github.com/loudreader/loudkit/go/voice"
 )
 
+// The Philox sub-streams each stage draws from, under its own stage seed.
+// The names and the values are Python's, in loudkit.models.windowing.
 const (
-	FlowNoiseStream    uint32 = 0
+	// FlowNoiseStream is the sub-stream for the CFM prior. Streams 0 and 1
+	// are consumed by the Box-Muller pair, so keep any future draw at 2 or
+	// above.
+	FlowNoiseStream uint32 = 0
+	// VocoderPhaseStream is the sub-stream for the eight harmonic phase
+	// offsets. Row 0 is pinned to 0: the voiced fundamental must start at a
+	// zero crossing.
 	VocoderPhaseStream uint32 = 0
+	// VocoderNoiseStream is the first of the Box-Muller pair (1 and 2) for
+	// the excitation noise.
 	VocoderNoiseStream uint32 = 1
 )
 
+// The tokens that frame a transcript segment. A property of the T3 text
+// tokenizer family, kept here rather than beside the generator so the ONNX
+// path can frame the same way, which is where Python keeps them too.
 const (
+	// StartTextToken opens the transcript segment.
 	StartTextToken = 255
-	StopTextToken  = 0
+	// StopTextToken closes it.
+	StopTextToken = 0
 )
 
 const (
@@ -33,6 +48,7 @@ type Framed struct {
 	Row          []int64   // (P+Q,) token row
 	Cond         []float32 // (80 * 2*(P+Q)) mel condition
 	PromptFrames int
+	PromptTokens int // how many of Row's leading entries are prompt
 	N            int
 }
 
@@ -59,7 +75,7 @@ func TimeGrid(cfg config.AlgorithmConfig) []float64 {
 // gives it a token to pad with.
 var ErrNoPadToken = errors.New(
 	"static window needs a pad token: set WindowConfig.PadTokenID or " +
-		"provide SilenceTokenIds — padding with token 0 bleeds +3 dB of " +
+		"provide SilenceTokenIds: padding with token 0 bleeds +3 dB of " +
 		"high-band energy into the tail through the encoder's attention",
 )
 
@@ -73,6 +89,19 @@ func padTokenID(cfg config.AlgorithmConfig) (int, error) {
 	return 0, ErrNoPadToken
 }
 
+// staticPromptLen is how many prompt slots a static window reserves.
+//
+// A static window with no prompt count is Python's
+// `p_len = w.static_prompt_tokens or len(prompt_tokens)`
+// (models/windowing.py): the prompt fills the row as it is. Dereferencing the
+// pointer instead panics on a configuration Python frames.
+func staticPromptLen(w config.WindowConfig, promptTokens []int) int {
+	if w.StaticPromptTokens != nil {
+		return *w.StaticPromptTokens
+	}
+	return len(promptTokens)
+}
+
 // FrameWindows applies the window recipe. Returns ErrNoPadToken when the
 // checkpoint manifest configures a static-length window without a pad token,
 // and an error when more tokens are handed in than the window holds.
@@ -80,7 +109,7 @@ func padTokenID(cfg config.AlgorithmConfig) (int, error) {
 // An over-window input is refused with the amount of speech that would have
 // been lost; silent truncation in a reading tool
 // leaves the end of a passage nonexistent while the audio still
-// sounds fine — the only listener who notices is one who knows the text. The
+// sounds fine: the only listener who notices is one who knows the text. The
 // Python engine refuses it loudly; so does this.
 func FrameWindows(cfg config.AlgorithmConfig, tokens []int, v *voice.Profile) (Framed, error) {
 	w := cfg.Window
@@ -102,11 +131,26 @@ func FrameWindows(cfg config.AlgorithmConfig, tokens []int, v *voice.Profile) (F
 	var prompt, query []int
 	var condWidth, promptFrames int
 	if w.StaticLength != nil {
+		// The guard above measures against max_speech_tokens; the buffer below
+		// is static_length long. A recipe whose static buffer is the shorter
+		// of the two does not fail here, it truncates: max_speech_tokens 300
+		// with static_length 255 dropped 45 speech tokens, 1.8 seconds of the
+		// passage, and returned audio that sounds finished to everyone who
+		// does not know the text.
+		//
+		// config.FromManifest refuses this recipe with the reference's
+		// sentence, so no manifest reaches it. This is the second door,
+		// because AlgorithmConfig is an ordinary struct a caller may build by
+		// hand, and Framed.N would then report the count that went in rather
+		// than the count the row carries.
+		if err := w.Validate(); err != nil {
+			return Framed{}, err
+		}
 		pad, err := padTokenID(cfg)
 		if err != nil {
 			return Framed{}, err
 		}
-		pLen := *w.StaticPromptTokens
+		pLen := staticPromptLen(w, promptTokens)
 		prompt = make([]int, pLen)
 		for i := range prompt {
 			prompt[i] = pad
@@ -144,12 +188,11 @@ func FrameWindows(cfg config.AlgorithmConfig, tokens []int, v *voice.Profile) (F
 		}
 	}
 
-	return Framed{Row: row, Cond: cond, PromptFrames: promptFrames, N: n}, nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return Framed{
+		Row:          row,
+		Cond:         cond,
+		PromptFrames: promptFrames,
+		PromptTokens: len(prompt),
+		N:            n,
+	}, nil
 }

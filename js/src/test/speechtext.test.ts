@@ -3,7 +3,7 @@
  *
  * Hand-written cases in five languages are five tests of five different
  * things. `tests/data/conformance/speechtext.json` is one test of one thing,
- * and a disagreement names itself. That file's own note says so — "Every port
+ * and a disagreement names itself. That file's own note says so: "Every port
  * must reproduce these exactly; a difference is a divergence, not a dialect".
  * All the bindings read
  * the `chunking` section and hand-write their funnel expectations; hand-written

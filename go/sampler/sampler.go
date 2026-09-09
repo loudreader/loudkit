@@ -35,7 +35,7 @@ type Sampler struct {
 
 	// Observation of how close each step came to stopping. Never feeds back
 	// into the draw; read by the postprocess detectors after generation.
-	// stopToken < 0 disables it, and with it its cost — one exponential and
+	// stopToken < 0 disables it, and with it its cost, one exponential and
 	// one sum over the vocabulary per step.
 	stopToken int
 	eosFloor  int
@@ -43,10 +43,15 @@ type Sampler struct {
 	peakProb  float64
 }
 
+// New is a sampler on the shipping Philox block size.
 func New(config Config, seed uint64) *Sampler {
 	return NewWithBlock(config, seed, 256)
 }
 
+// NewWithBlock is New with the Philox block size named, for the conformance
+// harness. The block is how many uniforms one counter draw yields, so it moves
+// which draw a given step reads and therefore the tokens; a caller who is not
+// reproducing a fixture wants New.
 func NewWithBlock(config Config, seed uint64, block int) *Sampler {
 	sil := make(map[int]bool)
 	for _, t := range config.SilenceTokenIds {
@@ -61,8 +66,8 @@ func NewWithBlock(config Config, seed uint64, block int) *Sampler {
 // ObserveEOS enables the stop-token observation the postprocess layer reads.
 //
 // Done here, in the sampler, rather than by changing the generator: every
-// backend already calls the sampler on every step — it owns the RNG stream, so
-// a backend that skipped it would produce different tokens — which means the
+// backend already calls the sampler on every step, and it owns the RNG stream, so
+// a backend that skipped it would produce different tokens, which means the
 // observation reaches every generation path without a new seam.
 //
 // eosFloor is the floor this generation runs under. The peak is only recorded
@@ -79,7 +84,7 @@ func (s *Sampler) ObserveEOS(stopToken, eosFloor int) {
 // probability). (-1, 0) when the stop token was never plausible, or when
 // ObserveEOS was not called.
 //
-// If the model never stops, that peak is where the sentence really ended —
+// If the model never stops, that peak is where the sentence really ended,
 // which is what makes the number worth carrying.
 func (s *Sampler) EOSPeak() (int, float64) { return s.peakAt, s.peakProb }
 
@@ -89,7 +94,7 @@ func (s *Sampler) EOSPeak() (int, float64) { return s.peakAt, s.peakProb }
 // The quantity is the shipped engine's, reproduced exactly: the stop token's
 // softmax weight over the sum of the weights that survived min_p. The numerator
 // is taken BEFORE the cutoff is applied, so a step where the stop token was
-// itself filtered out still reports how near it came — the number answers "how
+// itself filtered out still reports how near it came: the number answers "how
 // close was this to being the end", not "what was the chance of stopping", and
 // the first question is the one the detectors need, because the rows they exist
 // to rescue are precisely the ones where stopping never won.
@@ -137,8 +142,18 @@ func (s *Sampler) Call(logits []float32, step int, seen []bool) int {
 	}
 
 	if cfg.RepetitionPenalty != 1.0 {
+		// The penalty applies to every seen token, silence included. Silence
+		// was exempt here until the interior-stall study: immune to the
+		// penalty and re-admitted below the min_p floor (the exemption
+		// below), a silence run had no exit, zero escapes in 1,031
+		// instrumented trap steps, and 33.0% of long-form paragraphs
+		// carried a >1 s hole, with 74 of 1705 passages rendering chunks of
+		// no speech at all. Penalising seen silence closes the trap: holes
+		// 33.0% -> 4.3% and mute chunks 74 -> 1 at 120 passages/arm across
+		// ten languages, natural-band pause rates inside noise on 8/9
+		// healthy voices, WER flat or better.
 		for i := range z {
-			if seen[i] && !s.silence[i] {
+			if seen[i] {
 				if z[i] > 0 {
 					z[i] /= cfg.RepetitionPenalty
 				} else {
@@ -171,6 +186,13 @@ func (s *Sampler) Call(logits []float32, step int, seen []bool) int {
 	best := math.Inf(-1)
 	bestIdx := -1
 	for i := range scaled {
+		// Silence stays available even when min_p would drop it: a pause token
+		// is what makes a reader pause, and a filter that removes the only way
+		// to pause is a filter that removes prosody. This is the one exemption
+		// silence keeps: removing it was measured catastrophic (median
+		// long-form gap 2.46 s -> 4.64 s). The repetition penalty above now
+		// applies to silence like everything else, so a pause that overstays
+		// decays instead of never ending.
 		keep := cfg.MinP == 0 || scaled[i] >= threshold || s.silence[i]
 		if !keep {
 			continue

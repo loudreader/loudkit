@@ -7,7 +7,7 @@
 //! and nothing here claims a word lands where a listener would say it does.
 //!
 //! Needs no assets. `loudkit::timing` is arithmetic over sample counts, which is
-//! the whole of it — the engine parts that fill these in cannot run without the
+//! the whole of it: the engine parts that fill these in cannot run without the
 //! checkpoint, the exported graphs and the onnxruntime shared library, and the
 //! same is true in the other four ports.
 
@@ -139,7 +139,7 @@ fn no_text_is_no_words_rather_than_a_division_by_zero() {
 
 /// The five ports count code points. A byte count would give Polish and
 /// Japanese text different word weights in Rust than in Python, for text that
-/// reads identically — `żółć` is four characters and eight bytes.
+/// reads identically: `żółć` is four characters and eight bytes.
 #[test]
 fn length_is_counted_in_characters_not_bytes() {
     let words = estimate_words("aaaa żółć", 0.0, 1.0);

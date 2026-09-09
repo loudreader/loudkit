@@ -1,86 +1,109 @@
-# loudkit Rust binding
+# loudkit for Rust
 
-The loudkit engine over the `ort` crate (load-dynamic). The rng, sampler,
-tokenizer, windowing, engine and the Polish respelling lexicon are ported to
-Rust, with **no torch** at runtime.
+Text to speech in Rust, on ONNX Runtime through the `ort` crate. No Python,
+no torch.
 
-## Status: supported
+## Hello
 
-Passes the shared conformance fixture: weight-free vectors exact, free-run
-tokens and render band against the checkpoint. The full walkthrough is
-`docs/guides/09-rust.md` in the repo root.
+One shared library that cannot be vendored: `brew install onnxruntime` on
+macOS, `apt install libonnxruntime-dev` on Linux, the
+[onnxruntime-win-x64 archive](https://github.com/microsoft/onnxruntime/releases)
+on Windows. It is found automatically; set `LOUDKIT_ONNXRUNTIME_LIB` if yours is
+somewhere unusual.
 
-## Requirements
-
-- Rust edition 2021 (stable toolchain)
-- a `libonnxruntime` shared library (load-dynamic; point `ORT_DYLIB_PATH` at it)
-- the exported ONNX graphs, the packed checkpoint, a voice profile, and
-  `tokenizer.json`
-
-## Synthesise
-
-```toml
-[dependencies]
-loudkit = "0.1"
-```
+For a new application:
 
 ```bash
-pip install "loudkit[hub]"
-loudkit download loudreader/loudr-1 --for onnx --local-dir loudr-1
+cargo new hello
+cd hello
+cargo add loudkit@0.1.1
 ```
 
-Everything lands inside `loudr-1/`, which is what the paths below are relative
-to. `--with-cloning` adds the three enrollment graphs.
+`src/main.rs`:
 
 ```rust
-use loudkit::engine::Engine;
-use loudkit::voice;
+use loudkit::engine::{Engine, Options};
 
 fn main() -> Result<(), String> {
-    let mut eng = Engine::load(
-        "loudr-1/loudr-1.safetensors", // packed checkpoint
-        "loudr-1/onnx",                // exported graphs
-        "loudr-1/tokenizer.json",      // text tokenizer
+    let mut engine = Engine::load("loudreader/loudr-1")?;
+    let joe = engine.voice("joe")?;
+    let out = engine.synthesize(
+        "Hello from loudkit.",
+        &joe,
+        &Options {
+            seed: 7,
+            ..Default::default()
+        },
     )?;
-    let v = voice::load("loudr-1/voices/joe.safetensors")?;
-
-    // Use synthesize_long. synthesize renders one window and errors on
-    // anything longer instead of clipping it. The `None`s are language (the voice's own),
-    // previous_tokens and should_cancel.
-    let (audio, tokens, _mel, sr, _chunks, _capped) =
-        eng.synthesize_long("Hello from loudkit.", &v, 7, None, 1.0, None, None)?;
-    println!("{} tokens, {:.2}s", tokens.len(), audio.len() as f64 / sr as f64);
-    // `audio` is f32 at `sr`. Hand it to your own WAV writer or audio
-    // device. This crate writes no files.
+    out.save_wav("hello.wav")?;
+    println!("hello.wav: {:.2}s", out.duration());
     Ok(())
 }
 ```
 
-`ORT_DYLIB_PATH` must point at a `libonnxruntime` before this runs. Streaming,
-timestamps, speed and barge-in: `docs/guides/09-rust.md`.
+```bash
+cargo run
+```
+
+The first run downloads the model files into
+`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS and
+`~/.cache/loudkit/loudreader--loudr-1` elsewhere (`$LOUDKIT_CACHE` moves it),
+the directory the Go, JS and Swift ports share, and checks every file
+against the release's own `SHA256SUMS`; later runs read what is there.
+`engine.voices()` names the 28 voices.
+
+The snippets on this page need loudkit 0.1.1. From a checkout, `cargo run
+--example hello` runs `examples/hello.rs`, which is this file.
+
+Both `loudr-1` and `loudr-1-turbo` use this API in 0.1.1. Change the model
+name to switch; keep the same voice profile. A local release directory works
+as well as a published model name.
+
+
+## The rest of the front door
+
+```rust
+loudkit::download("loudreader/loudr-1", "loudr-1")?;          // a directory of your own
+hub::download_with(repo, dir, &hub::Options { cloning: true, ..Default::default() })?;
+Engine::load("loudr-1")?;                                     // a directory or a repo id
+engine.voices()?;                                             // the names in the release
+engine.voice("joe")?;                                         // one of them
+engine.synthesize(text, &voice, &Options { seed, language, speed, previous_tokens, ..Default::default() })?;
+engine.stream(text, &voice, &options, None, &mut |chunk| { play(chunk.audio); true })?;
+let mine = engine.enroll_wav("me.wav", "mine", "en")?;         // clone; fetches the enrollment graphs once
+mine.save("mine.safetensors")?;                               // a portable profile
+voice::load("mine.safetensors")?;
+out.save_wav(path)?;                                          // 16-bit PCM
+```
+
+`synthesize` takes text of any length: it splits at sentence boundaries and
+joins the audio. `Options::default()` is seed 0, the voice's own language and
+normal speed. `stream` hands out chunks as they are made; return `false` to
+stop, or set `Options.should_cancel` (read by `synthesize` too, which then
+returns `Err(error::CANCELLED)`) to stop within one decode step. `enroll_wav`
+on an engine loaded by repo id fetches the enrollment graphs once; a directory
+of your own needs `cloning: true`.
+`Engine::load_paths(checkpoint, onnx_dir, tokenizer)` opens a layout of your
+own.
+
+Streaming, timestamps, speed and barge-in: `docs/guides/09-rust.md`.
 
 ## Execution provider
 
-The default build runs on the CPU provider. `Engine::load_with` and
-`Enroller::load_with` take an `ExecutionConfig` whose `onnx_provider` is one of
-`auto` (the default), `cpu`, `cuda`, `coreml` or `directml`, the same five
-values the Python, Go and TypeScript bindings accept.
+`Engine::load_with` and `Enroller::load_with` take an `ExecutionConfig` whose
+`onnx_provider` is one of `auto` (the default), `cpu`, `cuda`, `coreml` or
+`directml`, the same five values every port accepts.
 
 ```rust
 use loudkit::execution::{ExecutionConfig, OnnxProvider};
 
 let execution = ExecutionConfig { onnx_provider: OnnxProvider::Cuda };
-let mut eng = Engine::load_with(ckpt, onnx_dir, tokenizer, &execution)?;
-println!("{}", eng.describe());  // ... | exec[onnx provider=cuda]
+let mut engine = Engine::load_with("loudreader/loudr-1", &execution)?;
+println!("{}", engine.describe());
 ```
 
-`auto` takes CUDA where the build offers it and CPU otherwise, and the describe line
-names the one it took. A named provider that is not available is an
-error, never a quiet demotion to the CPU: a benchmark row that still says `cuda`
-over a CPU number is worse than a refusal.
-
-Two things have to be true for a provider to run, and the refusal says which one
-is missing.
+Two things must be true for a provider to run, and the refusal says which one
+is missing:
 
 | provider | cargo feature | shared library |
 | --- | --- | --- |
@@ -89,37 +112,22 @@ is missing.
 | `coreml` | `--features coreml` | an Apple-platform onnxruntime built with CoreML |
 | `directml` | `--features directml` | the `Microsoft.ML.OnnxRuntime.DirectML` build, on Windows |
 
-No feature is on by default, and the default build needs nothing but a plain
-`libonnxruntime`. Because the crate uses `ort`'s `load-dynamic`, a feature only
-compiles the registration code in. The library at `ORT_DYLIB_PATH` still has to
-carry the provider.
-
-A GPU provider can change the token stream and waveform. CoreML is available by
-name when both the feature and a compatible runtime are present, but `auto`
-does not select it because its first compile is expensive. The conformance
-fixture pins CPU. See
+No provider feature is on by default, so `auto` resolves to `cpu` in a default
+build. A named provider that is not available is an error, never a quiet
+demotion to CPU. A GPU provider can change the token stream and waveform;
+conformance runs pin CPU. See
 [`docs/benchmarks.md`](../docs/benchmarks.md#onnx-execution-providers).
-
-The default build compiles no provider feature in, so `auto` resolves to `cpu`
-here. In every port, `auto` prefers CUDA when available and otherwise uses CPU.
-
-CUDA has been measured on an RTX 3090. DirectML is unit-tested for resolution
-and refusal text but has not been measured on Windows.
-
-The CLI carries the same knob as `--provider`.
 
 ## Build and test
 
 ```bash
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
-cargo test --test weightfree          # weight-free conformance vectors
-cargo test                            # + engine conformance (needs LOUDKIT_* assets)
-
-cargo clippy --all-targets --features cuda,coreml,directml -- -D warnings
+cargo test                            # weight-free; `cargo test -- --ignored` runs the engine conformance with LOUDKIT_* assets
+cargo clippy --all-targets --no-default-features -- -D warnings
+cargo test --no-default-features      # the build a consumer gets without `download`
 ```
 
-## Runtime libraries and assets
-
-The ONNX Runtime shared library and the checkpoint/graphs are **not** bundled.
-The crate loads them from the paths you provide.
+`download` is on by default: it pulls `ureq` with rustls, the whole of this
+crate's TLS surface. `default-features = false` drops it and keeps the
+engine, which then takes a release directory and no repo id.

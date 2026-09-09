@@ -44,7 +44,7 @@ func TestDescribeCarriesTheProvider(t *testing.T) {
 }
 
 // A provider name is checked before the checkpoint is read, so a typo costs a
-// message rather than the seconds it takes to load a couple of gigabytes — and
+// message rather than the seconds it takes to load a couple of gigabytes: and
 // so a run that cannot honour the request never starts.
 func TestLoadWithRefusesAnUnknownProviderBeforeReadingAnything(t *testing.T) {
 	_, err := LoadWith("/nonexistent/checkpoint.safetensors", "/nonexistent/onnx",

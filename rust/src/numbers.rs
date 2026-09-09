@@ -1,11 +1,11 @@
-//! Numbers, said out loud — the Rust half of `loudkit.frontend.numbers`.
+//! Numbers, said out loud: the Rust half of `loudkit.frontend.numbers`.
 //!
 //! The grammar is data and only the interpreter is code: this module reads the
 //! same `numbers.json` every other implementation reads, so a rule lives once.
 //! The composition mirrors `loudkit/frontend/numbers.py` function for
 //! function; the reasons behind the odd-looking behaviours (joiners carrying
 //! their own spacing, per-value agreement scopes, a scale noun with its own
-//! gender) live in the Python docstrings and `docs/reference/preprocess.md`,
+//! gender) live in the Python docstrings and `docs/design/preprocess.md`,
 //! and the hand-written fixture plus the 1300-row CLDR differential pin them.
 //!
 //! Python reference: `loudkit/frontend/numbers.py`.
@@ -42,7 +42,11 @@ pub struct Grammar {
     units_before_tens: bool,
     unit_tens_joiner: String,
     time_infix: String,
-    abbreviations: Vec<(String, String)>,
+    /// Longest written form first, each already compiled: the pattern is a
+    /// function of the written form and nothing else, so it belongs beside the
+    /// table rather than in the pass that reads it once per abbreviation per
+    /// call.
+    abbreviations: Vec<(Regex, String)>,
     tens_joiner_exceptions: HashMap<i64, String>,
     hundred_joiner: String,
     scale_joiner_on_round_hundreds: bool,
@@ -59,32 +63,10 @@ pub struct Grammar {
 }
 
 static GRAMMARS: LazyLock<HashMap<String, Grammar>> = LazyLock::new(|| {
-    let doc: serde_json::Value =
-        serde_json::from_str(include_str!("numbers.json")).expect("numbers.json unreadable");
+    use crate::grammar::{int_map, strings as strs, text as s};
+
     let mut out = HashMap::new();
-    let Some(langs) = doc["languages"].as_object() else {
-        return out;
-    };
-    let strs = |v: &serde_json::Value| -> Vec<String> {
-        v.as_array()
-            .map(|a| {
-                a.iter()
-                    .filter_map(|s| s.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    let int_map = |v: &serde_json::Value| -> HashMap<i64, String> {
-        v.as_object()
-            .map(|m| {
-                m.iter()
-                    .filter_map(|(k, val)| Some((k.parse().ok()?, val.as_str()?.to_string())))
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    let s = |v: &serde_json::Value| v.as_str().unwrap_or_default().to_string();
-    for (lang, e) in langs {
+    for (lang, e) in crate::grammar::languages() {
         let mut scales = Vec::new();
         if let Some(list) = e["scales"].as_array() {
             for sc in list {
@@ -141,7 +123,16 @@ static GRAMMARS: LazyLock<HashMap<String, Grammar>> = LazyLock::new(|| {
                         .unwrap_or_default();
                     // Longest first, so fr.o.m. cannot be half-eaten.
                     list.sort_by_key(|(w, _)| std::cmp::Reverse(w.len()));
-                    list
+                    list.into_iter()
+                        .map(|(written, spoken)| {
+                            let pattern =
+                                format!(r"(^|[^\w.]){}($|[^\w.])", regex::escape(&written));
+                            (
+                                Regex::new(&pattern).expect("escaped pattern is valid"),
+                                spoken,
+                            )
+                        })
+                        .collect()
                 },
                 tens_joiner_exceptions: int_map(&e["tens_joiner_exceptions"]),
                 hundred_joiner: s(&e["hundred_joiner"]),
@@ -181,32 +172,50 @@ impl Grammar {
     }
 }
 
+/// The mark that groups digits in a language whose decimal mark is `decimal`.
+///
+/// The two swap: a language that writes 1.5 groups with a comma, one that
+/// writes 1,5 groups with a period. Written once because a reader that
+/// disagreed with the other two about which mark this is would read a thousand
+/// as a decimal.
+fn grouping(decimal: &str) -> &'static str {
+    if decimal == "." {
+        ","
+    } else {
+        "."
+    }
+}
+
 /// First 16 hex characters of the SHA-256 of the grammar file this crate
 /// embeds, followed by the respelling lexicon. Hashed as raw bytes, like every
 /// other implementation, so the five agree only when they ship the same files.
+///
+/// Every byte in these files is data the funnel reads, and nothing else: a
+/// prose member inside them would move this digest and the fingerprint above
+/// it when a sentence was corrected, while every sample rendered identically.
+/// Descriptions live beside the data, in `numbers.about.md` and
+/// `numerals.provenance.json`, neither hashed nor embedded here.
 #[must_use]
 pub fn grammar_digest() -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
-    hasher.update(include_bytes!("numbers.json"));
+    hasher.update(crate::grammar::SOURCE.as_bytes());
     // The lexicon alongside the grammar: it is a funnel input exactly as the
     // grammar is and it changes the spoken tokens, so both files hash into the
     // fingerprint. Leaving the lexicon out covers 55 KB of rules but not 6.5 MB
     // of vocabulary, and a build whose lexicon has drifted says different words
     // under the same sixteen hex digits.
     hasher.update(include_bytes!("pl_en_respell.json"));
+    // And the numeral table, for the same reason: it decides the words a
+    // numeral becomes, and it pins the Unicode version the fold uses.
+    hasher.update(include_bytes!("numerals.json"));
     // sha2 0.11 returns a generic array rather than something LowerHex, so the
     // bytes are formatted one at a time. Sixteen characters is half a SHA-256,
     // like the fingerprint itself.
-    hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>()[..16]
-        .to_string()
+    crate::hex(&hasher.finalize())[..16].to_string()
 }
 
-/// The language ids [`cardinal`] can verbalize, sorted — the roster in
+/// The language ids [`cardinal`] can verbalize, sorted: the roster in
 /// `numbers.json`, and the allowlist [`crate::frontend`] enforces.
 ///
 /// Mirrors `loudkit.frontend.numbers.supported_languages`. One authority for
@@ -220,14 +229,23 @@ pub fn supported_languages() -> Vec<&'static str> {
 }
 
 /// `value` as words. An empty gender gives the citation form. Unknown language
-/// or a value past the grammar's largest scale is an error — silently reading
+/// or a value past the grammar's largest scale is an error: silently reading
 /// digits back would be indistinguishable from success.
 pub fn cardinal(value: i64, language: &str, gender: &str) -> Result<String, String> {
     let g = GRAMMARS
         .get(language)
         .ok_or_else(|| format!("no number grammar for {language:?}"))?;
     let ceiling = g.scales.first().map_or(1000, |s| s.value * 1000);
-    if value.abs() >= ceiling {
+    // `checked_abs`, because `i64::MIN` has no positive counterpart: `abs`
+    // overflows, which panics in debug and in release wraps back to
+    // `i64::MIN`, still negative and still under the ceiling, so the negative
+    // arm below recursed on the same value until the stack ran out. It is the
+    // one value with no magnitude, and the answer for it is the error this
+    // function already gives anything past the largest scale.
+    if value
+        .checked_abs()
+        .is_none_or(|magnitude| magnitude >= ceiling)
+    {
         return Err(format!(
             "{value} is past the largest scale {language:?} has a word for"
         ));
@@ -431,14 +449,14 @@ pub fn decimal_separator(language: &str) -> &'static str {
 ///
 /// Language-dependent for the separators, and that is not a detail. U+066B is a
 /// *decimal* separator, so folding it to a dot everywhere turned "٣٫١٤" into
-/// "3.14" — which in the eleven languages that write decimals with a comma is
+/// "3.14", which in the eleven languages that write decimals with a comma is
 /// the written form of a clock time, read out as *drei Uhr vierzehn*.
 #[must_use]
 pub fn fold_foreign_digits(text: &str, language: &str) -> String {
     let decimal = GRAMMARS
         .get(language)
         .map_or(".", |g| g.decimal_separator.as_str());
-    let grouping = if decimal == "." { "," } else { "." };
+    let grouping = grouping(decimal);
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
@@ -454,21 +472,21 @@ pub fn fold_foreign_digits(text: &str, language: &str) -> String {
 }
 
 static PHONE_RUN: LazyLock<Regex> =
-    // Python's `_PHONE_RUN`: an E.164 number — a plus, then digits, possibly
-    // grouped by spaces — read digit by digit and taken before the digit run,
+    // Python's `_PHONE_RUN`. An E.164 number is a plus, then digits, possibly
+    // grouped by spaces, read digit by digit and taken before the digit run,
     // which cannot decline it. "+48 123 456 789" is a valid
     // one-to-three-then-threes grouping, so it read as *forty-eight billion*.
     // The plus is the evidence: E.164 requires one, a grouped thousand has none.
     LazyLock::new(|| Regex::new(r"\+[0-9][0-9 ]*[0-9]").unwrap());
 
-/// Below this a plus-signed run is a delta, not a telephone number: "+5
-/// degrees" and "+1 000 000 users" are not numbers to spell out.
 /// ISO 8601's 24:00. Admitted as an hour, and only with a zero minute.
 const END_OF_DAY_HOUR: i64 = 24;
 
 /// Digits in every thousands group after the first.
 const GROUP_DIGITS: usize = 3;
 
+/// Below this a plus-signed run is a delta, not a telephone number: "+5
+/// degrees" and "+1 000 000 users" are not numbers to spell out.
 const MIN_E164_DIGITS: usize = 8;
 
 static UNICODE_MINUS: LazyLock<Regex> =
@@ -478,33 +496,46 @@ static UNICODE_MINUS: LazyLock<Regex> =
     // space, and "−5" was read as *five*. Not U+2013, which writes a range.
     LazyLock::new(|| Regex::new(r"[\u{2212}\u{2010}]([0-9])").unwrap());
 
+/// Every E.164 number in `text`, said digit by digit.
+///
+/// Walked by match rather than by `replace_all`, because the two guards the
+/// digit run answers to read the characters either side of the run and a
+/// replacer is handed only the match.
 fn expand_phone_numbers(text: &str, language: &str) -> String {
-    PHONE_RUN
-        .replace_all(text, |caps: &regex::Captures<'_>| {
-            let whole = &caps[0];
-            let digits: Vec<u32> = whole.chars().filter_map(|c| c.to_digit(10)).collect();
-            if digits.len() < MIN_E164_DIGITS {
-                return whole.to_string();
-            }
-            let said: Vec<String> = digits
-                .iter()
-                .filter_map(|d| cardinal(i64::from(*d), language, "").ok())
-                .collect();
-            if said.len() != digits.len() {
-                return whole.to_string();
-            }
-            said.join(" ")
-        })
-        .into_owned()
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    for m in PHONE_RUN.find_iter(text) {
+        // The same two guards the digit run answers to, for the same reason: a
+        // run inside a word is part of an identifier, and `+12345678abc` is not
+        // a telephone number in any country.
+        if glued_to_a_word(text, m.start()) || glued_forward(text, m.end()) {
+            continue;
+        }
+        let digits: Vec<u32> = m.as_str().chars().filter_map(|c| c.to_digit(10)).collect();
+        if digits.len() < MIN_E164_DIGITS {
+            continue;
+        }
+        let said: Vec<String> = digits
+            .iter()
+            .filter_map(|d| cardinal(i64::from(*d), language, "").ok())
+            .collect();
+        if said.len() != digits.len() {
+            continue;
+        }
+        out.push_str(&text[last..m.start()]);
+        out.push_str(&said.join(" "));
+        last = m.end();
+    }
+    out.push_str(&text[last..]);
+    out
 }
 
 /// Whether the token continues past the match into a letter.
 ///
-/// The mirror of `gluedToAWord`, and it was missing here while Python, JS and
-/// Swift had it: `123.de` is one token to them and two to this port, which read
-/// "einhundertdreiundzwanzig.de". A grouping space is crossed so `200 000x` is one
-/// token; the ordinary space in `2024 200 people` is not, because what follows it
-/// is a word.
+/// The mirror of `gluedToAWord`. Without it `123.de` is two tokens here and
+/// one everywhere else, and this port reads "einhundertdreiundzwanzig.de". A
+/// grouping space is crossed so `200 000x` is one token; the ordinary space in
+/// `2024 200 people` is not, because what follows it is a word.
 fn glued_forward(text: &str, end: usize) -> bool {
     let bytes = text.as_bytes();
     let mut i = end;
@@ -513,16 +544,22 @@ fn glued_forward(text: &str, end: usize) -> bool {
             .chars()
             .next()
             .expect("i < len is a char boundary");
-        if c.is_alphabetic() {
+        if crate::unicode::is_letter(c) {
             return true;
         }
-        if c.is_alphanumeric() || c == '_' || c == '.' || c == ',' || c == '-' || c == '+' {
+        if crate::unicode::is_letter_or_digit(c)
+            || c == '_'
+            || c == '.'
+            || c == ','
+            || c == '-'
+            || c == '+'
+        {
             i += c.len_utf8();
             continue;
         }
         // A group, not "a digit follows": the space is crossed only when three
         // digits start behind it. The loose question walked out of one number
-        // and into the next, so `1000 5.1e+3` refused the `1000` — it found the
+        // and into the next, so `1000 5.1e+3` refused the `1000`: it found the
         // `e` of an exponent two tokens away and called the whole thing one
         // glued token.
         if c == ' ' && i > 0 && bytes[i - 1].is_ascii_digit() && starts_a_group(text, i + 1) {
@@ -534,7 +571,7 @@ fn glued_forward(text: &str, end: usize) -> bool {
     false
 }
 
-/// Whether three digits start at `i` — the shape `DIGIT_RUN` binds as a group
+/// Whether three digits start at `i`: the shape `DIGIT_RUN` binds as a group
 /// after the first, and so the shape a space in front of them may be grouping.
 ///
 /// The length is checked, not assumed: a three-character slice of a
@@ -554,7 +591,7 @@ fn starts_a_group(text: &str, i: usize) -> bool {
 /// the run the pattern refused to bind and a ragged group is exactly why it
 /// refused, so `1 0023R` must stay one token. Backwards the group *is* the
 /// match, whose width the pattern already fixed, and the loose question there
-/// swallows the `1000` of `e3 1000` — a four-digit number across an ordinary
+/// swallows the `1000` of `e3 1000`: a four-digit number across an ordinary
 /// space, unrelated to the exponent behind it.
 fn continues_a_group(text: &str, i: usize) -> bool {
     starts_a_group(text, i)
@@ -574,7 +611,7 @@ fn truncated_by_a_fraction(text: &str, end: usize) -> bool {
     matches!(rest.next(), Some('.') | Some(',')) && rest.next().is_some_and(|c| c.is_ascii_digit())
 }
 
-/// Whether the digit run at `start` sits inside a token containing a letter —
+/// Whether the digit run at `start` sits inside a token containing a letter,
 /// Python's backward walk over word characters and dots, which is the question
 /// its one-character lookbehind could not ask.
 fn glued_to_a_word(text: &str, start: usize) -> bool {
@@ -585,35 +622,41 @@ fn glued_to_a_word(text: &str, start: usize) -> bool {
         // `-` and `+` are in the walk because an exponent puts one between
         // the letter and the digits: in `1e-3` the scan starts at the `3`,
         // walks back over `-` to `e`, and stops calling it a number.
-        if c.is_alphanumeric() || c == '_' || c == '.' || c == ',' || c == '-' || c == '+' {
+        if crate::unicode::is_letter_or_digit(c)
+            || c == '_'
+            || c == '.'
+            || c == ','
+            || c == '-'
+            || c == '+'
+        {
             i -= c.len_utf8();
         } else if c == ' '
             // A digit, then the space: the byte before it, because only an
             // ASCII digit can be one. The test is not redundant with the group
-            // ahead — the walk crosses repeatedly, so `Sold 200 000` went
+            // ahead: the walk crosses repeatedly, so `Sold 200 000` went
             // `000` -> `200` -> over the space before `200` into "Sold",
             // refusing a number nothing was glued to.
             && i >= 2
             && bytes[i - 2].is_ascii_digit()
             && continues_a_group(text, i)
         {
-            // A thousands space, crossed here as it is in the forward walk, and
-            // it was missing: `C0200 000` binds as one match, the lookbehind
-            // refuses that match, and the `000` then matches on its own —
-            // "C0200 zero zero zero", half a token spoken, where Python, JS and
-            // Swift leave the whole thing written.
+            // A thousands space, crossed here as it is in the forward walk.
+            // Without the crossing, `C0200 000` binds as one match, the
+            // lookbehind refuses that match, and the `000` then matches on its
+            // own: "C0200 zero zero zero", half a token spoken, where the other
+            // ports leave the whole thing written.
             i -= 1;
         } else {
             return false;
         }
-        if c.is_alphabetic() {
+        if crate::unicode::is_letter(c) {
             return true;
         }
     }
     false
 }
 
-/// Whether a digit sits at `i`, or at `i + 1` behind a space — the two shapes
+/// Whether a digit sits at `i`, or at `i + 1` behind a space: the two shapes
 /// Python's `(?! ?[0-9])` rejects.
 fn digits_follow(text: &str, i: usize) -> bool {
     let bytes = text.as_bytes();
@@ -624,7 +667,7 @@ fn digits_follow(text: &str, i: usize) -> bool {
 }
 
 static DIGIT_RUN: LazyLock<Regex> =
-    // ASCII digits only, explicitly — see the Python module for why.
+    // ASCII digits only, explicitly: see the Python module for why.
     //
     // Python's `_DIGIT_RUN` minus its lookbehind, which this crate cannot
     // express; that guard is applied in `expand_numbers` against the character
@@ -636,17 +679,17 @@ static DIGIT_RUN: LazyLock<Regex> =
         Regex::new(r"([0-9]{1,3}(?: [0-9]{3})+|[0-9]+)((?:[.,][0-9]+)*)").unwrap()
     });
 
-/// Every run of digits in `text`, said as words — the seam between the
+/// Every run of digits in `text`, said as words: the seam between the
 /// verbalizer and the funnel. Never errors and never leaves digits behind: a
 /// number past every scale is read digit by digit (it is almost always an
-/// identifier), and only the language's own decimal mark is a decimal mark —
+/// identifier), and only the language's own decimal mark is a decimal mark:
 /// the other one is grouping, and is dropped the way a reader drops it.
 #[must_use]
 pub fn expand_numbers(text: &str, language: &str) -> String {
     let Some(g) = GRAMMARS.get(language) else {
         return text.to_string();
     };
-    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let is_word = |c: char| crate::unicode::is_letter_or_digit(c) || c == '_';
     // Both before anything looks for a digit run: the sign has to be ASCII by
     // the time the pattern matches one, and a phone number has to be gone
     // before the grouping rule meets a shape it cannot decline.
@@ -656,7 +699,7 @@ pub fn expand_numbers(text: &str, language: &str) -> String {
     let mut out = String::with_capacity(text.len());
     // `cursor` is what has been written out and `scan` is where the next match
     // is looked for: a cursor of its own rather than `captures_iter`, because a
-    // refused match does not always mean a refused *region* — see the
+    // refused match does not always mean a refused *region*: see the
     // lookbehind below. `scan` never moves backwards, which is what keeps
     // `&text[cursor..start]` from slicing backwards on input like
     // `"1 234 567 12."`, a panic the fuzzer found.
@@ -665,7 +708,7 @@ pub fn expand_numbers(text: &str, language: &str) -> String {
     while let Some(caps) = DIGIT_RUN.captures_at(text, scan) {
         let whole = caps.get(0).expect("group 0 always participates");
         // The whole-number group, whose end is where the pattern asks its
-        // boundary question — the match may run past it into a fraction.
+        // boundary question: the match may run past it into a fraction.
         let whole_number = caps.get(1).expect("group 1 always participates");
         let (mut start, mut end) = (whole.start(), whole.end());
         // The lookbehind, in code: a run glued to a word is part of that word,
@@ -683,7 +726,7 @@ pub fn expand_numbers(text: &str, language: &str) -> String {
             // refuses is this *match*, and a match glued at its left edge can
             // still hold a number that is not. `e3 1000` binds as `3 100`, and
             // taking the iterator's next match after that refusal skipped the
-            // rest of the region — the thousand behind it was left written.
+            // rest of the region: the thousand behind it was left written.
             // Python's engine retries at every position, which is why it reads
             // it.
             scan = whole.start() + 1;
@@ -697,7 +740,7 @@ pub fn expand_numbers(text: &str, language: &str) -> String {
         // cardinal with a bare "9" trailing behind it.
         //
         // What Python's engine arrives at instead is the *first group*, matched
-        // by the other alternative — so that is what this match is cut back to,
+        // by the other alternative, so that is what this match is cut back to,
         // before anything else looks at it. Everything else then follows: the
         // guards below ask their questions of a real boundary, the groups behind
         // this one are matched in their own turn (and a tidy tail like the
@@ -721,7 +764,7 @@ pub fn expand_numbers(text: &str, language: &str) -> String {
         //
         // A run glued to a word on the left was left alone while a run glued to
         // one on the right was expanded up to the letter and abandoned: "5x3"
-        // came out *fivex3* and "1e6" *onee6* — a word welded to a digit, which
+        // came out *fivex3* and "1e6" *onee6*: a word welded to a digit, which
         // is not a reading of anything. And the lookbehind sees one character,
         // so an identifier that puts a dot between its letter and its digits
         // slipped past it: in "v1.2.3" the scan starts at the `2` and the
@@ -760,14 +803,14 @@ pub fn expand_numbers(text: &str, language: &str) -> String {
 ///
 /// `1.2.3`, `192.168.0.1` and `12.03.2026` all match the digit-run pattern and
 /// none of them is a quantity. Reading one as a quantity says "nineteen million
-/// two hundred sixteen thousand eight hundred one" for an IP address — and in
+/// two hundred sixteen thousand eight hundred one" for an IP address, and in
 /// the Python reference is a hard crash.
 ///
 /// A run is a quantity when it has at most one separator, or when its
 /// separators genuinely group: every segment after the first exactly three
 /// digits, the first one to three. Anything else is left as written.
 fn is_quantity(literal: &str, g: &Grammar) -> bool {
-    let grouping = if g.decimal_separator == "." { "," } else { "." };
+    let grouping = grouping(&g.decimal_separator);
     let (whole, fraction, has_fraction) = match literal.split_once(&g.decimal_separator) {
         Some((w, f)) => (w, f, true),
         None => (literal, "", false),
@@ -795,7 +838,7 @@ fn say_number(literal: &str, g: &Grammar, language: &str) -> String {
     // The non-decimal mark is only grouping when it groups: every following
     // segment exactly three digits. Polish "1.000" is a thousand; Polish "2.5"
     // is a de-facto decimal, and 2.5 read as 25 is a changed meaning.
-    let grouping = if g.decimal_separator == "." { "," } else { "." };
+    let grouping = grouping(&g.decimal_separator);
     let (mut whole, mut fraction) = match literal.split_once(&g.decimal_separator) {
         Some((w, f)) => (w.to_string(), Some(f.to_string())),
         None => (literal.to_string(), None),
@@ -816,7 +859,7 @@ fn say_number(literal: &str, g: &Grammar, language: &str) -> String {
     if let Some(fraction) = fraction {
         if !fraction.is_empty() {
             parts.push(g.decimal_word.clone());
-            // Digit by digit — "point four nine", never "point forty-nine":
+            // Digit by digit: "point four nine", never "point forty-nine":
             // leading zeros carry meaning there that a cardinal would eat.
             parts.extend(digit_by_digit(&fraction, language));
         }
@@ -845,14 +888,175 @@ fn digit_by_digit(digits: &str, language: &str) -> Vec<String> {
         .collect()
 }
 
+/// A Roman numeral written with I, V and X, and nothing else.
+///
+/// L, C, D and M are left out, and that is the whole rule rather than an
+/// optimisation of it. Every two-letter initialism that is also a valid Roman
+/// numeral needs one of them: CD, CV, DC, MC, MD, XL, CM, and so does the only
+/// common English word that is one, MIX. What remains is 2 to 39, which is
+/// where chapter, act, volume, war and regnal numbers live.
+///
+/// The boundaries Python writes as `(?<![0-9A-Za-z])` and `(?![0-9A-Za-z])`
+/// are read off the neighbouring bytes below, this engine having no lookaround.
+static ROMAN_RUN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[IVX]{2,}").unwrap());
+
+/// The only spellings 2 to 39 has. Matched whole, so `IIX` and `VV` are
+/// refused.
+///
+/// They are letters that happen to be in the alphabet rather than numbers, and
+/// a token this refuses is a token the acronym pass still sees.
+static ROMAN_CANONICAL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\A(X{0,3})(IX|IV|V?I{0,3})\z").unwrap());
+
+const TEN: i64 = 10;
+
+/// `numeral` as a number, or `None` when it is not one.
+fn roman_value(numeral: &str) -> Option<i64> {
+    let matched = ROMAN_CANONICAL.captures(numeral)?;
+    let tail = &matched[2];
+    let units = match tail {
+        "IX" => 9,
+        "IV" => 4,
+        // Byte counts, and the run holds only ASCII letters.
+        _ => {
+            i64::from(tail.starts_with('V')) * 5
+                + tail.bytes().filter(|&b| b == b'I').count() as i64
+        }
+    };
+    Some(matched[1].len() as i64 * TEN + units)
+}
+
+/// `Chapter IV` and `World War II`, said as numbers.
+///
+/// See `docs/design/text-funnel.md`.
+#[must_use]
+pub fn expand_roman_numerals(text: &str, language: &str) -> String {
+    if !GRAMMARS.contains_key(language) {
+        return text.to_string();
+    }
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0usize;
+    for m in ROMAN_RUN.find_iter(text) {
+        // Bytes, not characters: only ASCII alphanumerics are refused, and no
+        // byte of a multi-byte character is one of those.
+        if m.start() > 0 && bytes[m.start() - 1].is_ascii_alphanumeric() {
+            continue;
+        }
+        if bytes.get(m.end()).is_some_and(u8::is_ascii_alphanumeric) {
+            continue;
+        }
+        let Some(value) = roman_value(m.as_str()) else {
+            continue;
+        };
+        let Ok(said) = cardinal(value, language, "") else {
+            continue;
+        };
+        out.push_str(&text[last..m.start()]);
+        out.push_str(&said);
+        last = m.end();
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// The letters a price abbreviates its magnitude with, longest first.
+///
+/// Only beside a currency mark, which is what makes them unambiguous: a bare
+/// `5m` is five metres as readily as five million, and `20k` is a race
+/// distance. `$5m` is a sum of money in every convention that writes it.
+const SCALE_SUFFIXES: [(&str, i64); 6] = [
+    ("bn", 1_000_000_000),
+    ("tn", 1_000_000_000_000),
+    ("k", 1_000),
+    ("m", 1_000_000),
+    ("b", 1_000_000_000),
+    ("t", 1_000_000_000_000),
+];
+
+/// The suffixes above as one alternation, either case, for the funnel's
+/// pattern.
+///
+/// Both cases are spelled out rather than asked of a case-insensitive flag,
+/// because a pattern that needs an inline flag group is a pattern the five
+/// implementations cannot share.
+pub static SCALE_SUFFIX_PATTERN: LazyLock<String> = LazyLock::new(|| {
+    SCALE_SUFFIXES
+        .iter()
+        .map(|(spelling, _)| {
+            spelling
+                .chars()
+                .map(|c| format!("[{c}{}]", c.to_ascii_uppercase()))
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+});
+
+/// The scale noun `suffix` abbreviates, in the form `count` of them takes.
+///
+/// `None` where the language has no noun for that magnitude, which leaves the
+/// letter written rather than guessing at a word for it.
+#[must_use]
+pub fn scale_suffix_word(suffix: &str, count: i64, language: &str) -> Option<String> {
+    let g = GRAMMARS.get(language)?;
+    let written = suffix.to_ascii_lowercase();
+    for (spelling, value) in SCALE_SUFFIXES {
+        if spelling != written {
+            continue;
+        }
+        for sc in &g.scales {
+            if sc.value == value {
+                return Some(scale_word(count, &sc.forms).to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Every form of every scale noun this language has, longest first.
+///
+/// Longest first because they go into an alternation, where a shorter form
+/// that prefixes a longer one would match first and leave the rest of the word
+/// behind. Length in characters, like every other implementation: a byte count
+/// orders the accented forms differently.
+#[must_use]
+pub fn scale_nouns(language: &str) -> Vec<String> {
+    let Some(g) = GRAMMARS.get(language) else {
+        return Vec::new();
+    };
+    let mut forms: Vec<String> = g
+        .scales
+        .iter()
+        .flat_map(|sc| sc.forms.iter())
+        .filter(|form| !form.is_empty())
+        .cloned()
+        .collect();
+    forms.sort_unstable();
+    forms.dedup();
+    forms.sort_by(|a, b| {
+        b.chars()
+            .count()
+            .cmp(&a.chars().count())
+            .then_with(|| a.cmp(b))
+    });
+    forms
+}
+
 static TIME_RUN: LazyLock<Regex> =
     // No `\b`: Python guards this with `(?<![\d.,:]) … (?![.,:]?\d)`, which
     // rejects a digit or separator either side and says nothing about letters.
     // `\b` fires between a letter and a digit too, so `a14:30` matched in
     // Python and not here. Both guards live in the neighbour check below.
-    LazyLock::new(|| Regex::new(r"([01]?[0-9]|2[0-4])[:.]([0-5][0-9])").unwrap());
+    //
+    // The seconds are one group here and two patterns in Python, which keeps
+    // one regex for both separators: a dotted run never carries them, and the
+    // scan below drops the group when the separator is a dot.
+    LazyLock::new(|| {
+        Regex::new(r"([01]?[0-9]|2[0-4])[:.]([0-5][0-9])(?::([0-5][0-9]))?").unwrap()
+    });
 
-/// Clock times as words — see the Python module for the shape and the
+/// Clock times as words: see the Python module for the shape and the
 /// deliberate absence of the colloquial clock.
 #[must_use]
 pub fn expand_times(text: &str, language: &str) -> String {
@@ -861,15 +1065,25 @@ pub fn expand_times(text: &str, language: &str) -> String {
     };
     // Rebuilt by index rather than with `replace_all`, because whether a match
     // is a time depends on what sits *outside* it and this regex engine has no
-    // lookaround. `12.03` matches inside `12.03.2026` — the ordinary written
-    // date of German, Polish, Danish, Finnish and Norwegian — and must not be
+    // lookaround. `12.03` matches inside `12.03.2026`: the ordinary written
+    // date of German, Polish, Danish, Finnish and Norwegian, and must not be
     // read as twelve o'clock three with the year trailing behind it.
     let bytes = text.as_bytes();
     let mut out = String::with_capacity(text.len());
     let mut last = 0usize;
     for caps in TIME_RUN.captures_iter(text) {
         let whole = caps.get(0).expect("group 0 always matches");
-        if attached_to_digits(bytes, whole.start(), whole.end()) {
+        let dotted = bytes[caps.get(1).expect("group 1 always matches").end()] == b'.';
+        // A dotted run carries no seconds: `10.30.45` is a version string as
+        // readily as a timestamp, where `10:30:45` is a timestamp in every
+        // convention. The dotted pattern the reference keeps separate has no
+        // seconds group at all, so the run ends at the minutes here.
+        let spoken_end = if dotted {
+            caps.get(2).expect("group 2 always matches").end()
+        } else {
+            whole.end()
+        };
+        if attached_to_digits(bytes, whole.start(), spoken_end) {
             continue;
         }
         // A dot between an hour and two minutes is a clock time in some of
@@ -877,21 +1091,26 @@ pub fn expand_times(text: &str, language: &str) -> String {
         // already says which: a language that writes 14.30 for half past two
         // does not use the dot as its decimal mark. German writes "14.30 Uhr"
         // and "2,50 €"; English writes "2:30" and "$2.50". Without this every
-        // English decimal with two fraction digits read as the clock — "$0.49"
-        // as *zero forty-nine* — and the shared fixture pinned one of them, so
+        // English decimal with two fraction digits read as the clock: "$0.49"
+        // as *zero forty-nine*, and the shared fixture pinned one of them, so
         // all five implementations agreed on it.
-        if bytes[caps.get(1).expect("group 1 always matches").end()] == b'.'
-            && g.decimal_separator == "."
-        {
+        if dotted && g.decimal_separator == "." {
             continue;
         }
         let hour: i64 = caps[1].parse().unwrap_or(0);
         let minute: i64 = caps[2].parse().unwrap_or(0);
+        // A zero seconds field says nothing the hour and minute have not
+        // already said, so `10:30:00` reads exactly as `10:30` does.
+        let seconds: i64 = if dotted {
+            0
+        } else {
+            caps.get(3).map_or(0, |s| s.as_str().parse().unwrap_or(0))
+        };
         // 24 is admitted only with a zero minute: ISO 8601 writes end-of-day
         // as 24:00, and without it the two halves were read as unrelated
         // numbers with the colon left standing between them. 24:30 is not a
         // time in any convention and stays as written.
-        if hour == END_OF_DAY_HOUR && minute != 0 {
+        if hour == END_OF_DAY_HOUR && (minute != 0 || seconds != 0) {
             continue;
         }
         let mut words = Vec::new();
@@ -901,39 +1120,68 @@ pub fn expand_times(text: &str, language: &str) -> String {
         if !g.time_infix.is_empty() {
             words.push(g.time_infix.clone());
         }
-        if minute != 0 {
+        // A zero minute is dropped from `14:00` and kept in `14:00:45`, where
+        // dropping it would move the seconds into the minutes' place.
+        if minute != 0 || seconds != 0 {
             if let Ok(said) = cardinal(minute, language, "") {
                 words.push(said);
             }
         }
-        let mut end = whole.end();
+        if seconds != 0 {
+            if let Ok(said) = cardinal(seconds, language, "") {
+                words.push(said);
+            }
+        }
+        let mut end = spoken_end;
         if !g.time_infix.is_empty() {
             end = consume_written_infix(bytes, end, &g.time_infix);
         }
         out.push_str(&text[last..whole.start()]);
         out.push_str(&words.join(" "));
+        // The reading is words, and a word is not written against the letters
+        // that followed the digits: `3:45pm` is "three forty-five pm", the
+        // reading the spaced form already got.
+        if ascii_letter_at(bytes, end) {
+            out.push(' ');
+        }
         last = end;
     }
     out.push_str(&text[last..]);
     out
 }
 
-/// Extends `end` past a written infix word — German writes `um 14.30 Uhr`,
+/// Whether an ASCII letter stands at `i`. The class the written infix is
+/// already guarded against, so the two rules that decide where a spoken time
+/// ends answer to one alphabet in all five implementations rather than to five
+/// spellings of `\w`.
+fn ascii_letter_at(bytes: &[u8], i: usize) -> bool {
+    bytes.get(i).is_some_and(u8::is_ascii_alphabetic)
+}
+
+/// Extends `end` past a written infix word: German writes `um 14.30 Uhr`,
 /// and the spoken reading already puts the infix where it belongs, between
 /// hour and minutes (*vierzehn Uhr dreißig*). Leaving the written word
 /// standing said it twice. Consumed only when it is a whole word immediately
 /// after the time; *Uhrzeit* keeps its head.
 ///
+/// The whitespace in front of it may be absent: a word is the same word
+/// whether or not a space was typed before it. An empty infix is refused
+/// instead, which is what the zero-width match this scan would otherwise
+/// accept means.
+///
 /// ASCII byte scan throughout: space and tab are single bytes in UTF-8 and a
 /// letter or digit touching the infix is detected by range, so this matches
 /// the other four implementations exactly.
 fn consume_written_infix(bytes: &[u8], end: usize, infix: &str) -> usize {
+    if infix.is_empty() {
+        return end;
+    }
     let infix = infix.as_bytes();
     let mut i = end;
     while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
         i += 1;
     }
-    if i == end || i + infix.len() > bytes.len() || &bytes[i..i + infix.len()] != infix {
+    if i + infix.len() > bytes.len() || &bytes[i..i + infix.len()] != infix {
         return end;
     }
     let after = i + infix.len();
@@ -944,7 +1192,7 @@ fn consume_written_infix(bytes: &[u8], end: usize, infix: &str) -> usize {
 }
 
 /// Whether the match at `start..end` has a digit or a separator touching either
-/// end — what tells `14:30` from the `12.03` inside a date. A trailing sentence
+/// end: what tells `14:30` from the `12.03` inside a date. A trailing sentence
 /// period is fine, because what follows it is not a digit.
 fn attached_to_digits(bytes: &[u8], start: usize, end: usize) -> bool {
     if start > 0 && matches!(bytes[start - 1], b'0'..=b'9' | b'.' | b',' | b':') {
@@ -957,7 +1205,7 @@ fn attached_to_digits(bytes: &[u8], start: usize, end: usize) -> bool {
     }
 }
 
-/// The authority-listed abbreviations, written out — longest first, word
+/// The authority-listed abbreviations, written out: longest first, word
 /// boundaries only. See the Python module.
 #[must_use]
 pub fn expand_abbreviations(text: &str, language: &str) -> String {
@@ -965,14 +1213,40 @@ pub fn expand_abbreviations(text: &str, language: &str) -> String {
         return text.to_string();
     };
     let mut out = text.to_string();
-    for (written, spoken) in &g.abbreviations {
-        let pattern = format!(r"(^|[^\w.]){}($|[^\w.])", regex::escape(written));
-        let re = Regex::new(&pattern).expect("escaped pattern is valid");
-        out = re
-            .replace_all(&out, |caps: &regex::Captures<'_>| {
-                format!("{}{}{}", &caps[1], spoken, &caps[2])
-            })
-            .to_string();
+    for (re, spoken) in &g.abbreviations {
+        out = expand_abbreviation(&out, re, spoken);
     }
+    out
+}
+
+/// One abbreviation, at every word boundary it stands on.
+///
+/// The reference writes the boundaries as the zero-width `(?<![\w.])` and
+/// `(?![\w.])`. This engine has no lookaround, so the pattern matches the
+/// neighbouring characters instead, and a matched character is a character the
+/// next search cannot start on: the scan resumed past the space that had to
+/// serve as the *following* occurrence's left boundary, and every second
+/// occurrence was left written. `etc. etc.` came out as *et cetera etc.* in
+/// English, `tzn. tzn.` as *to znaczy tzn.* in Polish, and so on in all twelve
+/// languages. Putting the trailing boundary character back before the next
+/// search makes the match zero-width where the reference's is.
+fn expand_abbreviation(text: &str, pattern: &Regex, spoken: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut copied = 0;
+    let mut at = 0;
+    while at <= text.len() {
+        let Some(caps) = pattern.captures_at(text, at) else {
+            break;
+        };
+        // Group 1 is the character before the abbreviation, group 2 the one
+        // after; both may be empty at a string edge.
+        let lead = caps.get(1).expect("leading boundary group");
+        let tail = caps.get(2).expect("trailing boundary group");
+        out.push_str(&text[copied..lead.end()]);
+        out.push_str(spoken);
+        copied = tail.start();
+        at = tail.start();
+    }
+    out.push_str(&text[copied..]);
     out
 }

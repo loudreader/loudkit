@@ -1,4 +1,4 @@
-//! Philox-4x32-10 — a bit-parity port of `loudkit.rng`. Native u32/u64
+//! Philox-4x32-10: a bit-parity port of `loudkit.rng`. Native u32/u64
 //! arithmetic, so the bits match the Python, JS and Go implementations by
 //! construction. The n-th random number is a pure function of
 //! `(seed, stream, step, index)`.
@@ -43,9 +43,16 @@ pub fn uniforms(seed: u64, stream: u32, step0: usize, n_steps: usize, width: usi
         for q in 0..quads {
             let r = philox4x32(q as u32, step, stream, 0, seed as u32, (seed >> 32) as u32);
             for (i, v) in r.iter().enumerate() {
-                let idx = s * width + q * 4 + i;
-                if idx < out.len() {
-                    out[idx] = (f64::from(*v) + 0.5) / 4294967296.0;
+                // Guarded against the row's own width, not the whole buffer.
+                // A `width` that is not a multiple of four leaves the last
+                // quad with values past the end of row `s`, and `idx <
+                // out.len()` let them land on row `s + 1`. The answer came
+                // out right only because rows are written in increasing `s`
+                // and the next iteration overwrote the spill; reordering the
+                // loop would have corrupted the stream in silence.
+                let column = q * 4 + i;
+                if column < width {
+                    out[s * width + column] = (f64::from(*v) + 0.5) / 4294967296.0;
                 }
             }
         }

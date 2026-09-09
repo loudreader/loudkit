@@ -44,13 +44,15 @@ The full MIT text and Resemble AI's copyright line are in
 [`NOTICE`](../NOTICE), which ships inside the pip, npm, crates.io and Go
 packages rather than only in this repository.
 
-## What this record does not establish
+## Verified upstream match
 
-**The upstream revision.** The export ran against a local checkout of the
-Chatterbox weights. The revision is not recorded in the artefact metadata or in
-the export script. The hash above identifies this file. It does not identify
-which upstream snapshot produced it.
+On 2026-09-05, all 16 tensor names, shapes, dtypes and values were compared with
+[`ve.safetensors` at Chatterbox revision
+`5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18`](https://huggingface.co/ResembleAI/chatterbox/blob/5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18/ve.safetensors).
+Every tensor matched exactly in the final local 0.1.1 bundle. The complete file
+also has the same SHA-256 recorded above. This establishes an immutable upstream
+source for the bytes we distribute.
 
-The encoder is a read-out rather than a transform, so a re-export from a
-published Chatterbox revision is expected to produce a byte-identical file. That
-is the route for anyone who needs the link established.
+The original export did not record its upstream checkout revision. The match
+above establishes tensor identity with a published snapshot; it does not
+reconstruct the original checkout or require identical safetensors headers.

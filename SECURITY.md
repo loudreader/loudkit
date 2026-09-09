@@ -8,16 +8,16 @@ report a problem.
 
 * **Voice cloning.** The whole point of the project is to render arbitrary text
   in a voice enrolled from a few seconds of audio. That is the feature. loudkit
-  cannot verify that you own the voice you enrolled, and it does not try to —
+  cannot verify that you own the voice you enrolled, and it does not try to;
   that is the caller's responsibility (`RESPONSIBLE_USE.md`). Do not point this
   tool at a recording of someone else's voice without their consent.
 * **The synthesis server.** `loudkit serve` holds a warm engine and answers
-  requests over HTTP. **There is no sandbox**, and on loopback — the default —
+  requests over HTTP. **There is no sandbox**, and on loopback, the default,
   no authentication either: anyone who can reach the port can synthesise speech
   in every voice on disk. A non-loopback bind is refused unless `--allow-public`
   is passed, and then it *requires* a bearer token, generated and printed to
   stderr if you do not supply one; synthesis routes are rate limited per client
-  address on such a bind. None of that makes it a service — it is a way to keep
+  address on such a bind. None of that makes it a service; it is a way to keep
   a model warm on your own machine, and the token exists so that forgetting a
   flag cannot leave an open one on a network.
 * **Voice profiles.** A `VoiceProfile` is an enrolled speaker embedding plus a
@@ -35,14 +35,14 @@ report a problem.
 * Use the deterministic flags (`ExecutionConfig.deterministic`) rather than
   disabling them: bit-identical output is also the property that makes a
   golden-file regression visible.
-* If you embed loudkit in a service, put a boundary in front of it — your own
-  auth, your own rate limit, your own text filter — and keep the engine
+* If you embed loudkit in a service, put a boundary in front of it, your own
+  auth, your own rate limit, your own text filter, and keep the engine
   internal.
 
 ## Dependencies
 
 Dependencies are declared as **minimum versions** in `pyproject.toml` (e.g.
-`fastapi>=0.110`) — there is no lockfile, so the exact versions you get depend
+`fastapi>=0.110`); there is no lockfile, so the exact versions you get depend
 on when you install and on your resolver. This is a deliberate choice for a
 library, not a claim of pinning: treat a dependency update as a change that
 could affect behaviour, and verify your own install against a known-good
@@ -74,6 +74,13 @@ loudkit itself does and does not promise.
 
 ## Supported versions
 
-Pre-release: only the current `main` receives security fixes. After the
-first tagged release, the latest tag and its predecessor each get fixes for
-90 days.
+The latest release and its predecessor receive security fixes for 90 days.
+
+## Model download trust
+
+The initial HTTPS download trusts the repository owner and the supplied
+checksum list (trust on first use). Checksums detect corruption and mixed
+bundles; they are not an independent signature of the publisher. The local
+receipt records the resolved revision and checksum-list digest. It permits
+offline reuse; it does not protect against an attacker who can alter both the
+local model and receipt. Pin a reviewed immutable revision for deployment.

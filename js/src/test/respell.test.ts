@@ -1,5 +1,5 @@
 /**
- * Polish lexical respelling — bit-parity checks against the Python port.
+ * Polish lexical respelling: bit-parity checks against the Python port.
  *
  * `lexicalRespelling` (wired into `speechText` for language="pl") rewrites
  * English embedded in Polish the way a Polish reader says it. The expected
@@ -82,8 +82,8 @@ test("inflection via stem", () => {
   assert.equal(lexicalRespelling("updates", "pl"), "apdejc");
   assert.equal(lexicalRespelling("deadline'u", "pl"), "dedlajnu");
   // Endings longer than one character: POLISH_ENDINGS was a set of single
-  // characters (see the word-list test below), so only `deadline'u` — whose
-  // ending happens to be the single char `u` — passed. `em` and `a` are the
+  // characters (see the word-list test below), so only `deadline'u`, whose
+  // ending happens to be the single char `u`, passed. `em` and `a` are the
   // two the Python suite pins.
   assert.equal(lexicalRespelling("updatem", "pl"), "apdejtem");
   assert.equal(lexicalRespelling("mailem", "pl"), "mailem");
@@ -93,7 +93,7 @@ test("the word lists are lists of words, not sets of characters", () => {
   // `new Set("a b " + "c d".split(" "))` binds `.split` to the second literal
   // alone: `string + Array` stringifies, and `new Set(string)` iterates
   // CHARACTERS. Three of the four lists were built that way, which is
-  // invisible from any single respelling — so the sizes are asserted, and
+  // invisible from any single respelling, so the sizes are asserted, and
   // then the outputs that actually moved.
   assert.equal(lexicalRespelling("host", "pl"), "host", "KEEP_POLISH is dead");
   assert.equal(lexicalRespelling("python", "pl"), "python", "KEEP_POLISH is dead");
@@ -126,9 +126,9 @@ test("full sentence matches the Python funnel", () => {
 test("lexicon loads from the packaged data", () => {
   assert.equal(lexicalRespelling("download", "pl"), "dałnloud");
   // The generated long tail, with a real expectation: an identity assertion
-  // (`f("queue") === f("queue")`) would hold with the 6.5 MB lexicon deleted —
+  // (`f("queue") === f("queue")`) would hold with the 6.5 MB lexicon deleted:
   // a test of nothing, standing where the check on the packaged data belongs.
-  // Rust's tests/respell.rs:112 asserts it the same way.
+  // Rust's `tests/respell.rs` lexicon test asserts it the same way.
   assert.equal(lexicalRespelling("queue", "pl"), "kju");
   assert.equal(lexicalRespelling("commit", "pl"), "komit");
 });

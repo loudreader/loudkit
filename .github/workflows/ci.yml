@@ -69,9 +69,9 @@ jobs:
         # newest admitted interpreter is one CI has actually run.
         python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           cache: pip
           python-version: ${{ matrix.python }}
@@ -82,13 +82,16 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint
-        run: ruff check python tests tools integrations/speech-dispatcher
+        run: ruff check python tests tools research integrations/speech-dispatcher
 
       - name: Format check
-        run: ruff format --check python tests tools integrations/speech-dispatcher
+        run: ruff format --check python tests tools research integrations/speech-dispatcher
 
       - name: Types
-        run: mypy python/loudkit && mypy --config-file tools/mypy.ini tools/
+        run: |
+          mypy python/loudkit
+          mypy --config-file tools/mypy.ini tools/ research/
+          mypy --config-file tools/mypy-tests.ini
 
       - name: Tests
         if: matrix.os != 'ubuntu-latest' || matrix.python != '3.12'
@@ -116,9 +119,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
 
@@ -150,7 +153,7 @@ jobs:
     name: swift (macOS)
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - name: Lint
         # `swift build` and `swift test` and nothing else, so a force unwrap
         # on a path the process does not control was nobody's job.
@@ -171,19 +174,44 @@ jobs:
         # weight-free; the parts needing a checkpoint skip themselves.
         run: swift test
 
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Fuzz the Swift funnel against Python
+        # The one gate that would have caught the last three Swift-only
+        # divergences, and it was not running anywhere.
+        #
+        # The linux `fuzz` job cannot host this -- `LoudKitText` imports
+        # CryptoKit and OSLog -- so its comment said Swift "is fuzzed on macOS
+        # before merge", meaning by hand. It was not: seeds 1, 4, 6 and 7 were
+        # red for `Character.isNumber` (Numeric_Type, so a CJK numeral is a
+        # digit), for a surrogate pair read one UTF-16 unit at a time, and for
+        # ICU's `\b` counting Other_Alphabetic. A gate a person has to remember
+        # to run is not a gate, and neither is a comment claiming they did.
+        #
+        # numpy is the only dependency the funnel has, so this needs none of
+        # the dev extra: no torch, no download, about a second per seed after
+        # the build above.
+        run: |
+          python -m pip install --quiet numpy
+          PYTHONPATH="$PWD/python" python tools/fuzz_parity.py --cases 300 --seed 1 --ports swift
+          PYTHONPATH="$PWD/python" python tools/fuzz_parity.py --cases 300 --seed 2 --ports swift
+
   js:
     name: js (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         node: ["20", "22"]
     defaults:
       run:
+        shell: bash
         working-directory: js
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -221,19 +249,21 @@ jobs:
 
   go:
     name: go (${{ matrix.go }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         # go.mod declares 1.25 (x/text v0.40 requires it); testing anything
         # older would fail on `go vet` before a single test ran.
         go: ["1.25"]
     defaults:
       run:
+        shell: bash
         working-directory: go
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version: ${{ matrix.go }}
           # GOMODCACHE and the build cache, keyed on the module file. Off by
@@ -253,12 +283,17 @@ jobs:
 
   rust:
     name: rust (stable)
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     defaults:
       run:
+        shell: bash
         working-directory: rust
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
         with:
           components: clippy, rustfmt
@@ -266,7 +301,7 @@ jobs:
       # re-downloaded the registry and rebuilt `ort`, `ndarray` and `regex` from
       # source. Keyed on the lockfile: a dependency change misses, everything
       # else hits.
-      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4.2.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -279,6 +314,16 @@ jobs:
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+      # `download` is on by default and documented as droppable, so the build
+      # without it is a shipped configuration that nothing here compiled. The
+      # feature gates a module's worth of `#[cfg]`, one arm of `hub::resolve`
+      # and half of tests/hub.rs; a mistake in any of them is invisible to
+      # every other job in this file and reaches the consumer who wrote
+      # `default-features = false` rather than the person who made it.
+      - name: Clippy with no default features
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
+      - name: Weight-free conformance without the download feature
+        run: cargo test --no-default-features
       # Plain `cargo test`, not `--test weightfree`: that one target skipped
       # every #[cfg(test)] unit test in src/ (including the pad-token and
       # recipe_version regressions) plus tests/respell.rs and
@@ -315,7 +360,7 @@ jobs:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       # `toolchain:` is named rather than left to the action's default. The
       # action is pinned by commit SHA, so there is no `@1.88` ref for it to
       # read a version out of, and its default is `stable`: omitting the input
@@ -324,7 +369,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
         with:
           toolchain: "1.88"
-      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4.2.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -383,11 +428,11 @@ jobs:
       run:
         working-directory: rust
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c  # stable
         with:
           components: clippy
-      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4.2.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -424,14 +469,14 @@ jobs:
     # no third-party action pinned by a hash nobody in this repo can verify,
     # and each names the advisory in the language of the manifest it read.
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
-      - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version: "1.25"
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "22"
       - name: Python
@@ -525,14 +570,14 @@ jobs:
     # Two seeds, not one: the generator is deterministic, so a single seed is a
     # fixed test set with extra steps. Each run costs about thirty seconds.
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
-      - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b  # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version: "1.25"
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "22"
       - name: Install
@@ -549,14 +594,16 @@ jobs:
         # the same shapes rather than speaking half a token -- so the flag is
         # gone and a divergence fails the build.
         #
-        # Swift is deliberately not in `--ports` here, and it is not an
-        # oversight: `LoudKitText` imports CryptoKit and OSLog, `LoudKit`
-        # imports CoreML, and none of the three exist on Linux, so `swift test`
-        # cannot run on a hosted ubuntu runner at all. It is fuzzed on macOS
-        # before merge and is green on the same seeds. The macOS `parity` job
-        # could run it, but that job downloads the model and excludes forks;
-        # hanging a weight-free gate off a weight-bearing job would cover less
-        # than this does, not more.
+        # Swift is not in `--ports` here because it cannot be: `LoudKitText`
+        # imports CryptoKit and OSLog, `LoudKit` imports CoreML, and none of
+        # the three exist on Linux, so `swift test` does not run on a hosted
+        # ubuntu runner at all.
+        #
+        # It is fuzzed in the `swift` job instead. This comment used to say it
+        # was "fuzzed on macOS before merge", meaning by hand, which is a
+        # sentence and not a gate -- and it was wrong: four of the first seven
+        # seeds were red the whole time. The `parity` job is still the wrong
+        # home for it, because that job downloads the model and excludes forks.
         run: |
           python tools/fuzz_parity.py --cases 300 --seed 1 --ports go,rust,js
           python tools/fuzz_parity.py --cases 300 --seed 2 --ports go,rust,js
@@ -585,13 +632,28 @@ jobs:
       # Model bytes are part of this test's input, so a moving branch is not a
       # test input. Raise this pin only after the replacement bundle passes its
       # own release verification and update the cache key with it automatically.
-      LOUDKIT_HF_REVISION: "0fe297e449ba4f31113977f6c7f8c438fdfd1be3"
+      # loudreader/loudr-1 at v0.1.1: the 0.1.1 bundle merged from Hub PR 5,
+      # 80 files, 28 voices, checkpoint 73e69a78, fingerprint 7cd75498ad4e7531,
+      # built and verified on 2026-09-09 with profile full-0.1.
+      LOUDKIT_HF_REVISION: "b09f5a7a75993548fbd038cc572c7981997e1601"
+      # loudreader/loudr-1-turbo at v0.1.1: the 0.1.1 bundle merged from Hub
+      # PR 2, 84 files, the same 28 voices, checkpoint 590dcf9e, fingerprint
+      # e5303ba243087222, built and verified on 2026-09-09 with turbo-0.1.
+      LOUDKIT_TURBO_HF_REVISION: "b065d253d95fd9b4b13d34cbc4d4e3233f259ba4"
       PIP_NO_CACHE_DIR: "1"
       HF_XET_CHUNK_CACHE_SIZE_BYTES: "0"
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - name: Require published model revisions
+        shell: bash
+        run: |
+          if [[ ! "$LOUDKIT_TURBO_HF_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The 0.1.1 model candidates are local only. Publish the audited bundles and pin both immutable revisions before running release parity."
+            exit 1
+          fi
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
 
@@ -599,12 +661,12 @@ jobs:
       # images are not a toolchain contract: the first public run reached that
       # step after 27 minutes and failed before one test with `go: command not
       # found`. Pin the same versions and actions as their dedicated jobs.
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version: "1.25"
           cache-dependency-path: go/go.sum
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "22"
           cache: npm
@@ -616,10 +678,10 @@ jobs:
       # avoids moving 4 GB on every main push; running `loudkit download` below
       # even on a cache hit still checks the remote revision, SHA256SUMS and the
       # complete backend inventories before any test can use the files.
-      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+      - uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4.2.0
         with:
           path: ${{ runner.temp }}/loudr-1
-          key: loudr-1-${{ runner.os }}-${{ env.LOUDKIT_HF_REVISION }}
+          key: loudr-1-clean-${{ runner.os }}-${{ env.LOUDKIT_HF_REVISION }}
 
       - name: Install every measured runtime
         run: |
@@ -632,19 +694,28 @@ jobs:
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/loudr-1"
-          # The Swift engine compiles each .mlpackage and caches the .mlmodelc
-          # beside it (Renderer.loadModel) — inside this snapshot, which the
-          # post-job cache then saves. On the next restore `loudkit download`
-          # correctly refuses the unlisted files. Drop the compile droppings
-          # before verification so a polluted cache heals instead of failing.
-          find "$root/coreml" -maxdepth 1 -name '*.mlmodelc' \
-            -exec rm -rf {} + 2>/dev/null || true
           for backend in torch onnx coreml; do
             .venv/bin/loudkit download loudreader/loudr-1 \
               --revision "$LOUDKIT_HF_REVISION" \
               --for "$backend" --with-cloning --local-dir "$root"
           done
+          turbo="$RUNNER_TEMP/loudr-1-turbo"
+          for backend in torch onnx coreml; do
+            .venv/bin/loudkit download loudreader/loudr-1-turbo \
+              --revision "$LOUDKIT_TURBO_HF_REVISION" \
+              --for "$backend" --with-cloning --local-dir "$turbo"
+          done
           {
+            echo "LOUDKIT_TURBO_CHECKPOINT=$turbo/loudr-1-turbo.safetensors"
+            echo "LOUDKIT_FUSION_CHECKPOINT=$turbo/loudr-1-turbo.safetensors"
+            echo "LOUDKIT_FUSION_COREML_ASSETS=$turbo/coreml"
+            echo "LOUDKIT_FUSION_ONNX_DIR=$turbo/onnx"
+            # Go's clone-once gate and Rust's fused cases read the second
+            # model under their own names; without these three, both fail
+            # under LOUDKIT_REQUIRE_ASSETS instead of skipping.
+            echo "LOUDKIT_FUSION_CKPT=$turbo/loudr-1-turbo.safetensors"
+            echo "LOUDKIT_SECOND_CKPT=$turbo/loudr-1-turbo.safetensors"
+            echo "LOUDKIT_SECOND_ONNX_DIR=$turbo/onnx"
             echo "LOUDKIT_ASSET_ROOT=$root"
             echo "LOUDKIT_CKPT=$root/loudr-1.safetensors"
             echo "LOUDKIT_CHECKPOINT=$root/loudr-1.safetensors"
@@ -803,10 +874,11 @@ jobs:
           .venv/bin/pytest tests/test_coreml_lifetime.py -q
           .venv/bin/pytest \
             tests/test_docs.py::test_published_voice_profile_digests_match_the_roster \
-            tests/test_docs.py::test_public_docs_quote_the_measured_voice_profile_size -q
+            tests/test_docs.py::test_public_docs_quote_the_measured_voice_profile_size \
+            tests/test_docs.py::test_the_weighted_parity_rows_are_what_the_generator_produces -q
 
       - name: Swift conformance against the same fixture
-        run: swift test
+        run: swift test -c release
 
       # The bindings' asset-backed conformance, after the same public release
       # has been resolved for every port. LOUDKIT_REQUIRE_ASSETS makes a missing
@@ -830,12 +902,25 @@ jobs:
           (cd rust && cargo test && cargo test -- --ignored)
           (cd js && npm ci --silent && npm run test:all)
 
+      - name: Turbo conformance in every graph SDK
+        run: |
+          set -euo pipefail
+          export LOUDKIT_CKPT="$LOUDKIT_TURBO_CHECKPOINT"
+          export LOUDKIT_FUSION_CKPT="$LOUDKIT_TURBO_CHECKPOINT"
+          export LOUDKIT_ONNX_DIR="$LOUDKIT_FUSION_ONNX_DIR"
+          export LOUDKIT_FIXTURE="$PWD/tests/data/conformance/vectors_fusion_mtp2.json"
+          .venv/bin/pytest tests/test_conformance.py -k fused -q
+          (cd go && go test ./conformance -run TestEngineConformance -count=1)
+          (cd rust && cargo test engine_conformance -- --ignored)
+          (cd js && npm run test:fixture)
+
+
   packaging:
     name: packaging (wheel + sdist)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           cache: pip
           python-version: "3.12"

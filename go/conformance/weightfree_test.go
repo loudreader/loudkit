@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/loudreader/loudkit/go/chunking"
@@ -22,7 +23,9 @@ func fixturePath(t *testing.T) string {
 		p = filepath.Join("..", "..", "tests", "data", "conformance", "vectors.json")
 	}
 	if _, err := os.Stat(p); err != nil {
-		t.Skipf("fixture not found: %s", p)
+		// Committed fixture, so absence is breakage. Skipping made the whole
+		// weight-free suite report success on a tree that could not run it.
+		t.Fatalf("fixture not found: %s (%v)", p, err)
 	}
 	return p
 }
@@ -33,7 +36,7 @@ func tokenizerPath(t *testing.T) string {
 		p = filepath.Join("..", "..", "tests", "data", "conformance", "tokenizer.json")
 	}
 	if _, err := os.Stat(p); err != nil {
-		t.Skipf("tokenizer not found: %s", p)
+		t.Fatalf("tokenizer not found: %s (%v)", p, err)
 	}
 	return p
 }
@@ -53,7 +56,7 @@ func loadVectors(t *testing.T) map[string]interface{} {
 // requireCases fails when a fixture section is empty.
 //
 // Every loop in this file ranges over a slice pulled out of the fixture by key.
-// A regeneration that renamed one — `philox` to `rng`, say — would leave the
+// A regeneration that renamed one (`philox` to `rng`, say) would leave the
 // loop comparing nothing and the test reporting a pass, switching the entire
 // cross-language determinism claim off silently.
 func requireCases(t *testing.T, section map[string]interface{}, key string) []interface{} {
@@ -99,7 +102,12 @@ func TestUniformBits(t *testing.T) {
 	for _, raw := range uniformBitsCases {
 		p := raw.(map[string]interface{})
 		var seed uint64
-		fmt.Sscanf(p["seed"].(string), "0x%x", &seed)
+		// Checked, not dropped: a fixture whose seed field changes
+		// shape parses as nothing and the case then runs on seed 0, which
+		// passes or fails for reasons that have nothing to do with the port.
+		if n, err := fmt.Sscanf(p["seed"].(string), "0x%x", &seed); n != 1 || err != nil {
+			t.Fatalf("seed %v is not a hex string: %v", p["seed"], err)
+		}
 		u := rng.Uniforms(seed, uint32(toFloat(p["stream"])), int(toFloat(p["step0"])),
 			int(toFloat(p["n_steps"])), int(toFloat(p["width"])))
 		got := make([]uint32, len(u))
@@ -129,7 +137,10 @@ func TestGumbel(t *testing.T) {
 	for _, raw := range gumbelCases {
 		p := raw.(map[string]interface{})
 		var seed uint64
-		fmt.Sscanf(fmt.Sprintf("%v", p["seed"]), "%d", &seed)
+		// See the check in TestUniformBits.
+		if n, err := fmt.Sscanf(fmt.Sprintf("%v", p["seed"]), "%d", &seed); n != 1 || err != nil {
+			t.Fatalf("seed %v is not a decimal number: %v", p["seed"], err)
+		}
 		g := rng.GumbelNoise(seed, uint32(toFloat(p["stream"])), int(toFloat(p["step"])),
 			1, int(toFloat(p["width"])))
 		vals := p["values"].([]interface{})
@@ -230,9 +241,9 @@ func TestFrontend(t *testing.T) {
 // checkpoint's text embedding table against.
 //
 // Encode can return any id in the vocabulary, and every one of them indexes
-// that table; a tokenizer paired with a checkpoint from another release used to
-// read past its end mid-synthesis. The shipped weights carry 2454 rows
-// (TorchTokenGenerator.TEXT_VOCAB), so 2453 is the last id that fits — the
+// that table; without the check a tokenizer paired with a checkpoint from
+// another release reads past its end mid-synthesis. The shipped weights carry 2454 rows
+// (TorchTokenGenerator.TEXT_VOCAB), so 2453 is the last id that fits: the
 // margin is one row, which is why a regenerated fixture must show up here, as a
 // line to read, rather than in a panic on someone's laptop.
 func TestTheVocabularyCeilingIsKnown(t *testing.T) {
@@ -245,23 +256,11 @@ func TestTheVocabularyCeilingIsKnown(t *testing.T) {
 	}
 }
 
-func TestSeedDerivation(t *testing.T) {
-	const phi = uint64(0x9e3779b97f4a7c15)
-	const psi = uint64(0xbf58476d1ce4e5b9)
-	seeds := loadVectors(t)["seeds"].(map[string]interface{})
-	derivationCases := requireCases(t, seeds, "derivation")
-	for _, raw := range derivationCases {
-		p := raw.(map[string]interface{})
-		seed := uint64(toFloat(p["seed"]))
-		stream := uint64(toFloat(p["stream"]))
-		derived := seed*phi + stream*psi
-		var want uint64
-		fmt.Sscanf(p["derived"].(string), "0x%x", &want)
-		if derived != want {
-			t.Fatalf("seed %d stream %d: got %#x want %#x", seed, stream, derived, want)
-		}
-	}
-}
+// The seed contract's *fixture* rows are pinned against the shipping
+// `engine.deriveSeed` in go/engine/derive_seed_test.go, which can reach the
+// unexported function. A copy of the formula here, recomputed from constants
+// declared beside it, would leave this suite green while deriveSeed itself
+// drifted.
 
 func toFloat(x interface{}) float64 {
 	switch v := x.(type) {
@@ -298,7 +297,7 @@ func toInts(x interface{}) []int {
 //
 // Every other check in this file compares a behaviour somebody thought to
 // compare. This compares the entire configuration, so a field nobody wrote a
-// test for still cannot drift — the failure mode is concrete: an euler_grid
+// test for still cannot drift: the failure mode is concrete: an euler_grid
 // ignored by one port, a silence_token_ids that accepts a string, and a
 // chunking.prefix_tokens guessed rather than read. This finds the next one for
 // free.
@@ -311,6 +310,17 @@ func TestFingerprintMatchesTheSharedFixture(t *testing.T) {
 	// The production algorithm, spelled out rather than loaded, so this runs
 	// with no checkpoint: the fingerprint is a property of the values, and the
 	// values are what the fixture pins.
+	//
+	// The render-id censuses are properties of the weights: the manifest
+	// carries them at its top level, beside silence_token_ids, so like that
+	// list they are spelled out here rather than defaulted by Production().
+	pp := postprocess.Production()
+	pp.SilenceRenderIds = []int{4137, 4215, 4218, 4299, 6162, 6324, 6405, 6486}
+	pp.QuietRenderIds = []int{
+		1458, 1461, 1488, 1701, 1704, 1707, 1716, 1731, 1785, 1788, 1869, 1947,
+		1950, 1951, 1959, 1978, 2028, 2031, 2040, 2058, 2076, 2112, 2139, 3645,
+		3648, 3651, 3704, 3888, 3894, 4188, 5838, 6081, 6183, 6537,
+	}
 	cfg := config.AlgorithmConfig{
 		RecipeVersion:   "loudkit-1",
 		Guidance:        "single_path",
@@ -324,7 +334,7 @@ func TestFingerprintMatchesTheSharedFixture(t *testing.T) {
 		StopSpeech:      6562,
 		Window:          config.ProductionWindow(),
 		Chunking:        chunking.Production(),
-		Postprocess:     postprocess.Production(),
+		Postprocess:     pp,
 		Sampling: config.SamplingConfig{
 			Temperature:        0.8,
 			RepetitionPenalty:  1.2,
@@ -355,7 +365,7 @@ func TestFingerprintMatchesTheSharedFixture(t *testing.T) {
 // Pinned across languages because it is hand-written in five of them and it is
 // *audible*: two of the detector rules compare it against a threshold, so a
 // port that computes it differently cuts a chunk somewhere else. The quantity
-// has two subtleties either of which a reimplementation gets wrong silently —
+// has two subtleties either of which a reimplementation gets wrong silently,
 // the numerator is the stop token's weight taken BEFORE the min_p cutoff, and
 // the peak is recorded only PAST the floor.
 func TestEOSPeakMatchesTheSharedFixture(t *testing.T) {
@@ -397,4 +407,120 @@ func TestEOSPeakMatchesTheSharedFixture(t *testing.T) {
 			t.Errorf("%s: peak prob %g, want %g", c["name"], prob, wantProb)
 		}
 	}
+}
+
+// TestResplitPlan holds this port to the `cap_resplit` law without weights.
+//
+// The token streams need a model; the *plan* does not. Which window carries
+// which index, where the split falls, and which seed each window draws are all
+// computable from the fixture alone, and they are exactly the three things that
+// went wrong while this law was being written: a second half seeded from the
+// next chunk's stream, a Swift split that counted grapheme clusters, and a
+// queue that did not advance. A port that gets any of them wrong produces
+// different audio and every other test still passes.
+func TestResplitPlan(t *testing.T) {
+	vectors := loadVectors(t)
+	raw, ok := vectors["resplit"].(map[string]interface{})
+	if !ok {
+		// The section this test exists for. Skipping when it is absent meant
+		// deleting it from the fixture would have retired the law in silence.
+		t.Fatal("fixture has no resplit section; nothing was compared")
+	}
+	resplitStream := uint64(toFloat(raw["resplit_stream"]))
+	chunkBase := uint64(toFloat(raw["chunk_stream_base"]))
+	prefixTokens := int(toFloat(raw["prefix_tokens"]))
+
+	for _, kase := range raw["cases"].([]interface{}) {
+		c := kase.(map[string]interface{})
+		name := c["name"].(string)
+		seed := uint64(toFloat(c["seed"]))
+		// The case moves the window, so the chunk budget moves with it: the
+		// config refuses a budget larger than the window, and the engine gates
+		// the re-split on the window rather than on any cap.
+		cfg := chunking.Production()
+		cfg.MaxTokens = int(toFloat(c["window"]))
+		if cfg.CapResplit != chunking.WordCapResplit {
+			t.Fatalf("this port ships cap_resplit=%q; the fixture pins the law", cfg.CapResplit)
+		}
+		prepared := c["prepared"].(string)
+		windows := c["windows"].([]interface{})
+		texts := chunking.SplitText(prepared, cfg)
+
+		tail := func(w map[string]interface{}) []int {
+			all := toInts(w["tokens"])
+			if len(all) <= prefixTokens {
+				return all
+			}
+			return all[len(all)-prefixTokens:]
+		}
+		check := func(at int, text string, sd uint64, pre []int, split bool, index int) {
+			w := windows[at].(map[string]interface{})
+			if got := int(toFloat(w["index"])); got != index {
+				t.Fatalf("%s window %d: index %d, fixture %d: a moved index moves "+
+					"every later chunk's seed", name, at, index, got)
+			}
+			if w["text"].(string) != text {
+				t.Fatalf("%s window %d: text %q, fixture %q", name, at, text, w["text"])
+			}
+			if w["split"].(bool) != split {
+				t.Fatalf("%s window %d: split=%v, fixture %v", name, at, split, w["split"])
+			}
+			want := strings.TrimPrefix(w["seed"].(string), "0x")
+			if fmt.Sprintf("%x", sd) != want {
+				t.Fatalf("%s window %d: seed %x, fixture %s: the second half must draw "+
+					"from its own stream off the chunk seed", name, at, sd, want)
+			}
+			got := toInts(w["prefix"])
+			if len(got) != len(pre) {
+				t.Fatalf("%s window %d: carry length %d, fixture %d", name, at, len(pre), len(got))
+			}
+			for i := range got {
+				if got[i] != pre[i] {
+					t.Fatalf("%s window %d: carry %v, fixture %v", name, at, pre, got)
+				}
+			}
+		}
+
+		// Chunk 0 draws the caller's seed itself; the base applies from chunk 1 up.
+		chunkSeed := func(index int) uint64 {
+			if index == 0 {
+				return seed
+			}
+			return resplitDerive(seed, chunkBase+uint64(index))
+		}
+
+		wi := 0
+		var carry []int
+		for index, chunkText := range texts {
+			wasSplit := windows[wi].(map[string]interface{})["split"].(bool)
+			first, second, splittable := chunking.SplitInHalf(chunkText)
+			if wasSplit {
+				if !splittable {
+					t.Fatalf("%s chunk %d: the fixture split it and this port "+
+						"finds no word boundary", name, index)
+				}
+				check(wi, first, chunkSeed(index), carry, true, index)
+				pre := tail(windows[wi].(map[string]interface{}))
+				wi++
+				check(wi, second,
+					resplitDerive(chunkSeed(index), resplitStream),
+					pre, true, index)
+				carry = tail(windows[wi].(map[string]interface{}))
+				wi++
+				continue
+			}
+			check(wi, chunkText, chunkSeed(index), carry, false, index)
+			carry = tail(windows[wi].(map[string]interface{}))
+			wi++
+		}
+		if wi != len(windows) {
+			t.Fatalf("%s: planned %d windows, fixture has %d", name, wi, len(windows))
+		}
+		t.Logf("%s re-split plan: PASS (%d windows from %d chunks)", name, wi, len(texts))
+	}
+}
+
+// resplitDerive mirrors deriveSeed in package engine, which is unexported.
+func resplitDerive(seed, stream uint64) uint64 {
+	return seed*0x9E3779B97F4A7C15 + stream*0xBF58476D1CE4E5B9
 }

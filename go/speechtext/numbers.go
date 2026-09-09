@@ -1,4 +1,4 @@
-// Numbers, said out loud — the Go half of loudkit.frontend.numbers.
+// Numbers, said out loud: the Go half of loudkit.frontend.numbers.
 //
 // The grammar is data and only the interpreter is code: this file reads the
 // same numbers.json every other implementation reads, so a rule lives once.
@@ -7,21 +7,21 @@
 // hand-written fixture are what catch the drift that remains.
 //
 // The composition mirrors loudkit/frontend/numbers.py function for function.
-// Where a behaviour looks odd — the joiner carrying its own spacing, agreement
-// scopes per value, a scale noun with its own gender — the reason lives in the
-// Python docstrings and in docs/reference/preprocess.md, and the fixture pins
+// Where a behaviour looks odd (the joiner carrying its own spacing, agreement
+// scopes per value, a scale noun with its own gender), the reason lives in the
+// Python docstrings and in docs/design/preprocess.md, and the fixture pins
 // it.
 //
 // Python reference: loudkit/frontend/numbers.py.
 package speechtext
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -75,52 +75,38 @@ type Grammar struct {
 // so fr.o.m. cannot be half-eaten by a shorter entry.
 type AbbrevEntry struct{ Written, Spoken string }
 
-var grammars map[string]*Grammar
+var (
+	grammarsOnce   sync.Once
+	grammars       map[string]*Grammar
+	abbrevPatterns map[string][]abbrevPattern
+)
 
+// abbrevPattern is one abbreviation with its match already compiled.
+type abbrevPattern struct {
+	written *regexp.Regexp
+	spoken  string
+}
+
+// grammarTables is the only reader of grammars.
+//
+// sync.Once, not a bare `grammars == nil` check: every exported entry
+// point below is reached concurrently by a server, and a nil check lets a
+// second caller read the table while the first is still filling it. That is a
+// half-filled map, so a number verbalizes with a missing grammar, and two
+// callers inside the loader at once is a concurrent map write, which is a hard
+// runtime crash. loadDateRules, loadLetterTables and loadPayload in this
+// package already take this route.
+func grammarTables() map[string]*Grammar {
+	grammarsOnce.Do(loadGrammars)
+	return grammars
+}
+
+// loadGrammars fills a local table and publishes it in one assignment, so no
+// reader can reach a partially built map even if the Once above is bypassed.
 func loadGrammars() {
-	var doc struct {
-		Languages map[string]struct {
-			Ones               []string            `json:"ones"`
-			Teens              []string            `json:"teens"`
-			Tens               []string            `json:"tens"`
-			Hundred            string              `json:"hundred"`
-			Hundreds           []string            `json:"hundreds"`
-			HundredsGendered   map[string][]string `json:"hundreds_gendered"`
-			HundredPluralFinal string              `json:"hundred_plural_final"`
-			Scales             []struct {
-				Value            int64    `json:"value"`
-				Forms            []string `json:"forms"`
-				One              *string  `json:"one"`
-				Separate         bool     `json:"separate"`
-				Link             string   `json:"link"`
-				SmallJoiner      string   `json:"small_joiner"`
-				MultiplierAgrees bool     `json:"multiplier_agrees"`
-				MultiplierGender string   `json:"multiplier_gender"`
-			} `json:"scales"`
-			UnitsBeforeTens            bool                         `json:"units_before_tens"`
-			UnitTensJoiner             string                       `json:"unit_tens_joiner"`
-			TimeInfix                  string                       `json:"time_infix"`
-			Abbreviations              map[string]string            `json:"abbreviations"`
-			TensJoinerExceptions       map[string]string            `json:"tens_joiner_exceptions"`
-			HundredJoiner              string                       `json:"hundred_joiner"`
-			ScaleJoinerOnRoundHundreds bool                         `json:"scale_joiner_on_round_hundreds"`
-			ScaleLargeJoiner           string                       `json:"scale_large_joiner"`
-			OneBeforeHundred           bool                         `json:"one_before_hundred"`
-			OneBeforeScale             bool                         `json:"one_before_scale"`
-			WordJoin                   string                       `json:"word_join"`
-			MinusWord                  string                       `json:"minus_word"`
-			DecimalSeparator           string                       `json:"decimal_separator"`
-			DecimalWord                string                       `json:"decimal_word"`
-			Exceptions                 map[string]string            `json:"exceptions"`
-			Genders                    map[string]map[string]string `json:"genders"`
-			GenderScopes               map[string]string            `json:"gender_scopes"`
-			CombiningOnes              map[string]string            `json:"combining_ones"`
-		} `json:"languages"`
-	}
-	if err := json.Unmarshal(numbersJSON, &doc); err != nil {
-		panic("speechtext: embedded numbers.json is unreadable: " + err.Error())
-	}
-	grammars = make(map[string]*Grammar, len(doc.Languages))
+	langs := grammarDocument()
+	tables := make(map[string]*Grammar, len(langs))
+	patterns := make(map[string][]abbrevPattern, len(langs))
 	intKeys := func(m map[string]string) map[int64]string {
 		out := make(map[int64]string, len(m))
 		for k, v := range m {
@@ -132,7 +118,7 @@ func loadGrammars() {
 		}
 		return out
 	}
-	for lang, e := range doc.Languages {
+	for lang, e := range langs {
 		g := &Grammar{
 			Ones: e.Ones, Teens: e.Teens, Tens: e.Tens,
 			Hundred: e.Hundred, Hundreds: e.Hundreds,
@@ -177,22 +163,36 @@ func loadGrammars() {
 				MultiplierGender: sc.MultiplierGender,
 			})
 		}
-		grammars[lang] = g
+		tables[lang] = g
+		for _, entry := range g.Abbreviations {
+			patterns[lang] = append(patterns[lang], abbrevPattern{
+				written: regexp.MustCompile(regexp.QuoteMeta(entry.Written)),
+				spoken:  entry.Spoken,
+			})
+		}
 	}
+	grammars = tables
+	abbrevPatterns = patterns
 }
 
-// SupportedNumberLanguages lists the language ids Cardinal can verbalize —
-// the roster in numbers.json, and the allowlist the text frontend enforces.
+// abbrevTables is the only reader of abbrevPatterns, and shares the Once that
+// fills it: the patterns are derived from the grammar tables and are published
+// with them.
+func abbrevTables() map[string][]abbrevPattern {
+	grammarsOnce.Do(loadGrammars)
+	return abbrevPatterns
+}
+
+// SupportedNumberLanguages lists the language ids Cardinal can verbalize: the
+// roster in numbers.json, and the allowlist the text frontend enforces.
 //
-// The nil check is not decoration: grammars is loaded lazily by Cardinal, so
-// without it this returns an empty slice rather than the roster, and
-// an empty allowlist refuses every language there is.
+// It goes through grammarTables rather than reading grammars directly. The
+// tables load lazily, so a direct read returns an empty slice rather than the
+// roster, and an empty allowlist refuses every language there is.
 func SupportedNumberLanguages() []string {
-	if grammars == nil {
-		loadGrammars()
-	}
-	out := make([]string, 0, len(grammars))
-	for lang := range grammars {
+	tables := grammarTables()
+	out := make([]string, 0, len(tables))
+	for lang := range tables {
 		out = append(out, lang)
 	}
 	sort.Strings(out)
@@ -217,13 +217,10 @@ func (g *Grammar) gendered(value int64, gender, position string) string {
 }
 
 // Cardinal says value as words. Gender "" gives the citation form; an unknown
-// language or a value past the grammar's largest scale is an error — silently
+// language or a value past the grammar's largest scale is an error: silently
 // reading digits back would be indistinguishable from success.
 func Cardinal(value int64, language, gender string) (string, error) {
-	if grammars == nil {
-		loadGrammars()
-	}
-	g, ok := grammars[language]
+	g, ok := grammarTables()[language]
 	if !ok {
 		return "", fmt.Errorf("no number grammar for %q", language)
 	}
@@ -235,7 +232,14 @@ func Cardinal(value int64, language, gender string) (string, error) {
 	if abs < 0 {
 		abs = -abs
 	}
-	if abs >= ceiling {
+	// `abs < 0` is the most negative int64 and nothing else: negating it
+	// overflows back to itself, so it stayed negative, passed the ceiling test
+	// below, and reached the negative branch, which called Cardinal with the
+	// same value again until the stack ran out. A stack overflow is not a
+	// recoverable panic, so one call on one value took the process down. It is
+	// out of range like every other value past the largest scale, and Python,
+	// whose integers do not overflow, refuses it there.
+	if abs < 0 || abs >= ceiling {
 		return "", fmt.Errorf("%d is past the largest scale %q has a word for", value, language)
 	}
 	if value < 0 {
@@ -307,9 +311,6 @@ func scaleGroup(value int64, sc Scale, g *Grammar, gender string) string {
 	switch {
 	case sc.SmallJoiner != "" && (rest < 100 || roundHundreds):
 		link = " " + sc.SmallJoiner + " "
-		if join == "" {
-			link = " " + sc.SmallJoiner + " "
-		}
 	case rest >= 100 && count >= 100 && g.ScaleLargeJoiner != "":
 		link = g.ScaleLargeJoiner
 	default:
@@ -421,8 +422,8 @@ func belowHundred(value int64, g *Grammar, gender string, asMultiplier bool) str
 	return tenWord + joiner + unitWord
 }
 
-// ASCII digits only, explicitly — see the Python module for why.
-// Python's `_DIGIT_RUN`, minus the lookbehind RE2 cannot express — that guard
+// ASCII digits only, explicitly: see the Python module for why.
+// Python's `_DIGIT_RUN`, minus the lookbehind RE2 cannot express: that guard
 // is applied in ExpandNumbers against the character before the match.
 //
 // The three parts of the pattern are each audible: a run glued to a
@@ -431,19 +432,20 @@ func belowHundred(value int64, g *Grammar, gender string, asMultiplier bool) str
 // thousands are one number (`1 000` reads as *one zero zero zero*).
 var digitRunRe = regexp.MustCompile(`([0-9]{1,3}(?: [0-9]{3})+|[0-9]+)((?:[.,][0-9]+)*)`)
 
-// phoneRunRe is Python's `_PHONE_RUN`: an E.164 number — a plus, then digits,
-// possibly grouped by spaces — read digit by digit and taken before the digit
+// phoneRunRe is Python's `_PHONE_RUN`: an E.164 number (a plus, then digits,
+// possibly grouped by spaces) read digit by digit and taken before the digit
 // run, which cannot decline it. "+48 123 456 789" is a valid
 // one-to-three-then-threes grouping, so it was read as *forty-eight billion*.
 // The plus is the evidence: E.164 requires one and a grouped thousand never has
 // one.
 var phoneRunRe = regexp.MustCompile(`\+[0-9][0-9 ]*[0-9]`)
 
-// minE164Digits keeps the rule above away from a signed quantity: "+5 degrees"
-// and "+1 000 000 users" are deltas and millions, not numbers to spell out.
-// ISO 8601's 24:00. Admitted as an hour, and only with a zero minute.
+// endOfDayHour is ISO 8601's 24:00. Admitted as an hour, and only with a zero
+// minute.
 const endOfDayHour = 24
 
+// minE164Digits keeps phoneRunRe away from a signed quantity: "+5 degrees" and
+// "+1 000 000 users" are deltas and millions, not numbers to spell out.
 const minE164Digits = 8
 
 // unicodeMinusRe folds U+2212 MINUS SIGN and U+2010 HYPHEN to ASCII where a
@@ -453,8 +455,26 @@ const minE164Digits = 8
 // which writes a range, and not U+2014, which is punctuation.
 var unicodeMinusRe = regexp.MustCompile(`[\x{2212}\x{2010}]([0-9])`)
 
-func expandPhoneNumbers(text, language string, g *Grammar) string {
-	return phoneRunRe.ReplaceAllStringFunc(text, func(match string) string {
+// expandPhoneNumbers says every E.164 number in text digit by digit.
+//
+// Matched by index rather than by ReplaceAllStringFunc, because the two guards
+// the digit run answers to read the characters either side of the run and a
+// replacer is handed only the match.
+func expandPhoneNumbers(text, language string) string {
+	spans := phoneRunRe.FindAllStringIndex(text, -1)
+	if spans == nil {
+		return text
+	}
+	var out strings.Builder
+	last := 0
+	for _, span := range spans {
+		// The same two guards the digit run answers to, for the same reason: a
+		// run inside a word is part of an identifier, and `+12345678abc` is not
+		// a telephone number in any country.
+		if gluedToAWord(text, span[0]) || gluedForward(text, span[1]) {
+			continue
+		}
+		match := text[span[0]:span[1]]
 		digits := make([]rune, 0, len(match))
 		for _, r := range match {
 			if r >= '0' && r <= '9' {
@@ -462,28 +482,33 @@ func expandPhoneNumbers(text, language string, g *Grammar) string {
 			}
 		}
 		if len(digits) < minE164Digits {
-			return match
+			continue
 		}
 		said := make([]string, 0, len(digits))
+		failed := false
 		for _, d := range digits {
 			word, err := Cardinal(int64(d-'0'), language, "")
 			if err != nil {
-				return match
+				failed = true
+				break
 			}
 			said = append(said, word)
 		}
-		_ = g
-		return strings.Join(said, " ")
-	})
+		if failed {
+			continue
+		}
+		out.WriteString(text[last:span[0]])
+		out.WriteString(strings.Join(said, " "))
+		last = span[1]
+	}
+	out.WriteString(text[last:])
+	return out.String()
 }
 
 // decimalSeparator is the mark `language` writes between a whole number and
 // its fraction, defaulting to "." for a language with no grammar.
 func decimalSeparator(language string) string {
-	if grammars == nil {
-		loadGrammars()
-	}
-	if g, ok := grammars[language]; ok {
+	if g, ok := grammarTables()[language]; ok {
 		return g.DecimalSeparator
 	}
 	return "."
@@ -499,14 +524,11 @@ func decimalSeparator(language string) string {
 //
 // Language-dependent for the separators, and that is not a detail. U+066B is a
 // *decimal* separator, so folding it to a dot everywhere turned "٣٫١٤" into
-// "3.14" — which in the eleven languages that write decimals with a comma is the
+// "3.14", which in the eleven languages that write decimals with a comma is the
 // written form of a clock time, read out as *drei Uhr vierzehn*.
 func FoldForeignDigits(text, language string) string {
-	if grammars == nil {
-		loadGrammars()
-	}
 	decimal := "."
-	if g, ok := grammars[language]; ok {
+	if g, ok := grammarTables()[language]; ok {
 		decimal = g.DecimalSeparator
 	}
 	grouping := "."
@@ -534,17 +556,14 @@ func FoldForeignDigits(text, language string) string {
 	return b.String()
 }
 
-// ExpandNumbers says every run of digits in text as words — the seam between
+// ExpandNumbers says every run of digits in text as words: the seam between
 // the verbalizer and the funnel. It never errors and never leaves digits
 // behind: a number past every scale is read digit by digit, which is what such
-// a number almost always is — an identifier. A separator between digits is a
+// a number almost always is, an identifier. A separator between digits is a
 // decimal mark only when it is the language's own; the other mark is a
 // grouping mark and is dropped, which is what a reader does with it.
 func ExpandNumbers(text, language string) string {
-	if grammars == nil {
-		loadGrammars()
-	}
-	g, ok := grammars[language]
+	g, ok := grammarTables()[language]
 	if !ok {
 		return text
 	}
@@ -552,7 +571,7 @@ func ExpandNumbers(text, language string) string {
 	// the time the pattern matches one, and a phone number has to be gone
 	// before the grouping rule sees a shape it cannot decline.
 	text = unicodeMinusRe.ReplaceAllString(text, "-$1")
-	text = expandPhoneNumbers(text, language, g)
+	text = expandPhoneNumbers(text, language)
 	var b strings.Builder
 	// `cursor` is how far the output has been written, `pos` how far the scan
 	// has read. They are two variables rather than one because a refused match
@@ -578,7 +597,7 @@ func ExpandNumbers(text, language string) string {
 		// The lookbehind, in code: a run glued to a word is part of that word,
 		// so `iOS18` stays written. The sign is read backwards rather than
 		// captured, because RE2 does not retry a failed match one position to
-		// the right the way Python's engine does — a captured `-?` swallows
+		// the right the way Python's engine does: a captured `-?` swallows
 		// the hyphen in `1-5` and leaves the `5` unspoken.
 		sign := false
 		if start > 0 && text[start-1] == '-' && wordBoundaryBefore(text, start-1) {
@@ -591,7 +610,7 @@ func ExpandNumbers(text, language string) string {
 		// Python's `(?! ?[0-9])`, in code: a space-grouped run is a grouped
 		// number only if it *reaches a boundary*. RE2 has no lookahead and,
 		// unlike Python's engine, does not retry the alternation one branch
-		// down — so where Python backtracks to reading each segment on its
+		// down, so where Python backtracks to reading each segment on its
 		// own, this takes the longest prefix that fits and abandons the rest:
 		// "1 202 555 0199" matches "1 202 555 019" and is read as a
 		// ten-digit cardinal with a bare "9" trailing behind it.
@@ -599,21 +618,21 @@ func ExpandNumbers(text, language string) string {
 		// Judged at the end of the whole-number group, not at the end of the
 		// match: Python asks it where the grouped alternative stops, which is
 		// before the fraction. Asking it behind the fraction instead made
-		// `1 000.0 3` ragged — a digit does follow the `.0` — and read the
+		// `1 000.0 3` ragged (a digit does follow the `.0`) and read the
 		// grouped thousand as three separate zeros where every other port says
 		// *duizend komma nul drie*.
 		ragged := strings.Contains(text[loc[2]:loc[3]], " ") && digitsFollow(text, loc[3])
 		// A ragged run is read, and consumed, as its first group alone. That is
-		// the match Python's engine ends up with — the grouped alternative is
+		// the match Python's engine ends up with: the grouped alternative is
 		// refused outright, the `[0-9]+` fallback takes the digits in front of
-		// the first space — and everything after it is re-matched from there,
+		// the first space, and everything after it is re-matched from there,
 		// which is why the tail can come back as a number in its own right:
 		// `1 000 1 234 567 1 234 567` is *un*, *zéro zéro zéro*, four more
 		// segments, and then a grouped million, because that last run does reach
 		// a boundary. Reading the whole run segment-wise in one pass said
 		// *un deux cent trente-quatre …* for a number that is not ragged at all,
 		// and consuming the whole binding on a refusal lost the thousand in
-		// `1e+3 1000` — the space in front of four digits never grouped, so the
+		// `1e+3 1000`: the space in front of four digits never grouped, so the
 		// `e` has nothing to do with it.
 		wholeEnd, readEnd := loc[3], end
 		if ragged {
@@ -635,7 +654,7 @@ func ExpandNumbers(text, language string) string {
 		// The lookbehind has no mirror: a run glued to a word on the left is
 		// left alone, a run glued to one on the right is expanded up to the
 		// letter and then abandoned. "5x3" comes out *fivex3* and "1e6" comes
-		// out *onee6* — a word welded to a digit, which is not a reading of
+		// out *onee6*: a word welded to a digit, which is not a reading of
 		// anything. And the lookbehind sees one character, so an identifier
 		// that puts a dot between its letter and its digits slips past it:
 		// in "v1.2.3" the scan starts at the `2` and the version comes out
@@ -674,17 +693,17 @@ func ExpandNumbers(text, language string) string {
 // gluedForward reports whether the token continues past the match into a
 // letter.
 //
-// The mirror of `gluedToAWord`, and it was missing here while Python, JS and
-// Swift had it: `123.de` is one token to them and two to this port, which read
-// "einhundertdreiundzwanzig.de". A grouping space is crossed so `200 000x` is one
-// token; the ordinary space in `2024 200 people` is not, because what follows it
-// is a word.
+// The mirror of gluedToAWord. Without it "123.de" is two tokens here and one
+// in Python, JS and Swift, and this port reads
+// "einhundertdreiundzwanzig.de". A grouping space is crossed so "200 000x" is
+// one token; the ordinary space in "2024 200 people" is not, because what
+// follows it is a word.
 func gluedForward(text string, end int) bool {
 	i := end
 	for i < len(text) {
 		// Decoded as a rune, not read as a byte. `é` is two bytes and neither
 		// of them is an ASCII letter, so a byte-wise test walks straight past
-		// it and reads the `1 234 567` in `1 234 567.é` that Python refuses —
+		// it and reads the `1 234 567` in `1 234 567.é` that Python refuses,
 		// the kind of input the parity fuzzer generates, because the funnel is
 		// meant for nine languages with accents in them.
 		r, width := utf8.DecodeRuneInString(text[i:])
@@ -696,14 +715,15 @@ func gluedForward(text string, end int) bool {
 			continue
 		}
 		// A thousands space: a digit in front of it and a group behind it, or the
-		// walk leaves one number and enters the next — `1000 5.1e+3` found the
+		// walk leaves one number and enters the next: `1000 5.1e+3` found the
 		// `e` two tokens away and called the whole line one glued token.
 		//
 		// `startsAGroup` here and `continuesAGroup` backwards; see the two for
 		// why the question is the looser one in this direction only. The indices
-		// are the ones this direction needs: written with the backward walk's —
-		// a digit at `i-2` and the group at `i` — the test asked whether a space
-		// was a digit, was false at every space, and let `2024 200x` read as
+		// are the ones this direction needs: written with the backward walk's
+		// indices, a digit at `i-2` and the group at `i`, the test asked
+		// whether a space was a digit, was false at every space, and let
+		// `2024 200x` read as
 		// *duemilaventiquattro 200x*: half a token spoken, which is the class
 		// this guard exists to stop.
 		if r == ' ' && i > 0 && isASCIIDigit(text[i-1]) && startsAGroup(text, i+1) {
@@ -728,7 +748,7 @@ func truncatedByAFraction(text string, end int) bool {
 }
 
 // gluedToAWord reports whether the digit run at `start` sits inside a token
-// containing a letter — Python's backward walk over word characters and dots,
+// containing a letter: Python's backward walk over word characters and dots,
 // which is the question its one-character lookbehind could not ask.
 func gluedToAWord(text string, start int) bool {
 	i := start
@@ -740,7 +760,7 @@ func gluedToAWord(text string, start int) bool {
 		// `-` and `+` are in the walk because an exponent puts one between the
 		// letter and the digits: in `1e-3` the scan starts at the `3`, walks
 		// back over `-` to `e`, and stops calling it a number. A bare `-5` is
-		// unaffected — the walk reaches a space and finds no letter.
+		// unaffected: the walk reaches a space and finds no letter.
 		r, width := utf8.DecodeLastRuneInString(text[:i])
 		switch {
 		case r == '_' || r == '.' || r == ',' || r == '-' || r == '+' ||
@@ -753,7 +773,7 @@ func gluedToAWord(text string, start int) bool {
 		// break of the kind the walk exists to stop. `C0200 000` binds as one
 		// match in this port, the lookbehind refuses it for the `C`, and the
 		// scan then finds the standalone `000` with nothing but a space behind
-		// it — "C0200 zero zero zero", half a token spoken, where Python, JS and
+		// it: "C0200 zero zero zero", half a token spoken, where Python, JS and
 		// Swift leave the whole thing written.
 		//
 		// The group being stepped out of is the one whose width the pattern
@@ -772,7 +792,7 @@ func gluedToAWord(text string, start int) bool {
 // startsAGroup reports whether a thousands group's worth of digits begins at
 // `i`: three of them, with nothing said about a fourth. The forward walk's half
 // of the question and the looser half, because forwards the walk finishes a run
-// the pattern *refused* to bind and a ragged group is exactly why it refused —
+// the pattern *refused* to bind and a ragged group is exactly why it refused,
 // `1 0023R` binds as `1 002` in an engine that does not backtrack, and a walk
 // that stopped at the ragged group read the `1` and left `0023R` written: half a
 // run spoken with the rest welded to a letter.
@@ -797,7 +817,7 @@ func startsAGroup(text string, i int) bool {
 //
 // The backward walk's half, and the strict one, because backwards the group *is*
 // the match and the pattern already fixed its width. The fourth-digit clause is
-// what keeps `e3 1000` readable — four digits behind the space are not a group,
+// what keeps `e3 1000` readable: four digits behind the space are not a group,
 // so the space never grouped, so the thousand is a token of its own with nothing
 // glued to the `e`. Measured on the fuzzer: the loose question in both
 // directions changes 60 readings and 56 of them are losses; asked forwards only,
@@ -893,7 +913,7 @@ func sayNumber(literal string, g *Grammar, language string) string {
 	parts := []string{sayInteger(whole, language)}
 	if hasFraction && fraction != "" {
 		parts = append(parts, g.DecimalWord)
-		// Digit by digit — "point four nine", never "point forty-nine":
+		// Digit by digit, "point four nine", never "point forty-nine":
 		// leading zeros carry meaning there that a cardinal would eat.
 		parts = append(parts, digitByDigit(fraction, language)...)
 	}
@@ -926,26 +946,214 @@ func digitByDigit(digits, language string) []string {
 	return out
 }
 
+// romanRunRe matches a Roman numeral written with I, V and X, and nothing else.
+//
+// L, C, D and M are left out, and that is the whole rule rather than an
+// optimisation of it. Every two-letter initialism that is also a valid Roman
+// numeral needs one of them (CD, CV, DC, MC, MD, XL, CM), and so does the only
+// common English word that is one, MIX. What remains is 2 to 39, which is where
+// chapter, act, volume, war and regnal numbers live.
+//
+// The `(?<![0-9A-Za-z])` and `(?![0-9A-Za-z])` Python writes around the run are
+// checked in code below: RE2 has no lookaround, and the class is ASCII, so the
+// bytes either side answer it exactly.
+var romanRunRe = regexp.MustCompile(`[IVX]{2,}`)
+
+// romanCanonicalRe is the only spelling 2 to 39 has. Matched whole, so `IIX`
+// and `VV` are refused: they are letters that happen to be in the alphabet
+// rather than numbers, and a run this refuses is a run the acronym pass still
+// sees.
+var romanCanonicalRe = regexp.MustCompile(`^(X{0,3})(IX|IV|V?I{0,3})$`)
+
+const romanTen = 10
+
+// romanValue reads a run as a number, and reports whether it is one.
+func romanValue(numeral string) (int64, bool) {
+	m := romanCanonicalRe.FindStringSubmatch(numeral)
+	if m == nil {
+		return 0, false
+	}
+	var units int64
+	switch tail := m[2]; tail {
+	case "IX":
+		units = 9
+	case "IV":
+		units = 4
+	default:
+		if strings.HasPrefix(tail, "V") {
+			units = 5
+		}
+		units += int64(strings.Count(tail, "I"))
+	}
+	return int64(len(m[1]))*romanTen + units, true
+}
+
+// expandRomanNumerals says `Chapter IV` and `World War II` as numbers.
+//
+// Before the acronym pass, which spells a Roman numeral letter by letter, and
+// after the numeral fold, which is what turns `Ⅳ` into the `IV` read here. A
+// language with no number grammar keeps the letters.
+func expandRomanNumerals(text, language string) string {
+	if _, ok := grammarTables()[language]; !ok {
+		return text
+	}
+	spans := romanRunRe.FindAllStringIndex(text, -1)
+	if spans == nil {
+		return text
+	}
+	var out strings.Builder
+	last := 0
+	for _, s := range spans {
+		if asciiWordByteBefore(text, s[0]) || asciiWordByteAt(text, s[1]) {
+			continue
+		}
+		value, ok := romanValue(text[s[0]:s[1]])
+		if !ok {
+			continue
+		}
+		said, err := Cardinal(value, language, "")
+		if err != nil {
+			continue
+		}
+		out.WriteString(text[last:s[0]])
+		out.WriteString(said)
+		last = s[1]
+	}
+	out.WriteString(text[last:])
+	return out.String()
+}
+
+// asciiWordByteAt and asciiWordByteBefore are `[0-9A-Za-z]` at and before a byte
+// offset. A byte test rather than a rune one, because the class is ASCII: every
+// byte of a multi-byte rune is 0x80 or above and so outside it either way.
+func asciiWordByteAt(text string, at int) bool {
+	if at >= len(text) {
+		return false
+	}
+	c := text[at]
+	return isASCIIDigit(c) || ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z')
+}
+
+func asciiWordByteBefore(text string, at int) bool {
+	if at <= 0 {
+		return false
+	}
+	return asciiWordByteAt(text, at-1)
+}
+
+// scaleSuffixes are the letters a price abbreviates its magnitude with, longest
+// first.
+//
+// Only beside a currency mark, which is what makes them unambiguous: a bare
+// `5m` is five metres as readily as five million, and `20k` is a race distance.
+// `$5m` is a sum of money in every convention that writes it.
+var scaleSuffixes = []struct {
+	spelling string
+	value    int64
+}{
+	{"bn", 1_000_000_000},
+	{"tn", 1_000_000_000_000},
+	{"k", 1_000},
+	{"m", 1_000_000},
+	{"b", 1_000_000_000},
+	{"t", 1_000_000_000_000},
+}
+
+// scaleSuffixPattern is the suffixes above as one alternation, either case.
+//
+// Both cases are spelled out rather than asked of a case-insensitive flag,
+// because JavaScript has no inline flag group and a pattern that needs one is a
+// pattern the five implementations cannot share. Derived from the table rather
+// than written out, so the letters live in one place.
+var scaleSuffixPattern = buildScaleSuffixPattern()
+
+func buildScaleSuffixPattern() string {
+	parts := make([]string, 0, len(scaleSuffixes))
+	for _, s := range scaleSuffixes {
+		var b strings.Builder
+		for _, c := range s.spelling {
+			b.WriteString("[" + string(c) + strings.ToUpper(string(c)) + "]")
+		}
+		parts = append(parts, b.String())
+	}
+	return strings.Join(parts, "|")
+}
+
+// scaleSuffixWord is the scale noun `suffix` abbreviates, in the form `count` of
+// them takes, or "" where the language has no noun for that magnitude, which
+// leaves the letter written rather than guessing at a word for it.
+func scaleSuffixWord(suffix string, count int64, language string) string {
+	g, ok := grammarTables()[language]
+	if !ok {
+		return ""
+	}
+	lowered := strings.ToLower(suffix)
+	for _, s := range scaleSuffixes {
+		if s.spelling != lowered {
+			continue
+		}
+		for _, sc := range g.Scales {
+			if sc.Value == s.value {
+				return scaleWord(count, sc.Forms)
+			}
+		}
+	}
+	return ""
+}
+
+// scaleNouns is every form of every scale noun this language has, longest first.
+//
+// Longest first because they go into an alternation, where a shorter form that
+// prefixes a longer one would match first and leave the rest of the word behind.
+// Runes, not bytes: `millón` is six characters and seven bytes, and a byte
+// length orders it against `million` the wrong way round.
+func scaleNouns(language string) []string {
+	g, ok := grammarTables()[language]
+	if !ok {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var forms []string
+	for _, sc := range g.Scales {
+		for _, form := range sc.Forms {
+			if form == "" || seen[form] {
+				continue
+			}
+			seen[form] = true
+			forms = append(forms, form)
+		}
+	}
+	sort.Slice(forms, func(i, j int) bool {
+		li, lj := utf8.RuneCountInString(forms[i]), utf8.RuneCountInString(forms[j])
+		if li != lj {
+			return li > lj
+		}
+		return forms[i] < forms[j]
+	})
+	return forms
+}
+
 // No `\b`: Python guards this with `(?<![\d.,:]) … (?![.,:]?\d)`, which rejects
 // a digit or separator either side and says nothing about letters. `\b` fires
 // between a letter and a digit too, so `a14:30` matched in Python and not here.
 // Both guards live in the neighbour check below.
-var timeRunRe = regexp.MustCompile(`([01]?[0-9]|2[0-4])[:.]([0-5][0-9])`)
+//
+// The seconds are optional and colon-only. A dotted time carries none: `10.30.45`
+// is a version string as readily as a timestamp, where `10:30:45` is a timestamp
+// in every convention.
+var timeRunRe = regexp.MustCompile(`([01]?[0-9]|2[0-4])[:.]([0-5][0-9])(?::([0-5][0-9]))?`)
 
-// ExpandTimes reads clock times as words — see the Python module for the
+// ExpandTimes reads clock times as words: see the Python module for the
 // shape and the deliberate absence of the colloquial clock.
 func ExpandTimes(text, language string) string {
-	if grammars == nil {
-		loadGrammars()
-	}
-	g, ok := grammars[language]
+	g, ok := grammarTables()[language]
 	if !ok {
 		return text
 	}
 	// Rebuilt by index rather than with ReplaceAllStringFunc, because whether a
 	// match is a time depends on what sits *outside* it and RE2 has no
-	// lookaround. `12.03` matches inside `12.03.2026` — the ordinary written
-	// date of German, Polish, Danish, Finnish and Norwegian — and must not be
+	// lookaround. `12.03` matches inside `12.03.2026`: the ordinary written
+	// date of German, Polish, Danish, Finnish and Norwegian, and must not be
 	// read as twelve o'clock three with the year trailing behind it. A time is
 	// a time only when nothing is attached to either end.
 	matches := timeRunRe.FindAllStringSubmatchIndex(text, -1)
@@ -956,6 +1164,19 @@ func ExpandTimes(text, language string) string {
 	last := 0
 	for _, m := range matches {
 		start, end := m[0], m[1]
+		// A zero seconds field says nothing the hour and minute have not
+		// already said, so `10:30:00` reads exactly as `10:30` does.
+		seconds := int64(0)
+		if m[6] >= 0 {
+			if text[m[3]] == ':' {
+				seconds, _ = strconv.ParseInt(text[m[6]:m[7]], 10, 64)
+			} else {
+				// Seconds belong to the colon form alone, so the dotted form
+				// gives them back: the match ends at the minutes and what
+				// follows is written text again.
+				end = m[5]
+			}
+		}
 		if attachedToDigits(text, start, end) {
 			continue
 		}
@@ -964,8 +1185,8 @@ func ExpandTimes(text, language string) string {
 		// already says which: a language that writes 14.30 for half past two
 		// does not use the dot as its decimal mark. German writes "14.30 Uhr"
 		// and "2,50 €"; English writes "2:30" and "$2.50". Without this, every
-		// English decimal with two fraction digits was read as the clock —
-		// "$0.49" as *zero forty-nine*, "3.14" as *three fourteen* — and the
+		// English decimal with two fraction digits was read as the clock,
+		// "$0.49" as *zero forty-nine*, "3.14" as *three fourteen*, and the
 		// shared fixture pinned one of them, so all five agreed on it.
 		if text[m[3]] == '.' && g.DecimalSeparator == "." {
 			continue
@@ -976,7 +1197,7 @@ func ExpandTimes(text, language string) string {
 		// as 24:00, and without it the two halves were read as unrelated
 		// numbers with the colon left standing between them. 24:30 is not a
 		// time in any convention and stays as written.
-		if hour == endOfDayHour && minute != 0 {
+		if hour == endOfDayHour && (minute != 0 || seconds != 0) {
 			continue
 		}
 		words := []string{}
@@ -986,42 +1207,74 @@ func ExpandTimes(text, language string) string {
 		if g.TimeInfix != "" {
 			words = append(words, g.TimeInfix)
 		}
-		if minute != 0 {
+		// A zero minute is dropped from `14:00` and kept in `14:00:45`, where
+		// dropping it would move the seconds into the minutes' place.
+		if minute != 0 || seconds != 0 {
 			if said, err := Cardinal(minute, language, ""); err == nil {
 				words = append(words, said)
 			}
 		}
-		// German is the only grammar here with a written infix; asked with an
-		// empty one the scan matches the empty string wherever the whitespace
-		// run ends and eats the whitespace with it. `3.14 é` in Portuguese came
-		// out *três catorzeé* — two words welded — because the guard against
-		// that is a letter test on one ASCII byte and `é` is two.
+		if seconds != 0 {
+			if said, err := Cardinal(seconds, language, ""); err == nil {
+				words = append(words, said)
+			}
+		}
+		// German is the only grammar here with a written infix. An empty one
+		// asks the scan to find nothing and take the whitespace with it, so
+		// both this caller and the scan itself refuse it: `3.14 é` in
+		// Portuguese welds two words otherwise, the guard being a letter test
+		// on one ASCII byte where `é` is two.
 		if g.TimeInfix != "" {
 			end = consumeWrittenInfix(text, end, g.TimeInfix)
 		}
 		out.WriteString(text[last:start])
 		out.WriteString(strings.Join(words, " "))
+		// The reading is words, and a word is not written against the letters
+		// that followed the digits: `3:45pm` is "three forty-five pm", the
+		// reading the spaced form already got.
+		if asciiLetterAt(text, end) {
+			out.WriteString(" ")
+		}
 		last = end
 	}
 	out.WriteString(text[last:])
 	return out.String()
 }
 
-// consumeWrittenInfix extends end past a written infix word — German writes
+// asciiLetterAt reports whether an ASCII letter stands at index i. The class
+// the written infix is already guarded against, so the two rules that decide
+// where a spoken time ends answer to one alphabet in all five implementations
+// rather than to five spellings of \w.
+func asciiLetterAt(text string, i int) bool {
+	if i >= len(text) {
+		return false
+	}
+	c := text[i]
+	return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z')
+}
+
+// consumeWrittenInfix extends end past a written infix word: German writes
 // "um 14.30 Uhr", and the spoken reading already puts the infix where it
 // belongs, between hour and minutes (*vierzehn Uhr dreißig*). Leaving the
 // written word standing said it twice. Consumed only when it is a whole word
 // immediately after the time; *Uhrzeit* keeps its head.
 //
+// The whitespace in front of it may be absent: a word is the same word whether
+// or not a space was typed before it. An empty infix is refused instead,
+// which is what the zero-width match this scan would otherwise accept means.
+//
 // ASCII byte scan throughout: space and tab are single bytes in UTF-8 and a
 // letter or digit touching the infix is detected by range, so this matches
 // the other four implementations exactly.
 func consumeWrittenInfix(text string, end int, infix string) int {
+	if infix == "" {
+		return end
+	}
 	i := end
 	for i < len(text) && (text[i] == ' ' || text[i] == '\t') {
 		i++
 	}
-	if i == end || i+len(infix) > len(text) || text[i:i+len(infix)] != infix {
+	if i+len(infix) > len(text) || text[i:i+len(infix)] != infix {
 		return end
 	}
 	if after := i + len(infix); after < len(text) {
@@ -1034,7 +1287,7 @@ func consumeWrittenInfix(text string, end int, infix string) int {
 }
 
 // attachedToDigits reports whether text[start:end] has a digit or a separator
-// touching either end — the test that tells `14:30` from the `12.03` inside a
+// touching either end: the test that tells `14:30` from the `12.03` inside a
 // date. A trailing sentence period is fine: what follows it is not a digit.
 func attachedToDigits(text string, start, end int) bool {
 	if start > 0 {
@@ -1059,19 +1312,63 @@ func attachedToDigits(text string, start, end int) bool {
 }
 
 // ExpandAbbreviations writes out the authority-listed abbreviations, longest
-// first, at word boundaries only — see the Python module.
+// first, at word boundaries only: see the Python module.
 func ExpandAbbreviations(text, language string) string {
-	if grammars == nil {
-		loadGrammars()
-	}
-	g, ok := grammars[language]
-	if !ok || len(g.Abbreviations) == 0 {
-		return text
-	}
 	out := text
-	for _, entry := range g.Abbreviations {
-		re := regexp.MustCompile(`(^|[^\w.])` + regexp.QuoteMeta(entry.Written) + `($|[^\w.])`)
-		out = re.ReplaceAllString(out, "${1}"+entry.Spoken+"${2}")
+	for _, p := range abbrevTables()[language] {
+		out = expandAbbreviation(out, p)
 	}
 	return out
+}
+
+// expandAbbreviation replaces every whole-word occurrence of one abbreviation.
+//
+// The boundary is looked at, never consumed. Python's pattern is
+// `(?<![\w.])...(?![\w.])`, two zero-width assertions; a pattern that captures
+// the neighbouring characters instead eats them, and the next occurrence then
+// has nothing left to sit behind. "np. itd. itp." expanded its first and third
+// entries and left the middle one written.
+func expandAbbreviation(text string, p abbrevPattern) string {
+	spans := p.written.FindAllStringIndex(text, -1)
+	if spans == nil {
+		return text
+	}
+	var b strings.Builder
+	b.Grow(len(text))
+	last := 0
+	for _, s := range spans {
+		if s[0] < last || wordOrDotBefore(text, s[0]) || wordOrDotAt(text, s[1]) {
+			// Inside a word, or inside a longer dotted run: an abbreviation
+			// that is part of a word is part of the word.
+			continue
+		}
+		b.WriteString(text[last:s[0]])
+		b.WriteString(p.spoken)
+		last = s[1]
+	}
+	b.WriteString(text[last:])
+	return b.String()
+}
+
+func wordOrDotBefore(text string, at int) bool {
+	if at <= 0 {
+		return false
+	}
+	r, _ := utf8.DecodeLastRuneInString(text[:at])
+	return r == '.' || wordCharacter(r)
+}
+
+func wordOrDotAt(text string, at int) bool {
+	if at >= len(text) {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(text[at:])
+	return r == '.' || wordCharacter(r)
+}
+
+// wordCharacter is Python's `\w` for a str pattern: a letter, a number of any
+// kind, or an underscore. RE2's `\w` is the ASCII half of that, so `źnp.`
+// stood at a word boundary in this port and inside a word in the other four.
+func wordCharacter(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsNumber(r)
 }

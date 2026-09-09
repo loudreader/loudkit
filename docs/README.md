@@ -1,53 +1,61 @@
 # loudkit documentation
 
-Start with [the guides](guides/) if you are using the library, and
-[reference](reference/) if you are looking up a specific behaviour.
+Twelve pages cover using loudkit. Everything else is in [reference/](reference/)
+for someone who has already shipped, [platforms/](platforms/) for one machine,
+and [design/](design/) for anyone changing the engine.
 
-## Guides
+[Open the voice gallery](https://loudreader.github.io/loudkit/demo/) to search, listen,
+compare English voices from both models. [Voices](../VOICES.md)
+explains which profiles are included and records their sources and licences.
 
-Guides 1-6 form the Python path. Guides 7-10 are standalone quickstarts for the
-other four implementations.
+## Using loudkit
 
-[Getting started](guides/01-getting-started.md) ·
-[Streaming and long-form](guides/02-streaming-and-long-form.md) ·
-[Cloning a voice](guides/03-cloning-a-voice.md) ·
-[Server, streaming API and MCP](guides/04-server-and-agents.md) ·
-[Benchmarking](guides/05-benchmarking.md) ·
-[Embedding](guides/06-embedding.md) ·
-[JavaScript / TypeScript](guides/07-js-ts.md) ·
-[Go](guides/08-go.md) ·
-[Rust](guides/09-rust.md) ·
-[Swift](guides/10-swift.md)
+1. [Getting started](guides/01-getting-started.md): Python, first WAV, voices,
+   the seed, devices.
+2. [Swift](guides/10-swift.md): the same engine over CoreML.
+3. [Go](guides/08-go.md): over ONNX Runtime.
+4. [Rust](guides/09-rust.md): over ONNX Runtime.
+5. [JavaScript and TypeScript](guides/07-js-ts.md): over `onnxruntime-node`.
+6. [Choosing a model](guides/11-choosing-a-model.md): loudr-1 or loudr-1-turbo,
+   and where each one runs.
+7. [Cloning a voice](guides/03-cloning-a-voice.md): a profile of your own from
+   ten seconds of audio.
+8. [Long text and streaming](guides/02-streaming-and-long-form.md): first
+   audio before the passage finishes.
+9. [Server and agents](guides/04-server-and-agents.md): HTTP, gRPC, MCP and
+   Speech Dispatcher over one warm engine.
+10. [Troubleshooting](reference/troubleshooting.md): symptoms, causes, fixes.
+11. [Model card](MODEL_CARD.md): loudr-1.
+12. [Turbo model card](MODEL_CARD-turbo.md): loudr-1-turbo.
+
+Beside them: [Voices](../VOICES.md), [What 0.1 supports](../SUPPORTED.md) and
+[Responsible use](../RESPONSIBLE_USE.md).
 
 ## Reference
 
-What the library guarantees, and what each implementation does.
-
-- [Troubleshooting](reference/troubleshooting.md): symptoms, causes and fixes.
-- [Compatibility](reference/COMPATIBILITY.md): versioning and breaking changes.
-- [Errors](reference/errors.md): errors exposed by each implementation.
-- [Timestamps](reference/timestamps.md), [speed](reference/speed.md) and
-  [provenance](reference/provenance.md): output behaviour.
-- [Architecture](reference/ARCHITECTURE.md),
-  [ONNX graphs](reference/onnx-graphs.md) and
-  [identity](reference/IDENTITY-CONTRACT.md): implementation details for
-  developers changing or porting the engine.
-- [Text normalization](reference/preprocess.md),
-  [postprocess](reference/postprocess.md) and [typing](reference/typing.md):
-  deeper reference material.
+- [Compatibility](reference/COMPATIBILITY.md): what may change between
+  releases, and how to pin one.
+- [Errors](reference/errors.md): what each implementation raises.
+- [Timestamps](reference/timestamps.md) and [speed](reference/speed.md):
+  what a result carries and how playback speed works.
+- [Content Credentials](reference/provenance.md): what a saved WAV records.
+- [Identity contract](reference/IDENTITY-CONTRACT.md): what "same input, same
+  audio" means across backends, and what it does not.
+- [Voice encoder licence chain](PROVENANCE-voice-encoder.md).
 
 ## Platforms
 
-[Apple: CoreML artefacts and the Swift package](platforms/apple.md) ·
-[Docker: variants, compose and the port-mapping boundary](platforms/docker.md) ·
-[Jetson: the JetPack environment the Orin rows were measured with](platforms/jetson.md)
-
-## The model
-
-[Model card](MODEL_CARD.md) ·
-[Voice encoder provenance](PROVENANCE-voice-encoder.md) ·
-[Voices](../VOICES.md)
+[Apple](platforms/apple.md) (CoreML and the Swift package),
+[Docker](platforms/docker.md), [Jetson](platforms/jetson.md).
 
 ## Performance
 
-[Benchmarks](benchmarks.md) · [Measured parity](parity-measured.md)
+[Benchmarks](benchmarks.md): the measured figures, the machines and the
+commands. [Measured parity](parity-measured.md): the cross-runtime report.
+
+## Design
+
+[design/](design/) holds the notes for anyone changing the engine: the
+architecture map, text normalization, postprocess, the ONNX graphs, typing,
+embedding, the benchmark tools, silence classes, two-token decode and the
+evaluation method. None of it is needed to use loudkit.

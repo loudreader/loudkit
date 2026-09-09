@@ -1,5 +1,5 @@
 /**
- * Philox-4x32-10 — counter-based RNG, a bit-parity port of `loudkit.rng`.
+ * Philox-4x32-10: counter-based RNG, a bit-parity port of `loudkit.rng`.
  *
  * Every operation is a 32-bit multiply, xor or add on integers, so a correct
  * implementation in Python, Swift or TypeScript produces identical bits by
@@ -9,7 +9,7 @@
  *
  * Seeds are full 64-bit values (the engine derives per-stage seeds by mixing a
  * user seed with a stage constant, both 64-bit), which do not fit in a JS
- * `number` exactly — so every seed-taking function accepts `bigint` and splits
+ * `number` exactly, so every seed-taking function accepts `bigint` and splits
  * it into its two 32-bit halves up front. The counters (index, step, stream)
  * are < 2^32 and stay plain `number`s, masked after every op so no value above
  * 2^53 ever survives an operation.
@@ -57,7 +57,7 @@ const SEED_LIMIT = 1n << 64n;
  * Accepts `bigint` as well as `number` because a JS `number` is a double: every
  * other binding takes a full 64-bit seed (`int` / `UInt64` / `uint64` / `u64`),
  * and any seed above 2^53 silently rounds on the way in. That would break the
- * library's one promise — same seed, same tokens on every binding — with no
+ * library's one promise (same seed, same tokens on every binding) with no
  * error and no way for the caller to notice. So a `number` seed must be a safe
  * integer, and anything larger has to be passed as a `bigint`.
  *
@@ -162,4 +162,25 @@ export function gumbelNoise(
     out[i] = -Math.log(-Math.log(u[i]));
   }
   return out;
+}
+
+/**
+ * One user seed into an independent per-stage stream.
+ *
+ * Mirrors `loudkit.engine._derive`: `(seed * PHI + stream * PSI) & 2^64`.
+ * BigInt keeps the 64-bit product exact, which JS numbers cannot, and
+ * {@link normalizeSeed} refuses a `number` seed that already lost precision
+ * before arriving.
+ *
+ * A free function rather than a private method on `Engine` so the shared
+ * fixture is pinned against *this*, the code every chunk seed in a real render
+ * goes through. A fixture test that declares `PHI` and `PSI` itself and
+ * recomputes the product stays green when the shipping constants move, which
+ * is the one thing it exists to catch. Rust and Go expose it the same way.
+ */
+export function deriveSeed(seed: number | bigint, stream: number): bigint {
+  const PHI = 0x9e3779b97f4a7c15n;
+  const PSI = 0xbf58476d1ce4e5b9n;
+  const MASK = (1n << 64n) - 1n;
+  return (normalizeSeed(seed) * PHI + BigInt(stream) * PSI) & MASK;
 }

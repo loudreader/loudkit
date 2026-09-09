@@ -1,11 +1,11 @@
 /**
- * LR-SAMPLER-v1 — one sampling law, specified tightly enough to reimplement.
+ * LR-SAMPLER-v1: one sampling law, specified tightly enough to reimplement.
  *
  * Bit-parity port of `loudkit.sampler.LRSamplerV1`. Three decisions make it
  * portable:
  *
  * - the RNG is counter-based Philox, so a token's randomness depends on
- *   `(seed, step, index)` alone — never on how many tokens came before;
+ *   `(seed, step, index)` alone, never on how many tokens came before;
  * - `min_p` is evaluated in **logit space** (`z/T >= max(z/T) + ln(min_p)`),
  *   identical to the probability form but with no softmax and therefore no
  *   order-dependent reduction;
@@ -28,21 +28,11 @@ export interface SamplingConfig {
   minTokensTextRatio: number;
 }
 
-export const DEFAULT_SAMPLING: SamplingConfig = {
-  temperature: 0.8,
-  repetitionPenalty: 1.2,
-  minP: 0.05,
-  maxNewTokens: 255,
-  silenceTokenIds: [],
-  minTokensFloor: 0,
-  minTokensTextRatio: 0.0,
-};
-
 const SAMPLING_STREAM = 0;
 
 /**
- * Stateless with respect to *which* numbers it draws — a token's randomness is
- * a pure function of `(seed, step)` — but caches a block of precomputed Gumbel
+ * Stateless with respect to *which* numbers it draws, since a token's
+ * randomness is a pure function of `(seed, step)`, but caches a block of Gumbel
  * noise, because generating ten Philox rounds per token costs more than
  * running the entire model.
  */
@@ -58,7 +48,7 @@ export class LRSamplerV1 {
   /**
    * Observation of how close each step came to stopping. Never feeds back into
    * the draw; read by the postprocess detectors after generation. `null`
-   * disables it, and with it its cost — one exponential and one sum over the
+   * disables it, and with it its cost: one exponential and one sum over the
    * vocabulary per step.
    */
   private stopToken: number | null = null;
@@ -77,8 +67,9 @@ export class LRSamplerV1 {
    * Enable the stop-token observation the postprocess layer reads.
    *
    * Done here, in the sampler, rather than by changing the generator: every
-   * backend already calls the sampler on every step — it owns the RNG stream,
-   * so a backend that skipped it would produce different tokens — which means
+   * backend already calls the sampler on every step, and it owns the RNG
+   * stream, so a backend that skipped it would produce different tokens, which
+   * means
    * the observation reaches every generation path without a new seam.
    *
    * `eosFloor` is the floor this generation runs under. The peak is only
@@ -98,7 +89,7 @@ export class LRSamplerV1 {
    *
    * `[-1, 0]` when the stop token was never plausible, or when
    * {@link observeEos} was not called. **If the model never stops, that peak is
-   * where the sentence really ended** — which is what makes it worth carrying.
+   * where the sentence really ended**, which is what makes it worth carrying.
    */
   get eosPeak(): [number, number] {
     return [this.peakAt, this.peakProb];
@@ -110,7 +101,7 @@ export class LRSamplerV1 {
    * The quantity is the shipped engine's, reproduced exactly: the stop token's
    * softmax weight over the sum of the weights that survived `min_p`. The
    * numerator is taken **before** the cutoff is applied, so a step where the
-   * stop token was itself filtered out still reports how near it came — the
+   * stop token was itself filtered out still reports how near it came: the
    * number answers "how close was this to being the end", not "what was the
    * chance of stopping", and the first question is the one the detectors need,
    * because the rows they exist to rescue are precisely the ones where stopping
@@ -143,17 +134,17 @@ export class LRSamplerV1 {
   }
 
   private noiseFor(step: number, width: number): Float64Array {
-    const cache = this.noise;
+    let row = this.noise;
     if (
-      cache === null ||
+      row === null ||
       step < this.base ||
       step >= this.base + this.block ||
-      cache.length !== this.block * width
+      row.length !== this.block * width
     ) {
       this.base = Math.floor(step / this.block) * this.block;
-      this.noise = gumbelBlock(this.seed, SAMPLING_STREAM, this.base, this.block, width);
+      row = gumbelBlock(this.seed, SAMPLING_STREAM, this.base, this.block, width);
+      this.noise = row;
     }
-    const row = this.noise!;
     const start = (step - this.base) * width;
     return row.subarray(start, start + width);
   }
@@ -168,9 +159,17 @@ export class LRSamplerV1 {
     }
 
     if (cfg.repetitionPenalty !== 1.0) {
-      const silenceSet = new Set(this.silence);
+      // The penalty applies to every seen token, silence included. Silence was
+      // exempt here until the interior-stall study: immune to the penalty and
+      // re-admitted below the min_p floor (the exemption below), a silence run
+      // had no exit (zero escapes in 1,031 instrumented trap steps) and
+      // 33.0% of long-form paragraphs carried a >1 s hole, with 74 of 1705
+      // passages rendering chunks of no speech at all. Penalising seen silence
+      // closes the trap: holes 33.0% -> 4.3% and mute chunks 74 -> 1 at 120
+      // passages/arm across ten languages, natural-band pause rates inside
+      // noise on 8/9 healthy voices, WER flat or better.
       for (let i = 0; i < n; i++) {
-        if (seen[i] && !silenceSet.has(i)) {
+        if (seen[i]) {
           z[i] = z[i] > 0 ? z[i] / cfg.repetitionPenalty : z[i] * cfg.repetitionPenalty;
         }
       }
@@ -197,6 +196,13 @@ export class LRSamplerV1 {
     let best = -Infinity;
     let bestIdx = -1;
     for (let i = 0; i < n; i++) {
+      // Silence stays available even when min_p would drop it: a pause token
+      // is what makes a reader pause, and a filter that removes the only way
+      // to pause is a filter that removes prosody. This is the one exemption
+      // silence keeps: removing it was measured catastrophic (median
+      // long-form gap 2.46 s -> 4.64 s). The repetition penalty above now
+      // applies to silence like everything else, so a pause that overstays
+      // decays instead of never ending.
       const keep = cfg.minP === 0 || s[i] >= threshold || silenceSet.has(i);
       if (!keep) continue;
       const v = s[i] + g[i];

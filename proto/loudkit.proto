@@ -100,23 +100,25 @@ message SynthesizeRequest {
   // argument-then-voice-then-"en" chain and this transport does not touch it.
   string language = 4;
 
-  // Playback speed in [0.5, 2.0], pitch preserved. 0 is read as unset and
-  // becomes 1.0, which is an exact bypass - proto3 cannot tell an absent
-  // double from a zero one, and 0.0 is not a speed anybody means. A value
-  // outside the range is INVALID_ARGUMENT, refused before the engine is taken
-  // rather than clamped: a caller that asked for 3x and silently got 2x has
-  // audio that is not what it asked for and nothing saying so.
-  double speed = 5;
+  // Playback speed in [0.5, 2.0], pitch preserved. Unmentioned means 1.0,
+  // which is an exact bypass. A value outside the range is INVALID_ARGUMENT,
+  // refused before the engine is taken rather than clamped: a caller that
+  // asked for 3x and silently got 2x has audio that is not what it asked for
+  // and nothing saying so.
+  //
+  // `optional` for presence, not for style: proto3's default for a double is
+  // 0.0, so without it an explicit 0.0 is indistinguishable from an absent
+  // field and this door alone renders a request the HTTP and MCP doors refuse
+  // by name. `long_form` below is the same hazard.
+  optional double speed = 5;
 
   // Split a long passage at sentence boundaries rather than refusing it.
   // `Synthesize` only: `SynthesizeStream` splits whatever this says.
   //
   // `optional` for presence, not for style: proto3's default for a bool is
   // false and the library's default is true, so a request that simply does not
-  // mention the field would have silently taken the other path and produced
-  // different audio from every other transport. `speed` above is the same
-  // hazard handled the other way, because 0.0 is not a speed anybody means and
-  // an absent double can be read as unset without ambiguity.
+  // mention the field would silently take the other path and produce different
+  // audio from every other transport.
   optional bool long_form = 6;
 
   // The previous reply's `continuation`, to chain calls without an audible
@@ -125,6 +127,11 @@ message SynthesizeRequest {
 
   // "wav" (default), "pcm16", "flac" or "ogg". Empty means wav; any other
   // name is INVALID_ARGUMENT listing the four that work.
+  //
+  // SynthesizeStream takes the first three. An Ogg bitstream's state spans
+  // the whole stream, so one container per chunk would name bytes that are
+  // not what they say; ogg is INVALID_ARGUMENT there, pointing at Synthesize.
+  // `/v1/synthesize/stream` refuses it in the same words.
   string audio_format = 8;
 }
 

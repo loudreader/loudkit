@@ -9,7 +9,7 @@
     "",
     "Protocol: render each item, then (a) a native speaker marks binary pass/fail —",
     "one hour per language, the highest-value evaluation money can buy here — and",
-    "(b) the ASR round-trip runs against the language's own floor (tools/eval_floors.json).",
+    "(b) the ASR round-trip runs against the language's own floor (research/eval_floors.json).",
     "Items are inputs only: the correct pronunciations are what the native ear",
     "carries, not what this file could encode."
   ],

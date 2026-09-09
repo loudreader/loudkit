@@ -50,3 +50,13 @@ updates:
       interval: weekly
     commit-message:
       prefix: deps
+
+  # The documentation site is npm too, and was the one package.json nothing
+  # watched: it builds and publishes a public page, so a vulnerable transitive
+  # dependency there is as reachable as one in the library.
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps

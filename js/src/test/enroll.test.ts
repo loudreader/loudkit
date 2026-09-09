@@ -13,6 +13,7 @@ import test from "node:test";
 import assert from "node:assert";
 
 import { Enroller } from "../enroll.js";
+import { refuseIfAssetsRequired } from "./assets.js";
 
 const ONNX_DIR = process.env.LOUDKIT_ONNX_DIR;
 
@@ -32,9 +33,7 @@ function fixtureDir(): string {
 
 const available = Boolean(ONNX_DIR) && existsSync(join(fixtureDir(), "ref_audio.f32"));
 
-if (!available && process.env.LOUDKIT_REQUIRE_ASSETS && process.env.LOUDKIT_REQUIRE_ASSETS !== "0") {
-  throw new Error("LOUDKIT_REQUIRE_ASSETS is set but LOUDKIT_ONNX_DIR / the enrollment fixture are not present");
-}
+refuseIfAssetsRequired(available, "LOUDKIT_ONNX_DIR / the enrollment fixture are not present");
 
 function readF32(path: string): Float32Array {
   const buf = readFileSync(path);

@@ -7,7 +7,7 @@
  * order a language sums floats in; one offset chosen differently moves every
  * sample after it, so a golden file would fail for a reason that is not a
  * defect, and the usual response to a fixture that fails for no reason is to
- * regenerate it — which switches the check off. The four properties asserted
+ * regenerate it, which switches the check off. The four properties asserted
  * here fail only when the behaviour is actually wrong: the output length is
  * exact, the pitch does not move (a resampler would move it by exactly `speed`),
  * the loudness survives, and `speed = 1.0` is a bypass rather than a stretch by
@@ -15,9 +15,10 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { MAX_SPEED, MIN_SPEED, stretchedLength, timeStretch } from "../timestretch.js";
+import { MAX_SPEED, MIN_SPEED, stretchedLength, timeStretch, fadeEdges, EDGE_FADE_SECONDS } from "../timestretch.js";
 
 const RATE = 24_000;
 const SPEEDS = [0.5, 0.8, 1.25, 1.5, 2.0];
@@ -40,7 +41,7 @@ function tone(f0: number, samples: number): Float32Array {
  * Fundamental by autocorrelation, over the lag range of a human voice.
  *
  * Unnormalised on purpose: the biased sum decays slowly with lag, which breaks
- * the tie between a period and twice a period in favour of the period — the
+ * the tie between a period and twice a period in favour of the period: the
  * octave error every naive pitch tracker makes. The decay is far too gentle to
  * move the peak within its own lobe.
  */
@@ -102,7 +103,7 @@ test("pitch does not move and loudness survives", () => {
   for (const speed of [0.5, 1.5, 2.0]) {
     const out = timeStretch(x, RATE, speed);
     const after = fundamental(out);
-    // A resampler would land at f0 * speed here — 110 Hz or 440 Hz — so 3 % is
+    // A resampler would land at f0 * speed here (110 Hz or 440 Hz) so 3 % is
     // a wide margin against the failure this is guarding, and a tight one
     // against a stretch that has started smearing.
     assert.ok(
@@ -143,7 +144,7 @@ test("a speed outside the offered range is refused, not clamped", () => {
 
 test("a fragment shorter than one frame is cut or padded, not stretched", () => {
   // Below one frame there is no second frame to align against, so the correct
-  // answer is the right *length* filled with what there is — wrong in the way
+  // answer is the right *length* filled with what there is: wrong in the way
   // silence is wrong rather than in the way a pitch shift is.
   const x = tone(220, 100);
   const faster = timeStretch(x, RATE, 2.0);
@@ -172,7 +173,7 @@ test("the frame is derived from the sample rate, not hardcoded", () => {
   // distinguishable at all: a perfectly steady tone compressed 1.5x *is* its own
   // prefix, sample for sample, because nothing in it happens at a particular
   // time. An amplitude ramp gives the stretch something to move, and makes the
-  // difference between the branches legible — a compressed ramp reaches its top,
+  // difference between the branches legible: a compressed ramp reaches its top,
   // a truncated one stops two thirds of the way up.
   const n = 1_200;
   const x = tone(220, n);
@@ -189,7 +190,7 @@ test("the frame is derived from the sample rate, not hardcoded", () => {
   assert.deepEqual(Array.from(at48k), Array.from(x.subarray(0, at48k.length)));
 
   // 8 kHz: one frame is 200 samples, so the overlap-add ran instead. Same input,
-  // same speed, same output length, different samples — and the ramp climbs
+  // same speed, same output length, different samples, and the ramp climbs
   // further, because a compressed ramp keeps rising where a truncated one simply
   // stops.
   assert.notDeepEqual(Array.from(at8k), Array.from(at48k));
@@ -197,8 +198,8 @@ test("the frame is derived from the sample rate, not hardcoded", () => {
 });
 
 test("a sample rate too low to have a hop does not hang", () => {
-  // The guard that no implementation tested, which is how two of the five —
-  // this one included — shipped without it.
+  // The guard that no implementation tested, which is how two of the five
+  // (this one included) shipped without it.
   //
   // Below ~60 Hz the derived frame is one sample, so the hop (frame / 2) is
   // zero, and `writeAt += hop` never advances. This port computed the hop
@@ -216,7 +217,7 @@ test("a sample rate too low to have a hop does not hang", () => {
 });
 
 test("two calls agree bit for bit", () => {
-  // No RNG, no adaptivity, no wall clock. Same in, same out, forever — which is
+  // No RNG, no adaptivity, no wall clock. Same in, same out, forever, which is
   // what lets the engine promise the same bytes for the same seed *and* the
   // same speed.
   const x = tone(220, RATE);
@@ -251,5 +252,41 @@ test("nothing clips or goes non-finite", () => {
         `speed ${speed} produced ${got[i]} at sample ${i}, well past the input's range`
       );
     }
+  }
+});
+
+
+test("fadeEdges starts and ends at zero and leaves the middle", () => {
+  const audio = new Float32Array(24_000).fill(0.25);
+  const out = fadeEdges(audio, 24_000);
+  const n = Math.floor(EDGE_FADE_SECONDS * 24_000);
+  assert.equal(out[0], 0);
+  assert.equal(out[out.length - 1], 0);
+  assert.deepEqual(Array.from(out.subarray(n, out.length - n)), Array.from(audio.subarray(n, audio.length - n)));
+  for (let i = 1; i < n; i++) {
+    assert.ok(out[i] >= out[i - 1], `ramp not monotonic at ${i}`);
+    assert.ok(Math.abs(out[i] - out[out.length - 1 - i]) < 1e-7, `ramp not symmetric at ${i}`);
+  }
+  assert.equal(audio[0], 0.25);
+});
+
+test("fadeEdges leaves a short window alone", () => {
+  const audio = new Float32Array(10).fill(1);
+  assert.deepEqual(Array.from(fadeEdges(audio, 24_000)), Array.from(audio));
+});
+
+
+// Every ramp the fixture pins, the historical 5 ms and the shipped 20 ms, has
+// to come out of fadeEdges bit for bit. A cosine computed here cannot: numpy
+// takes it in float32, and the ramp a release actually applies is the 20 ms one.
+test("24 kHz fades exactly match the Python float32 ramps", () => {
+  const fixture = JSON.parse(readFileSync(new URL("../../../tests/data/conformance/edge_fade.json", import.meta.url), "utf8"));
+  assert.ok(fixture.ramps.length >= 2, "the 5 ms and 20 ms ramps are both pinned");
+  for (const ramp of fixture.ramps) {
+    assert.equal(ramp.bits.length, ramp.samples);
+    const got = fadeEdges(new Float32Array(4 * ramp.samples).fill(1), fixture.sample_rate, ramp.seconds);
+    const bits = new Uint32Array(got.buffer);
+    assert.deepEqual(Array.from(bits.slice(0, ramp.samples)), ramp.bits, `${ramp.seconds}s head`);
+    assert.deepEqual(Array.from(bits.slice(-ramp.samples)).reverse(), ramp.bits, `${ramp.seconds}s tail`);
   }
 });

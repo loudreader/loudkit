@@ -3,7 +3,7 @@
 
 RELEASING.md §8 asks for this in prose: a machine that never saw the repository,
 `pip install loudkit`, `download`, `speak`, `verify`. Prose is a hope. This is
-the same steps as a gate, so the answer is a exit code rather than a memory of
+the same steps as a gate, so the answer is an exit code rather than a memory of
 having tried it.
 
 The one property that makes it a clean room, and the only one worth writing a

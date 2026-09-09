@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/loudreader/loudkit/go/chunking"
 	"github.com/loudreader/loudkit/go/config"
@@ -64,13 +65,17 @@ func TestEngineConformance(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	buf, err := os.ReadFile(filepath.Join(fixture, "vectors.json"))
+	buf, err := os.ReadFile(filepath.Join(fixture, fixtureName(eng.Config().DecodeMode)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var vectors map[string]interface{}
 	if err := json.Unmarshal(buf, &vectors); err != nil {
 		t.Fatal(err)
+	}
+	wantFingerprint := vectors["algorithm"].(map[string]interface{})["fingerprint"].(string)
+	if got, want := eng.Fingerprint(), wantFingerprint; got != want {
+		t.Fatalf("algorithm fingerprint: got %s, want %s", got, want)
 	}
 	cases := vectors["end_to_end"].([]interface{})
 
@@ -92,7 +97,9 @@ func TestEngineConformance(t *testing.T) {
 			MaxNewTokens:      cfg.Sampling.MaxNewTokens,
 			SilenceTokenIds:   cfg.Sampling.SilenceTokenIds,
 		}, seed)
+		started := time.Now()
 		rawTok, err := eng.Generate(ids, v, s, nil, nil, nil)
+		t.Logf("%s generation: %d tokens in %s (no prefix)", name, len(rawTok), time.Since(started))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,6 +119,24 @@ func TestEngineConformance(t *testing.T) {
 			}
 		}
 		t.Logf("%s tokens: PASS (%d)", name, len(stripped))
+
+		// The two public paths agree with the generator: chunk 0 draws the
+		// caller's seed, so a text that fits one window renders the same
+		// tokens through SynthesizeWindow and through Synthesize.
+		opts := engine.Options{Seed: seed, Language: c["language"].(string)}
+		window, err := eng.SynthesizeWindow(c["text"].(string), v, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		whole, err := eng.Synthesize(c["text"].(string), v, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !equalInts(window.Tokens, stripped) || !equalInts(whole.Tokens, stripped) {
+			t.Fatalf("%s: SynthesizeWindow %d tokens, Synthesize %d tokens, generator %d: "+
+				"the public paths and the generator disagree",
+				name, len(window.Tokens), len(whole.Tokens), len(stripped))
+		}
 
 		// fixed-token render: within the band
 		mel, err := eng.DecodeMel(want, v, derive(seed, 1))
@@ -134,7 +159,15 @@ func TestEngineConformance(t *testing.T) {
 		if waveCorr < toFloat(gates["wave_corr"]) {
 			t.Errorf("%s wave corr %.4f below gate %.4f", name, waveCorr, toFloat(gates["wave_corr"]))
 		}
-		t.Logf("%s render: mel %.6f wave %.4f", name, melCorr, waveCorr)
+		level := levelDB(t, audio, wavRef)
+		if math.Abs(level) > toFloat(gates["wave_rms_db"]) {
+			t.Errorf("%s level %+.4f dB against the reference, outside the %.4f dB band; "+
+				"correlation cannot see this", name, level, toFloat(gates["wave_rms_db"]))
+		}
+		if peak := peakOf(audio); peak > 1 {
+			t.Errorf("%s peak %.4f is outside the declared [-1, 1] waveform", name, peak)
+		}
+		t.Logf("%s render: mel %.6f wave %.4f level %+.4f dB", name, melCorr, waveCorr, level)
 	}
 
 	longForm(t, eng, v, vectors)
@@ -169,7 +202,7 @@ func longForm(t *testing.T, eng *engine.Engine, v *voice.Profile, vectors map[st
 		c := kase.(map[string]interface{})
 		name := c["name"].(string)
 		language := c["language"].(string)
-		// Funnel first, then split — the order the engine uses, and the order
+		// Funnel first, then split: the order the engine uses, and the order
 		// the character budget assumes.
 		prepared := speechtext.Prepared(c["text"].(string), language)
 		if prepared != c["prepared"].(string) {
@@ -205,7 +238,18 @@ func longForm(t *testing.T, eng *engine.Engine, v *voice.Profile, vectors map[st
 			// the carry rather than the tokens that followed from it.
 			if index > 0 {
 				previous := toInts(chunks[index-1].(map[string]interface{})["tokens"])
-				tail := previous[len(previous)-prefixTokens:]
+				end := len(previous)
+				if eng.Config().DecodeMode == "fusion_mtp2" {
+					end -= end % 2
+				}
+				start := max(0, end-prefixTokens)
+				if eng.Config().DecodeMode == "fusion_mtp2" {
+					start -= start % 2
+				}
+				tail := previous[start:end]
+				if len(prefix) != len(tail) {
+					t.Fatalf("carry length: got %d, want %d", len(prefix), len(tail))
+				}
 				for i := range tail {
 					if prefix[i] != tail[i] {
 						t.Fatalf("%s chunk %d: carry %v is not the previous chunk's tail %v",
@@ -231,7 +275,9 @@ func longForm(t *testing.T, eng *engine.Engine, v *voice.Profile, vectors map[st
 				MaxNewTokens:      cfg.Sampling.MaxNewTokens,
 				SilenceTokenIds:   cfg.Sampling.SilenceTokenIds,
 			}, seed)
+			started := time.Now()
 			rawTok, err := eng.Generate(ids, v, s, nil, nil, prefix)
+			t.Logf("%s chunk %d generation: %d tokens, prefix %d, %s", name, index, len(rawTok), len(prefix), time.Since(started))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -251,8 +297,68 @@ func longForm(t *testing.T, eng *engine.Engine, v *voice.Profile, vectors map[st
 				}
 			}
 		}
+		// The engine's own long-form path, not the generator driven with the
+		// fixture's seeds: this is what holds the chunk seed law (chunk 0 the
+		// caller's seed, chunk k derive(seed, 16+k)) and the carry to the
+		// fixture rather than the fixture to the test.
+		whole, err := eng.Synthesize(c["text"].(string), v, engine.Options{
+			Seed: uint64(toFloat(c["seed"])), Language: language,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		publicTokens := c["tokens"]
+		if public, ok := c["public_tokens"]; ok {
+			publicTokens = public
+		}
+		if want := toInts(publicTokens); !equalInts(whole.Tokens, want) {
+			for i := 0; i < min(len(want), len(whole.Tokens)); i++ {
+				if want[i] != whole.Tokens[i] {
+					t.Logf("first whole-token mismatch %d: got %v want %v", i, whole.Tokens[max(0, i-3):min(len(whole.Tokens), i+5)], want[max(0, i-3):min(len(want), i+5)])
+					break
+				}
+			}
+			t.Fatalf("%s: Synthesize produced %d tokens, the fixture's public list has %d: "+
+				"the engine's own seed law or carry has drifted", name, len(whole.Tokens), len(want))
+		}
+
+		var streamedTokens []int
+		var streamedAudio []float32
+		count := 0
+		err = eng.Stream(c["text"].(string), v, engine.Options{Seed: uint64(toFloat(c["seed"])), Language: language}, func(chunk engine.Chunk) bool {
+			count++
+			streamedTokens = append(streamedTokens, chunk.Tokens...)
+			streamedAudio = append(streamedAudio, chunk.Audio...)
+			return true
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != len(chunks) || !equalInts(streamedTokens, whole.Tokens) {
+			t.Fatalf("%s: stream changed chunk count or tokens", name)
+		}
+		if len(streamedAudio) != len(whole.Audio) {
+			t.Fatalf("%s: repeat audio length changed", name)
+		}
+		for i, sample := range streamedAudio {
+			if math.Float32bits(sample) != math.Float32bits(whole.Audio[i]) {
+				t.Fatalf("%s: repeat audio changed at sample %d", name, i)
+			}
+		}
 		t.Logf("%s long-form tokens: PASS (%d chunks)", name, len(chunks))
 	}
+}
+
+func equalInts(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func derive(seed, stream uint64) uint64 {
@@ -291,6 +397,41 @@ func corr(t *testing.T, a, b []float32) float64 {
 	return num / math.Sqrt(da*db)
 }
 
+// levelDB is the RMS ratio of a render to its reference, in dB.
+//
+// Correlation subtracts the mean and divides by the deviation, so it reports
+// 1.0 for a render at half volume, at twenty times volume, or with a DC
+// offset. Level is exactly what that normalisation discards, so it is the one
+// amplitude fact worth its own gate.
+func levelDB(t *testing.T, a, b []float32) float64 {
+	t.Helper()
+	if len(a) != len(b) {
+		t.Fatalf("length mismatch %d vs %d", len(a), len(b))
+	}
+	var sa, sb float64
+	for i := range a {
+		sa += float64(a[i]) * float64(a[i])
+		sb += float64(b[i]) * float64(b[i])
+	}
+	if sa == 0 {
+		t.Fatalf("rendered silence")
+	}
+	return 20 * math.Log10(math.Sqrt(sa/sb))
+}
+
+// peakOf is the loudest sample, against the [-1, 1] a waveform is declared to
+// occupy. Everything downstream clips to that range, so a render outside it is
+// audibly wrong and needs no tolerance to say so.
+func peakOf(a []float32) float64 {
+	peak := 0.0
+	for _, v := range a {
+		if abs := math.Abs(float64(v)); abs > peak {
+			peak = abs
+		}
+	}
+	return peak
+}
+
 func readF32(t *testing.T, path string) []float32 {
 	buf, err := os.ReadFile(path)
 	if err != nil {
@@ -307,8 +448,8 @@ func readF32(t *testing.T, path string) []float32 {
 // TestSynthesizeReportsHitTokenCap pins the truncation flag on the long-form
 // result: false for a normal render, which ends at a stop token well under the
 // cap. Python's synthesis layer declares every transport must report
-// hit_token_cap — silent truncation presented as complete audio reads as
-// complete to an agent — and this port computed the flag and dropped it.
+// hit_token_cap: silent truncation presented as complete audio reads as
+// complete to an agent, and this port computed the flag and dropped it.
 func TestSynthesizeReportsHitTokenCap(t *testing.T) {
 	ckpt := os.Getenv("LOUDKIT_CKPT")
 	onnxDir := os.Getenv("LOUDKIT_ONNX_DIR")
@@ -335,16 +476,15 @@ func TestSynthesizeReportsHitTokenCap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, tokens, _, chunks, _, capped, err := eng.SynthesizeLong(
-		"Hello from loudkit.", v, 4242, "", 1.0, nil, nil)
+	out, err := eng.Synthesize("Hello from loudkit.", v, engine.Options{Seed: 4242})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if capped {
-		t.Fatalf("a short sentence that ends at its stop token must not report hitTokenCap")
+	if out.HitTokenCap {
+		t.Fatalf("a short sentence that ends at its stop token must not report HitTokenCap")
 	}
-	if len(tokens) == 0 || len(chunks) == 0 {
-		t.Fatalf("the render produced no speech: %d tokens, %d chunks", len(tokens), len(chunks))
+	if len(out.Tokens) == 0 || len(out.Chunks) == 0 {
+		t.Fatalf("the render produced no speech: %d tokens, %d chunks", len(out.Tokens), len(out.Chunks))
 	}
 }
 
@@ -362,4 +502,11 @@ func skipOrFail(t *testing.T, reason string) {
 		t.Fatalf("LOUDKIT_REQUIRE_ASSETS is set but %s", reason)
 	}
 	t.Skip(reason)
+}
+
+func fixtureName(mode string) string {
+	if mode == "fusion_mtp2" {
+		return "vectors_fusion_mtp2.json"
+	}
+	return "vectors.json"
 }

@@ -5,13 +5,13 @@ import XCTest
 /// The weight-free half of the conformance contract: Philox bits, sampler
 /// choices, frontend ids, seed derivation. These vectors were produced by the
 /// Python implementation; if this file passes, the two implementations agree
-/// on every decision that shapes a reading — without either having imported
+/// on every decision that shapes a reading, without either having imported
 /// the other.
 /// The cases for one fixture section, refusing an empty list.
 ///
 /// Every loop below iterates a slice pulled out of the fixture by key, with a
 /// force-cast that turns a *renamed* key into a crash but an *empty* list into
-/// a silent pass — the entire cross-language determinism claim switched off
+/// a silent pass, the entire cross-language determinism claim switched off
 /// with nothing to show for it. Go, Rust and JS grew the same guard.
 private func cases(_ section: [String: Any], _ key: String,
                    file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {

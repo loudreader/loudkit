@@ -4,7 +4,7 @@
  * The vocabulary carries tags for 31 languages; the text layer is written for
  * twelve. A blacklist of only zh/ja/he/ko/ru lets the other 26 go
  * straight through: `encode(text, "bg")` NFKD-mangles Cyrillic into ids the
- * model reads as sounds it never learned — no error, plausible-sounding audio,
+ * model reads as sounds it never learned: no error, plausible-sounding audio,
  * wrong language.
  *
  * The roster is asserted against the number grammars rather than a literal

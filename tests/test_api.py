@@ -43,11 +43,33 @@ class TestEnrollIsTopLevel:
             # voice encoder, so this is the escape hatch for a tree that keeps
             # it somewhere else, not part of the ordinary call.
             "voice_encoder_weights",
+            # The rate of samples passed directly; a path is read at its own.
+            "sample_rate",
+            # Cut at the last pause before the prompt limit and pad silence; `clone` asks
+            # for it, the library does not.
+            "end_in_silence",
         ]
         # audio first, checkpoint second: the recording is the subject.
         assert signature.parameters["name"].kind is inspect.Parameter.KEYWORD_ONLY
 
-    @pytest.mark.parametrize("device", ["cpu", "onnx", "coreml", "garbage"])
+    def test_a_recording_that_is_not_there_is_a_loudkit_error(self) -> None:
+        """The three-line README path, on the ordinary typo.
+
+        `librosa.load` on a missing file raises `LibsndfileError: System error`
+        from inside soundfile: it does not name the path, it does not inherit
+        `LoudkitError`, and the documented `except LoudkitError` therefore did
+        not hold at the one boundary a first-time caller reaches. The refusal
+        is raised before the checkpoint is resolved, so it costs no download.
+        """
+        with pytest.raises(loudkit.AudioNotFoundError, match="no-such-clip.wav"):
+            loudkit.enroll("/nonexistent/no-such-clip.wav", "unused.safetensors")
+        # Both supertypes, because both are what callers already catch.
+        with pytest.raises(loudkit.LoudkitError):
+            loudkit.enroll("/nonexistent/no-such-clip.wav", "unused.safetensors")
+        with pytest.raises(FileNotFoundError):
+            loudkit.enroll("/nonexistent/no-such-clip.wav", "unused.safetensors")
+
+    @pytest.mark.parametrize("device", ["cpu", "garbage"])
     def test_enroll_explains_the_missing_extra_before_importing_torch(
         self, monkeypatch: pytest.MonkeyPatch, device: str
     ) -> None:

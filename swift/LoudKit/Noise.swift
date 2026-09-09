@@ -6,12 +6,12 @@ import Foundation
 /// random. Both sides of the conformance table draw them from the same Philox
 /// counters, so a cross-language waveform comparison measures arithmetic, not
 /// RNG plumbing. The Gaussian transform draws a fresh uniform pair per sample
-/// (cos-only Box–Muller) — the cached-spare variant puts a period-2 structure
+/// (cos-only Box–Muller), the cached-spare variant puts a period-2 structure
 /// exactly on Nyquist, measured at +5.3 dB and audible after the vocoder.
 enum Noise {
     /// `rows x cols` standard normals, row-major float32. Consumes Philox
     /// sub-streams `stream` and `stream + 1` (the Box–Muller pair), so
-    /// callers space their stream ids by two — same rule as Python.
+    /// callers space their stream ids by two, same rule as Python.
     static func gaussianField(seed: UInt64, stream: UInt32, rows: Int, cols: Int) -> [Float] {
         let u1 = Philox.uniforms(seed: seed, stream: stream, step0: 0, nSteps: rows, width: cols)
         let u2 = Philox.uniforms(seed: seed, stream: stream + 1, step0: 0, nSteps: rows, width: cols)

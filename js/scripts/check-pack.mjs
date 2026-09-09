@@ -3,8 +3,8 @@
  *
  * `package.json` points `main`/`types` at `dist/` and lists `data/` in `files`, and
  * both are generated and gitignored. Without a `prepack` step, `npm pack` from
- * a clean checkout produced a tarball of **two files** — README.md and
- * package.json, 1148 bytes — which installs fine and fails at the first
+ * a clean checkout produced a tarball of **two files**, README.md and
+ * package.json at 1148 bytes, which installs fine and fails at the first
  * `import`. Nothing in the test suite notices, because the tests run against
  * the working tree rather than the artefact.
  *
@@ -12,7 +12,7 @@
  * it from the Python package and silently does nothing when the source is
  * missing, so an empty or absent `data/` means the respelling tables were never
  * copied and the binding would degrade to unrespelled English inside Polish
- * text — the failure that is inaudible in review and obvious to a listener.
+ * text: the failure that is inaudible in review and obvious to a listener.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -33,7 +33,7 @@ function filesBelow(dir) {
 
 for (const entry of ["dist/index.js", "dist/index.d.ts"]) {
   if (!existsSync(join(root, entry))) {
-    problems.push(`${entry} is missing — run \`npm run build\``);
+    problems.push(`${entry} is missing. Run \`npm run build\``);
   }
 }
 
@@ -69,7 +69,7 @@ for (const path of maps) {
 const lexicon = join(root, "data", "pl_en_respell.json");
 if (!existsSync(lexicon)) {
   problems.push(
-    "data/pl_en_respell.json is missing — `prebuild` copies it from " +
+    "data/pl_en_respell.json is missing. `prebuild` copies it from " +
       "../../python/loudkit/models/data/, which means this was packed outside the " +
       "loudkit repo"
   );
@@ -82,11 +82,23 @@ if (!existsSync(lexicon)) {
 
 // The number grammars are compiled into dist/ by the JSON import, but the
 // tarball also ships data/ so the file stays inspectable next to its siblings.
-if (!existsSync(join(root, "data", "numbers.json"))) {
-  problems.push(
-    "data/numbers.json is missing — `prebuild` copies it from " +
-      "../../python/loudkit/models/data/"
-  );
+// `numerals.json` is not compiled in at all: it is read at run time on the
+// first fold, so for that one this check is the only thing between a missing
+// file and an `ENOENT` in a recipient's process.
+for (const name of ["numbers.json", "numerals.json"]) {
+  if (!existsSync(join(root, "data", name))) {
+    problems.push(
+      `data/${name} is missing. \`prebuild\` copies it from ` +
+        "../../python/loudkit/models/data/"
+    );
+  }
+}
+
+// The README's quickstart is this file, word for word, and it is the only
+// runnable thing in the tarball. Packing without it publishes a README that
+// tells the reader to run a script they did not get.
+if (!existsSync(join(root, "examples", "hello.mjs"))) {
+  problems.push("examples/hello.mjs is missing, and the README quickstart is that file");
 }
 
 // The tarball is what a recipient gets, and it is not this repository: without
@@ -95,7 +107,7 @@ if (!existsSync(join(root, "data", "numbers.json"))) {
 // so a missing one means someone deleted it.
 for (const entry of ["LICENSE", "NOTICE", "DISCLOSURE"]) {
   if (!existsSync(join(root, entry))) {
-    problems.push(`${entry} is missing — copy it from the repository root`);
+    problems.push(`${entry} is missing. Copy it from the repository root`);
   }
 }
 

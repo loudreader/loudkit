@@ -2,9 +2,9 @@
 //
 // The whole value of this feature is that a reading app can trust the first
 // tier and be told, loudly, not to trust the second in the same way. So the
-// tests are split the same way: the chunk assertions are equalities — down to
-// the last bit, because a tolerance would hide exactly the defect that matters
-// — and the word assertions are invariants (monotonic, inside the chunk, every
+// tests are split the same way. The chunk assertions are equalities, down to
+// the last bit, because a tolerance would hide exactly the defect that matters;
+// the word assertions are invariants (monotonic, inside the chunk, every
 // word present). Nothing here claims a word lands where a listener would say it
 // does.
 
@@ -26,7 +26,7 @@ func TestChunksAreAdjacentToTheLastBit(t *testing.T) {
 		t.Errorf("the first chunk starts at %v, want 0", got[0].Start)
 	}
 	if got[1].Start != got[0].End {
-		t.Errorf("chunk 1 starts at %v but chunk 0 ends at %v — a gap of %v",
+		t.Errorf("chunk 1 starts at %v but chunk 0 ends at %v: a gap of %v",
 			got[1].Start, got[0].End, got[1].Start-got[0].End)
 	}
 	if want := float64(7_001+13_337) / sampleRate; got[1].End != want {
@@ -124,7 +124,7 @@ func TestNoTextIsNoWordsRatherThanADivisionByZero(t *testing.T) {
 
 // The other four ports count code points too. A byte count would give Polish and
 // Japanese text different word weights in Go than in Python, for text that reads
-// identically — "żółć" is four characters to a reader and eight bytes to Go.
+// identically: "żółć" is four characters to a reader and eight bytes to Go.
 func TestLengthIsCountedInCodePointsNotBytes(t *testing.T) {
 	words := EstimateWords("aaaa żółć", 0.0, 1.0)
 	if len(words) != 2 {

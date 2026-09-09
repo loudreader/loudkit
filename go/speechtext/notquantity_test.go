@@ -2,7 +2,7 @@ package speechtext
 
 import "testing"
 
-// A digit run with two or more separators is a version, an address or a date —
+// A digit run with two or more separators is a version, an address or a date,
 // never a number. Reading one as a number says the segments as one value: with
 // the comma as the decimal mark the dots are treated as thousands grouping and
 // the segments concatenate, so 192.168.0.1 is spoken as "nineteen million two

@@ -1,4 +1,4 @@
-//! Minimal safetensors reader — enough to pull the checkpoint's embedding
+//! Minimal safetensors reader: enough to pull the checkpoint's embedding
 //! tables and a voice profile. Format: 8-byte little-endian header length, a
 //! JSON header naming each tensor with its dtype, shape and byte offsets, then
 //! the raw tensors.
@@ -76,7 +76,7 @@ impl File {
                 .ok_or_else(|| format!("tensor {name}: data_offsets overflow"))?;
             if begin > end || stop > buf.len() {
                 return Err(format!(
-                    "tensor {name}: spans {begin}..{end} of a {}-byte payload — file is \
+                    "tensor {name}: spans {begin}..{end} of a {}-byte payload, file is \
                      truncated or the header is corrupt",
                     buf.len().saturating_sub(base)
                 ));
@@ -84,7 +84,7 @@ impl File {
             // The shape must account for exactly the bytes claimed.
             //
             // The range check above stops a slice panic, but callers read
-            // `shape` to size their work — a header declaring `[256]` over four
+            // `shape` to size their work: a header declaring `[256]` over four
             // bytes of payload is not a bad tensor, it is a reader computing
             // with a length the data does not have. The accessors below also
             // use `chunks_exact`, which silently drops a partial tail; with
@@ -109,7 +109,7 @@ impl File {
             if declared != end - begin {
                 return Err(format!(
                     "tensor {name}: declares shape {shape:?} of {dtype} ({declared} bytes) \
-                     but occupies {} bytes — the header does not describe the payload",
+                     but occupies {} bytes, the header does not describe the payload",
                     end - begin
                 ));
             }
@@ -166,6 +166,101 @@ impl File {
             .map(|c| i64::from_le_bytes(*c))
             .collect())
     }
+}
+
+/// One tensor to write: its name, dtype, shape and little-endian bytes.
+pub struct Entry {
+    pub name: String,
+    pub dtype: String,
+    pub shape: Vec<i64>,
+    pub data: Vec<u8>,
+}
+
+/// The order the safetensors library lays tensors out in: widest dtype first,
+/// then by name. Only the order the reader inverts; the format accepts any.
+fn dtype_rank(dtype: &str) -> usize {
+    [
+        "BOOL", "U8", "I8", "F8_E5M2", "F8_E4M3", "I16", "U16", "F16", "BF16", "I32", "U32", "F32",
+        "F64", "I64", "U64",
+    ]
+    .iter()
+    .position(|d| *d == dtype)
+    .unwrap_or(0)
+}
+
+/// Write tensors and metadata as a safetensors file: the 8-byte header
+/// length, the JSON header padded to a multiple of eight with spaces, then
+/// the payloads in header order. Owner-only permissions on POSIX.
+///
+/// # Errors
+///
+/// For a shape that does not account for the bytes, and everything the file
+/// write returns.
+pub fn write(
+    path: &std::path::Path,
+    entries: &[Entry],
+    metadata: &HashMap<String, String>,
+) -> Result<(), String> {
+    let mut sorted: Vec<&Entry> = entries.iter().collect();
+    sorted.sort_by(|a, b| {
+        dtype_rank(&b.dtype)
+            .cmp(&dtype_rank(&a.dtype))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    let mut fields: Vec<String> = Vec::new();
+    if !metadata.is_empty() {
+        let meta: std::collections::BTreeMap<&String, &String> = metadata.iter().collect();
+        fields.push(format!(
+            "\"__metadata__\":{}",
+            serde_json::to_string(&meta).map_err(|e| e.to_string())?
+        ));
+    }
+    let mut offset = 0usize;
+    for e in &sorted {
+        let width =
+            byte_width(&e.dtype).ok_or_else(|| format!("{}: unknown dtype {}", e.name, e.dtype))?;
+        let elements: i64 = e.shape.iter().product();
+        if elements * width as i64 != e.data.len() as i64 {
+            return Err(format!(
+                "{}: shape {:?} of {} is {} bytes, data is {}",
+                e.name,
+                e.shape,
+                e.dtype,
+                elements * width as i64,
+                e.data.len()
+            ));
+        }
+        fields.push(format!(
+            "{}:{{\"dtype\":\"{}\",\"shape\":{},\"data_offsets\":[{},{}]}}",
+            serde_json::to_string(&e.name).map_err(|err| err.to_string())?,
+            e.dtype,
+            serde_json::to_string(&e.shape).map_err(|err| err.to_string())?,
+            offset,
+            offset + e.data.len()
+        ));
+        offset += e.data.len();
+    }
+    let mut header = format!("{{{}}}", fields.join(","));
+    while header.len() % 8 != 0 {
+        header.push(' ');
+    }
+    let mut out = Vec::with_capacity(8 + header.len() + offset);
+    out.extend_from_slice(&(header.len() as u64).to_le_bytes());
+    out.extend_from_slice(header.as_bytes());
+    for e in &sorted {
+        out.extend_from_slice(&e.data);
+    }
+    fs::write(path, &out).map_err(|e| format!("{}: {e}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        // Reported, not discarded. The doc above promises owner-only
+        // permissions, so a chmod that fails leaves a voice profile readable
+        // by everyone with the caller told nothing.
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("{}: cannot restrict to owner-only: {e}", path.display()))?;
+    }
+    Ok(())
 }
 
 /// Bytes per element, or `None` for a dtype this reader does not know.

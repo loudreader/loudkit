@@ -50,10 +50,10 @@ for your use, pass `include_provenance=False`.
 ## Reading it back
 
 ```python
-import loudkit as lk
+from loudkit.provenance import read_provenance, verify_provenance
 
-info = lk.read_provenance("hello.wav")  # the manifest, or None
-manifest, ok = lk.verify_provenance("hello.wav")  # does audio_sha256 still match?
+info = read_provenance("hello.wav")  # the manifest, or None
+manifest, ok = verify_provenance("hello.wav")  # does audio_sha256 still match?
 ```
 
 `verify_provenance` re-hashes the audio and compares. It catches a manifest

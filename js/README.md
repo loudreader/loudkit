@@ -1,79 +1,93 @@
-# loudkit JS/TS binding
+# loudkit for JavaScript and TypeScript
 
-The loudkit engine over `onnxruntime-node`. The sampler, RNG (Philox),
-tokenizer, windowing and the generator loop are ported to TypeScript, with
-**no torch** at runtime.
+Text to speech in Node, on `onnxruntime-node`. No Python, no torch.
 
-## Status: supported
+## Hello
 
-Passes the shared conformance fixture: weight-free vectors exact, free-run
-tokens and render band against the checkpoint. The full walkthrough is
-`docs/guides/07-js-ts.md` in the repo root.
-
-## Requirements
-
-- Node ≥ 20 (uses `node:test`; `package.json` requires it, and CI runs 20 and 22)
-- the exported ONNX graphs (`onnx/` beside the checkpoint; run
-  `python tools/export_onnx.py` once from the repo root)
-- the packed checkpoint, a voice profile, and `tokenizer.json`
-
-## Synthesise
+Node 20 or newer.
 
 ```bash
 npm install loudkit
 ```
 
-```bash
-pip install "loudkit[hub]"
-loudkit download loudreader/loudr-1 --for onnx --local-dir loudr-1
-```
+The `onnxruntime-node` dependency has an install script for optional native
+binaries, including CUDA. If your package manager blocks dependency scripts,
+review and allow that dependency's script when you need those binaries. The
+bundled CPU runtime does not require the optional CUDA download; selecting CUDA
+also requires a driver compatible with the installed runtime.
 
-Everything lands inside `loudr-1/`, which is what the paths below are relative
-to. `--with-cloning` adds the three enrollment graphs.
+`hello.mjs`:
 
 ```javascript
-import { Engine, loadVoice } from "loudkit";
+import { Engine } from "loudkit";
 
-const engine = await Engine.load(
-  "loudr-1/loudr-1.safetensors",  // packed checkpoint
-  "loudr-1/onnx",                 // exported graphs
-  "loudr-1/tokenizer.json"        // text tokenizer
-);
-const voice = loadVoice("loudr-1/voices/joe.safetensors");
-
-// Use synthesizeLong. synthesize renders one window and errors on anything
-// longer instead of clipping it. Omit the language to read in the voice's own.
-const r = await engine.synthesizeLong("Hello from loudkit.", voice, 7);
-console.log(`${r.tokens.length} tokens, ${(r.audio.length / r.sampleRate).toFixed(2)}s`);
-// r.audio is a Float32Array at r.sampleRate. Hand it to your own WAV writer
-// or audio device. This package writes no files.
+const engine = await Engine.load("loudreader/loudr-1");
+const result = await engine.synthesize("Hello from loudkit.", engine.voice("joe"), { seed: 7 });
+result.saveWav("hello.wav");
+console.log(`hello.wav, ${(result.audio.length / result.sampleRate).toFixed(2)}s`);
+await engine.close();
 ```
+
+```bash
+node hello.mjs
+```
+
+The first run downloads the model files into
+`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS and
+`~/.cache/loudkit/loudreader--loudr-1` on Linux (`$LOUDKIT_CACHE` moves it),
+the directory the Go, Rust and Swift ports share, and checks every file
+against the release's own `SHA256SUMS`; later runs read what is there.
+`engine.voices()` names the 28 voices. `close()` hands back the
+runtime's memory; it matters when you build a second engine.
+
+The snippets on this page need loudkit 0.1.1. From a checkout: `npm run build`,
+then `node examples/hello.mjs`, which is this file.
+
+Both `loudr-1` and `loudr-1-turbo` use this API in 0.1.1. Change the model
+name to switch; keep the same voice profile. A local release directory works
+as well as a published model name.
+
+
+## The rest of the front door
+
+```javascript
+await download("loudreader/loudr-1", "loudr-1");          // a directory of your own
+await download(repo, dir, { revision: "v0.1.1", cloning: true });
+await Engine.load("loudr-1");                            // a directory or a repo id
+engine.voices();                                         // the names in the release
+engine.voice("joe");                                     // one of them
+await engine.synthesize(text, voice, { seed, language, speed, previousTokens });
+for await (const chunk of engine.stream(text, voice, options)) play(chunk.audio);
+const mine = await engine.enroll("me.wav", { name: "mine", language: "en" });
+saveVoice(mine, "mine.safetensors");                     // a portable profile
+loadVoice("mine.safetensors");
+result.saveWav(path);  result.toWav();                   // 16-bit PCM
+```
+
+`synthesize` takes text of any length: it splits at sentence boundaries and
+joins the audio. Every option has a default: seed 0, the voice's own language,
+normal speed. `stream` yields chunks as they are made; `options.shouldCancel`
+stops within one decode step. `enroll` on an engine loaded by repo id fetches
+the enrollment graphs once; a directory of your own needs `{ cloning: true }`.
+`Engine.loadPaths(checkpoint, onnxDir, tokenizer)` opens a layout of your own.
 
 Streaming, timestamps, speed and barge-in: `docs/guides/07-js-ts.md`.
 
 ## Execution provider
 
-`onnxProvider` picks the onnxruntime execution provider. The five accepted
-values are the same in every loudkit port: `auto`, `cpu`, `cuda`, `coreml`,
+`onnxProvider` picks the onnxruntime execution provider; the five values are
+the same in every port: `auto` (the default), `cpu`, `cuda`, `coreml`,
 `directml`.
 
 ```javascript
-const engine = await Engine.load(ckpt, onnxDir, tokenizerPath, {
-  onnxProvider: "auto",         // the default
-});
+const engine = await Engine.load("loudr-1", { onnxProvider: "auto" });
 console.log(engine.onnxProvider);  // the one that ran, never "auto"
-console.log(engine.describe());    // algo[...] loudkit-1 | exec[onnx provider=coreml prec[all=fp32]]
+console.log(engine.describe());
 ```
 
-`auto` takes CUDA where the build offers it and CPU otherwise. It reaches
-neither CoreML, which this port refuses, nor DirectML, which nobody has
-measured. Any other value is a requirement: if the
-build does not carry that provider, `load` throws and names what is available.
-It never falls back to CPU without saying so, because a benchmark row that
-reads `cuda` and ran on CPU is worse than a failure.
-
-Which providers you get is fixed when `onnxruntime-node` is installed, not
-when loudkit runs. The package ships one prebuilt binary per platform and arch:
+`auto` takes CUDA where the build offers it and CPU otherwise. A named provider
+the build does not carry is an error, never a quiet fall back to CPU. Which
+providers exist is fixed when `onnxruntime-node` is installed:
 
 | platform | providers |
 | --- | --- |
@@ -81,27 +95,11 @@ when loudkit runs. The package ships one prebuilt binary per platform and arch:
 | linux/x64 | `cpu`, `cuda` |
 | win32/x64, win32/arm64 | `cpu`, `directml` |
 
-There is no separate npm package to install for CUDA or DirectML. For CUDA the
-provider's own shared libraries are fetched by the package's postinstall step,
-which `--onnxruntime-node-install=skip` turns off. For anything your platform's
-prebuilt binary does not carry, build `onnxruntime-node` from source.
-
-`availableProviders()` reports what the installed build actually offers. Ask it
-rather than inferring from `process.platform`, which describes the download and
-not a locally built binding.
-
-`Enroller.load` takes the same option.
-
-A GPU provider can change the token stream and waveform. This port refuses
-CoreML because `onnxruntime-node` cannot persist its compile cache; use Swift or
-one of the other ports for CoreML. Conformance runs pin CPU, and
-`npm run test:fixture` accepts `--provider` for explicit comparisons. See
+`availableProviders()` reports what the installed build offers. This package
+refuses `coreml`, because `onnxruntime-node` cannot keep its compile cache;
+use the Swift package for CoreML. A GPU provider can change the token stream
+and waveform; conformance runs pin CPU. See
 [`docs/benchmarks.md`](../docs/benchmarks.md#onnx-execution-providers).
-
-CUDA was measured on an RTX 3090 with `onnxruntime-node` 1.26.0. The declared
-1.27 series needs a newer NVIDIA driver than that machine had, so the result is
-not a measurement of the default install. DirectML is unit-tested for
-resolution and refusal text but has not been measured on Windows.
 
 ## Build and test
 
@@ -111,8 +109,5 @@ npm test                 # weight-free conformance vectors
 npm run test:all         # + engine conformance (needs checkpoint + graphs)
 ```
 
-## Runtime libraries and assets
-
 `onnxruntime-node` ships the native runtime as a package dependency. The
-checkpoint, graphs and tokenizer are **not** bundled. Point the engine at the
-paths on disk.
+checkpoint, graphs and tokenizer are not bundled; `Engine.load` fetches them.

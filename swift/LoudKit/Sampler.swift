@@ -1,6 +1,6 @@
 import Foundation
 
-/// LR-SAMPLER-v1 — the third independent implementation of the sampling law.
+/// LR-SAMPLER-v1, the third independent implementation of the sampling law.
 ///
 /// Same semantics, to the bit, as `loudkit.sampler.LRSamplerV1`, and verified
 /// against it through the conformance fixture: the RNG is Philox-addressed
@@ -10,6 +10,9 @@ import Foundation
 /// toward the lowest index. All sampling arithmetic runs in Double, exactly
 /// as the Python side promotes to float64.
 public final class LRSamplerV1 {
+    /// The law's name, the same string as Python's `SAMPLER_VERSION`, so a
+    /// caller that records which sampler produced a row records what the
+    /// reference records. Nothing in this port reads it.
     public static let version = "LR-SAMPLER-v1"
     static let samplingStream: UInt32 = 0
 
@@ -23,13 +26,18 @@ public final class LRSamplerV1 {
 
     /// Observation of how close each step came to stopping. Never feeds back
     /// into the draw; read by the postprocess detectors after generation. `nil`
-    /// disables it, and with it its cost — one exponential and one sum over the
+    /// disables it, and with it its cost, one exponential and one sum over the
     /// vocabulary per step.
     private var stopToken: Int?
     private var eosFloor = 0
     private var peakAt = -1
     private var peakProb = 0.0
 
+    /// A sampler over one window.
+    ///
+    /// `seed` is the window's seed, already derived; `block` is how many Philox
+    /// draws are taken at a time, which changes nothing about the values, only
+    /// how often they are fetched.
     public init(config: SamplingConfig, seed: UInt64, block: Int = 256) {
         self.config = config
         self.seed = seed
@@ -40,8 +48,8 @@ public final class LRSamplerV1 {
     /// Enable the stop-token observation the postprocess layer reads.
     ///
     /// Done here, in the sampler, rather than by changing the generator: every
-    /// backend already calls the sampler on every step — it owns the RNG
-    /// stream, so a backend that skipped it would produce different tokens —
+    /// backend already calls the sampler on every step, it owns the RNG
+    /// stream, so a backend that skipped it would produce different tokens,
     /// which means the observation reaches every generation path without a new
     /// seam.
     ///
@@ -60,7 +68,7 @@ public final class LRSamplerV1 {
     ///
     /// `(-1, 0)` when the stop token was never plausible, or when
     /// ``observeEOS(stopToken:floor:)`` was not called. **If the model never
-    /// stops, that peak is where the sentence really ended** — which is what
+    /// stops, that peak is where the sentence really ended**, which is what
     /// makes the number worth carrying.
     public var eosPeak: (at: Int, probability: Double) { (peakAt, peakProb) }
 
@@ -70,7 +78,7 @@ public final class LRSamplerV1 {
     /// token's softmax weight over the sum of the weights that survived
     /// `min_p`. The numerator is taken **before** the cutoff is applied, so a
     /// step where the stop token was itself filtered out still reports how near
-    /// it came — the number answers "how close was this to being the end", not
+    /// it came, the number answers "how close was this to being the end", not
     /// "what was the chance of stopping", and the first question is the one the
     /// detectors need, because the rows they exist to rescue are precisely the
     /// ones where stopping never won.
@@ -100,8 +108,8 @@ public final class LRSamplerV1 {
                 seed: seed, stream: Self.samplingStream,
                 // `UInt32(...)` traps rather than wrapping in Swift, so a run
                 // past 2^32 steps would kill the process with no message. Not
-                // reachable at 25 tokens a second — that is five and a half
-                // years of continuous speech — but a trap is a bad way to find
+                // reachable at 25 tokens a second, that is five and a half
+                // years of continuous speech, but a trap is a bad way to find
                 // out, and the clamp costs one comparison.
                 step0: UInt32(clamping: noiseBase), nSteps: block, width: width)
         }
@@ -113,18 +121,26 @@ public final class LRSamplerV1 {
     ///
     /// - Parameters:
     ///   - logits: `(vocab,)` scores straight from the model head.
-    ///   - step: decode step index — it addresses the RNG, so the result does
+    ///   - step: decode step index, it addresses the RNG, so the result does
     ///     not depend on how many tokens were drawn before.
-    ///   - seen: which tokens have already been emitted (repetition penalty;
-    ///     silence ids are exempt).
+    ///   - seen: which tokens have already been emitted (repetition penalty).
     public func sample(logits: [Float], step: Int, seen: [Bool]) -> Int {
         let vocab = logits.count
         var z = [Double](repeating: 0, count: vocab)
         for i in 0..<vocab { z[i] = Double(logits[i]) }
 
         if config.repetitionPenalty != 1.0 {
+            // The penalty applies to every seen token, silence included.
+            // Exempting silence here as well as below the min_p floor leaves a
+            // silence run with no exit: zero escapes in 1,031 instrumented trap
+            // steps, 33.0% of long-form paragraphs carrying a hole over a
+            // second, and 74 of 1705 passages rendering chunks of no speech at
+            // all. Penalising seen silence closes the trap: holes 33.0% to
+            // 4.3% and mute chunks 74 to 1 at 120 passages per arm across ten
+            // languages, natural-band pause rates inside noise on 8 of 9
+            // healthy voices, WER flat or better.
             let rp = config.repetitionPenalty
-            for i in 0..<vocab where seen[i] && !isSilence.contains(i) {
+            for i in 0..<vocab where seen[i] {
                 z[i] = z[i] > 0 ? z[i] / rp : z[i] * rp
             }
         }
@@ -151,6 +167,13 @@ public final class LRSamplerV1 {
         var bestIdx = 0
         var best = -Double.infinity
         for i in 0..<vocab {
+            // Silence stays available even when min_p would drop it: a pause
+            // token is what makes a reader pause, and a filter that removes
+            // the only way to pause is a filter that removes prosody. This is
+            // the one exemption silence keeps; removing it was measured
+            // catastrophic (median long-form gap 2.46 s -> 4.64 s). The
+            // repetition penalty above applies to silence like everything else,
+            // so a pause that overstays decays instead of never ending.
             let keep = z[i] >= threshold || isSilence.contains(i)
             guard keep else { continue }
             let v = z[i] + g[gBase + i]

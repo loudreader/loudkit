@@ -67,10 +67,11 @@ services:
     # Passed through to the server *and* to the healthcheck, which is behind the
     # same token as every other route.
     environment:
+      LOUDKIT_NO_WARM: ${LOUDKIT_NO_WARM:-0}
       LOUDKIT_TOKEN: ${LOUDKIT_TOKEN:?set LOUDKIT_TOKEN, e.g. export LOUDKIT_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')}
     command:
       - serve
-      - --checkpoint=/weights/loudr-1.safetensors
+      - --checkpoint=/weights/${LOUDKIT_MODEL_FILE:-loudr-1.safetensors}
       - --voices=/voices
       # Inside the container only; the port mapping above is the boundary.
       - --host=0.0.0.0

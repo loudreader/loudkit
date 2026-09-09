@@ -15,7 +15,9 @@ import assert from "node:assert";
 import { Engine } from "../engine.js";
 import type { ExecutionOptions } from "../execution.js";
 import { loadVoice } from "../voice.js";
+import { deriveSeed } from "../rng.js";
 import { LRSamplerV1 } from "../sampler.js";
+import { refuseIfAssetsRequired } from "./assets.js";
 
 const CKPT = process.env.LOUDKIT_CKPT;
 const ONNX_DIR = process.env.LOUDKIT_ONNX_DIR;
@@ -31,15 +33,7 @@ const available = [CKPT, ONNX_DIR, VOICE, TOKENIZER].every((p) => p && existsSyn
 // watching this file go red.
 const EXECUTION: ExecutionOptions = { onnxProvider: "cpu" };
 
-if (!available && process.env.LOUDKIT_REQUIRE_ASSETS && process.env.LOUDKIT_REQUIRE_ASSETS !== "0") {
-  // A skipped conformance test and a passing one look identical in a summary
-  // line. On a runner that is supposed to have the assets, missing ones are a
-  // broken environment — same switch, same meaning, as the Python suite's
-  // requires() and the Go and Rust conformance tests.
-  throw new Error(
-    "LOUDKIT_REQUIRE_ASSETS is set but LOUDKIT_CKPT/ONNX_DIR/VOICE/TOKENIZER are not all present"
-  );
-}
+refuseIfAssetsRequired(available, "LOUDKIT_CKPT/ONNX_DIR/VOICE/TOKENIZER are not all present");
 
 /** The shared fixture, resolved by walking up to the repo root. */
 function fixtureDir(): string {
@@ -56,45 +50,40 @@ function fixtureDir(): string {
 }
 
 /** The end-to-end case the tests below replay, by name. */
-function endToEndCase(name: string): any {
-  const vectors = JSON.parse(readFileSync(join(fixtureDir(), "vectors.json"), "utf8"));
+function endToEndCase(name: string, decode = "single"): any {
+  const vectors = JSON.parse(readFileSync(join(fixtureDir(), decode === "fusion_mtp2" ? "vectors_fusion_mtp2.json" : "vectors.json"), "utf8"));
   const found = vectors.end_to_end.find((c: any) => c.name === name);
   if (!found) throw new Error(`fixture has no end_to_end case ${name}`);
   return found;
 }
 
-/**
- * Pearson correlation, on the explicit condition that the two are the same
- * length. Correlating `Math.min(...)` samples scores a truncated render
- * perfectly against the prefix it did produce — and the length is the finding
- * in that case, not a detail to absorb.
- */
-
-test("engine synthesises over the ONNX graphs", { skip: !available && "set LOUDKIT_CKPT/ONNX_DIR/VOICE/TOKENIZER" }, async () => {
-  const engine = await Engine.load(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+test("engine synthesises over the ONNX graphs", { skip: !available && "set LOUDKIT_CKPT/ONNX_DIR/VOICE/TOKENIZER" }, async (t) => {
+  const engine = await Engine.loadPaths(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+  t.after(() => engine.close());
   const voice = loadVoice(VOICE!);
-  const result = await engine.synthesize(
+  const result = await engine.synthesizeWindow(
     "The quick brown fox jumps over the lazy dog.",
     voice,
-    4242
+    { seed: 4242 }
   );
-  assert.equal(result.tokens.length, 79);
+  assert.deepEqual(result.tokens, endToEndCase("s0", engine.config.decode).tokens);
   assert.ok(result.audio.length > 0);
   assert.ok(result.audio.every((v) => Number.isFinite(v)));
   // The truncation flag rides every result: Python declares every transport
   // must report hit_token_cap, because silent truncation presented as
   // complete audio reads as complete to an agent. A sentence ending at its
   // stop token, well under the cap, must report false.
-  assert.equal(result.hitCap, false);
+  assert.equal(result.hitTokenCap, false);
 });
 
-test("free-run tokens match the Python reference", { skip: !available }, async () => {
+test("free-run tokens match the Python reference", { skip: !available }, async (t) => {
   // The token *values*, not their count. Asserting `length === 79` passes for
-  // any 79 tokens whatsoever — including a completely different reading — and
+  // any 79 tokens whatsoever, including a completely different reading, and
   // the whole claim of this binding is that it samples the same stream as
   // Python, which only the values can show.
-  const c = endToEndCase("s0");
-  const engine = await Engine.load(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+  const engine = await Engine.loadPaths(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+  t.after(() => engine.close());
+  const c = endToEndCase("s0", engine.config.decode);
   const voice = loadVoice(VOICE!);
   const sampler = new LRSamplerV1(engine.config.sampling, c.seed);
   const raw = await engine.generate(
@@ -106,8 +95,9 @@ test("free-run tokens match the Python reference", { skip: !available }, async (
   assert.deepEqual(stripped, c.tokens);
 });
 
-test("render is bit-identical on repeat", { skip: !available }, async () => {
-  const engine = await Engine.load(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+test("render is bit-identical on repeat", { skip: !available }, async (t) => {
+  const engine = await Engine.loadPaths(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+  t.after(() => engine.close());
   const voice = loadVoice(VOICE!);
   const tokens = [
     3943, 1272, 2264, 1083, 573, 2835, 4582, 4849, 2006, 1951, 2112, 2166,
@@ -118,8 +108,8 @@ test("render is bit-identical on repeat", { skip: !available }, async () => {
     4592, 5051, 2867, 728, 2184, 486, 162, 1539, 4299, 6486, 6405, 6405, 6405,
     6405, 6405, 6405, 6405, 6405, 6081,
   ];
-  const seed1 = engine["deriveSeed"](4242, 1);
-  const seed2 = engine["deriveSeed"](4242, 2);
+  const seed1 = deriveSeed(4242, 1);
+  const seed2 = deriveSeed(4242, 2);
   const a = await engine.decodeMel(tokens, voice, seed1);
   const b = await engine.decodeMel(tokens, voice, seed1);
   assert.deepEqual(Array.from(a), Array.from(b));
@@ -134,37 +124,38 @@ test("render is bit-identical on repeat", { skip: !available }, async () => {
 });
 
 test(
-  "stream and synthesizeLong are one loop, not two",
+  "stream and synthesize are one loop, not two",
   { skip: !available && "set LOUDKIT_CKPT/ONNX_DIR/VOICE/TOKENIZER" },
-  async () => {
+  async (t) => {
     // The whole-passage path is the streaming path with the chunks
     // concatenated. If they ever become two loops they will drift, and the
-    // drift will be inaudible until a join lands somewhere different — so the
+    // drift will be inaudible until a join lands somewhere different, so the
     // equality is asserted rather than assumed.
-    const engine = await Engine.load(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+    const engine = await Engine.loadPaths(CKPT!, ONNX_DIR!, TOKENIZER!, EXECUTION);
+  t.after(() => engine.close());
     const voice = loadVoice(VOICE!);
     // Comfortably past one window. The budget is
     // floor(max_tokens * CHARS_PER_TOKEN) = 127 characters, so a passage that
     // merely feels long can still arrive as a single chunk and make this test
-    // assert nothing — which is what the first draft of it did.
+    // assert nothing, which is what the first draft of it did.
     const text =
       "The first sentence sets the scene and runs on for a while. " +
       "The second sentence follows it and is no shorter than the first one was. " +
       "The third sentence exists so that the splitter has somewhere to breathe. " +
       "The fourth sentence closes the passage without hurrying.";
 
-    const whole = await engine.synthesizeLong(text, voice, 7, "en");
+    const whole = await engine.synthesize(text, voice, { seed: 7, language: "en" });
 
     const pieces: Float32Array[] = [];
     const tokens: number[] = [];
-    for await (const chunk of engine.stream(text, voice, 7, "en")) {
+    for await (const chunk of engine.stream(text, voice, { seed: 7, language: "en" })) {
       pieces.push(chunk.audio);
       tokens.push(...chunk.tokens);
       // The flag is per chunk here and ORed across chunks on the joined
       // result; a normal passage ends at stop tokens, so both are false.
-      assert.equal(chunk.hitCap, false);
+      assert.equal(chunk.hitTokenCap, false);
     }
-    assert.equal(whole.hitCap, false);
+    assert.equal(whole.hitTokenCap, false);
     assert.ok(pieces.length > 1, "the passage must actually split");
 
     const total = pieces.reduce((n, a) => n + a.length, 0);

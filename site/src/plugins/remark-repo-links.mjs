@@ -41,6 +41,7 @@ const DOCMAP = path.join(SITE_DIR, '.docmap.json');
  * reference pages instead of bouncing the reader out to GitHub.
  */
 const DIR_SECTIONS = {
+  'docs/guides': 'using-loudkit',
   'docs/reference': 'reference',
   'docs/design': 'design',
   'docs/platforms': 'platforms',
@@ -74,9 +75,8 @@ function rewrite(url, sourcePath) {
   const page = pages()[rel];
   if (page) return page.url + hash;
 
-  // docs/ and docs/guides/ do have index pages, under their own route ids.
+  // docs/ has an index page, under its own route id.
   if (rel === 'docs') return pageUrl('overview') + hash;
-  if (rel === 'docs/guides') return pageUrl('guides/index') + hash;
   if (rel in DIR_SECTIONS) return `${pageUrl('overview')}#${DIR_SECTIONS[rel]}`;
 
   const abs = path.join(REPO, rel);

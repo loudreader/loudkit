@@ -76,35 +76,36 @@ rust-test-all:
 check: check-python check-types check-format
 
 check-python:
-    {{ ruff }} check python/ tests/ tools/ integrations/speech-dispatcher/
+    {{ ruff }} check python/ tests/ tools/ research/ integrations/speech-dispatcher/
 
 check-types:
     {{ mypy }} python/loudkit/
-    {{ mypy }} --config-file tools/mypy.ini tools/
+    {{ mypy }} --config-file tools/mypy.ini tools/ research/
+    {{ mypy }} --config-file tools/mypy-tests.ini
 
 check-format:
-    {{ ruff }} format --check python/ tests/ tools/ integrations/speech-dispatcher/
+    {{ ruff }} format --check python/ tests/ tools/ research/ integrations/speech-dispatcher/
 
 # Auto-fix lint and format
 fix:
-    {{ ruff }} check python/ tests/ tools/ integrations/speech-dispatcher/ --fix
-    {{ ruff }} format python/ tests/ tools/ integrations/speech-dispatcher/
+    {{ ruff }} check python/ tests/ tools/ research/ integrations/speech-dispatcher/ --fix
+    {{ ruff }} format python/ tests/ tools/ research/ integrations/speech-dispatcher/
 
 # ─── Benchmark ────────────────────────────────────────────────────────
 
 # Benchmark this machine (needs --checkpoint; set LOUDKIT_CHECKPOINT)
 bench checkpoint_path voice_path device:
-    {{ python }} -m loudkit.cli bench --checkpoint {{ checkpoint_path }} --voice {{ voice_path }} --device {{ device }} --json out/bench.json
+    {{ python }} tools/bench.py --checkpoint {{ checkpoint_path }} --voice {{ voice_path }} --device {{ device }} --json out/bench.json
 
 # Profile one passage stage by stage
 profile checkpoint_path voice_path passage:
-    {{ python }} -m loudkit.cli profile --checkpoint {{ checkpoint_path }} --voice {{ voice_path }} -- "{{ passage }}"
+    {{ python }} tools/profile_stages.py --checkpoint {{ checkpoint_path }} --voice {{ voice_path }} -- "{{ passage }}"
 
 # Cross-backend output comparison (cpu_fp32/cpu/mps/mps_fp32/onnx, determinism,
 # mel/wave correlation vs the fp32 reference) — writes out/compare/backends_compare.json.
 # Checkpoint from LOUDKIT_CHECKPOINT or LOUDKIT_ASSET_ROOT, as the test suite resolves it.
 compare:
-    {{ python }} tools/compare_backends.py
+    {{ python }} research/compare_backends.py
 
 # ─── Voices table ─────────────────────────────────────────────────────
 
@@ -120,7 +121,7 @@ serve checkpoint_path voice_dir port:
 
 # Serve over MCP (stdio)
 mcp checkpoint_path voice_dir:
-    {{ python }} -m loudkit.cli mcp --checkpoint {{ checkpoint_path }} --voices {{ voice_dir }}
+    {{ python }} -m loudkit.cli serve --mcp --checkpoint {{ checkpoint_path }} --voices {{ voice_dir }}
 
 # ─── Release prep ─────────────────────────────────────────────────────
 

@@ -10,13 +10,13 @@ import Foundation
 /// arrives as *onest*, because the number pass expands the digits and leaves the
 /// suffix stuck to them.
 ///
-/// Every rule is data from the shared `numbers.json` — month names, day forms,
+/// Every rule is data from the shared `numbers.json`, month names, day forms,
 /// the infixes Spanish and Portuguese speak between the parts, the German
 /// oblique triggers, the ordinal tables. What is code here is the *shape*: which
 /// written forms are dates at all, and how each language reads a year.
 ///
 /// Two refusals are as deliberate as anything it does. A yearless `12.3.` is
-/// never matched — its closing period is indistinguishable from a sentence's, so
+/// never matched, its closing period is indistinguishable from a sentence's, so
 /// `Die Zahl ist 3.5.` would otherwise come out as *dritte Mai*. And `3/12/2026` is left alone
 /// in English, where it is March twelfth to half the world and the third of
 /// December to the other half: a listener recovers from hearing digits, not from
@@ -59,12 +59,6 @@ public enum Dates {
     }
 
     static let rules: [String: Rules] = {
-        guard let url = Bundle.module.url(forResource: "numbers", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let doc = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let languages = doc["languages"] as? [String: [String: Any]]
-        else { return [:] }
-
         func intKeys(_ raw: Any?) -> [Int: String] {
             var out: [Int: String] = [:]
             for (k, v) in (raw as? [String: String]) ?? [:] {
@@ -74,7 +68,7 @@ public enum Dates {
         }
 
         var result: [String: Rules] = [:]
-        for (lang, entry) in languages {
+        for (lang, entry) in Numbers.grammarLanguages {
             guard let dates = entry["dates"] as? [String: Any] else { continue }
             var r = Rules()
             r.dayForm = dates["day_form"] as? String ?? "cardinal"
@@ -119,7 +113,7 @@ public enum Dates {
 
     /// The day-of-month word, in whatever form this language's dates take.
     ///
-    /// `oblique` is German only — the `-en` ending that `am`/`den`/`vom` select.
+    /// `oblique` is German only, the `-en` ending that `am`/`den`/`vom` select.
     /// Ignored elsewhere, because no other language here inflects the day by its
     /// frame.
     static func ordinalDay(_ day: Int, language: String, oblique: Bool = false) -> String? {
@@ -135,7 +129,7 @@ public enum Dates {
     /// A year, read the way this language reads years.
     ///
     /// English and Norwegian split it; German, Dutch and Swedish group it in
-    /// hundreds; the rest say one plain cardinal. Spanish is the explicit case —
+    /// hundreds; the rest say one plain cardinal. Spanish is the explicit case,
     /// the RAE writes that a year is read as its cardinal and *not* in
     /// two-figure blocks as in English, so 2021 is *dos mil veintiuno*.
     static func sayYear(_ year: Int, language: String) -> String {
@@ -164,7 +158,7 @@ public enum Dates {
         if (1001...1999).contains(year) || year >= 2100 {
             let century = year / 100, rest = year % 100
             if rest == 0 { return "\(card(century, "en")) hundred" }
-            // "nineteen oh five" — never "nineteen five", which nobody says.
+            // "nineteen oh five", never "nineteen five", which nobody says.
             if rest < 10 { return "\(card(century, "en")) oh \(card(rest, "en"))" }
             return "\(card(century, "en")) \(card(rest, "en"))"
         }
@@ -174,7 +168,7 @@ public enum Dates {
 
     /// German, Dutch and Swedish all write `<century><joiner><rest>` solid; only
     /// the joiner and the range differ. German's upper bound is 1999 because the
-    /// GfdS explicitly rejects `zwanzighundert…` — German did not follow the
+    /// GfdS explicitly rejects `zwanzighundert…`, German did not follow the
     /// English "twenty-sixteen" shift. Swedish runs to 2099 because
     /// Isof/Språkrådet has recommended the `tjugohundra…` series for decades.
     private static func yearHundreds(
@@ -251,16 +245,25 @@ public enum Dates {
 
     // MARK: written forms
 
+    /// The `T` before a clock time is taken with the date: it is a field
+    /// separator and not a letter, and left behind it glues to the last word of
+    /// the date (`…twenty twenty-sixTten`).
+    ///
+    /// A written date is bounded by a word boundary, and not by digits alone: a
+    /// run that continues into a letter is an identifier, and `25/03/2026x` is
+    /// no more a date than `x25/03/2026` is. All three numeric forms carry the
+    /// `wordClass` guards as well as the separators each form names.
     private static let iso = try! NSRegularExpression(
-        pattern: #"(?<![\d.,:/-])([12][0-9]{3})-([01][0-9])-([0-3][0-9])(?![\d-])"#)
+        pattern: #"(?<![\#(wordClass).,:/-])([12][0-9]{3})-([01][0-9])-([0-3][0-9])"#
+            + #"(?:(T)(?=[0-2][0-9]:[0-5][0-9])|(?![\#(wordClass)-]))"#)
     /// With the year, which is what makes it a date rather than a guess. The
-    /// yearless `12.3.` is deliberately not matched — see the type's note.
+    /// yearless `12.3.` is deliberately not matched, see the type's note.
     private static let dotted = try! NSRegularExpression(
-        pattern: #"(?<![\d.,:/-])([0-3]?[0-9])\.([01]?[0-9])\.([12][0-9]{3})\b"#)
+        pattern: #"(?<![\#(wordClass).,:/-])([0-3]?[0-9])\.([01]?[0-9])\.([12][0-9]{3})(?![\#(wordClass)])"#)
     /// Day-first in every language here; English is handled in the callback,
     /// where the field order is genuinely ambiguous.
     private static let slashed = try! NSRegularExpression(
-        pattern: #"(?<![\d.,:/-])([0-3]?[0-9])/([01]?[0-9])/([12][0-9]{3})(?![\d/])"#)
+        pattern: #"(?<![\#(wordClass).,:/-])([0-3]?[0-9])/([01]?[0-9])/([12][0-9]{3})(?![\#(wordClass)/])"#)
 
     /// Every written date in `text`, said the way `language` says it.
     ///
@@ -272,10 +275,14 @@ public enum Dates {
 
         out = replace(out, iso) { groups, at, whole in
             guard let y = Int(groups[1]), let m = Int(groups[2]), let d = Int(groups[3]),
-                  valid(day: d, month: m, year: y)
+                  valid(day: d, month: m, year: y),
+                  let said = spoken(day: d, month: m, year: y, language: language,
+                                    oblique: isOblique(at: at, in: whole, r))
             else { return nil }
-            return spoken(day: d, month: m, year: y, language: language,
-                          oblique: isOblique(at: at, in: whole, r))
+            // The separator becomes the space that keeps the date and the time
+            // two spoken units. A word for it would be a per-language fact this
+            // grammar does not carry, and a plainer reading is not a wrong one.
+            return groups.count > 4 ? said + " " : said
         }
         out = replace(out, dotted) { groups, at, whole in
             // Swedish marks an ordinal with a colon (`1:a`), never a trailing
@@ -303,7 +310,7 @@ public enum Dates {
         return textual(out, language: language, r)
     }
 
-    /// `12 marca 2026`, `12. März 2026`, `March 12, 2026` — a written month name
+    /// `12 marca 2026`, `12. März 2026`, `March 12, 2026`, a written month name
     /// beside a bare day. The name is the disambiguator, so this runs for every
     /// language including English.
     private static func textual(_ text: String, language: String, _ r: Rules) -> String {
@@ -321,37 +328,48 @@ public enum Dates {
 
         var out = text
         let dayFirstPattern =
-            #"(?<![\w])([0-3]?[0-9])\.?\#(infix)\s+(\#(names))(?:\#(yinfix)\s+([12][0-9]{3}))?(?!\w)"#
-        if let dayFirst = try? NSRegularExpression(
-            pattern: dayFirstPattern, options: [.caseInsensitive]) {
-            out = replace(out, dayFirst) { groups, at, whole in
-                guard let d = Int(groups[1]), let m = monthIndex(groups[2], r) else { return nil }
-                let y = groups.count > 3 ? Int(groups[3]) : nil
-                guard valid(day: d, month: m, year: y) else { return nil }
-                if !r.dayFirstPrefix.isEmpty || !r.dayFirstInfix.isEmpty {
-                    // English written day-first reads "the twelfth of March":
-                    // both dialects say it that way, so no locale flag is
-                    // needed to choose.
-                    guard let head = ordinalDay(d, language: language),
-                          let monthWord = monthName(m, language: language) else { return nil }
-                    var rest = [monthWord]
-                    if let y { rest.append(sayYear(y, language: language)) }
-                    let prefix = r.dayFirstPrefix.isEmpty ? "" : "\(r.dayFirstPrefix) "
-                    let join = r.dayFirstInfix.isEmpty ? " " : " \(r.dayFirstInfix) "
-                    return "\(prefix)\(head)\(join)\(rest.joined(separator: " "))"
+            #"(?<![\#(wordClass)])([0-3]?[0-9])\.?\#(infix)\s+(\#(names))(?:\#(yinfix)\s+([12][0-9]{3}))?(?![\#(wordClass)])"#
+        // `try!`: the pattern is a literal around escaped month names from the
+        // rules table, so a throw means this source or the table is broken,
+        // never that the caller's text is. On a `try?` the whole date pass went
+        // missing for that language and said nothing.
+        let dayFirst = try! NSRegularExpression(
+            pattern: dayFirstPattern, options: [.caseInsensitive])
+        out = replace(out, dayFirst) { groups, at, whole in
+            guard let d = Int(groups[1]), let m = monthIndex(groups[2], r) else { return nil }
+            let y = groups.count > 3 ? Int(groups[3]) : nil
+            guard valid(day: d, month: m, year: y) else { return nil }
+            if !r.dayFirstPrefix.isEmpty || !r.dayFirstInfix.isEmpty {
+                // English written day-first reads "the twelfth of March":
+                // both dialects say it that way, so no locale flag is
+                // needed to choose.
+                guard let head = ordinalDay(d, language: language),
+                      let monthWord = monthName(m, language: language) else { return nil }
+                var rest = [monthWord]
+                if let y { rest.append(sayYear(y, language: language)) }
+                var prefix = ""
+                if !r.dayFirstPrefix.isEmpty,
+                   wordBefore(at: at, in: whole) != r.dayFirstPrefix.lowercased() {
+                    // The sentence may already carry the article: "the 3 April
+                    // minutes" is a noun phrase whose determiner is written,
+                    // and a second one is a stammer.
+                    prefix = "\(r.dayFirstPrefix) "
                 }
-                return spoken(day: d, month: m, year: y, language: language,
-                              oblique: isOblique(at: at, in: whole, r))
+                let join = r.dayFirstInfix.isEmpty ? " " : " \(r.dayFirstInfix) "
+                return "\(prefix)\(head)\(join)\(rest.joined(separator: " "))"
             }
+            return spoken(day: d, month: m, year: y, language: language,
+                          oblique: isOblique(at: at, in: whole, r))
         }
 
         // Month-first is an English shape. Reading it in a language that never
         // writes it would be inventing a construction nobody used.
         guard !r.dayFirstInfix.isEmpty else { return out }
         let monthFirstPattern =
-            #"(?<![\w])(\#(names))\s+([0-3]?[0-9])(?:(?:st|nd|rd|th)\b)?,?(?:\s+([12][0-9]{3}))?(?!\w)"#
-        guard let monthFirst = try? NSRegularExpression(
-            pattern: monthFirstPattern, options: [.caseInsensitive]) else { return out }
+            #"(?<![\#(wordClass)])(\#(names))\s+([0-3]?[0-9])(?:(?:st|nd|rd|th)\b)?,?(?:\s+([12][0-9]{3}))?(?![\#(wordClass)])"#
+        // `try!` for the same reason as the day-first pattern above.
+        let monthFirst = try! NSRegularExpression(
+            pattern: monthFirstPattern, options: [.caseInsensitive])
         return replace(out, monthFirst) { groups, _, _ in
             guard let m = monthIndex(groups[1], r), let d = Int(groups[2]) else { return nil }
             let y = groups.count > 3 ? Int(groups[3]) : nil
@@ -372,15 +390,25 @@ public enum Dates {
         return nil
     }
 
+    /// The word standing immediately before the match at `at`, folded for
+    /// comparison: lower-cased and stripped of the clause marks a sentence
+    /// leaves against it, and `""` where the match opens the text.
+    ///
+    /// Reads the string the pass is substituting over, so the neighbour is the
+    /// previous pass's output and not the original text.
+    private static func wordBefore(at: Int, in whole: String) -> String {
+        let ns = whole as NSString
+        guard at <= ns.length else { return "" }
+        let before = ns.substring(to: at).replacingOccurrences(
+            of: #"\s+$"#, with: "", options: .regularExpression)
+        guard let last = before.split(separator: " ").last else { return "" }
+        return last.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ",;:"))
+    }
+
     /// German only: `am`/`den`/`vom` before the day select the `-en` ending.
     private static func isOblique(at: Int, in whole: String, _ r: Rules) -> Bool {
         guard !r.obliqueTriggers.isEmpty else { return false }
-        let ns = whole as NSString
-        guard at <= ns.length else { return false }
-        let before = ns.substring(to: at).replacingOccurrences(
-            of: #"\s+$"#, with: "", options: .regularExpression)
-        guard let last = before.split(separator: " ").last else { return false }
-        let tail = last.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ",;:"))
+        let tail = wordBefore(at: at, in: whole)
         return r.obliqueTriggers.contains { $0.lowercased() == tail }
     }
 
@@ -390,8 +418,8 @@ public enum Dates {
     ///
     /// Composed rather than enumerated past ninety-nine: the hundreds and above
     /// stay cardinal and only the last two digits become an ordinal, so *101st*
-    /// is "one hundred and first". The irregulars a suffix rule gets wrong —
-    /// fifth, eighth, ninth, twelfth, twentieth — are inside the two-digit
+    /// is "one hundred and first". The irregulars a suffix rule gets wrong,
+    /// fifth, eighth, ninth, twelfth, twentieth, are inside the two-digit
     /// tables and written out there.
     public static func ordinal(_ value: Int, language: String) -> String? {
         guard let r = rules[language], !r.ordinalUnits.isEmpty, value >= 0 else { return nil }
@@ -413,21 +441,36 @@ public enum Dates {
         return "\(card(tens * 10, "en"))\(r.ordinalJoiner)\(unitWord)"
     }
 
+    /// The word class the four other ports test at a date's edge: `\p{L}`,
+    /// `\p{Nd}` and the underscore, written out rather than borrowed from
+    /// `\w` or `\b`.
+    ///
+    /// ICU's `\w` is `[\p{Alphabetic}\p{M}\p{Nd}\p{Pc}]`, which counts a combining mark and
+    /// every Other_Alphabetic character as a word character. Python's is
+    /// `str.isalnum()` plus underscore, and Go and Rust ask `L or Nd` by hand.
+    /// Measured: `12.03.2026\u{24D0}` -- a date followed by a CIRCLED LATIN SMALL
+    /// LETTER A, category `So` -- found no word boundary here and stayed
+    /// written, while the other four read the date and spaced the circle.
+    static let wordClass = "\\p{L}\\p{Nd}_"
+
     /// `1st` and `22nd` as words.
     ///
     /// English is the only one of the twelve writing an ordinal as digits plus a
     /// letter suffix, so for every other language this is a no-op. It runs
     /// before the number pass, which would otherwise expand the digits and leave
-    /// the suffix stuck to them: *onest*, *fiveth place*, *twenty-twond*.
+    /// the suffix stuck to them: onest, fiveth place, twenty-twond.
     ///
     /// A value the tables cannot say is left exactly as written, suffix
     /// included, rather than half-said.
     public static func expandOrdinals(_ text: String, language: String) -> String {
         guard let r = rules[language], !r.ordinalSuffixes.isEmpty else { return text }
         let suffixes = r.ordinalSuffixes.joined(separator: "|")
-        guard let re = try? NSRegularExpression(
-            pattern: #"\b([0-9]+)(\#(suffixes))\b"#, options: [.caseInsensitive])
-        else { return text }
+        // `try!`: the pattern is a literal around the rules table's ordinal
+        // suffixes, so a throw is a defect here or in the table. A `try?`
+        // returned the text unread and left "1st" written.
+        let re = try! NSRegularExpression(
+            pattern: #"(?<![\#(wordClass)])([0-9]+)(\#(suffixes))(?![\#(wordClass)])"#,
+            options: [.caseInsensitive])
         return replace(text, re) { groups, _, _ in
             guard let n = Int(groups[1]) else { return nil }
             return ordinal(n, language: language)
@@ -439,7 +482,7 @@ public enum Dates {
     /// Replace every match, right to left so earlier offsets stay valid.
     ///
     /// The callback receives the capture groups (index 0 is the whole match),
-    /// the match's offset, and the string being scanned — the last two because
+    /// the match's offset, and the string being scanned, the last two because
     /// the German oblique test reads the word *before* the date. Returning `nil`
     /// leaves that match exactly as written, which is this module's answer
     /// whenever the evidence runs out.

@@ -16,7 +16,7 @@ import pytest
 from loudkit.config import AlgorithmConfig, ChunkConfig, SamplingConfig
 from loudkit.timing import ChunkSpan, estimate_words, timeline
 
-from .test_engine import _engine, _voice
+from .conftest import fake_engine, fake_voice
 
 SAMPLE_RATE = 24_000
 
@@ -92,10 +92,10 @@ class TestTheEngineFillsThemIn:
             chunking=ChunkConfig(max_tokens=20, prefix_tokens=0),
             sampling=SamplingConfig(max_new_tokens=64),
         )
-        return _engine(algo)
+        return fake_engine(algo)
 
     def test_a_single_window_gets_one_span_covering_everything(self) -> None:
-        result = _engine().synthesize("Hello there world.", _voice(), seed=1)
+        result = fake_engine().synthesize("Hello there world.", fake_voice(), seed=1)
         assert len(result.chunks) == 1
         assert result.chunks[0].start == 0.0
         assert result.chunks[0].end == result.duration
@@ -104,9 +104,9 @@ class TestTheEngineFillsThemIn:
     def test_a_two_chunk_render_reports_two_spans_at_the_right_offsets(self) -> None:
         engine = self._long_engine()
         text = "One. Two. Three. Four. Five. Six. Seven. Eight."
-        streamed = list(engine.stream(text, _voice(), seed=1))  # type: ignore[attr-defined]
+        streamed = list(engine.stream(text, fake_voice(), seed=1))
         assert len(streamed) > 1, "the text has to actually split for this to mean anything"
-        joined = engine.synthesize_long(text, _voice(), seed=1)  # type: ignore[attr-defined]
+        joined = engine.synthesize(text, fake_voice(), seed=1)
 
         assert len(joined.chunks) == len(streamed)
         at = 0
@@ -121,9 +121,7 @@ class TestTheEngineFillsThemIn:
         — reporting anything but zero would be a guess about the caller's
         playback."""
         engine = self._long_engine()
-        for part in engine.stream(  # type: ignore[attr-defined]
-            "One. Two. Three. Four. Five. Six.", _voice(), seed=1
-        ):
+        for part in engine.stream("One. Two. Three. Four. Five. Six.", fake_voice(), seed=1):
             assert len(part.chunks) == 1
             assert part.chunks[0].start == 0.0
             assert part.chunks[0].end == part.duration
@@ -132,14 +130,14 @@ class TestTheEngineFillsThemIn:
         """What was tokenised, not what the caller typed: the funnel reads
         numbers as words, and a highlight matched against the input would drift
         the moment a digit appeared."""
-        result = _engine().synthesize("I have 3 apples.", _voice(), seed=1)
+        result = fake_engine().synthesize("I have 3 apples.", fake_voice(), seed=1)
         assert "three" in result.chunks[0].text
 
     def test_rendering_bare_tokens_still_spans_the_whole_result(self) -> None:
         """No text reached that path, so there is nothing to estimate — but a
         caller stitching results should not have to special-case it."""
-        engine = _engine()
-        result = engine.synthesize_tokens([1, 2, 3], _voice(), seed=1)
+        engine = fake_engine()
+        result = engine.synthesize_tokens([1, 2, 3], fake_voice(), seed=1)
         assert len(result.chunks) == 1
         assert result.chunks[0].end == result.duration
         assert result.chunks[0].words == ()

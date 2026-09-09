@@ -3,13 +3,12 @@ import Foundation
 import LoudKitText
 
 /// The engine: the same five-component composition as `loudkit.engine.Engine`,
-/// with the same public shape, so the README can show both languages side by
-/// side:
+/// with the same public shape:
 ///
-///     let engine = try Engine.load(checkpoint: url)
-///     let voice  = try VoiceProfile.load(url: voiceURL)
+///     let engine = try await Engine.load("loudreader/loudr-1")
+///     let voice  = try engine.voice(named: "joe")
 ///     let result = try engine.synthesize("Hello there.", voice: voice, seed: 7)
-///     try result.save(to: outURL)
+///     try result.saveWav("hello.wav")
 ///
 /// Seeds are derived per stage with the identical splitting constants, so the
 /// sampler, the flow prior and the vocoder excitation consume the same Philox
@@ -17,39 +16,81 @@ import LoudKitText
 public final class Engine {
     static let streamFlow: UInt64 = 1
     static let streamVocoder: UInt64 = 2
-    /// Chunk seeds start here, clear of the per-stage streams.
+    /// Where the seeds of chunks *after the first* start, clear of the
+    /// per-stage streams. Chunk 0 draws the caller's seed itself, so a text
+    /// that fits one window renders the same through ``synthesizeWindow`` and
+    /// through ``synthesize``, in every implementation.
     static let streamChunkBase: UInt64 = 16
 
+    /// Mirrors `_STREAM_RESPLIT` in `loudkit.window`: the second half of a
+    /// re-split chunk draws from its own stream off the chunk's seed. Chunk
+    /// streams run from ``streamChunkBase`` upwards with no ceiling, so there
+    /// is no room above them to claim; deriving off the chunk seed leaves only
+    /// the values already drawn from it to avoid, which are the flow at 1, the
+    /// vocoder at 2, and the retry ladder from 8 up.
+    static let streamResplit: UInt64 = 4096
+
+    /// What this engine computes, and the fingerprint it reports.
     public let algorithm: AlgorithmConfig
+    /// Where each stage runs. Free to differ between builds without moving the
+    /// fingerprint.
     public let execution: ExecutionConfig
+    /// Text to token ids, with the language tag.
     public let frontend: TextFrontend
+    /// The autoregressive stage: text tokens to speech tokens.
     public let tokenGenerator: TokenGenerator
+    /// The flow decoder: speech tokens to a mel spectrogram.
     public let melDecoder: MelDecoder
+    /// The vocoder: a mel spectrogram to a waveform.
     public let vocoder: Vocoder
-    /// Where this engine was loaded from — kept so `withExecution` can
-    /// rebuild the CoreML stages without re-reading the generator weights.
+    /// Where this engine was loaded from, kept so `withExecution` can rebuild
+    /// the CoreML stages without re-reading the generator weights.
     private var checkpointURL: URL?
     private var assetsURL: URL?
+    /// The release this engine was opened from, when it was one: what
+    /// `voiceNames`, `voice(named:)` and `enroll` read.
+    var bundle: ModelBundle?
 
-    public struct StageTimings {
+    /// Wall time in each of the three stages, in seconds.
+    public struct StageTimings: Sendable, Equatable {
+        /// Token generation.
         public let tokens: Double
+        /// Flow decoding to mel.
         public let mel: Double
+        /// Vocoding to a waveform.
         public let audio: Double
+        /// The three added up.
         public var total: Double { tokens + mel + audio }
+        /// Audio seconds produced per second spent. Above one is faster than
+        /// real time; a zero total reports infinity rather than dividing by it.
         public func rtf(audioSeconds: Double) -> Double {
             total > 0 ? audioSeconds / total : .infinity
         }
     }
 
-    public struct Result {
+    /// One finished synthesis: the waveform, and everything about how it was
+    /// produced that a caller may need to reproduce or judge it.
+    public struct Result: Sendable {
+        /// The waveform, mono float32 in [-1, 1] at `sampleRate`.
         public let audio: [Float]
+        /// The acoustic speech tokens that were rendered, control tokens
+        /// stripped. Pass these as `previousTokens` to continue the contour.
         public let tokens: [Int]
+        /// The mel spectrogram the vocoder read, 80 bins, frame major.
         public let mel: [Float]
+        /// Frames in `mel`, since `mel` is flat.
         public let melFrames: Int
+        /// The seed this render was drawn from. Same seed, same audio.
         public let seed: UInt64
+        /// Sample rate of `audio`.
         public let sampleRate: Int
+        /// Wall time in each stage.
         public let timings: StageTimings
+        /// The algorithm fingerprint at render time, so a stored result can be
+        /// compared with a later one without guessing what produced it.
         public let algorithmFingerprint: String
+        /// Some chunk stopped at a cap rather than a stop token, so it is cut
+        /// off mid-sentence. ORed across the passage.
         public let hitTokenCap: Bool
         /// What the artifact detectors concluded, one entry per chunk.
         ///
@@ -59,23 +100,13 @@ public final class Engine {
         public var inspections: [Postprocess.Inspection] = []
 
         /// The time-stretch this render was asked for. `1.0` means none was
-        /// applied — the waveform came straight out of the vocoder.
+        /// applied: the waveform came straight out of the vocoder.
         ///
         /// Recorded rather than inferred, because it cannot be inferred: a
         /// stretched reading and a naturally faster one are the same numbers
         /// afterwards, and `duration` alone cannot tell a caller which it is
         /// holding.
         public var speed: Double = 1.0
-
-        /// Whether `shouldCancel` stopped this passage before its last chunk.
-        ///
-        /// `synthesize` throws `LoudKitError.cancelled` for the same event,
-        /// because a fraction of one utterance is not useful. A long passage is
-        /// different — the chunks already rendered are playable — so `stream`
-        /// and `synthesizeLong` return what they have. Breaking and saying
-        /// nothing leaves a caller unable to tell an interrupted
-        /// reading from a short one, and the two want opposite handling.
-        public var cancelled: Bool = false
 
         /// Where each chunk lands in `audio`, and where its words probably do.
         ///
@@ -84,7 +115,7 @@ public final class Engine {
         /// `duration`. A single-window synthesis gets one entry covering the
         /// whole result.
         ///
-        /// Chunk boundaries are exact — they are sample offsets, which the
+        /// Chunk boundaries are exact: they are sample offsets, which the
         /// engine already knows because it concatenated the chunks. The
         /// per-word times inside each entry are an **estimate**; read
         /// ``Timing`` before building anything that depends on them.
@@ -93,22 +124,19 @@ public final class Engine {
         /// `speed`.
         public var chunks: [ChunkTiming] = []
 
-        /// Any chunk was impossibly long for its text and no rule could say
-        /// where to cut. Nothing was removed; you are being told.
+        /// Any chunk came back marked suspect. The five things that mark one
+        /// are listed on ``Postprocess/Inspection/suspect``; whether anything
+        /// was removed depends on which, so read `inspections` rather than
+        /// assuming. Not an error: a report, and the engine's signal to retry.
         public var suspect: Bool { inspections.contains { $0.suspect } }
 
+        /// Length of `audio` in seconds.
         public var duration: Double { Double(audio.count) / Double(sampleRate) }
 
-        /// Write a 32-bit float WAV.
-        ///
-        /// **Not** the same container as Python's `Result.save`, which is a
-        /// bare `sf.write(...)` and therefore soundfile's default PCM_16.
-        /// Same audio, different encoding — a byte comparison of the two
-        /// files can never match.
-        /// Float32 is kept deliberately: this file is what the conformance
-        /// harness reads back, and rounding to 16 bits would put a
-        /// quantisation floor under a correlation gated at 0.999.
-        public func save(to url: URL) throws {
+        /// Write a 32-bit float WAV, for the conformance harness: rounding
+        /// to 16 bits would put a quantisation floor under a correlation
+        /// gated at 0.999. `saveWav` is the file to hand a person.
+        public func saveFloat32Wav(to url: URL) throws {
             var data = Data()
             func append<T>(_ value: T) {
                 var v = value
@@ -116,14 +144,14 @@ public final class Engine {
             }
             let byteCount = audio.count * 4
             // RIFF carries its sizes in 32 bits, so a WAV cannot describe more
-            // than about 4 GB — roughly twelve hours at 24 kHz mono float32.
+            // than about 4 GB, roughly twelve hours at 24 kHz mono float32.
             // `UInt32(...)` on a larger value does not truncate in Swift, it
             // traps: the process dies with no message and no file written. Say
             // what happened instead.
             guard 36 + byteCount <= Int(UInt32.max) else {
                 throw LoudKitError.shape(
                     "\(audio.count) samples is \(byteCount) bytes of audio; a WAV "
-                    + "header cannot describe more than \(UInt32.max) — split the "
+                    + "header cannot describe more than \(UInt32.max): split the "
                     + "passage and write several files"
                 )
             }
@@ -171,6 +199,7 @@ public final class Engine {
         let checkpoint = try Checkpoint(url: checkpointURL)
         let algorithm = try checkpoint.algorithm()
         let assets = coremlAssets ?? checkpoint.coremlAssetsURL
+        try checkpoint.verifyCoreMLExport(at: assets, algorithm: algorithm)
         func package(_ stem: String) throws -> URL { try stageURL(in: assets, stem) }
         func units(_ u: ExecutionConfig.ComputeUnits) -> MLComputeUnitsWrapper { .init(u) }
 
@@ -202,7 +231,7 @@ public final class Engine {
     /// units would make placement comparisons needlessly expensive.
     public func withExecution(_ execution: ExecutionConfig) throws -> Engine {
         guard let checkpointURL, let assetsURL else {
-            throw LoudKitError.asset("engine was not built by Engine.load — no checkpoint to rebuild from")
+            throw LoudKitError.asset("engine was not built by Engine.load: no checkpoint to rebuild from")
         }
         func units(_ u: ExecutionConfig.ComputeUnits) -> MLComputeUnitsWrapper { .init(u) }
         func package(_ stem: String) throws -> URL { try Self.stageURL(in: assetsURL, stem) }
@@ -223,24 +252,60 @@ public final class Engine {
             vocoder: Vocoder(config: algorithm, hift: hift))
         engine.checkpointURL = checkpointURL
         engine.assetsURL = assetsURL
+        engine.bundle = bundle
         return engine
+    }
+
+    private func release(_ what: String) throws -> ModelBundle {
+        guard let bundle else {
+            throw LoudKitError.asset(
+                "this engine was opened with Engine.load(checkpoint:), which has no "
+                + "release to take \(what) from")
+        }
+        return bundle
+    }
+
+    /// The names `voice(named:)` will accept, sorted. Empty for an engine
+    /// opened with `Engine.load(checkpoint:)`.
+    public var voiceNames: [String] { bundle?.voiceNames ?? [] }
+
+    /// One shipped voice by name, such as `"joe"`.
+    public func voice(named name: String) throws -> VoiceProfile {
+        try release("voices").voice(named: name)
+    }
+
+    /// Clone a voice from a recording on disk: anything AVFoundation opens.
+    /// `language` is what the voice reads in by default.
+    ///
+    /// The three enrollment packages are not in a plain fetch. An engine
+    /// loaded by repo id fetches them into its own cache directory the first
+    /// time; one loaded from a directory needs a fetch made with
+    /// `cloning: true`.
+    public func enroll(contentsOf url: URL, name: String = "", language: String = "en")
+        async throws -> VoiceProfile {
+        let bundle = try release("the enrollment packages")
+        try await bundle.fetchCloning()
+        return try bundle.enroller().enroll(contentsOf: url, name: name, language: language)
     }
 
     /// A stage may be present as the exported .mlpackage or as the
     /// precompiled .mlmodelc only (an app bundle ships the compiled form and
-    /// skips the on-device CoreML compile). The package wins when both exist
-    /// because MLHelpers.loadModel already prefers a compiled sibling of the
-    /// same stem.
+    /// skips the on-device CoreML compile). The package wins when both exist,
+    /// and `MLHelpers.loadModel` then compiles it into a temporary directory on
+    /// every load: the compiled sibling is used only when it is the one form
+    /// present, so a package and a compiled copy of the same stem cannot drift
+    /// apart unnoticed.
     private static func stageURL(in assets: URL, _ stem: String) throws -> URL {
         for ext in ["mlpackage", "mlmodelc"] {
             let url = assets.appendingPathComponent("\(stem).\(ext)")
             if FileManager.default.fileExists(atPath: url.path) { return url }
         }
         throw LoudKitError.asset(
-            "\(stem).mlpackage/.mlmodelc not found in \(assets.path) — "
+            "\(stem).mlpackage/.mlmodelc not found in \(assets.path): "
             + "export with tools/export_coreml.py")
     }
 
+    /// One line for a log: what this engine computes, then where it runs.
     public func describe() -> String {
         "\(algorithm.describe()) | \(execution.describe())"
     }
@@ -256,19 +321,22 @@ public final class Engine {
     ///
     /// `isTerminal` says whether this chunk ends the passage. A continuation
     /// chunk has no sentence end, so its stop peak means nothing and its
-    /// trailing pause is the sentence's rhythm rather than dead air — the
+    /// trailing pause is the sentence's rhythm rather than dead air, the
     /// detectors that cut a tail are told so and hold off.
     private func generateInspected(
         textTokens: [Int], voice: VoiceProfile, seed: UInt64, prefix: [Int],
         isTerminal: Bool, maxNewTokens: Int?, onStep: (() -> Void)?,
         shouldCancel: (() -> Bool)?
-    ) throws -> (tokens: [Int], inspection: Postprocess.Inspection, hitCap: Bool) {
+    ) throws -> (
+        tokens: [Int], inspection: Postprocess.Inspection, hitCap: Bool, hitWindow: Bool,
+        generatedCount: Int
+    ) {
         let pp = algorithm.postprocess
         let floor = algorithm.eosFloor(nTextTokens: textTokens.count)
         // Refused rather than passed through. A negative cap reached the
         // generator, which produced nothing and returned an empty result with
-        // no error anywhere — the same defect Python carried at `engine.py`,
-        // and the same fix: a count of tokens is at least one.
+        // no error anywhere. The reference makes the same refusal for the
+        // same reason: a count of tokens is at least one.
         if let asked = maxNewTokens, asked < 1 {
             throw LoudKitError.shape("maxNewTokens must be >= 1, got \(asked)")
         }
@@ -284,14 +352,29 @@ public final class Engine {
                     window: algorithm.window.maxSpeechTokens))
         }
 
-        // Selective re-roll: a window whose verdict is unfixable — dropout
-        // (content missing) or suspect (certainly wrong, nowhere to cut) — is
+        // Selective re-roll: a window whose verdict is unfixable (dropout
+        // content missing, or suspect, certainly wrong with nowhere to cut) is
         // regenerated from a derived seed, up to retryMaxAttempts times. Only
         // condemned windows pay; the ladder is a pure function of the caller's
         // seed, so the same seed still gives the same audio, retries included.
         var gen: [Int] = []
         var verdict = Postprocess.Inspection(keep: 0, reason: .clean, suspect: false)
         var hitCap = false
+        var hitWindow = false
+        // When the ladder exhausts with every attempt condemned, the attempt
+        // that ships is the *best* seen, not the last: fewest tokens in the
+        // true-silence set, integer and portable, like the detectors.
+        // Measured: on the worst voices 30% of condemned fires exhaust the
+        // ladder, and keeping the last attempt shipped rows worse than the
+        // first. The render census gates the count where the checkpoint
+        // carries one; the configured silence list is the fallback.
+        let deadAir = Set(
+            pp.silenceRenderIds.isEmpty
+                ? algorithm.sampling.silenceTokenIds : pp.silenceRenderIds)
+        var best: (
+            count: Int, gen: [Int], verdict: Postprocess.Inspection, hitCap: Bool,
+            hitWindow: Bool
+        )?
         var attempt = 0
         while true {
             // Retry attempts draw derive(seed, 8 + attempt): clear of the
@@ -301,14 +384,16 @@ public final class Engine {
             if pp.mode != .off {
                 sampler.observeEOS(stopToken: algorithm.stopSpeechToken, floor: floor)
             }
-            let generation = tokenGenerator.generate(
+            // Token-level barge-in throws `LoudKitError.cancelled` from the
+            // generator, at the poll that fired; a partial row never gets here.
+            let generation = try tokenGenerator.generate(
                 textTokens: textTokens, voice: voice, sampler: sampler, maxNewTokens: cap,
                 prefix: prefix, onStep: onStep, shouldCancel: shouldCancel)
 
             // `gen` is what the shipped engine calls a row: every token the
             // model committed to, with the stop marker itself excluded.
             // Indices into it are decode-step indices, which is what makes the
-            // observed peak comparable against it — so the detectors run here,
+            // observed peak comparable against it, so the detectors run here,
             // before `stripSpecials` is free to renumber anything.
             gen = generation.rawTokens
             let ended = gen.last == algorithm.stopSpeechToken
@@ -316,6 +401,13 @@ public final class Engine {
 
             let peak = sampler.eosPeak
             hitCap = !ended && gen.count >= cap
+            // The window, asked separately and asked here, where `gen` is still
+            // what the model produced. `cap` is `min(maxNewTokens,
+            // ceilingFor(...))`, so `hitCap` cannot tell a filled window from a
+            // runaway short text; and the trim below can cut a filled window
+            // down to a few tokens, which is how a caller measuring the
+            // returned array saw room to spare.
+            hitWindow = !ended && gen.count >= algorithm.window.maxSpeechTokens
             verdict = Postprocess.inspect(
                 gen,
                 request: Postprocess.Request(
@@ -324,40 +416,43 @@ public final class Engine {
                     ended: ended, isTerminal: isTerminal, hitCeiling: hitCap),
                 silence: Set(algorithm.sampling.silenceTokenIds), config: pp)
             let condemned = verdict.reason == .dropout || verdict.suspect
-            if !condemned || pp.mode == .off || attempt >= pp.retryMaxAttempts { break }
+            if !condemned || pp.mode == .off { break }
+            let silenceCount = gen.lazy.filter { deadAir.contains($0) }.count
+            // Strict `<`, and `Int.max` for "nothing recorded yet": on a tie
+            // the earlier attempt stands, so the ladder stays a pure function
+            // of the caller's seed with no dependence on iteration order.
+            if silenceCount < (best?.count ?? Int.max) {
+                best = (silenceCount, gen, verdict, hitCap, hitWindow)
+            }
+            if attempt >= pp.retryMaxAttempts {
+                // Always set: the loop only reaches here after a condemned
+                // attempt, and a condemned attempt is recorded just above.
+                if let chosen = best { (_, gen, verdict, hitCap, hitWindow) = chosen }
+                break
+            }
             attempt += 1
         }
+        // How many tokens the model committed to, before the trim: the
+        // overflow error reports this rather than what survived postprocess.
+        let generatedCount = gen.count
         if pp.mode == .trim, verdict.keep < gen.count {
             gen = Array(gen.prefix(verdict.keep))
         }
-        return (try stripSpecials(gen), verdict, hitCap)
+        let speech = try stripSpecials(gen)
+        try Self.requireSpeechProduced(speech)
+        return (speech, verdict, hitCap, hitWindow, generatedCount)
     }
 
-    /// `onStep` — see `TokenGenerator.generate`; forwarded verbatim.
+    /// Render text that fits one model window, and refuse text that does not.
     ///
-    /// `language` is `nil` for "the voice's own language" — see
-    /// ``resolveLanguage(_:voice:)``. Pass one to read text in a language the
-    /// voice was not enrolled in; that is what cross-lingual synthesis is, and
-    /// the argument always wins.
-    ///
-    /// `speed` is playback speed, in `[0.5, 2.0]`; greater than one is faster
-    /// and pitch is preserved. `1.0` — the default — is an exact bypass: the
-    /// waveform is the vocoder's own samples, untouched. It is applied last,
-    /// after the postprocess detectors have inspected the render, because those
-    /// detectors measure pacing against the text (duration per token) and a
-    /// stretch applied first would move every measurement they make. It is a
-    /// change to the *delivery*, not to the reading, and like the seed it is an
-    /// execution input rather than an algorithm value — the fingerprint does
-    /// not move.
-    ///
-    /// `previousTokens` are the speech tokens this utterance continues from —
-    /// `Result.tokens` of the call before it. The single window is then
-    /// conditioned on their tail exactly as an interior chunk is conditioned on
-    /// its predecessor, which is what stops a second request from restarting
-    /// the pitch contour like a fresh sentence. Only the last
-    /// `chunking.prefixTokens` are used, so passing a whole previous result is
-    /// the intended usage and costs the caller no arithmetic.
-    public func synthesize(
+    /// `synthesize` is the call for any length; this one is for the
+    /// conformance harness and for a caller who wants the refusal. `language`
+    /// is `nil` for the voice's own; `speed` is in `[0.5, 2.0]`, pitch
+    /// preserved, and `1.0` is an exact bypass; `previousTokens` are the
+    /// `Result.tokens` of the call before, so this one continues its pitch
+    /// contour; `shouldCancel` is polled on every decode step and throws
+    /// `LoudKitError.cancelled` when it returns true.
+    public func synthesizeWindow(
         _ text: String, voice: VoiceProfile, seed: UInt64 = 0, language: String? = nil,
         maxNewTokens: Int? = nil, speed: Double = 1.0, previousTokens: [Int]? = nil,
         onStep: (() -> Void)? = nil,
@@ -368,7 +463,7 @@ public final class Engine {
         try TimeStretch.validateSpeed(speed)
         let prefix = try carryFrom(previousTokens)
         let language = Self.resolveLanguage(language, voice: voice)
-        // The speech funnel, before tokenising — the same `SpeechText.prepared`
+        // The speech funnel, before tokenising: the same `SpeechText.prepared`
         // Python calls `speech_text` and runs in `Engine._generate_window`, on
         // the one path that renders. This module could not reach it while it
         // lived in a separate target, so it encoded raw text: "Rabat 15% na
@@ -376,6 +471,11 @@ public final class Engine {
         // piętnaście procent na łikend!". Different tokens are different
         // speech, for the package the README presents beside Python.
         let prepared = SpeechText.prepared(text, languageId: language)
+        // The funnel may remove everything (a footnote marker, an emoji).
+        // Refused here, where `synthesize` refuses through an empty split:
+        // encoding what is left tokenises the bare language tag and renders
+        // `min_tokens_floor` tokens of babble under a caller's own text.
+        try Self.requireSomethingToSpeak(prepared)
         let textTokens = try frontend.encode(prepared, language: language)
 
         let t0 = Date()
@@ -384,17 +484,30 @@ public final class Engine {
             textTokens: textTokens, voice: voice, seed: seed, prefix: prefix, isTerminal: true,
             maxNewTokens: maxNewTokens, onStep: onStep, shouldCancel: shouldCancel)
         let t1 = Date()
-        // Discarded, not rendered. The partial tokens belong to speech the
-        // listener has already interrupted, and the mel decode plus vocode is
-        // the larger half of the barge-in latency on an edge device — so
-        // rendering them adds exactly the wait the cancellation exists to
-        // remove, and then plays audio nobody asked for. Python discards at
-        // engine.py:298 and JS at engine.ts:473, both with the same reasoning.
+        // Discarded, not rendered: every port polls here, between the token
+        // phase and the render, because the render is the larger half of the
+        // barge-in latency on an edge device.
         if shouldCancel?() == true { throw LoudKitError.cancelled }
+        // Refused rather than truncated: one window's audio with the rest of
+        // the text unspoken is silent data loss.
+        //
+        // The *window*, not the cap: `hitCap` is also set by the postprocess
+        // length ceiling, which stops a short text that ran away. That text
+        // fitted and there is nothing to split.
+        //
+        // Read from the generation rather than from the returned array:
+        // postprocess trims, so a window that filled and was then cut back
+        // measured short here and the refusal never fired. The overflow was
+        // gone from the evidence, not from the audio.
+        if generated.hitWindow {
+            throw LoudKitError.windowOverflow(
+                tokens: generated.generatedCount, window: algorithm.window.maxSpeechTokens)
+        }
         let speech = generated.tokens
         let (mel, frames) = try melDecoder.decode(
             tokens: speech, voice: voice, seed: Self.derive(seed, Self.streamFlow))
         let t2 = Date()
+        if shouldCancel?() == true { throw LoudKitError.cancelled }
         let rendered = try vocoder.synthesize(
             mel: mel, frames: frames, seed: Self.derive(seed, Self.streamVocoder))
         let t3 = Date()
@@ -403,10 +516,13 @@ public final class Engine {
         // would move every number they compare against. `speed == 1.0` returns
         // the vocoder's own array, so the default costs nothing and changes no
         // byte. Outside the stage timings for the same reason it is outside the
-        // fingerprint — it is delivery, not synthesis.
-        let audio = try TimeStretch.timeStretch(
-            rendered, sampleRate: algorithm.sampleRate, speed: speed)
+        // fingerprint: it is delivery, not synthesis.
+        let audio = TimeStretch.fadeEdges(
+            try TimeStretch.timeStretch(
+            rendered, sampleRate: algorithm.sampleRate, speed: speed),
+            sampleRate: algorithm.sampleRate, seconds: algorithm.edgeFadeSeconds)
 
+        if shouldCancel?() == true { throw LoudKitError.cancelled }
         return Result(
             audio: audio, tokens: speech, mel: mel, melFrames: frames, seed: seed,
             sampleRate: algorithm.sampleRate,
@@ -428,12 +544,20 @@ public final class Engine {
                 sampleRate: algorithm.sampleRate))
     }
 
-    /// Render a token sequence that already exists — the single most useful
+    /// Render a token sequence that already exists: the single most useful
     /// diagnostic when two implementations disagree (it removes sampling from
     /// the comparison and asks only whether the renderer agrees).
     public func synthesizeTokens(
         _ tokens: [Int], voice: VoiceProfile, seed: UInt64 = 0
     ) throws -> Result {
+        // A caller's sequence, so it is checked rather than filtered.
+        // `stripSpecials` drops ids at or above the limit because the generator
+        // legitimately emits them; here they came from outside, and dropping
+        // them renders something the caller did not ask for. Empty is refused
+        // for the same reason: `stripSpecials` would return an empty row and
+        // the renderer would hand back silence. Python refuses both.
+        guard !tokens.isEmpty else { throw LoudKitError.noTokensToRender }
+        try Self.validateSpeechTokens(tokens, limit: algorithm.startSpeechToken, field: "tokens")
         let speech = try stripSpecials(tokens)
         let t0 = Date()
         let (mel, frames) = try melDecoder.decode(
@@ -448,7 +572,7 @@ public final class Engine {
             timings: StageTimings(tokens: 0, mel: t1.timeIntervalSince(t0), audio: t2.timeIntervalSince(t1)),
             algorithmFingerprint: algorithm.fingerprint(),
             hitTokenCap: false,
-            // No text reached this path, so there are no words to estimate —
+            // No text reached this path, so there are no words to estimate,
             // but the span still covers the whole render, so a caller stitching
             // results does not have to special-case it.
             chunks: Timing.timeline(
@@ -456,83 +580,74 @@ public final class Engine {
                 sampleRate: algorithm.sampleRate))
     }
 
-    /// Drop the generator's control tokens, and **refuse** — rather than slice
-    /// — a sequence longer than the render window.
-    ///
-    /// `.prefix(maxSpeechTokens)` leaves the end of a passage nonexistent
-    /// while the audio still sounds perfectly fine: silent data loss,
-    /// noticed only by a listener who knows the text. Python raises here
-    /// (engine.py:466), and Rust, Go and JS all return an error; truncating
-    /// instead — in two places, `Renderer.decode` doing it again independently —
-    /// hands a caller clipped audio and no error anywhere.
     /// One rendered chunk, handed to a `stream` callback as soon as it exists.
-    public struct Chunk {
+    public struct Chunk: Sendable {
         /// Zero-based position in the split, which is also what the chunk's
         /// seed was derived from.
         public let index: Int
-        /// The piece of the passage this chunk speaks, after the speech funnel
-        /// — what was tokenised, which is not always what the caller passed in.
+        /// The piece of the passage this chunk speaks, after the speech
+        /// funnel: what was tokenised, which is not always what the caller
+        /// passed in.
         public let text: String
+        /// This chunk's waveform, already faded at both edges and stretched.
         public let audio: [Float]
+        /// This chunk's acoustic speech tokens, control tokens stripped.
         public let tokens: [Int]
+        /// This chunk's mel spectrogram, 80 bins, frame major.
         public let mel: [Float]
+        /// Frames in `mel`, since `mel` is flat.
         public let melFrames: Int
         /// What the artifact detectors concluded about this chunk. Per chunk
         /// rather than aggregated because chunks fail independently: one
         /// hallucinated tail among six clean ones is the case worth seeing.
         public let inspection: Postprocess.Inspection
+
+        /// True when generation stopped at a cap rather than at a stop token,
+        /// so this chunk is cut off mid-sentence. Per chunk, because chunks
+        /// truncate independently; `synthesize` ORs it across the passage.
+        public let hitTokenCap: Bool
         /// This chunk's own span, starting at zero.
         ///
-        /// A streamed chunk cannot know what preceded it — the caller decides
-        /// what it has already queued — so reporting anything but zero would be
+        /// A streamed chunk cannot know what preceded it and the caller decides
+        /// what it has already queued, so reporting anything but zero would be
         /// a guess about someone else's playback. Add the offset with
         /// ``ChunkTiming/shifted(by:)``, or let
-        /// ``Engine/synthesizeLong(_:voice:seed:language:speed:previousTokens:shouldCancel:)``
+        /// ``Engine/synthesize(_:voice:seed:language:speed:previousTokens:shouldCancel:)``
         /// stitch the timeline for you.
         public let timing: ChunkTiming
     }
 
     /// Speak `text` chunk by chunk, calling `onChunk` as each becomes ready.
     ///
-    /// The difference from
-    /// ``synthesizeLong(_:voice:seed:language:speed:previousTokens:shouldCancel:)``
-    /// is delivery, not synthesis: time to first audio is set by the first
-    /// chunk rather than by the whole passage, which is what lets a reading app
-    /// start playing a sentence while the rest is still being made.
-    ///
-    /// A callback rather than an `AsyncSequence`, so the caller decides whether
-    /// this runs on an actor: the engine's CoreML models are not `Sendable` and
-    /// making the API async would impose a concurrency model on hosts that do
-    /// not want one. Return `false` from `onChunk` to stop.
-    ///
-    /// Two things make the joins match Python's rather than merely existing:
-    ///
-    /// * **Per-chunk seeds.** Each chunk draws from `derive(seed, 16 + index)`,
-    ///   so a chunk's audio does not depend on how many came before it and
-    ///   stopping early cannot change what was already produced.
-    /// * **Prefix carry.** The last `chunking.prefixTokens` speech tokens of a
-    ///   chunk are fed into the next as context. Without it every chunk
-    ///   restarts its pitch contour like a fresh sentence, and the restart is
-    ///   audible at every join.
-    ///
-    /// `language` is `nil` for "the voice's own language" — see
-    /// ``resolveLanguage(_:voice:)``. Resolved once here, before splitting, so
-    /// every chunk of a passage is read in the same language.
-    ///
-    /// `speed` stretches each chunk independently, which is the same
-    /// independence the seeds and the prefix already have: a chunk's audio must
-    /// not depend on how many came before it, or a listener who stops early
-    /// would have heard something different from one who did not.
-    ///
-    /// `previousTokens` seeds the carry, so the first chunk of *this* call is
-    /// conditioned on the tail of a *previous* one. It is the same conditioning
-    /// the joins inside a passage already use — the carry variable below simply
-    /// starts non-empty — which is why a request boundary stops being audible
-    /// without a second mechanism existing to maintain.
+    /// The same synthesis as `synthesize`, delivered as it is made: time to
+    /// first audio is set by the first chunk. Return `false` from `onChunk`
+    /// to stop. `shouldCancel` stops within one decode step, and the stream
+    /// then ends without throwing: the chunks already delivered are the
+    /// partial, the one in flight is discarded. Chunk 0 draws the caller's
+    /// seed and every later chunk `derive(seed, 16 + index)`, so a chunk's
+    /// audio does not depend on how many came before it; the last
+    /// `chunking.prefixTokens` tokens of each chunk condition the next, and
+    /// `previousTokens` seed that carry for the first.
     public func stream(
         _ text: String, voice: VoiceProfile, seed: UInt64 = 0, language: String? = nil,
         speed: Double = 1.0, previousTokens: [Int]? = nil,
         shouldCancel: (() -> Bool)? = nil,
+        onChunk: (Chunk) throws -> Bool
+    ) throws {
+        do {
+            try chunks(
+                text, voice: voice, seed: seed, language: language, speed: speed,
+                previousTokens: previousTokens, shouldCancel: shouldCancel, onChunk: onChunk)
+        } catch LoudKitError.cancelled {
+            return
+        }
+    }
+
+    /// `stream`, throwing `LoudKitError.cancelled` where the flag stopped it.
+    private func chunks(  // swiftlint:disable:this function_parameter_count
+        _ text: String, voice: VoiceProfile, seed: UInt64, language: String?,
+        speed: Double, previousTokens: [Int]?,
+        shouldCancel: (() -> Bool)?,
         onChunk: (Chunk) throws -> Bool
     ) throws {
         try TimeStretch.validateSpeed(speed)
@@ -547,136 +662,164 @@ public final class Engine {
         let prefixLength = algorithm.chunking.prefixTokens
         var carry: [Int] = try carryFrom(previousTokens)
 
-        for (index, chunk) in chunks.enumerated() {
-            if shouldCancel?() == true { break }
-            let chunkSeed = Self.derive(seed, Self.streamChunkBase + UInt64(index))
+        // A work queue rather than a walk over `chunks`: a chunk the window
+        // could not hold is replaced, in place, by its two halves. The decision
+        // needs a generated window: the overrun is a fact about this voice and
+        // this text together, and nothing before generation knows it, so a
+        // queue is the only structure that lets one entry become two after the
+        // fact.
+        //
+        // Both halves keep the ORIGINAL chunk's index, so a repair cannot move
+        // the seed of any later chunk. Seeds only: chunk k+1 is conditioned on
+        // the tail of chunk k, which after a repair comes from the second half,
+        // so later audio in THIS passage does move. What the index buys is that
+        // the change stops at this passage.
+        struct Part {
+            let text: String
+            let index: Int
+            let seed: UInt64
+            let terminal: Bool
+            /// False on a half, so a half that still overruns ships as it is.
+            /// One did, measured through the engine over the 51 passages
+            /// carrying a cap hit, and its audio ended on a 0.42 s tail, it
+            /// finished its clause rather than being cut. An unbounded split is
+            /// a new way to fail.
+            let splittable: Bool
+        }
+        var queue = chunks.enumerated().map { index, text in
+            Part(
+                text: text, index: index,
+                seed: index == 0
+                    ? seed : Self.derive(seed, Self.streamChunkBase + UInt64(index)),
+                terminal: index == chunks.count - 1, splittable: true)
+        }
+
+        var qi = 0
+        while qi < queue.count {
+            let part = queue[qi]
+            let index = part.index
+            let chunk = part.text
+            if shouldCancel?() == true { throw LoudKitError.cancelled }
+            let chunkSeed = part.seed
             let textTokens = try frontend.encode(chunk, language: language)
             // Only the last chunk ends the passage.
             let generated = try generateInspected(
                 textTokens: textTokens, voice: voice, seed: chunkSeed, prefix: carry,
-                isTerminal: index == chunks.count - 1, maxNewTokens: nil, onStep: nil,
+                isTerminal: part.terminal, maxNewTokens: nil, onStep: nil,
                 shouldCancel: shouldCancel)
-            // Discarded, not rendered — see `synthesize`.
-            if shouldCancel?() == true { break }
+            // The window has to be what stopped it, not the length-proportional
+            // ceiling: generateInspected caps at min(maxNewTokens,
+            // ceilingFor(...)), and the second fires when a short text runs
+            // away. Halving a runaway gives two runaways with smaller ceilings.
+            // Measured before the trim, for the reason `synthesize` states.
+            if generated.hitWindow, part.splittable,
+                algorithm.chunking.capResplit == .word,
+                let halves = Chunking.splitInHalf(chunk)
+            {
+                // Discard this window and do the two halves instead. The second
+                // draws from a stream of its own off the chunk seed: the flow
+                // takes 1, the vocoder 2, and the retry ladder 8 up.
+                queue.replaceSubrange(
+                    qi...qi,
+                    with: [
+                        Part(
+                            text: halves.0, index: index, seed: chunkSeed,
+                            terminal: false, splittable: false),
+                        Part(
+                            text: halves.1, index: index,
+                            seed: Self.derive(chunkSeed, Self.streamResplit),
+                            terminal: part.terminal, splittable: false),
+                    ])
+                continue
+            }
+            // Discarded, not rendered: see `synthesizeWindow`.
+            if shouldCancel?() == true { throw LoudKitError.cancelled }
 
             let speech = generated.tokens
             let (mel, frames) = try melDecoder.decode(
                 tokens: speech, voice: voice, seed: Self.derive(chunkSeed, Self.streamFlow))
+            if shouldCancel?() == true { throw LoudKitError.cancelled }
             let rendered = try vocoder.synthesize(
                 mel: mel, frames: frames, seed: Self.derive(chunkSeed, Self.streamVocoder))
-            // Applied per chunk and last — see `synthesize`. Per chunk rather
+            // Applied per chunk and last, see `synthesize`. Per chunk rather
             // than once over the joined passage because `stream` has no joined
             // passage to apply it to, and the two paths have to produce the
             // same waveform.
-            let audio = try TimeStretch.timeStretch(
-                rendered, sampleRate: algorithm.sampleRate, speed: speed)
+            let audio = TimeStretch.fadeEdges(
+            try TimeStretch.timeStretch(
+                rendered, sampleRate: algorithm.sampleRate, speed: speed),
+            sampleRate: algorithm.sampleRate, seconds: algorithm.edgeFadeSeconds)
 
-            carry = prefixLength > 0 ? Array(speech.suffix(prefixLength)) : []
+            if shouldCancel?() == true { throw LoudKitError.cancelled }
+            carry = try Self.carryFrom(speech, prefixTokens: prefixLength,
+                                       startSpeechToken: algorithm.startSpeechToken, decode: algorithm.decode)
             let keepGoing = try onChunk(
                 Chunk(
                     index: index, text: chunk, audio: audio, tokens: speech, mel: mel,
                     melFrames: frames, inspection: generated.inspection,
+                    hitTokenCap: generated.hitCap,
                     // Timed on the stretched audio, so a caller who plays the
                     // chunk gets spans that match what they hear.
                     timing: Timing.timeline(
                         [ChunkSpan(text: chunk, samples: audio.count, tokens: speech.count)],
                         sampleRate: algorithm.sampleRate)[0]))
             if !keepGoing { break }
+            qi += 1
         }
     }
 
-    /// Speak text of any length as one waveform.
+    /// Speak text of any length as one `Result`.
     ///
-    /// Exactly
-    /// ``stream(_:voice:seed:language:speed:previousTokens:shouldCancel:onChunk:)``
-    /// with the chunks concatenated — one loop, so the streaming and
-    /// whole-passage paths cannot drift apart.
-    ///
-    /// Before this existed, `synthesize` refused anything past one window (~127
-    /// characters) and the caller had to split the text themselves. A caller
-    /// who splits differently gets different chunk boundaries, therefore
-    /// different derived seeds, therefore different audio from every other port
-    /// — while `AlgorithmConfig.fingerprint()` goes on declaring the chunking
-    /// recipe this module was not applying.
-    ///
-    /// `language` is `nil` for "the voice's own language"; left unresolved here
-    /// so ``stream(_:voice:seed:language:speed:previousTokens:shouldCancel:onChunk:)``
-    /// resolves it once, on the one path that renders.
-    ///
-    /// `speed` is applied per chunk, exactly as `stream` applies it, so the two
-    /// paths still produce the same waveform. `previousTokens` conditions the
-    /// *first* chunk; every chunk after it is conditioned on the one before, as
-    /// always.
-    public func synthesizeLong(
+    /// Exactly `stream` with the chunks concatenated, one loop, so the two
+    /// paths cannot drift. `hitTokenCap` is ORed across chunks: one truncated
+    /// chunk truncates the passage. Throws `LoudKitError.cancelled` when
+    /// `shouldCancel` returned true: a passage cut short is never handed back
+    /// as a `Result`.
+    public func synthesize(
         _ text: String, voice: VoiceProfile, seed: UInt64 = 0, language: String? = nil,
         speed: Double = 1.0, previousTokens: [Int]? = nil,
         shouldCancel: (() -> Bool)? = nil
     ) throws -> Result {
         var audio: [Float] = []
         var tokens: [Int] = []
-        // Set when `shouldCancel` stops the loop, so the caller can tell an
-        // interrupted passage from a finished one. `synthesize` throws
-        // `.cancelled` for the same event; here a partial result is genuinely
-        // useful — the audio produced so far is playable — so it is returned
-        // and flagged rather than discarded. What it must not be is
-        // indistinguishable from a short passage, which is what a bare `break`
-        // made it.
-        var wasCancelled = false
+        var hitCapAnywhere = false
         var melParts: [(mel: [Float], frames: Int)] = []
         var frames = 0
         var inspections: [Postprocess.Inspection] = []
         var spans: [ChunkSpan] = []
         let t0 = Date()
 
-        try stream(
+        try chunks(
             text, voice: voice, seed: seed, language: language, speed: speed,
             previousTokens: previousTokens, shouldCancel: shouldCancel)
         { chunk in
             audio.append(contentsOf: chunk.audio)
             tokens.append(contentsOf: chunk.tokens)
             inspections.append(chunk.inspection)
+            // ORed across chunks, matching the other four ports: one truncated
+            // chunk truncates the passage.
+            hitCapAnywhere = hitCapAnywhere || chunk.hitTokenCap
             spans.append(
                 ChunkSpan(
                     text: chunk.text, samples: chunk.audio.count, tokens: chunk.tokens.count))
             // Along time, not end to end: a mel is (bins, frames) row-major, so
-            // concatenating the flat arrays would interleave the bins.
-            // Collected, joined once. `appendMelAlongTime` copies the whole
-            // accumulator every call, so a passage of N chunks copied the mel
-            // N(N+1)/2 times — quadratic in the length of the thing being read,
-            // at the point where it is already the largest array in the process.
+            // concatenating the flat arrays would interleave the bins. Collected
+            // here, joined once by `joinMelsAlongTime`.
             melParts.append((chunk.mel, chunk.melFrames))
             frames += chunk.melFrames
             return true
         }
-        // Asked once more, after the stream has stopped: `stream` breaks out of
-        // its own loop and cannot report why, so this is where an interrupted
-        // passage becomes distinguishable from a finished one.
-        wasCancelled = shouldCancel?() == true
 
         let elapsed = Date().timeIntervalSince(t0)
-        // One allocation, one pass: bins-major, each chunk's frames written in
-        // place. This is what `appendMelAlongTime` did pairwise, without the
-        // N(N+1)/2 copies.
-        let bins = melParts.first.map { $0.mel.count / max($0.frames, 1) } ?? 0
-        var mel = [Float](repeating: 0, count: bins * frames)
-        if bins > 0 {
-            for bin in 0..<bins {
-                var at = bin * frames
-                for part in melParts {
-                    for f in 0..<part.frames { mel[at + f] = part.mel[bin * part.frames + f] }
-                    at += part.frames
-                }
-            }
-        }
+        let mel = Self.joinMelsAlongTime(melParts, frames: frames)
         return Result(
             audio: audio, tokens: tokens, mel: mel, melFrames: frames, seed: seed,
             sampleRate: algorithm.sampleRate,
             timings: StageTimings(tokens: elapsed, mel: 0, audio: 0),
             algorithmFingerprint: algorithm.fingerprint(),
-            hitTokenCap: false,
+            hitTokenCap: hitCapAnywhere,
             inspections: inspections,
             speed: speed,
-            cancelled: wasCancelled,
             // Rebuilt from the chunks rather than shifting each chunk's own
             // timing by a running Double: `timeline` accumulates sample offsets
             // as integers, so the joins are exact and every chunk's `end` is
@@ -684,21 +827,28 @@ public final class Engine {
             chunks: Timing.timeline(spans, sampleRate: algorithm.sampleRate))
     }
 
-    /// Concatenate two `(bins, frames)` row-major mels along the time axis.
+    /// Concatenate `(bins, frames)` row-major mels along the time axis.
     ///
     /// The flat arrays cannot simply be appended: that puts the second mel's
-    /// first bin after the first mel's last bin, which is not a spectrogram.
-    static func appendMelAlongTime(
-        _ left: [Float], _ leftFrames: Int, _ right: [Float], _ rightFrames: Int
-    ) -> [Float] {
-        if left.isEmpty { return right }
-        let bins = left.count / max(leftFrames, 1)
-        var out = [Float](repeating: 0, count: bins * (leftFrames + rightFrames))
+    /// first bin after the first mel's last bin, which is not a spectrogram,
+    /// and it still renders, into audio that sounds like a fault in the model.
+    ///
+    /// One allocation, one pass, bins-major, each part's frames written in
+    /// place. Joining pairwise copied the whole accumulator per chunk, so a
+    /// passage of N chunks copied the mel N(N+1)/2 times, quadratic in the
+    /// length of the thing being read and on the largest array in the process.
+    ///
+    /// `frames` is the total across `parts`, which the caller is already
+    /// counting.
+    static func joinMelsAlongTime(_ parts: [(mel: [Float], frames: Int)], frames: Int) -> [Float] {
+        let bins = parts.first.map { $0.mel.count / max($0.frames, 1) } ?? 0
+        guard bins > 0 else { return [] }
+        var out = [Float](repeating: 0, count: bins * frames)
         for bin in 0..<bins {
-            let target = bin * (leftFrames + rightFrames)
-            for f in 0..<leftFrames { out[target + f] = left[bin * leftFrames + f] }
-            for f in 0..<rightFrames {
-                out[target + leftFrames + f] = right[bin * rightFrames + f]
+            var at = bin * frames
+            for part in parts {
+                for f in 0..<part.frames { out[at + f] = part.mel[bin * part.frames + f] }
+                at += part.frames
             }
         }
         return out
@@ -709,13 +859,53 @@ public final class Engine {
     private func carryFrom(_ previousTokens: [Int]?) throws -> [Int] {
         try Self.carryFrom(
             previousTokens, prefixTokens: algorithm.chunking.prefixTokens,
-            startSpeechToken: algorithm.startSpeechToken)
+            startSpeechToken: algorithm.startSpeechToken, decode: algorithm.decode)
+    }
+
+    /// Refuse text the funnel emptied, before it is tokenised.
+    ///
+    /// A footnote marker or a lone emoji leaves nothing, and encoding nothing
+    /// tokenises the bare language tag: the generator then renders
+    /// `min_tokens_floor` tokens of babble under the caller's own text, with no
+    /// error anywhere. `synthesize` refuses through an empty split; this is the
+    /// same door on the one-window path. Static, so it is exercised without a
+    /// checkpoint. Mirrors the `NothingToSpeakError` in `generate_window`.
+    static func requireSomethingToSpeak(_ prepared: String) throws {
+        guard prepared.isEmpty else { return }
+        throw LoudKitError.shape(
+            "nothing to speak: the text funnel removed every character. "
+            + "Footnote markers, emoji and symbols with no word in the "
+            + "render language are dropped, and this input was only those.")
+    }
+
+    /// Refuse a window that generated no speech at all.
+    ///
+    /// Silence with no error is the one failure a caller does not notice, and
+    /// the remedy is a setting, so the message names it. Python raises here too.
+    static func requireSpeechProduced(_ speech: [Int]) throws {
+        guard speech.isEmpty else { return }
+        throw LoudKitError.shape(
+            "generation produced no speech tokens: the stop token was accepted "
+            + "immediately. Set sampling.min_tokens_floor above 0 to refuse that "
+            + "during sampling.")
+    }
+
+    /// Refuse a token sequence the renderer cannot look up, naming the first
+    /// offending id and the bound.
+    ///
+    /// One function for both doors that take ids from a caller, so
+    /// `previousTokens` and `tokens` refuse the same values with the same
+    /// sentence. Mirrors `loudkit.window.validate_speech_tokens`.
+    static func validateSpeechTokens(_ tokens: [Int], limit: Int, field: String) throws {
+        for token in tokens where !(0 <= token && token < limit) {
+            throw LoudKitError.invalidToken(field: field, token: token, limit: limit)
+        }
     }
 
     /// The conditioning context a call inherits from the one before it.
     ///
-    /// The same slice the streaming loop takes between two chunks — last
-    /// `chunking.prefixTokens` — applied to tokens that came from a different
+    /// The same slice the streaming loop takes between two chunks, last
+    /// `chunking.prefixTokens`, applied to tokens that came from a different
     /// call. There is deliberately no second mechanism: a request boundary and
     /// a chunk boundary are the same join, and the reason chunk joins do not
     /// stutter is the reason request joins should not either.
@@ -727,7 +917,7 @@ public final class Engine {
     /// Static, and taking the two config values rather than reading them off
     /// `self`, so it can be tested on a machine with no checkpoint and no
     /// CoreML packages: an `Engine` cannot be built without them, and this
-    /// arithmetic — which is the whole of feature C — would otherwise only ever
+    /// arithmetic, which is the whole of feature C, would otherwise only ever
     /// be exercised on the developer machines that have the weights.
     ///
     /// - Throws: `LoudKitError.shape` for an id outside the acoustic codebook.
@@ -736,25 +926,34 @@ public final class Engine {
     ///   reporting that only when it happens to land in the last six tokens
     ///   would make the failure depend on the length of the caller's text.
     static func carryFrom(
-        _ previousTokens: [Int]?, prefixTokens: Int, startSpeechToken: Int
+        _ previousTokens: [Int]?, prefixTokens: Int, startSpeechToken: Int, decode: String = "single"
     ) throws -> [Int] {
         guard let previousTokens else { return [] }
-        for token in previousTokens where !(0 <= token && token < startSpeechToken) {
-            throw LoudKitError.shape(
-                "previousTokens contains \(token), which is not an acoustic speech "
-                    + "token (expected 0 <= id < \(startSpeechToken)). Pass `Result.tokens` "
-                    + "from an earlier call; the generator's own control tokens are "
-                    + "already stripped from it.")
-        }
+        try validateSpeechTokens(previousTokens, limit: startSpeechToken,
+                                 field: "previousTokens")
         // Guarded rather than `suffix(prefixTokens)` alone for the same reason
         // Python does not write `tokens[-wanted:]`: at zero that slice is the
         // whole list rather than nothing, which would condition on the entire
         // previous utterance at exactly the setting that means "chunks are
         // independent". Swift's `suffix(0)` is empty, so this guard is about
         // saying the rule out loud in all five ports, not about the arithmetic.
-        return prefixTokens > 0 ? Array(previousTokens.suffix(prefixTokens)) : []
+        guard prefixTokens > 0 else { return [] }
+        var end = previousTokens.count
+        if decode == "fusion_mtp2" { end -= end % 2 }
+        var start = end - prefixTokens
+        if decode == "fusion_mtp2", start % 2 != 0 { start -= 1 }
+        return Array(previousTokens[max(0, start)..<end])
     }
 
+    /// Drop the generator's control tokens, and refuse, rather than slice, a
+    /// sequence longer than the render window.
+    ///
+    /// `.prefix(maxSpeechTokens)` leaves the end of a passage nonexistent
+    /// while the audio still sounds perfectly fine: silent data loss, noticed
+    /// only by a listener who knows the text. `window.strip_specials` raises,
+    /// and Rust, Go and JS all return an error; truncating instead, in two
+    /// places with `Renderer.decode` doing it again independently, hands a
+    /// caller clipped audio and no error anywhere.
     private func stripSpecials(_ tokens: [Int]) throws -> [Int] {
         let limit = algorithm.startSpeechToken
         // Refused, not filtered, and both ends. `filter { $0 < limit }` dropped
@@ -763,15 +962,20 @@ public final class Engine {
         // out-of-bounds read of the embedding table, and in torch it indexes
         // from the *end* and returns a plausible vector. Python, Go, Rust and
         // JS all refuse it; this was the one port that did not, on the public
-        // API — the transports validate before they get here.
+        // API; the transports validate before they get here.
         //
         // Filtering is right for a special and wrong for a negative: a special
         // is a token the caller legitimately has and this layer removes, while
         // a negative is not a token at all, and dropping it silently renders
         // something the caller did not ask for.
         if let bad = tokens.first(where: { $0 < 0 }) {
+            // The same sentence `LoudKitError.invalidToken` writes, from the
+            // same constant, so this site keeps the `invalid_tokens` code
+            // rather than holding it by a wording coincidence. Its own range
+            // clause, because this check has a range and no lower bound to
+            // state.
             throw LoudKitError.shape(
-                "tokens contains \(bad), which is not an acoustic speech token "
+                "tokens contains \(bad)\(LoudKitError.notASpeechToken) "
                     + "(expected 0 to \(limit - 1))")
         }
         let speech = tokens.filter { $0 < limit }
@@ -779,8 +983,8 @@ public final class Engine {
         return speech
     }
 
-    /// Per-stage seed from one user seed — same constants as
-    /// `loudkit.engine._derive`, so the streams line up across languages.
+    /// Per-stage seed from one user seed, same constants as
+    /// `loudkit.window._derive`, so the streams line up across languages.
     /// Public because the derivation is part of the seed contract (the
     /// conformance fixture pins its outputs), not an implementation detail.
     public static func derive(_ seed: UInt64, _ stream: UInt64) -> UInt64 {
@@ -793,7 +997,7 @@ public final class Engine {
     /// *missing* header key to `"en"`, and Python writes the key,
     /// so an empty string only arrives from a profile built in memory or a
     /// header hand-edited to `""`. A profile file with no language field
-    /// inherits nothing — it loads as `"en"`.
+    /// inherits nothing: it loads as `"en"`.
     static let fallbackLanguage = "en"
 
     /// The language chain: the argument, then the voice's recorded language,
@@ -801,8 +1005,8 @@ public final class Engine {
     ///
     /// Without the voice link, `engine.synthesize("Cześć", voice: polishVoice)`
     /// runs Polish text
-    /// through the English frontend — English number words, English
-    /// abbreviation expansion, no Polish respelling — and says so nowhere. A
+    /// through the English frontend, English number words, English
+    /// abbreviation expansion, no Polish respelling, and says so nowhere. A
     /// profile records the language of the audio it was enrolled from,
     /// so the voice is the better answer than a constant.
     ///
@@ -813,7 +1017,7 @@ public final class Engine {
     /// An empty profile language is treated as absent: it is not a language,
     /// and `TextFrontend.encode` would tag the text `[]` with it.
     ///
-    /// Mirrors `loudkit.engine._resolve_language`.
+    /// Mirrors `loudkit.window.resolve_language`.
     static func resolveLanguage(_ language: String?, voice: VoiceProfile) -> String {
         if let language { return language }
         return voice.language.isEmpty ? fallbackLanguage : voice.language

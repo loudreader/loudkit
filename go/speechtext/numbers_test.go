@@ -2,8 +2,12 @@ package speechtext
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -12,7 +16,9 @@ func loadNumbersFixture(t *testing.T, name string) map[string]any {
 	p := filepath.Join("..", "..", "tests", "data", "conformance", name)
 	raw, err := os.ReadFile(p)
 	if err != nil {
-		t.Skipf("fixture not found: %s", p)
+		// Committed fixture: unreadable means broken, not absent. A skip here
+		// passed the whole numbers suite without reading a case.
+		t.Fatalf("fixture not readable: %s (%v)", p, err)
 	}
 	var fx map[string]any
 	if err := json.Unmarshal(raw, &fx); err != nil {
@@ -121,7 +127,7 @@ func TestDigitRunParityCases(t *testing.T) {
 		// thousand into three spoken zeros.
 		{"1 000.0 3", "nl", "duizend komma nul drie"},
 		// The fraction group repeats, and a segment carrying two marks is not
-		// one readable number — it is left written, per segment.
+		// one readable number: it is left written, per segment.
 		{"4 5671.2.3", "es", "cuatro 5671.2.3"},
 		{"4 567 8901.2.3", "es", "cuatro quinientos sesenta y siete 8901.2.3"},
 		// A run the lookbehind refuses is not a consumed run: `3 100` binds
@@ -208,7 +214,7 @@ func TestAWrittenInfixIsNotSaidTwice(t *testing.T) {
 
 // An empty infix consumes nothing at all. Searched for anyway, it matched the
 // empty string wherever the whitespace run ended and took the whitespace with
-// it — everywhere the character behind was not an ASCII letter or digit, which
+// it: everywhere the character behind was not an ASCII letter or digit, which
 // includes every accented letter in nine of these languages.
 func TestAnEmptyInfixConsumesNoWhitespace(t *testing.T) {
 	cases := []struct{ text, lang, want string }{
@@ -219,6 +225,154 @@ func TestAnEmptyInfixConsumesNoWhitespace(t *testing.T) {
 	for _, c := range cases {
 		if got := ExpandTimes(c.text, c.lang); got != c.want {
 			t.Errorf("ExpandTimes(%q, %s) = %q, want %q", c.text, c.lang, got, c.want)
+		}
+	}
+}
+
+// meridiems are both spellings in both cases, plus the dotted forms, which are
+// letters too.
+var meridiems = []string{"am", "pm", "AM", "PM", "Am", "pM", "a.m.", "p.m."}
+
+// A spoken time is not written against a letter: `3:45pm` used to read *three
+// forty-fivepm*, one word to a listener, where `3:45 pm` read correctly. A
+// space in the source was deciding whether the meridiem was a word at all, and
+// nothing in this suite asked.
+func TestASpokenTimeIsNotWrittenAgainstALetter(t *testing.T) {
+	for _, meridiem := range meridiems {
+		text := "Call at 3:45" + meridiem + "."
+		want := "Call at three forty-five " + meridiem + "."
+		if got := ExpandTimes(text, "en"); got != want {
+			t.Errorf("ExpandTimes(%q, en) = %q, want %q", text, got, want)
+		}
+	}
+	// The written infix needs no space in front of it either.
+	for _, c := range []struct{ text, want string }{
+		{"um 14:30Uhr", "um vierzehn Uhr dreißig"},
+		{"Termin um 14.30Uhr.", "Termin um vierzehn Uhr dreißig."},
+	} {
+		if got := ExpandTimes(c.text, "de"); got != c.want {
+			t.Errorf("ExpandTimes(%q, de) = %q, want %q", c.text, got, c.want)
+		}
+	}
+}
+
+// Every hour and minute of the clock, in every language: the glued form reads
+// exactly as the spaced one. The separator is the one the language treats as a
+// time, and the hour is written both bare and zero-padded, two matches.
+func TestTheSpaceInTheSourceDecidesNothing(t *testing.T) {
+	for _, lang := range SupportedNumberLanguages() {
+		separator := "."
+		if decimalSeparator(lang) == "." {
+			separator = ":"
+		}
+		for _, meridiem := range []string{"pm", "a.m."} {
+			for hour := 0; hour <= 24; hour++ {
+				for _, writtenHour := range []string{
+					strconv.Itoa(hour), fmt.Sprintf("%02d", hour),
+				} {
+					for minute := 0; minute < 60; minute++ {
+						written := fmt.Sprintf("%s%s%02d", writtenHour, separator, minute)
+						glued := ExpandTimes("at "+written+meridiem+" sharp", lang)
+						spaced := ExpandTimes("at "+written+" "+meridiem+" sharp", lang)
+						if ExpandTimes(written, lang) == written {
+							// Not a clock time here, `24:01` being the whole
+							// set: both forms keep every character.
+							if want := "at " + written + meridiem + " sharp"; glued != want {
+								t.Fatalf("%s %s: glued = %q, want %q", lang, written, glued, want)
+							}
+							continue
+						}
+						if glued != spaced {
+							t.Fatalf("%s %s: glued %q, spaced %q", lang, written, glued, spaced)
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// A letter is the only thing the rule reads: what a following digit or
+// separator refused, it still refuses, and a letter in front of the time is a
+// different question the shared fixture answers.
+func TestOnlyALetterSeparatesASpokenTime(t *testing.T) {
+	for _, lang := range SupportedNumberLanguages() {
+		// A seconds field is two digits and the last of them: `10:30:45:60`
+		// is a separator run, not a clock, and the refusal that reads the
+		// character after the time is what says so.
+		for _, literal := range []string{"12.03.2026", "1.2.3", "24:30", "10:30:45:60"} {
+			if got := ExpandTimes(literal, lang); got != literal {
+				t.Errorf("%s: ExpandTimes(%q) = %q, want it left alone", lang, literal, got)
+			}
+		}
+		for _, text := range []string{"at 14:30", "at 14:30.", "at 14:30, yes", "at 14:30!"} {
+			got := ExpandTimes(text, lang)
+			if strings.Contains(got, "  ") || strings.TrimRight(got, " ") != got {
+				t.Errorf("%s: ExpandTimes(%q) = %q gained a space", lang, text, got)
+			}
+		}
+	}
+	if got := ExpandTimes("Meet at a14:30.", "en"); got != "Meet at afourteen thirty." {
+		t.Errorf("a letter before the time moved: %q", got)
+	}
+}
+
+// A clock time carries its seconds, and a zero seconds field says nothing the
+// hour and the minute have not already said.
+//
+// The two forms are compared with each other rather than with twelve spellings
+// of the reading, because agreeing is the whole rule. The dotted form is left
+// out on purpose: `10.30.45` is a version string as readily as a timestamp.
+func TestZeroSecondsReadAsNoSecondsAtAll(t *testing.T) {
+	for _, lang := range SupportedNumberLanguages() {
+		for _, pair := range [][2]string{
+			{"10:30:00", "10:30"},
+			{"3:45:00pm", "3:45pm"},
+			{"24:00:00", "24:00"},
+		} {
+			with, without := ExpandTimes(pair[0], lang), ExpandTimes(pair[1], lang)
+			if with != without {
+				t.Errorf("%s: ExpandTimes(%q) = %q but ExpandTimes(%q) = %q",
+					lang, pair[0], with, pair[1], without)
+			}
+		}
+		// A dotted time takes no seconds anywhere, whatever the language does
+		// with the dot between an hour and its minutes.
+		if got := ExpandTimes("10.30.45", lang); got != "10.30.45" {
+			t.Errorf("%s: ExpandTimes(%q) = %q, want it left alone", lang, "10.30.45", got)
+		}
+		if got := ExpandTimes("10:30:45", lang); got == "10:30:45" {
+			t.Errorf("%s: ExpandTimes(%q) left the seconds written", lang, "10:30:45")
+		}
+	}
+	// A zero minute is dropped from `10:30` and kept in `10:00:45`, where
+	// dropping it would move the seconds into the minutes' place.
+	if got := ExpandTimes("10:00:45 and 10:30:00", "en"); got != "ten zero forty-five and ten thirty" {
+		t.Errorf("the seconds moved: %q", got)
+	}
+}
+
+// TestCardinalRefusesTheMostNegativeInteger pins a refusal that used to be a
+// crash.
+//
+// Negating math.MinInt64 overflows back to itself, so the magnitude stayed
+// negative, passed the ceiling test, and reached the negative branch, which
+// called Cardinal again with the same value. A stack overflow is a fatal error
+// rather than a recoverable panic, so one call on one value took the process
+// down. Python refuses it, because its integers do not overflow and the value
+// is simply past the largest scale.
+func TestCardinalRefusesTheMostNegativeInteger(t *testing.T) {
+	for _, lang := range SupportedNumberLanguages() {
+		if _, err := Cardinal(math.MinInt64, lang, ""); err == nil {
+			t.Errorf("Cardinal(math.MinInt64, %q) was accepted", lang)
+		}
+		// Its neighbour is out of range too, and always was.
+		if _, err := Cardinal(math.MinInt64+1, lang, ""); err == nil {
+			t.Errorf("Cardinal(math.MinInt64+1, %q) was accepted", lang)
+		}
+		// Ordinary negatives still read.
+		if got, err := Cardinal(-1, lang, ""); err != nil || got == "" {
+			t.Errorf("Cardinal(-1, %q) = %q, %v", lang, got, err)
 		}
 	}
 }

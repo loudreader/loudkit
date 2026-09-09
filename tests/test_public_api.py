@@ -12,12 +12,15 @@ all.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 import loudkit
 from loudkit.engine import Engine
 
 from .assets import asset, requires
+from .conftest import fake_engine, fake_voice
 
 CKPT = asset("checkpoint")
 
@@ -38,7 +41,7 @@ class TestRegistryDispatch:
         with pytest.raises(FileNotFoundError):
             loudkit.load("/definitely/not/a/checkpoint.safetensors", device="cpu")
 
-    def test_load_and_from_checkpoint_are_the_same_path(self, monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_load_and_from_checkpoint_are_the_same_path(self, monkeypatch, tmp_path) -> None:
         """``loudkit.load`` is a thin, documented wrapper over
         ``Engine.from_checkpoint`` — the public surface has exactly one way to
         build an engine, so there is exactly one way to get it wrong.
@@ -56,11 +59,12 @@ class TestRegistryDispatch:
         checkpoint.write_bytes(b"")
         calls: list[tuple[str, str]] = []
 
-        def fake_build(path: str, *, device: str = "cpu", execution=None, algorithm=None):  # type: ignore[no-untyped-def]
+        def fake_build(path: str, *, device: str = "cpu", execution=None, algorithm=None):
             calls.append((path, device))
             return "engine"
 
         monkeypatch.setattr(loudkit.backends, "build_engine", fake_build)
+        monkeypatch.setattr(loudkit, "_require_device", lambda _device: None)
         got = Engine.from_checkpoint(str(checkpoint), device="cpu")
         assert got == "engine"
         assert calls == [(str(checkpoint), "cpu")]
@@ -72,14 +76,135 @@ class TestRegistryDispatch:
         assert calls == [(str(checkpoint), "mps")]
 
 
+class TestLoadResolvesOneDevice:
+    """`device=` and `execution.device` are two spellings of one decision.
+
+    Both halves of getting that wrong have shipped. First the two were resolved
+    independently, so naming both and disagreeing built an engine on one device
+    and placed it on the other. Then reconciling them defaulted to `"cpu"`
+    inside the helper, which is `build_engine`'s fallback and not `load`'s — so
+    a caller passing an `ExecutionConfig` about something else lost the GPU
+    without a word.
+    """
+
+    def _fake_build(self, monkeypatch, tmp_path):
+        import loudkit.backends
+
+        checkpoint = tmp_path / "fake.safetensors"
+        checkpoint.write_bytes(b"")
+        seen: list[str] = []
+
+        def fake_build(path: str, *, device: str = "cpu", execution=None, algorithm=None):
+            del path, execution, algorithm
+            seen.append(device)
+            return "engine"
+
+        monkeypatch.setattr(loudkit.backends, "build_engine", fake_build)
+        return checkpoint, seen
+
+    def test_overrides_about_something_else_do_not_take_the_gpu_away(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        """`ExecutionConfig(num_threads=1)` names no device. That is the
+        absence of a request, not a request for the default, which is the whole
+        reason a field is `None` until named."""
+        from loudkit.config import ExecutionConfig
+
+        checkpoint, seen = self._fake_build(monkeypatch, tmp_path)
+        monkeypatch.setattr(loudkit, "best_device", lambda: "cuda")
+        loudkit.load(str(checkpoint), execution=ExecutionConfig(num_threads=1))
+        assert seen == ["cuda"], "an override about threads must not choose the device"
+
+    def test_a_device_named_only_in_execution_is_the_one_used(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        from loudkit.config import ExecutionConfig
+
+        checkpoint, seen = self._fake_build(monkeypatch, tmp_path)
+        monkeypatch.setattr(loudkit, "best_device", lambda: "cuda")
+        loudkit.load(str(checkpoint), execution=ExecutionConfig(device="cpu"))
+        assert seen == ["cpu"]
+
+    def test_neither_spelling_takes_the_best_device(self, monkeypatch, tmp_path) -> None:
+        checkpoint, seen = self._fake_build(monkeypatch, tmp_path)
+        monkeypatch.setattr(loudkit, "best_device", lambda: "mps")
+        loudkit.load(str(checkpoint))
+        assert seen == ["mps"]
+
+    def test_two_spellings_that_disagree_are_refused(self, monkeypatch, tmp_path) -> None:
+        from loudkit.config import ExecutionConfig
+
+        checkpoint, _seen = self._fake_build(monkeypatch, tmp_path)
+        with pytest.raises(ValueError, match="disagree"):
+            loudkit.load(
+                str(checkpoint), device="cuda", execution=ExecutionConfig(device="cpu")
+            )
+
+    def test_the_runtime_check_reads_the_resolved_device(self, monkeypatch, tmp_path) -> None:
+        """An ONNX-only install spelling its request through `execution`.
+
+        `_require_runtime` asks for onnxruntime or torch depending on the
+        device, and it used to read the `device=` argument alone — so
+        `execution=ExecutionConfig(device="onnx")` on a machine with no
+        torch was told to install torch.
+        """
+        from loudkit.config import ExecutionConfig
+
+        checkpoint, _seen = self._fake_build(monkeypatch, tmp_path)
+        asked: list[str] = []
+        monkeypatch.setattr(
+            loudkit, "_require_runtime", lambda device, **_: asked.append(device)
+        )
+        loudkit.load(str(checkpoint), execution=ExecutionConfig(device="onnx"))
+        assert asked == ["onnx"]
+
+
+class TestTheMissingRuntimeIsNamedBeforeTheDownload:
+    """`_require_runtime` runs ahead of `resolve_checkpoint`, so an install
+    without the runtime hears which extra it wants instead of paying for a
+    release download and then a bare `ModuleNotFoundError` from inside the
+    backend.
+    """
+
+    @staticmethod
+    def _only(monkeypatch, present: str) -> None:
+        """Report exactly one runtime as installed, whatever this machine has."""
+        import importlib.util
+
+        monkeypatch.setattr(
+            importlib.util,
+            "find_spec",
+            lambda name, _package=None: object() if name == present else None,
+        )
+
+    def test_coreml_without_coremltools_names_the_coreml_extra(self, monkeypatch) -> None:
+        self._only(monkeypatch, "torch")
+        with pytest.raises(ModuleNotFoundError, match=r"loudkit\[coreml,audio\]"):
+            loudkit._require_runtime("coreml")
+
+    def test_coreml_asks_for_coremltools_and_not_for_torch(self, monkeypatch) -> None:
+        self._only(monkeypatch, "coremltools")
+        loudkit._require_runtime("coreml")
+        with pytest.raises(ModuleNotFoundError):
+            loudkit._require_runtime("cpu")
+
+
+def _golden_fingerprint() -> str:
+    """The one pin: the conformance fixture's, which every port reads too."""
+    import json
+
+    vectors = Path(__file__).resolve().parent / "data" / "conformance" / "vectors.json"
+    return str(json.loads(vectors.read_text(encoding="utf-8"))["algorithm"]["fingerprint"])
+
+
 @requires("checkpoint")
 class TestWeightedPublicApi:
     @pytest.mark.slow
     def test_load_returns_a_speaking_engine(self) -> None:
         engine = loudkit.load(str(CKPT), device="cpu")
         assert isinstance(engine, Engine)
-        # the engine speaks and the fingerprint matches the manifest's algorithm
-        assert engine.algorithm.fingerprint() == "79f71f5821477353"
+        # the engine speaks and the fingerprint is the conformance fixture's
+        assert engine.algorithm.fingerprint() == _golden_fingerprint()
 
     @pytest.mark.slow
     def test_engine_describes_both_layers(self) -> None:
@@ -98,21 +223,15 @@ class TestResolvingByName:
     in front of the one thing a new user came to do.
     """
 
-    def test_a_path_that_exists_is_never_a_repo_id(self, tmp_path) -> None:
+    def test_a_path_that_exists_is_never_a_repo_id(self, tmp_path, monkeypatch) -> None:
         """A local file wins, always. Nothing may reach for the network because
         a directory happened to be named like a repo."""
         from loudkit.hub import is_repo_id
 
         nested = tmp_path / "loudreader" / "loudr-1"
         nested.mkdir(parents=True)
-        import os
-
-        cwd = os.getcwd()
-        os.chdir(tmp_path)
-        try:
-            assert not is_repo_id("loudreader/loudr-1")
-        finally:
-            os.chdir(cwd)
+        monkeypatch.chdir(tmp_path)
+        assert not is_repo_id("loudreader/loudr-1")
 
     def test_path_shaped_strings_are_paths(self) -> None:
         """`./model.safetensors` matches the `org/name` pattern perfectly well
@@ -168,14 +287,20 @@ class TestErrorHierarchy:
     """
 
     def test_every_error_is_exported(self) -> None:
-        for name in (
-            "LoudkitError",
-            "UnsupportedLanguageError",
-            "VoiceNotFoundError",
-            "WindowOverflowError",
-            "NumberGrammarError",
-        ):
-            assert name in loudkit.__all__, f"{name} is not public"
+        """Not a hand list. A hand list is what let two classes go missing.
+
+        `NothingToSpeakError` and `ProvenanceError` were raised at public entry
+        points, named in `docs/reference/errors.md`, and importable only from
+        `loudkit.errors` — so the documented way to catch them did not work.
+        Enumerating `loudkit.errors.__all__` means the next class is public the
+        moment it exists, or this fails.
+        """
+        from loudkit import errors
+
+        for name in errors.__all__:
+            if not name.endswith("Error"):
+                continue  # `error_code` is a function, not a class
+            assert name in loudkit.__all__, f"{name} is not re-exported from loudkit"
             assert issubclass(getattr(loudkit, name), Exception)
 
     def test_the_builtin_bases_are_kept(self) -> None:
@@ -205,8 +330,6 @@ class TestErrorHierarchy:
 
         from loudkit.config import AlgorithmConfig
 
-        from .test_engine import _engine, _voice
-
         algo = AlgorithmConfig()
         algo = algo.with_(
             window=type(algo.window)(max_speech_tokens=4),
@@ -214,7 +337,9 @@ class TestErrorHierarchy:
             sampling=replace(algo.sampling, max_new_tokens=4),
         )
         with pytest.raises(loudkit.WindowOverflowError) as exc:
-            _engine(algo).synthesize("a b c d e f g h", _voice(), seed=1)
+            fake_engine(algo).synthesize(
+                "a b c d e f g h", fake_voice(), seed=1, single_window=True
+            )
         # The fake generator emits one token per input word, so the count is
         # knowable rather than approximate.
         assert exc.value.n_tokens == 8
@@ -247,7 +372,7 @@ class TestErrorHierarchy:
         assert exc.value.ref == "nope"
         assert exc.value.available == ("klett", "savage")
 
-    def test_a_typo_is_told_which_voice_was_meant(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_a_typo_is_told_which_voice_was_meant(self, tmp_path) -> None:
         """The list is already in the message; the *answer* should not have to
         be read out of it. A voice name is long, lowercase and language-prefixed
         — the shape people retype wrong."""
@@ -259,7 +384,7 @@ class TestErrorHierarchy:
             VoiceLibrary(tmp_path).load("en_klet")
         assert "did you mean 'en_klett'?" in str(exc.value)
 
-    def test_a_name_close_to_nothing_gets_no_guess(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_a_name_close_to_nothing_gets_no_guess(self, tmp_path) -> None:
         """A wrong guess is worse than none: the caller is already unsure which
         voices exist, and a confident suggestion of an unrelated one sends them
         further off."""
@@ -300,7 +425,7 @@ class TestErrorHierarchy:
                 assert revived.__dict__ == original.__dict__, type(original).__name__
 
     def test_the_number_grammar_error_is_one_class_under_two_names(self) -> None:
-        """It is exported from `loudkit.numbers`, where callers know it, and
+        """It is exported from `loudkit.frontend.numbers`, where callers know it, and
         defined in `loudkit.errors`, which `numbers` imports. Two names for one
         object — a copy would make `except NumberGrammarError` depend on which
         module the catcher imported from."""
@@ -325,7 +450,7 @@ class TestDiscovery:
     inside it.
     """
 
-    def _release(self, root, *names: str):  # type: ignore[no-untyped-def]
+    def _release(self, root, *names: str):
         (root / "loudr-1.safetensors").write_bytes(b"")
         voices = root / "voices"
         voices.mkdir()
@@ -341,17 +466,17 @@ class TestDiscovery:
         assert loudkit.languages() == supported_languages()
         assert "languages" in loudkit.__all__
 
-    def test_voices_lists_a_release_directory(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_voices_lists_a_release_directory(self, tmp_path) -> None:
         self._release(tmp_path, "pl_zofia", "en_klett", "en_savage")
         assert loudkit.voices(repo=str(tmp_path)) == ("en_klett", "en_savage", "pl_zofia")
 
-    def test_the_checkpoint_beside_the_voices_is_not_a_voice(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_checkpoint_beside_the_voices_is_not_a_voice(self, tmp_path) -> None:
         """A release is one checkpoint and a ``voices/`` directory, and both are
         ``.safetensors``. Only the directory tells them apart."""
         self._release(tmp_path, "en_klett")
         assert loudkit.voices(repo=str(tmp_path)) == ("en_klett",)
 
-    def test_an_empty_release_lists_nothing_rather_than_failing(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_an_empty_release_lists_nothing_rather_than_failing(self, tmp_path) -> None:
         self._release(tmp_path)
         assert loudkit.voices(repo=str(tmp_path)) == ()
 
@@ -361,7 +486,7 @@ class TestDiscovery:
         with pytest.raises(ValueError, match="needs a repo"):
             loudkit.voices()
 
-    def test_a_repo_id_reads_the_listing_not_the_files(self, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def test_a_repo_id_reads_the_listing_not_the_files(self, monkeypatch) -> None:
         """Choosing between voices costs one request, not one download each.
 
         Also pins the filter: the checkpoint, the tokenizer and a nested path
@@ -394,7 +519,7 @@ class TestDiscovery:
 
     def test_a_repo_that_is_a_file_never_reaches_the_network(
         self, monkeypatch, tmp_path
-    ) -> None:  # type: ignore[no-untyped-def]
+    ) -> None:
         """ "Anything that exists on disk is a path, always" — including when it
         is the wrong kind of path.
 
@@ -413,7 +538,7 @@ class TestDiscovery:
         with pytest.raises(FileNotFoundError, match="not a release directory"):
             loudkit.voices(repo=str(tmp_path / "loudr-1.safetensors"))
 
-    def test_a_voice_name_cannot_climb_out_of_the_release(self, monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_a_voice_name_cannot_climb_out_of_the_release(self, monkeypatch, tmp_path) -> None:
         """A name is a name, not a path.
 
         The server's `VoiceLibrary` has always refused separators, because a
@@ -435,7 +560,20 @@ class TestDiscovery:
         with pytest.raises(loudkit.VoiceNotFoundError, match="named, not addressed"):
             loudkit.hub.resolve_voice("../OUTSIDE", repo=str(tmp_path))
 
-    def test_a_local_release_resolves_a_voice_by_name(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_a_voice_name_carrying_nul_is_refused_by_name(self, tmp_path) -> None:
+        """No path can hold a NUL, so `resolve()` inside the tree branch raises
+        `lstat: embedded null character in path` — an OS-layer sentence naming
+        neither the field it came from nor what to send instead. The same
+        refusal `VoiceLibrary.load` makes, at the door that joins rather than
+        looks up.
+        """
+        import loudkit.hub
+
+        self._release(tmp_path, "en_klett")
+        with pytest.raises(loudkit.VoiceNotFoundError, match="named, not addressed"):
+            loudkit.hub.resolve_voice("en_kl\x00ett", repo=str(tmp_path))
+
+    def test_a_local_release_resolves_a_voice_by_name(self, tmp_path) -> None:
         """The listing and the resolver agree about the layout, which is the
         only reason a name from one can be handed to the other."""
         from loudkit.hub import resolve_voice
@@ -443,6 +581,56 @@ class TestDiscovery:
         self._release(tmp_path, "en_klett")
         got = resolve_voice("en_klett", repo=str(tmp_path))
         assert got == tmp_path / "voices" / "en_klett.safetensors"
+
+
+class TestAnEngineKnowsItsOwnRelease:
+    """`lk.load("org/model")` then `lk.voice("joe", repo="org/model")` names the
+    release twice, and the second one is the one people get wrong.
+
+    An engine already holds the checkpoint it was built from, and a release is
+    that file's directory — the same shape `loudkit.voices(repo=...)` accepts
+    for an unpacked release, and the shape a hub snapshot has, because `load`
+    fetches the backend's whole file set rather than one file. So the answer is
+    local and costs nothing.
+    """
+
+    def _release(self, root, *names: str, checkpoint: str = "loudr-1.safetensors"):
+        (root / checkpoint).write_bytes(b"")
+        voices = root / "voices"
+        voices.mkdir()
+        for name in names:
+            (voices / f"{name}.safetensors").write_bytes(b"")
+        return root / checkpoint
+
+    def _engine(self, checkpoint):
+        from dataclasses import replace
+
+        return replace(fake_engine(), checkpoint_path=str(checkpoint))
+
+    def test_it_lists_the_voices_beside_its_checkpoint(self, tmp_path) -> None:
+        engine = self._engine(self._release(tmp_path, "joe", "gosia"))
+        assert engine.voices() == ("gosia", "joe")
+
+    def test_a_name_it_does_not_have_is_refused_by_name(self, tmp_path) -> None:
+        engine = self._engine(self._release(tmp_path, "joe"))
+        with pytest.raises(loudkit.VoiceNotFoundError):
+            engine.voice("nope")
+
+    def test_the_checkpoint_may_be_named_anything(self, tmp_path) -> None:
+        """The release is the checkpoint's directory, not a fixed filename.
+
+        A turbo release ships a differently named checkpoint beside the same
+        `voices/`, and a `voice()` that reached for `loudr-1.safetensors` would
+        answer for the wrong release or for none.
+        """
+        ckpt = self._release(tmp_path, "joe", checkpoint="loudr-1-turbo.safetensors")
+        assert self._engine(ckpt).voices() == ("joe",)
+
+    def test_an_engine_built_by_hand_says_it_cannot_know(self, tmp_path) -> None:
+        """Components assembled in a test or a notebook came from no release.
+        The message has to name the call that does work, not just fail."""
+        with pytest.raises(FileNotFoundError, match="loudkit.voice"):
+            fake_engine().voices()
 
 
 class TestCloningReachesItsWeights:
@@ -461,25 +649,25 @@ class TestCloningReachesItsWeights:
     resolved, which is decided before a byte is read.
     """
 
-    def _release(self, root):  # type: ignore[no-untyped-def]
+    def _release(self, root):
         (root / "loudr-1.safetensors").write_bytes(b"")
         (root / "ve.safetensors").write_bytes(b"")
         return root
 
-    def test_the_encoder_is_found_beside_the_checkpoint(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_encoder_is_found_beside_the_checkpoint(self, tmp_path) -> None:
         from loudkit.hub import resolve_voice_encoder
 
         tree = self._release(tmp_path)
         got = resolve_voice_encoder(str(tree / "loudr-1.safetensors"))
         assert got == tree / "ve.safetensors"
 
-    def test_a_release_directory_resolves_too(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_a_release_directory_resolves_too(self, tmp_path) -> None:
         from loudkit.hub import resolve_voice_encoder
 
         tree = self._release(tmp_path)
         assert resolve_voice_encoder(str(tree)) == tree / "ve.safetensors"
 
-    def test_a_synthesis_only_release_says_so(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_a_synthesis_only_release_says_so(self, tmp_path) -> None:
         """The remedy has to be one the caller can act on. The old message named
         an argument the public function did not take."""
         from loudkit.hub import resolve_voice_encoder
@@ -496,3 +684,38 @@ class TestCloningReachesItsWeights:
         import loudkit
 
         assert "voice_encoder_weights" in inspect.signature(loudkit.enroll).parameters
+
+
+class TestADeviceTheMachineLacksIsRefusedFirst:
+    """Torch fails later and deeper, with an assertion from inside ``.to()``.
+    ``load`` says it in one sentence before the checkpoint is touched."""
+
+    def test_cuda_without_cuda(self, monkeypatch, tmp_path) -> None:
+        import torch
+
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 0)
+        with pytest.raises(ValueError, match="device 'cuda' is not available on this machine"):
+            loudkit.load(str(tmp_path / "nowhere.safetensors"), device="cuda")
+
+    def test_an_index_past_the_last_gpu(self, monkeypatch, tmp_path) -> None:
+        import torch
+
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 1)
+        with pytest.raises(ValueError, match="device 'cuda:1' is not available"):
+            loudkit.load(str(tmp_path / "nowhere.safetensors"), device="cuda:1")
+
+    def test_mps_without_mps(self, monkeypatch, tmp_path) -> None:
+        import torch
+
+        monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
+        with pytest.raises(ValueError, match="device 'mps' is not available"):
+            loudkit.load(str(tmp_path / "nowhere.safetensors"), device="mps")
+
+    def test_the_sentence_names_the_device_this_machine_has(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        import torch
+
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 0)
+        with pytest.raises(ValueError, match=f"best device here is {loudkit.best_device()!r}"):
+            loudkit.load(str(tmp_path / "nowhere.safetensors"), device="cuda")

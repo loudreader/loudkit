@@ -1,13 +1,11 @@
-/// Python reference: `loudkit/frontend/polish.py`.
+/// Python reference: `loudkit/frontend/text.py`.
 import Foundation
 import LoudKitText
 
-/// Text to text-tokens, exactly as the shipped engine and `loudkit.frontend.text`
-/// do it. Lifted from the production tokenizer port (ChatterboxTokenizer.swift,
-/// bit-parity tested against the Python reference) and kept deliberately thin:
-/// lowercase, NFKD, a language tag, spaces to `[SPACE]`, then plain BPE over
-/// Unicode *scalars* — NFKD combining marks stay separate symbols, exactly
-/// like Python code points.
+/// Text to text-tokens, exactly as `loudkit.frontend.text.GraphemeTextFrontend`
+/// does it, and deliberately thin: lowercase, NFKD, a language tag, spaces to
+/// `[SPACE]`, then plain BPE over Unicode scalars. NFKD combining marks stay
+/// separate symbols, exactly like Python code points.
 public final class TextFrontend {
     /// Refused languages whose refusal has a *specific* reason worth stating:
     /// their upstream pipeline wants Cangjie codes, kana conversion,
@@ -22,7 +20,7 @@ public final class TextFrontend {
     /// because the tokenizer's vocabulary carries tags for 31 languages. A
     /// blacklist let the other 26 through and the tag was emitted, so
     /// `encode(text, language: "bg")` NFKD-mangled Cyrillic into ids the model
-    /// reads as sounds it was never trained to make — no error, plausible
+    /// reads as sounds it was never trained to make, no error, plausible
     /// audio, wrong language.
     static var supportedLanguages: [String] { Numbers.supportedLanguages }
 
@@ -33,9 +31,18 @@ public final class TextFrontend {
     private let preTokRegex: NSRegularExpression
     private let unkId: Int
 
+    /// Read a `tokenizer.json` and build the BPE tables.
+    ///
+    /// - Throws: `LoudKitError.asset` when the file is not a tokenizer this
+    ///   build can read.
     public init(tokenizerURL: URL) throws {
         let data = try Data(contentsOf: tokenizerURL)
-        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        // Last-wins on a repeated name, like the reference's reader. See
+        // `ManifestReader.json`: a vocabulary is a JSON object, and a repeated
+        // entry in one would give this port a different id for that piece than
+        // the four ports that read the same file.
+        guard let root = try ManifestReader.json(
+            data, "\(tokenizerURL.lastPathComponent): bad tokenizer JSON") as? [String: Any],
               let model = root["model"] as? [String: Any],
               let vocabRaw = model["vocab"] as? [String: Any],
               let mergesRaw = model["merges"] as? [Any],
@@ -66,8 +73,8 @@ public final class TextFrontend {
             .map { NSRegularExpression.escapedPattern(for: $0.0) }
             .joined(separator: "|")
         // A tokenizer with no added tokens makes this the empty pattern, which
-        // ICU accepts and which then matches the empty string at every position
-        // — every character its own token. Unreachable with the shipped
+        // ICU accepts and which then matches the empty string at every position,
+        // every character its own token. Unreachable with the shipped
         // tokenizer, and one manifest away from being reachable, so it is a
         // `nil` rather than a pattern that cannot fail loudly.
         addedRegex = added.isEmpty
@@ -82,7 +89,7 @@ public final class TextFrontend {
         unkId = unk
     }
 
-    /// Normalise and tokenise. Same text and language give the same ids —
+    /// Normalise and tokenise. Same text and language give the same ids,
     /// and the same ids as `GraphemeTextFrontend.encode` on the Python side
     /// (the conformance fixture pins several trap sentences).
     public func encode(_ text: String, language: String = "en") throws -> [Int] {
@@ -93,20 +100,32 @@ public final class TextFrontend {
                 ? "needs model-based text preprocessing "
                     + "(Cangjie/kana/diacritics/jamo/stress) that this frontend does not carry"
                 : "is not one of the languages this build's text layer is written for"
-            throw LoudKitError.asset(
-                "language \(lang) \(why). Supported: \(roster.joined(separator: ", "))")
+            throw LoudKitError.languageUnsupported(lang, why: why, roster: roster)
         }
-        var t = text.lowercased()
+        // `NSString.lowercased`, not `String.lowercased()`: the latter skips
+        // the Final_Sigma rule, so a word-final `Σ` became `σ` here and `ς` in
+        // the reference, and the model was handed a different text id for the
+        // last letter of every Greek word written in capitals. Foundation's
+        // mapping is the full context-dependent one the reference's
+        // `str.lower()` applies, and it takes no locale, so no Turkish `I`
+        // surprise rides along.
+        var t = (text as NSString).lowercased
         t = t.decomposedStringWithCompatibilityMapping  // NFKD
         // Square brackets never reach the tokenizer from user text: the
         // vocabulary holds 117 bracket control tokens ([sigh], [gasp], the
         // language tags) and matches them greedily, so "he [sigh]ed" would
         // make the model sigh. The language tag added next is the one bracket
         // that belongs.
-        t = t.replacingOccurrences(of: "[", with: " ")
-        t = t.replacingOccurrences(of: "]", with: " ")
+        //
+        // `.literal` on all three, and it is what makes the sentence above
+        // true: the default compares extended grapheme clusters, so a bracket
+        // carrying a combining mark is not `"["` and reached the tokenizer as
+        // itself. The same held for a marked space, which stayed a space
+        // instead of becoming `[SPACE]`. The reference replaces code points.
+        t = t.replacingOccurrences(of: "[", with: " ", options: .literal)
+        t = t.replacingOccurrences(of: "]", with: " ", options: .literal)
         t = "[\(lang)]" + t
-        t = t.replacingOccurrences(of: " ", with: "[SPACE]")
+        t = t.replacingOccurrences(of: " ", with: "[SPACE]", options: .literal)
 
         var ids: [Int] = []
         let ns = t as NSString

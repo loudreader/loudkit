@@ -2,7 +2,7 @@
 //!
 //! Nothing here pins a waveform. A time-stretch has no golden output that
 //! survives a change of compiler, and the five ports sum the same floats in
-//! their own order — so what is asserted is what a listener would notice if it
+//! their own order, so what is asserted is what a listener would notice if it
 //! broke: the length, the pitch, the loudness, and the fact that `speed = 1.0`
 //! is not a stretch at all but a bypass.
 //!
@@ -10,7 +10,7 @@
 //! shared byte-level fixture was considered and rejected**: the alignment search
 //! picks between candidates whose cross-correlations can differ in the last bit
 //! across languages, and one offset chosen differently moves every sample after
-//! it — so the fixture would fail for a reason that is not a defect, which is
+//! it, so the fixture would fail for a reason that is not a defect, which is
 //! the worst kind of test to own.
 //!
 //! Needs no assets; this is arithmetic over a generated signal.
@@ -24,7 +24,7 @@ const SPEEDS: [f64; 6] = [0.5, 0.75, 0.9, 1.25, 1.5, 2.0];
 
 /// A voiced-ish test signal: a low fundamental, a harmonic, and a sweep.
 ///
-/// Deterministic by construction — no RNG anywhere in this file, because the
+/// Deterministic by construction: no RNG anywhere in this file, because the
 /// stretcher has none either and a flaky DSP test is worse than no DSP test.
 fn signal(seconds: f64, f0: f64) -> Vec<f32> {
     let n = (SAMPLE_RATE as f64 * seconds) as usize;
@@ -70,7 +70,7 @@ fn rms(x: &[f32]) -> f64 {
 }
 
 /// Bit-identical, not merely equal. The engine's default must not depend on a
-/// DSP path being lossless — it must not enter the DSP path at all.
+/// DSP path being lossless: it must not enter the DSP path at all.
 ///
 /// Rust cannot return the borrowed slice as an owned `Vec` without copying it,
 /// so this is the closest thing to Python's identity check that the ownership
@@ -96,7 +96,7 @@ fn the_output_is_exactly_as_long_as_asked() {
 
 /// Python rounds halves to even; Rust, Go, Swift and JavaScript do not. A
 /// one-sample disagreement on an exact half is found six months later, in a
-/// conformance run, by somebody else — so the formula is spelled
+/// conformance run, by somebody else, so the formula is spelled
 /// `floor(n / speed + 0.5)` in all five rather than handed to a rounding
 /// helper.
 #[test]
@@ -104,7 +104,7 @@ fn the_length_formula_is_half_up_not_half_even() {
     assert_eq!(stretched_length(5, 2.0), 3);
 }
 
-/// No overlap to align, so it is cut or padded. At 24 kHz this is under 25 ms —
+/// No overlap to align, so it is cut or padded. At 24 kHz this is under 25 ms,
 /// below anything the engine renders, and the alternative is a panic on the
 /// degenerate case.
 #[test]
@@ -213,7 +213,7 @@ fn the_bounds_themselves_are_allowed() {
 /// The guard that no implementation tested, which is how two of the five
 /// shipped without it.
 ///
-/// Below ~60 Hz the derived frame is one sample, so the hop — `frame / 2` — is
+/// Below ~60 Hz the derived frame is one sample, so the hop, `frame / 2`, is
 /// zero, and the overlap-add loop advances by it. TypeScript and Swift computed
 /// the hop *after* the degenerate-shape guard and never tested it, so both
 /// looped forever on an input Rust returned from in microseconds; nothing was
@@ -231,4 +231,69 @@ fn a_sample_rate_too_low_to_have_a_hop_does_not_hang() {
     );
     assert_eq!(got.len(), stretched_length(64, 1.5));
     assert_eq!(got.len(), 43);
+}
+
+#[test]
+fn fade_edges_starts_and_ends_at_zero_and_leaves_the_middle() {
+    let audio = vec![0.25f32; 24_000];
+    let out = loudkit::timestretch::fade_edges(
+        audio.clone(),
+        24_000,
+        loudkit::timestretch::EDGE_FADE_SECONDS,
+    );
+    assert_eq!(out[0], 0.0);
+    assert_eq!(out[out.len() - 1], 0.0);
+    let n = (loudkit::timestretch::EDGE_FADE_SECONDS * 24_000.0) as usize;
+    assert_eq!(&out[n..out.len() - n], &audio[n..audio.len() - n]);
+    for i in 1..n {
+        assert!(out[i] >= out[i - 1], "ramp not monotonic at {i}");
+        assert!(
+            (out[i] - out[out.len() - 1 - i]).abs() < 1e-7,
+            "ramp not symmetric at {i}"
+        );
+    }
+}
+
+#[test]
+fn fade_edges_leaves_a_short_window_alone() {
+    let audio = vec![1.0f32; 10];
+    assert_eq!(
+        loudkit::timestretch::fade_edges(
+            audio.clone(),
+            24_000,
+            loudkit::timestretch::EDGE_FADE_SECONDS
+        ),
+        audio
+    );
+}
+
+// Every ramp the fixture pins, the historical 5 ms and the shipped 20 ms, has
+// to come out of `fade_edges` bit for bit. A cosine computed here cannot: numpy
+// takes it in float32, and the ramp a release actually applies is the 20 ms one.
+#[test]
+fn edge_fade_matches_python_bits() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../tests/data/conformance/edge_fade.json")).unwrap();
+    let rate = fixture["sample_rate"].as_u64().unwrap() as usize;
+    let ramps = fixture["ramps"].as_array().unwrap();
+    assert!(ramps.len() >= 2, "the 5 ms and 20 ms ramps are both pinned");
+    for ramp in ramps {
+        let seconds = ramp["seconds"].as_f64().unwrap();
+        let bits = ramp["bits"].as_array().unwrap();
+        assert_eq!(bits.len(), ramp["samples"].as_u64().unwrap() as usize);
+        let audio = loudkit::timestretch::fade_edges(vec![1.0; 4 * bits.len()], rate, seconds);
+        let last = audio.len() - 1;
+        for (i, value) in bits.iter().enumerate() {
+            assert_eq!(
+                audio[i].to_bits(),
+                value.as_u64().unwrap() as u32,
+                "{seconds}s ramp {i}"
+            );
+            assert_eq!(
+                audio[last - i].to_bits(),
+                audio[i].to_bits(),
+                "{seconds}s tail {i}"
+            );
+        }
+    }
 }

@@ -1,0 +1,268 @@
+{
+ "generated_by": "tools/make_conformance.py --fixtures-only",
+ "listing": [
+  ".gitattributes",
+  "LICENSE",
+  "README.md",
+  "SHA256SUMS",
+  "coreml/camp.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+  "coreml/camp.mlpackage/Manifest.json",
+  "coreml/export.json",
+  "coreml/flow_encoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+  "coreml/flow_encoder.mlpackage/Manifest.json",
+  "coreml/flow_estimator.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+  "coreml/flow_estimator.mlpackage/Manifest.json",
+  "coreml/s3_tokenizer.mlpackage/Manifest.json",
+  "coreml/vocoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+  "coreml/vocoder.mlpackage/Manifest.json",
+  "coreml/voice_encoder.mlpackage/Manifest.json",
+  "logo.png",
+  "loudr-1-enrollment.safetensors",
+  "loudr-1.safetensors",
+  "manifest.json",
+  "onnx/camp.onnx",
+  "onnx/export.json",
+  "onnx/flow_encoder.onnx",
+  "onnx/flow_estimator.onnx",
+  "onnx/s3_tokenizer.onnx",
+  "onnx/t3_cond.onnx",
+  "onnx/t3_prefill.onnx",
+  "onnx/t3_step.onnx",
+  "onnx/vocoder.onnx",
+  "onnx/voice_encoder.onnx",
+  "release.json",
+  "samples/joe.opus",
+  "tokenizer.json",
+  "torch/pytorch_model.bin",
+  "ve.safetensors",
+  "voices/en/nested.safetensors",
+  "voices/gosia.safetensors",
+  "voices/joe.safetensors"
+ ],
+ "cases": [
+  {
+   "backend": "torch",
+   "cloning": false,
+   "allow": [
+    "*.safetensors",
+    "manifest.json",
+    "tokenizer.json",
+    "release.json",
+    "voices/*",
+    "SHA256SUMS"
+   ],
+   "ignore": [
+    "ve.safetensors",
+    "loudr-1-enrollment.safetensors"
+   ],
+   "wanted": [
+    "SHA256SUMS",
+    "loudr-1.safetensors",
+    "manifest.json",
+    "release.json",
+    "tokenizer.json",
+    "voices/en/nested.safetensors",
+    "voices/gosia.safetensors",
+    "voices/joe.safetensors"
+   ]
+  },
+  {
+   "backend": "torch",
+   "cloning": true,
+   "allow": [
+    "*.safetensors",
+    "manifest.json",
+    "tokenizer.json",
+    "release.json",
+    "voices/*",
+    "SHA256SUMS"
+   ],
+   "ignore": [],
+   "wanted": [
+    "SHA256SUMS",
+    "loudr-1-enrollment.safetensors",
+    "loudr-1.safetensors",
+    "manifest.json",
+    "release.json",
+    "tokenizer.json",
+    "ve.safetensors",
+    "voices/en/nested.safetensors",
+    "voices/gosia.safetensors",
+    "voices/joe.safetensors"
+   ]
+  },
+  {
+   "backend": "onnx",
+   "cloning": false,
+   "allow": [
+    "*.safetensors",
+    "manifest.json",
+    "tokenizer.json",
+    "release.json",
+    "voices/*",
+    "SHA256SUMS",
+    "onnx/t3_cond.onnx",
+    "onnx/t3_prefill.onnx",
+    "onnx/t3_step.onnx",
+    "onnx/flow_encoder.onnx",
+    "onnx/flow_estimator.onnx",
+    "onnx/vocoder.onnx",
+    "onnx/export.json",
+    "onnx/t3_pair_step.onnx",
+    "onnx/t3_head2.onnx"
+   ],
+   "ignore": [
+    "ve.safetensors",
+    "loudr-1-enrollment.safetensors"
+   ],
+   "wanted": [
+    "SHA256SUMS",
+    "loudr-1.safetensors",
+    "manifest.json",
+    "onnx/export.json",
+    "onnx/flow_encoder.onnx",
+    "onnx/flow_estimator.onnx",
+    "onnx/t3_cond.onnx",
+    "onnx/t3_prefill.onnx",
+    "onnx/t3_step.onnx",
+    "onnx/vocoder.onnx",
+    "release.json",
+    "tokenizer.json",
+    "voices/en/nested.safetensors",
+    "voices/gosia.safetensors",
+    "voices/joe.safetensors"
+   ]
+  },
+  {
+   "backend": "onnx",
+   "cloning": true,
+   "allow": [
+    "*.safetensors",
+    "manifest.json",
+    "tokenizer.json",
+    "release.json",
+    "voices/*",
+    "SHA256SUMS",
+    "onnx/t3_cond.onnx",
+    "onnx/t3_prefill.onnx",
+    "onnx/t3_step.onnx",
+    "onnx/flow_encoder.onnx",
+    "onnx/flow_estimator.onnx",
+    "onnx/vocoder.onnx",
+    "onnx/export.json",
+    "onnx/t3_pair_step.onnx",
+    "onnx/t3_head2.onnx",
+    "onnx/s3_tokenizer.onnx",
+    "onnx/camp.onnx",
+    "onnx/voice_encoder.onnx"
+   ],
+   "ignore": [
+    "ve.safetensors",
+    "loudr-1-enrollment.safetensors"
+   ],
+   "wanted": [
+    "SHA256SUMS",
+    "loudr-1.safetensors",
+    "manifest.json",
+    "onnx/camp.onnx",
+    "onnx/export.json",
+    "onnx/flow_encoder.onnx",
+    "onnx/flow_estimator.onnx",
+    "onnx/s3_tokenizer.onnx",
+    "onnx/t3_cond.onnx",
+    "onnx/t3_prefill.onnx",
+    "onnx/t3_step.onnx",
+    "onnx/vocoder.onnx",
+    "onnx/voice_encoder.onnx",
+    "release.json",
+    "tokenizer.json",
+    "voices/en/nested.safetensors",
+    "voices/gosia.safetensors",
+    "voices/joe.safetensors"
+   ]
+  },
+  {
+   "backend": "coreml",
+   "cloning": false,
+   "allow": [
+    "*.safetensors",
+    "manifest.json",
+    "tokenizer.json",
+    "release.json",
+    "voices/*",
+    "SHA256SUMS",
+    "coreml/flow_encoder.mlpackage/*",
+    "coreml/flow_estimator.mlpackage/*",
+    "coreml/vocoder.mlpackage/*",
+    "coreml/export.json",
+    "coreml/t3_*.mlpackage/*"
+   ],
+   "ignore": [
+    "ve.safetensors",
+    "loudr-1-enrollment.safetensors"
+   ],
+   "wanted": [
+    "SHA256SUMS",
+    "coreml/export.json",
+    "coreml/flow_encoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "coreml/flow_encoder.mlpackage/Manifest.json",
+    "coreml/flow_estimator.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+    "coreml/flow_estimator.mlpackage/Manifest.json",
+    "coreml/vocoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "coreml/vocoder.mlpackage/Manifest.json",
+    "loudr-1.safetensors",
+    "manifest.json",
+    "release.json",
+    "tokenizer.json",
+    "voices/en/nested.safetensors",
+    "voices/gosia.safetensors",
+    "voices/joe.safetensors"
+   ]
+  },
+  {
+   "backend": "coreml",
+   "cloning": true,
+   "allow": [
+    "*.safetensors",
+    "manifest.json",
+    "tokenizer.json",
+    "release.json",
+    "voices/*",
+    "SHA256SUMS",
+    "coreml/flow_encoder.mlpackage/*",
+    "coreml/flow_estimator.mlpackage/*",
+    "coreml/vocoder.mlpackage/*",
+    "coreml/export.json",
+    "coreml/t3_*.mlpackage/*",
+    "coreml/s3_tokenizer.mlpackage/*",
+    "coreml/camp.mlpackage/*",
+    "coreml/voice_encoder.mlpackage/*"
+   ],
+   "ignore": [
+    "ve.safetensors",
+    "loudr-1-enrollment.safetensors"
+   ],
+   "wanted": [
+    "SHA256SUMS",
+    "coreml/camp.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "coreml/camp.mlpackage/Manifest.json",
+    "coreml/export.json",
+    "coreml/flow_encoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "coreml/flow_encoder.mlpackage/Manifest.json",
+    "coreml/flow_estimator.mlpackage/Data/com.apple.CoreML/weights/weight.bin",
+    "coreml/flow_estimator.mlpackage/Manifest.json",
+    "coreml/s3_tokenizer.mlpackage/Manifest.json",
+    "coreml/vocoder.mlpackage/Data/com.apple.CoreML/model.mlmodel",
+    "coreml/vocoder.mlpackage/Manifest.json",
+    "coreml/voice_encoder.mlpackage/Manifest.json",
+    "loudr-1.safetensors",
+    "manifest.json",
+    "release.json",
+    "tokenizer.json",
+    "voices/en/nested.safetensors",
+    "voices/gosia.safetensors",
+    "voices/joe.safetensors"
+   ]
+  }
+ ]
+}

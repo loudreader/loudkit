@@ -5,16 +5,16 @@
  * length P owns speech positions 1..P. The first generated token therefore sits
  * at P+1. Asking for `step + 1` hands it a row the prefill just wrote for a
  * carried token and never reaches P+1 or beyond, which only shows up when a
- * chunk carries a prefix — every multi-chunk synthesis, never a single window.
- * Python (backends/onnx_backend.py:353) and Swift
- * (LoudKit/TokenGenerator.swift:586) have always used `len(prefix) + step + 1`.
+ * chunk carries a prefix: every multi-chunk synthesis, never a single window.
+ * The decode loops in Python's `onnx_backend.generate` and Swift's
+ * `TokenGenerator` both index with `len(prefix) + step + 1`.
  *
  * The engine cannot run its graphs here, so this drives `generate` against
  * three recording stand-in sessions. That is the only seam that shows the bug:
  * the index is inside the decode loop, and the number it produces leaves the
  * engine only as a row of the step graph's `embeds` feed. The tables are rigged
- * so that row reads back as the position — `speechEmb` all zeros, `speechPos`
- * row r filled with r — which turns "which row did it ask for" into a value
+ * so that row reads back as the position (`speechEmb` all zeros, `speechPos`
+ * row r filled with r), which turns "which row did it ask for" into a value
  * assertion rather than a mock-argument one.
  */
 
@@ -171,8 +171,9 @@ test("the repetition mask is seeded from the prefix", async () => {
   await engine.generate(TEXT_TOKENS, VOICE, fixedSampler(recorded, 9), 1, undefined, PREFIX);
 
   // A token repeated across a join is as repeated as one within a chunk. Rust
-  // and Go allocate this mask and go straight into the loop; JS seeds it at
-  // engine.ts:464, and this is that claim checked rather than assumed.
+  // and Go allocate this mask and go straight into the loop; `Engine.generate`
+  // seeds it from the prefix, and this is that claim checked rather than
+  // assumed.
   for (const t of PREFIX) assert.equal(recorded.seenAtFirstStep[t], 1);
   assert.equal(recorded.seenAtFirstStep[9], 0);
   assert.equal(recorded.seenAtFirstStep.reduce((n, v) => n + v, 0), new Set(PREFIX).size);
@@ -186,4 +187,47 @@ test("with no prefix the first generated token is row one", async () => {
   // expressions agree, and every fixture that pins one chunk passes either way.
   assert.equal(recorded.stepEmbeds[0], 1);
   assert.equal(recorded.seenAtFirstStep.reduce((n, v) => n + v, 0), 0);
+});
+
+test("paired decode uses token sampler steps and one cache slot per pair", async () => {
+  const { engine } = harness();
+  const calls: number[] = [];
+  const positions: bigint[] = [];
+  const config = { ...CONFIG, decode: "fusion_mtp2" as const };
+  const state = engine as unknown as Record<string, unknown>;
+  state.config = config;
+  state.prefillEmbeds = () => Promise.resolve({ embeds: new Float32Array(8 * ROW), length: 8 });
+  const hidden = { data: new Float32Array(ROW) };
+  const cache = (prefix: string) => Object.fromEntries(
+    Array.from({ length: 16 }, (_, i) => ["k", "v"].map((part) =>
+      [`${prefix}_${part}_${i}`, { data: new Float32Array(256) }]
+    )).flat()
+  );
+  state.prefill = fakeSession(() => ({ logits: { data: new Float32Array(8 * 64) }, hidden, ...cache("kv") }));
+  state.head2 = fakeSession(() => ({ logits: { data: new Float32Array(64) } }));
+  state.step = fakeSession((feeds) => {
+    positions.push((feeds.speech_position.data as BigInt64Array)[0]);
+    assert.equal((feeds.position.data as BigInt64Array)[0], 8n + BigInt(positions.length - 1));
+    return { logits: { data: new Float32Array(64) }, hidden, ...cache("present") };
+  });
+  const sampler = { call: (_row: Float32Array, step: number) => { calls.push(step); return step + 1; } } as unknown as LRSamplerV1;
+  assert.deepEqual(await engine.generate(TEXT_TOKENS, VOICE, sampler, 5, undefined, [2, 3, 4, 5]), [1, 2, 3, 4, 5]);
+  assert.deepEqual(calls, [0, 1, 2, 3, 4]);
+  assert.deepEqual(positions, [3n, 4n]);
+});
+
+test("fused prefix includes pair mean, exact GELU MLP, and speech position", () => {
+  const { engine } = harness();
+  const first = new Float32Array(2048 * ROW);
+  const second = new Float32Array(ROW * ROW);
+  first[0] = 1;
+  second[0] = 1;
+  Object.assign(engine, { fusion: {first, firstBias:new Float32Array(ROW), second, secondBias:new Float32Array(ROW)} });
+  const tables = engine["tables"];
+  tables.speechEmb[ROW] = 3;
+  for (const [x, gelu] of [[-1,-0.15865525393145707],[1,0.8413447460685429]]) {
+    tables.speechEmb[0] = x;
+    const result = engine["pairRow"](0,1,2);
+    assert.ok(Math.abs(result[0] - (0.5*(x+3)+gelu+2)) < 1e-6);
+  }
 });

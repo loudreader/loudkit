@@ -2,37 +2,35 @@
 /*
   The NVIDIA CUDA card on the landing page.
 
-  One table, every measured host, both execution modes side by side. It used
-  to be two tabs — graphs hosts in one, eager and batching in the other —
-  and a reader owning a Pascal card could not find their hardware anywhere:
-  the 1080 Ti measures eager 1.95x while its graphs run falls back to eager,
-  so it belonged to both lists and sat in neither cleanly. One table with
-  both columns says it without prose.
+  One table, every measured part, both models side by side under CUDA graphs.
+  The eager figures, the times to first audio and the batch rows for every part
+  are on the benchmark page; the card carries what a reader owning one of these
+  cards wants first.
 
   Figures are quoted from docs/benchmarks.md and must be re-quoted when that
-  page changes. The measurement-epoch note stays on the benchmarks page.
+  page changes. The measurement-epoch note is in the section foot below the
+  cards.
 */
 
-// Every CUDA host measured end to end, sorted by the graphs figure. The
-// asterisk marks the one row whose graphs column is not a graph: Pascal
-// cannot capture, so the flag runs eager there (benchmarks.md records both).
-const hosts: Array<{ name: string; eager: string; graphs: string; note?: string }> = [
-  { name: 'A100', eager: '2.16', graphs: '8.12' },
-  { name: 'L4', eager: '2.20', graphs: '7.56' },
-  { name: 'RTX 3090', eager: '3.39', graphs: '7.47' },
-  { name: 'T4', eager: '2.10', graphs: '5.46' },
-  { name: 'GTX&nbsp;1080&nbsp;Ti', eager: '1.95', graphs: '1.89', note: '&thinsp;*' },
-  { name: 'Jetson Orin', eager: '0.73', graphs: '1.83' },
+// Every CUDA part measured end to end on 0.1.1 with CUDA graphs, sorted by the
+// turbo figure; the Pascal card shows its eager path, the only one it has.
+const hosts: Array<{ name: string; base: string; turbo: string; note?: string }> = [
+  { name: 'RTX 3090', base: '8.55', turbo: '13.05' },
+  { name: 'L4', base: '7.50', turbo: '11.93' },
+  { name: 'A100', base: '7.68', turbo: '11.87' },
+  { name: 'T4', base: '5.16', turbo: '7.95' },
+  { name: 'GTX&nbsp;1080&nbsp;Ti', base: '2.26', turbo: '4.64', note: '&thinsp;*' },
+  { name: 'Jetson Orin Nano', base: '1.85', turbo: '2.50' },
 ];
 
-// Batch scaling, RTX 3090 with CUDA graphs: aggregate audio per second of
-// wall clock across the whole batch, never the speed of one synthesis.
+// Batch scaling, RTX 3090 with CUDA graphs, loudr-1-turbo: aggregate audio per
+// second of wall clock across the whole batch, never the speed of one synthesis.
 const batch: Array<[string, string]> = [
-  ['20.1', 'batch 1'],
-  ['80.8', 'batch 8'],
-  ['110.8', 'batch 16'],
-  ['137.3', 'batch 32'],
-  ['153.1', 'batch 64'],
+  ['42.0', 'batch 1'],
+  ['121.8', 'batch 8'],
+  ['145.5', 'batch 16'],
+  ['154.2', 'batch 32'],
+  ['155.0', 'batch 64'],
 ];
 ---
 
@@ -40,40 +38,41 @@ const batch: Array<[string, string]> = [
   <p class="lk-req">requires an NVIDIA GPU</p>
   <h3>NVIDIA CUDA</h3>
   <div class="lk-metric">
-    7.47&times;<span>real time, RTX 3090 with CUDA graphs</span>
+    13.05&times;<span>real time with loudr-1-turbo, RTX 3090 with CUDA graphs; loudr-1 runs 8.55&times;</span>
   </div>
   {/* One line, and it says what the figures cannot: the range of hardware. */}
-  <p>PyTorch, from an embedded board to a datacentre card.</p>
+  <p>PyTorch, from an embedded board to a datacentre card. Both models, CUDA graphs on.</p>
 
   <table class="lk-bench">
     <thead>
       <tr>
-        <th scope="col">Host</th>
-        <th scope="col">Eager</th>
-        <th scope="col">CUDA graphs</th>
+        <th scope="col">Part</th>
+        <th scope="col">loudr-1</th>
+        <th scope="col">loudr-1-turbo</th>
       </tr>
     </thead>
     <tbody>
       {
-        hosts.map(({ name, eager, graphs, note }) => (
+        hosts.map(({ name, base, turbo, note }) => (
           <tr>
             <td set:html={name} />
-            <td>{eager}&times;</td>
-            <td set:html={graphs + '&times;' + (note ?? '')} />
+            <td>{base}&times;</td>
+            <td set:html={turbo + '&times;' + (note ?? '')} />
           </tr>
         ))
       }
     </tbody>
   </table>
   <p class="lk-bench-note">
-    &thinsp;*&nbsp;Pascal cannot capture graphs: on the 1080&nbsp;Ti the flag runs eager.
+    &thinsp;*&nbsp;Pascal cannot capture graphs: the 1080&nbsp;Ti figures are its eager path. Eager figures and time to first audio for every part are on the benchmark page.
   </p>
 
   <div class="lk-batch">
-    <p class="lk-batch-label">Batch throughput, RTX 3090 with CUDA graphs</p>
+    <p class="lk-batch-label">Batch throughput, RTX 3090 with CUDA graphs, loudr-1-turbo</p>
     <p class="lk-batch-note">
       Many texts at once. Each number is the total audio produced per second of wall
-      clock across the whole batch, not the speed of one synthesis.
+      clock across the whole batch, not the speed of one synthesis. loudr-1 runs
+      16.7&times; at batch&nbsp;1 and 57.3&times; at batch&nbsp;64 on the same card.
     </p>
     <div class="lk-batch-strip">
       {
@@ -86,9 +85,9 @@ const batch: Array<[string, string]> = [
       }
     </div>
     <p class="lk-batch-note">
-      <a href="/loudkit/benchmarks/#aggregate-throughput-at-batch-n">
+      <a href="/loudkit/benchmarks/#aggregate-throughput-at-batch-n-011-both-models">
         What it measures, and the full table
-      </a>. The highest measured aggregate is 170.8&times; on an A100 at batch&nbsp;64.
+      </a>. The highest measured aggregate is 223.6&times;, turbo on an A100 at batch&nbsp;64.
     </p>
   </div>
 </div>

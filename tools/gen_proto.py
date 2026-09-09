@@ -3,7 +3,7 @@
 
     python tools/gen_proto.py
 
-The output is committed, and `tests/test_grpc.py` regenerates it and compares —
+The output is committed, and `tests/test_grpc.py` regenerates it and compares,
 the same rule the respelling lexicon follows. Generated code that is committed
 without a check drifts from its source the first time someone edits the `.proto`
 and forgets, and a stub that disagrees with the schema is a wire format nobody
@@ -17,6 +17,7 @@ package is installed.
 
 from __future__ import annotations
 
+import argparse
 import pathlib
 import re
 import subprocess
@@ -69,4 +70,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # In the entry point, not in `main`, which the suite calls as a function.
+    # Both paths this writes are fixed, so there is nothing to choose and any
+    # argument is a misreading -- but parsing is what makes `--help` print
+    # help: a generator that reads no argv answers every question by
+    # regenerating its output.
+    argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    ).parse_args()
     raise SystemExit(main())

@@ -129,7 +129,9 @@ Whatever you build it on. `python:3.12-slim` is published for linux/amd64 and
 linux/arm64, and so are the wheels the `cpu` and `onnx` variants install, so both
 build natively on either. The `cpu` variant was built and run on linux/arm64 on
 2026-08-22, and `doctor` reported torch 2.13.0+cpu on Linux aarch64. That is the
-only architecture measured here.
+only architecture measured here. The 0.1.1 ONNX image also generated audio with
+both final local model bundles on linux/arm64, with networking disabled and
+model mounts read-only.
 
 `cuda` is amd64 in practice, and it fails softly rather than loudly. The torch
 wheel carrying the CUDA runtime is published for x86_64 only, while the aarch64
