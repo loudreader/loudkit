@@ -23,8 +23,10 @@ const hosts: Array<{ name: string; base: string; turbo: string; note?: string }>
   { name: 'Jetson Orin Nano', base: '1.85', turbo: '2.50' },
 ];
 
-// Batch scaling, RTX 3090 with CUDA graphs, loudr-1-turbo: aggregate audio per
-// second of wall clock across the whole batch, never the speed of one synthesis.
+// Batch scaling of the token generator alone, RTX 3090 with CUDA graphs,
+// loudr-1-turbo: audio-equivalent output per second of wall clock across the
+// whole batch. Mel decoding and the vocoder are excluded, as on the benchmark
+// page, so these are never the speed of one synthesis.
 const batch: Array<[string, string]> = [
   ['42.0', 'batch 1'],
   ['121.8', 'batch 8'],
@@ -68,11 +70,13 @@ const batch: Array<[string, string]> = [
   </p>
 
   <div class="lk-batch">
-    <p class="lk-batch-label">Batch throughput, RTX 3090 with CUDA graphs, loudr-1-turbo</p>
+    <p class="lk-batch-label">Token-generator throughput · RTX 3090 · loudr-1-turbo</p>
     <p class="lk-batch-note">
-      Many texts at once. Each number is the total audio produced per second of wall
-      clock across the whole batch, not the speed of one synthesis. loudr-1 runs
-      16.7&times; at batch&nbsp;1 and 57.3&times; at batch&nbsp;64 on the same card.
+      These figures measure token generation only, expressed as equivalent seconds
+      of audio per second of processing, for the whole batch rather than one request.
+      They exclude audio rendering and do not represent end-to-end synthesis speed.
+      loudr-1 runs 16.7&times; at batch&nbsp;1 and 57.3&times; at batch&nbsp;64 on the
+      same card.
     </p>
     <div class="lk-batch-strip">
       {
@@ -87,7 +91,8 @@ const batch: Array<[string, string]> = [
     <p class="lk-batch-note">
       <a href="/loudkit/benchmarks/#aggregate-throughput-at-batch-n-011-both-models">
         What it measures, and the full table
-      </a>. The highest measured aggregate is 223.6&times;, turbo on an A100 at batch&nbsp;64.
+      </a>. The highest measured aggregate is 223.6&times; (token-generator only), turbo on
+      an A100 at batch&nbsp;64.
     </p>
   </div>
 </div>
