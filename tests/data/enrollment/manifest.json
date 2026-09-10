@@ -12,13 +12,13 @@
       "shape": [
         160000
       ],
-      "role": "torchaudio 24k->16k"
+      "role": "24k->16k, capped clip"
     },
     "wav16_t3.f32": {
       "shape": [
         240000
       ],
-      "role": "librosa 24k->16k"
+      "role": "24k->16k, full clip"
     },
     "tokenizer_mel.f32": {
       "shape": [

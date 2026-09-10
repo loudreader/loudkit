@@ -3,7 +3,7 @@
  * caller who asks for hardware this build does not have reads.
  *
  * Everything here runs on any machine. What cannot run here is the provider
- * itself — this laptop has no CUDA and no DirectML — so the backend list is
+ * itself, since this laptop has no CUDA and no DirectML, so the backend list is
  * passed in rather than read from the binding, and the cases that matter most
  * are the ones for absent hardware.
  */

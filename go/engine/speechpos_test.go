@@ -56,7 +56,7 @@ func TestGeneratedPositionsNeverReenterThePrefix(t *testing.T) {
 }
 
 // A single window carries nothing, generation starts at row 1, and the fix
-// changes nothing there — which is why no single-window test ever caught this.
+// changes nothing there, which is why no single-window test ever caught this.
 func TestWithoutAPrefixGenerationStillStartsAtRowOne(t *testing.T) {
 	for step := 0; step < 4; step++ {
 		if got := speechPosition(0, step); got != step+1 {

@@ -6,48 +6,55 @@ what this run actually observed. A row that says *not measured* was not run
 in this environment. It is left in rather than dropped, because a table
 quietly missing a row reads as a table with nothing to hide.
 
-Environment: Python 3.12.12, torch 2.13.0, onnxruntime 1.28.0, loudkit fa3e82f
+The rows are measured from Python: the weight-free rows against the shared
+fixtures in `tests/data/conformance/`, the weighted rows against the
+reference dumps in `tests/data/reference/` and the release checkpoint. A row
+that names the four ports is held for them by their own harnesses over the
+same fixture files: `go test ./...`, `cargo test`, `npm run test:all` and
+`swift test`, which the parity job in CI runs. Never hand-type a number here;
+run the generator with `--checkpoint` on a machine that holds the weights.
+
+Environment: Python 3.12.12, torch 2.13.0, onnxruntime 1.29.0, loudkit 0.1.1
 
 | stage | compared against | gate | measured |
 |---|---|---|---|
 | Philox 4x32-10 | published known-answer vectors | `exact` | ✓ 3/3 vectors |
 | LR-SAMPLER-v1 | shared fixture | `exact` | ✓ 3/3 cases |
-| Speech funnel | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 139/139 cases |
-| Long-form splitting | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 18/18 cases |
-| Postprocess detectors | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 36/36 cases |
+| Speech funnel | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 217/217 cases |
+| Long-form splitting | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 48/48 cases |
+| Postprocess detectors | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 37/37 cases |
 | EOS peak observation | shared fixture (Python, Swift, Go, Rust, JS) | `step exact, probability rtol 1e-09` | ✓ 3/3 cases |
 | Seed derivation | shared fixture | `exact` | ✓ 6/6 cases |
 | Token generator, teacher-forced | reference implementation | `top-1 >= 99%, median KL < 1e-4` | ✓ top-1 100.00% (195/195), max median KL 1.76e-06 |
-| Token generator, free-running | reference implementation | `exact` | ✓ 441/441 tokens |
+| Token generator, free-running | committed reference stream | `exact` | ✓ 446/446 tokens |
 | Mel decoder, fixed tokens | reference implementation | `corr >= 0.999` | ✓ corr 0.999999–0.999999 over 3 sentences |
-| Vocoder, fixed tokens | reference implementation | `corr >= 0.98` | ✓ corr 0.9971–1.0000 over 3 sentences |
+| Vocoder, fixed tokens | reference implementation | `corr >= 0.98` | ✓ corr 0.9951–0.9999 over 3 sentences |
 | Re-render, same seed and build | itself | `bit-identical` | ✓ identical |
-| ONNX renderer | shared fixture | `mel corr >= 0.999, wave corr >= 0.95` | ✓ mel 0.999990, wave 0.9692 (worst of 2) |
-| CoreML renderer | shared fixture | `mel corr >= 0.999, wave corr >= 0.95` | ✓ mel 0.999999, wave 0.9998 (worst of 2) |
+| ONNX renderer | shared fixture | `mel corr >= 0.999, wave corr >= 0.95` | ✓ mel 0.999991, wave 0.9992 (worst of 2) |
+| CoreML renderer | shared fixture | `mel corr >= 0.999, wave corr >= 0.95` | ✓ mel 1.000000, wave 1.0000 (worst of 2) |
+| loudr-1-turbo ONNX renderer | shared fixture | `mel corr >= 0.999, wave corr >= 0.999` | ✓ mel 1.000000, wave 0.9995 (worst of 2) |
+| loudr-1-turbo CoreML renderer | shared fixture | `mel corr >= 0.999, wave corr >= 0.999` | ✓ mel 1.000000, wave 0.9995 (worst of 2) |
+
+Exactness of a free-running stream is per architecture and per BLAS: the
+sampling law is the same everywhere, and the logits under it move at the
+last bit between machines, which can flip a sampled token.
+The figure in the row above is what this machine (arm64) reproduces.
 
 ## Why each gate is where it is
 
-- **Philox 4x32-10** — the RNG is checked against a standard, not against itself
-- **LR-SAMPLER-v1** — min_p in logit space, gumbel-argmax, ties to the low index
-- **Speech funnel** — invisibles, symbols, footnotes, punctuation, Polish respelling
-- **Long-form splitting** — where the reader breathes; a different split is a different reading
-- **Postprocess detectors** — where a chunk ended; a different verdict is a different cut
-- **EOS peak observation** — audible despite never feeding back: two detector rules threshold on it
-- **Seed derivation** — one user seed, independent per-stage streams
-- **Token generator, teacher-forced** — the only generator comparison free of sampling chaos (EXP-010)
-- **Token generator, free-running** — same law, same seed — a mismatch means the logits moved
-- **Mel decoder, fixed tokens** — same tokens and same injected noise, so a difference is arithmetic
-- **Vocoder, fixed tokens** — gated loosely on purpose: predicted phase decorrelates, spectrum does not
-- **Re-render, same seed and build** — identity class I-2: determinism within one backend
-- **ONNX renderer** — a second backend does not get a second, looser bar
-- **CoreML renderer** — a second backend does not get a second, looser bar
-
-## The free-running row across architectures
-
-The `exact` gate on free-running generation holds **at the recording
-configuration** (this machine, CPU): 441/441. The same run on an x86 host
-measured 427/441 — fourteen sampled tokens flipped by nothing but the
-architecture's reduction order, with teacher-forced KL at 1.89e-06. That is
-the identity contract's per-device scope made visible: the sampling law is
-exact; the logits underneath it move at the last bit between architectures,
-and occasionally a decision boundary sits there.
+- **Philox 4x32-10**: the RNG is checked against a standard, not against itself
+- **LR-SAMPLER-v1**: min_p in logit space, gumbel-argmax, ties to the low index
+- **Speech funnel**: invisibles, symbols, footnotes, punctuation, Polish respelling
+- **Long-form splitting**: where the reader breathes; a different split is a different reading
+- **Postprocess detectors**: where a chunk ended; a different verdict is a different cut
+- **EOS peak observation**: audible despite never feeding back: two detector rules threshold on it
+- **Seed derivation**: one user seed, independent per-stage streams
+- **Token generator, teacher-forced**: the only generator comparison free of sampling chaos (EXP-010)
+- **Token generator, free-running**: same law, same seed; pins generator and sampler stability, against the committed free-running reference
+- **Mel decoder, fixed tokens**: same tokens and same injected noise, so a difference is arithmetic
+- **Vocoder, fixed tokens**: gated loosely on purpose: predicted phase decorrelates, spectrum does not
+- **Re-render, same seed and build**: identity class I-2: determinism within one backend
+- **ONNX renderer**: a second backend does not get a second, looser bar
+- **CoreML renderer**: a second backend does not get a second, looser bar
+- **loudr-1-turbo ONNX renderer**: a second backend does not get a second, looser bar
+- **loudr-1-turbo CoreML renderer**: a second backend does not get a second, looser bar

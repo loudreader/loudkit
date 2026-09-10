@@ -10,13 +10,13 @@
  *  - fixed-token renders land inside the fixture's mel and waveform
  *    correlation bands (the renderer is transparent at fp32);
  *  - a passage too long for one window produces the fixture's exact token
- *    stream in **every** chunk, prefix carried across the joins — the case the
+ *    stream in **every** chunk, prefix carried across the joins: the case the
  *    single-sentence ones above cannot reach, because with an empty prefix
  *    `prefix.length + step + 1` and `step + 1` are the same expression.
  *
  * This is the JS half of the same contract `pytest` and `swift test` verify.
  *
- * Usage (from the js-ts dir):
+ * Usage (from the js dir):
  *   node dist/test/run_conformance.js --ckpt PATH --onnx DIR --voice PATH
  *     [--fixture tests/data/conformance]
  */
@@ -25,11 +25,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { splitText } from "../chunking.js";
-import { Engine } from "../engine.js";
+import { Engine, carryFrom } from "../engine.js";
 import type { ONNXProvider } from "../execution.js";
 import { speechText } from "../speechText.js";
 import type { VoiceProfile } from "../types.js";
 import { loadVoice } from "../voice.js";
+import { deriveSeed } from "../rng.js";
 import { LRSamplerV1 } from "../sampler.js";
 
 interface Case {
@@ -40,7 +41,7 @@ interface Case {
   tokens: number[];
   mel: { file: string; shape: number[] };
   wav: { file: string; samples: number };
-  gates: { mel_corr: number; wave_corr: number };
+  gates: { mel_corr: number; wave_corr: number; wave_rms_db: number };
 }
 
 interface LongFormChunk {
@@ -53,11 +54,12 @@ interface LongFormChunk {
 }
 
 interface LongFormCase {
+  public_tokens?: number[];
   name: string;
   text: string;
   language: string;
   seed: number;
-  /** The passage after the speech funnel — what the splitter is given. */
+  /** The passage after the speech funnel: what the splitter is given. */
   prepared: string;
   chunks: LongFormChunk[];
   tokens: number[];
@@ -92,7 +94,7 @@ function parseArgs(): Record<string, string> {
 function corr(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) {
     throw new Error(
-      `length mismatch: ${a.length} vs ${b.length} — correlating a prefix would ` +
+      `length mismatch: ${a.length} vs ${b.length}. Correlating a prefix would ` +
         "score a truncated render as a perfect one"
     );
   }
@@ -106,6 +108,35 @@ function corr(a: Float32Array, b: Float32Array): number {
     num += x * y; da += x * x; db += y * y;
   }
   return num / Math.sqrt(da * db);
+}
+
+/**
+ * The RMS ratio of a render to its reference, in dB.
+ *
+ * Correlation subtracts the mean and divides by the deviation, so it reports
+ * 1.0 for a render at half volume, at twenty times volume, or with a DC
+ * offset. Level is exactly what that normalisation discards, so it is the one
+ * amplitude fact worth its own gate.
+ */
+function levelDB(a: Float32Array, b: Float32Array): number {
+  if (a.length !== b.length) {
+    throw new Error(`length mismatch: ${a.length} vs ${b.length}`);
+  }
+  let sa = 0, sb = 0;
+  for (let i = 0; i < a.length; i++) { sa += a[i] * a[i]; sb += b[i] * b[i]; }
+  if (sa === 0) throw new Error("rendered silence");
+  return 20 * Math.log10(Math.sqrt(sa / sb));
+}
+
+/**
+ * The loudest sample, against the `[-1, 1]` a waveform is declared to occupy.
+ * Everything downstream clips to that range, so a render outside it is audibly
+ * wrong and needs no tolerance to say so.
+ */
+function peakOf(a: Float32Array): number {
+  let peak = 0;
+  for (let i = 0; i < a.length; i++) peak = Math.max(peak, Math.abs(a[i]));
+  return peak;
 }
 
 /**
@@ -132,9 +163,9 @@ function resolveFixtureDir(explicit: string | undefined): string {
 async function main(): Promise<void> {
   const args = parseArgs();
   // Environment variables as well as flags. `npm run test:all` passes no
-  // arguments, so the README's and tutorial 07's documented invocation —
-  // `LOUDKIT_CKPT=... LOUDKIT_ONNX_DIR=... LOUDKIT_VOICE=... npm run test:all`
-  // — always exited 2: this script read only CLI flags and none of the
+  // arguments, so the README's and tutorial 07's documented invocation,
+  // `LOUDKIT_CKPT=... LOUDKIT_ONNX_DIR=... LOUDKIT_VOICE=... npm run test:all`,
+  // always exited 2: this script read only CLI flags and none of the
   // variables the surrounding prose prefixed it with. The same names the Go
   // and Rust conformance runners already use, so one export block drives all
   // three.
@@ -145,7 +176,7 @@ async function main(): Promise<void> {
   // CPU unless asked otherwise, and never `"auto"`. The token half of this
   // fixture is an exact-match gate shared with Python, Rust, Go and Swift, so
   // it has to name the provider it ran on rather than take the best one this
-  // machine offers — on an arm64 Mac `"auto"` is CoreML, and the same script
+  // machine offers: on an arm64 Mac `"auto"` is CoreML, and the same script
   // would then be an exact-match gate against a different arithmetic without
   // saying so. `--provider` is how the divergence gets measured on purpose.
   const provider = (args.provider ?? process.env.LOUDKIT_ONNX_PROVIDER ?? "cpu") as ONNXProvider;
@@ -159,16 +190,13 @@ async function main(): Promise<void> {
     );
     process.exit(2);
   }
-  const vectors = JSON.parse(readFileSync(`${fixtureDir}/vectors.json`, "utf8"));
-  const cases: Case[] = vectors.end_to_end ?? [];
-  if (!cases.length) {
-    console.error("fixture has no end_to_end section");
-    process.exit(2);
-  }
-
-  const engine = await Engine.load(ckpt, onnx, `${fixtureDir}/tokenizer.json`, {
+  const engine = await Engine.loadPaths(ckpt, onnx, `${fixtureDir}/tokenizer.json`, {
     onnxProvider: provider,
   });
+  const fixtureName = engine.config.decode === "fusion_mtp2" ? "vectors_fusion_mtp2.json" : "vectors.json";
+  const vectors = JSON.parse(readFileSync(`${fixtureDir}/${fixtureName}`, "utf8"));
+  const cases: Case[] = vectors.end_to_end ?? [];
+  if (!cases.length) throw new Error("fixture has no end_to_end section");
   const voice = loadVoice(voicePath);
 
   // The provider is on the header line because every number below it is a
@@ -188,7 +216,7 @@ async function main(): Promise<void> {
     const stripped = raw.filter((t) => t < engine.config.startSpeechToken);
     // The fixture's tokens, whole. Slicing the *reference* to the window meant
     // an engine that stopped at 255 tokens for a 300-token reference printed
-    // CONFORMANCE PASS — this file's own header claims the tokens are "exactly
+    // CONFORMANCE PASS, while this file's own header claims the tokens are "exactly
     // the fixture's".
     const want = c.tokens;
     const match = stripped.length === want.length && stripped.every((t, i) => t === want[i]);
@@ -202,27 +230,44 @@ async function main(): Promise<void> {
         console.log(`  diverged at ${diffs.slice(0, 10).join(",")}`);
       }
     }
+    // The two public paths agree with the generator: chunk 0 draws the
+    // caller's seed, so a text that fits one window renders the same tokens
+    // through synthesizeWindow and through synthesize.
+    const options = { seed: c.seed, language: c.language };
+    const window = await engine.synthesizeWindow(c.text, voice, options);
+    const whole = await engine.synthesize(c.text, voice, options);
+    const same = (a: number[]) => a.length === want.length && a.every((t, i) => t === want[i]);
+    const publicOk = same(window.tokens) && same(whole.tokens);
+    console.log(`public ${c.name}: ${publicOk ? "PASS" : "FAIL"} ` +
+      `(window ${window.tokens.length}, synthesize ${whole.tokens.length}, fixture ${want.length})`);
+    if (!publicOk) allPass = false;
   }
 
   // ---- render: within the band ----------------------------------------
   for (const c of cases) {
     const seed = c.seed;
-    const mel = await engine.decodeMel(c.tokens, voice, engine["deriveSeed"](seed, 1));
-    const wav = await engine.vocode(mel, engine["deriveSeed"](seed, 2));
+    const mel = await engine.decodeMel(c.tokens, voice, deriveSeed(seed, 1));
+    const wav = await engine.vocode(mel, deriveSeed(seed, 2));
 
     const melRef = readFloat32File(`${fixtureDir}/${c.mel.file}`);
     const wavRef = readFloat32File(`${fixtureDir}/${c.wav.file}`);
 
     const melCorr = corr(mel, melRef);
     const waveCorr = corr(wav, wavRef);
+    const level = levelDB(wav, wavRef);
+    const peak = peakOf(wav);
     const melOk = melCorr >= c.gates.mel_corr;
     const waveOk = waveCorr >= c.gates.wave_corr;
+    const levelOk = Math.abs(level) <= c.gates.wave_rms_db;
+    const peakOk = peak <= 1;
     console.log(
       `render ${c.name}: mel ${melCorr.toFixed(6)} (gate ${c.gates.mel_corr}) ` +
       `${melOk ? "PASS" : "FAIL"} | wave ${waveCorr.toFixed(4)} (gate ${c.gates.wave_corr}) ` +
-      `${waveOk ? "PASS" : "FAIL"}`
+      `${waveOk ? "PASS" : "FAIL"} | level ${level >= 0 ? "+" : ""}${level.toFixed(4)} dB ` +
+      `(gate ${c.gates.wave_rms_db}) ${levelOk ? "PASS" : "FAIL"} | ` +
+      `peak ${peak.toFixed(4)} ${peakOk ? "PASS" : "FAIL"}`
     );
-    if (!melOk || !waveOk) allPass = false;
+    if (!melOk || !waveOk || !levelOk || !peakOk) allPass = false;
   }
 
   // ---- long form: every chunk's tokens, exactly ------------------------
@@ -264,7 +309,7 @@ async function longForm(
   }
   let ok = true;
   for (const c of section.cases) {
-    // Funnel first, then split — the order the engine uses, and the order the
+    // Funnel first, then split: the order the engine uses, and the order the
     // character budget assumes.
     const prepared = speechText(c.text, c.language);
     if (prepared !== c.prepared) {
@@ -288,7 +333,7 @@ async function longForm(
       // rather than the tokens that followed from it.
       if (chunk.index > 0) {
         const previous = c.chunks[chunk.index - 1].tokens;
-        const tail = previous.slice(previous.length - section.prefix_tokens);
+        const tail = carryFrom(previous, section.prefix_tokens, engine.config.startSpeechToken, engine.config.decode);
         if (chunk.prefix.some((t, i) => t !== tail[i])) {
           console.log(`long_form ${c.name} chunk ${chunk.index}: FAIL (carry)`);
           ok = false;
@@ -314,6 +359,27 @@ async function longForm(
         }
       }
     }
+    // The engine's own long-form path, not the generator driven with the
+    // fixture's seeds: this holds the chunk seed law (chunk 0 the caller's
+    // seed, chunk k derive(seed, 16 + k)) and the carry to the fixture.
+    const whole = await engine.synthesize(c.text, voice, { seed: c.seed, language: c.language });
+    const flat = c.public_tokens ?? c.tokens;
+    const wholeOk = whole.tokens.length === flat.length && whole.tokens.every((t, i) => t === flat[i]);
+    console.log(`long_form ${c.name} synthesize: ${wholeOk ? "PASS" : "FAIL"} ` +
+      `(${whole.tokens.length} vs ${flat.length})`);
+    if (!wholeOk) ok = false;
+    const streamedTokens: number[] = [];
+    const audio: Float32Array[] = [];
+    for await (const chunk of engine.stream(c.text, voice, {seed:c.seed, language:c.language})) {
+      streamedTokens.push(...chunk.tokens);
+      audio.push(chunk.audio);
+    }
+    const repeated = Buffer.concat(audio.map(a => Buffer.from(a.buffer,a.byteOffset,a.byteLength)));
+    const original = Buffer.from(whole.audio.buffer,whole.audio.byteOffset,whole.audio.byteLength);
+    const repeatOk = audio.length === c.chunks.length && streamedTokens.length === whole.tokens.length && streamedTokens.every((t,i) => t === whole.tokens[i]) && repeated.equals(original);
+    console.log(`long_form ${c.name} repeat stream: ${repeatOk ? "PASS" : "FAIL"} (${audio.length} chunks)`);
+    if (!repeatOk) ok = false;
+
   }
   return ok;
 }

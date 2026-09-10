@@ -1,7 +1,7 @@
 /**
  * The two timing tiers: exact chunk spans, estimated word spans.
  *
- * No fixture and no weights — the arithmetic is the whole feature, and it is
+ * No fixture and no weights: the arithmetic is the whole feature, and it is
  * pure. What is pinned here is what a highlight in a reading app depends on:
  * that the joins between chunks are the *same float* on both sides (not merely
  * close), that the words tile their chunk without drifting, and that a word's
@@ -19,7 +19,7 @@ const RATE = 24_000;
 test("chunk joins are the same float on both sides, not merely close", () => {
   // Sample counts chosen so none of the offsets is exactly representable as a
   // short decimal: a timeline that accumulated seconds would differ here in the
-  // last bit, which is a nanosecond gap — invisible to an assertion with a
+  // last bit, which is a nanosecond gap: invisible to an assertion with a
   // tolerance, visible as a flicker in a highlight that switches on
   // `time >= start`.
   const spans = [
@@ -78,7 +78,7 @@ test("word spans tile their chunk, monotonic and bounded", () => {
 test("a word's weight is its code-point count, not its UTF-16 length", () => {
   // "𝐚𝐛" is two code points and four UTF-16 units. Weighing it by `.length`
   // would give it two thirds of the span here while Python, Go, Rust and Swift
-  // gave it half — the same text read as two different timings, with nothing to
+  // gave it half: the same text read as two different timings, with nothing to
   // show for it in any output anyone looks at.
   const [chunk] = timeline([{ text: "\u{1D41A}\u{1D41B} cd", samples: RATE, tokens: 25 }], RATE);
   assert.equal(chunk.words.length, 2);
@@ -110,4 +110,17 @@ test("text with no words yields no words", () => {
 
 test("an empty timeline is empty, not one zero-length chunk", () => {
   assert.deepEqual(timeline([], RATE), []);
+});
+
+test("a NEL separates two words, as it does in Python and Go", () => {
+  // ECMAScript `\s` omits U+0085 NEL, which is ordinary in scraped and epub
+  // text. Python's `str.split()` and Go's `strings.Fields` both break on it,
+  // and a chunk that reads as one word here and two there highlights
+  // differently for the same audio.
+  const words = estimateWords("ab\u0085c", 0, 1);
+  assert.deepEqual(
+    words.map((w) => w.text),
+    ["ab", "c"]
+  );
+  assert.equal(words[0].end, 2 / 3);
 });

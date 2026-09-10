@@ -9,7 +9,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-import { cardinal, expandNumbers, expandTimes } from "../numbers.js";
+import {
+  cardinal,
+  decimalSeparator,
+  expandNumbers,
+  expandTimes,
+  supportedNumberLanguages,
+} from "../numbers.js";
 
  
 function fixture(name: string): any {
@@ -152,4 +158,83 @@ test("a written infix is not said twice", () => {
   }
   // Eleven of the twelve grammars carry an empty infix: nothing to consume.
   assert.equal(expandTimes("at 14:30 sharp", "en"), "at fourteen thirty sharp");
+  // The word needs no space in front of it.
+  assert.equal(expandTimes("um 14:30Uhr", "de"), "um vierzehn Uhr dreißig");
+  assert.equal(expandTimes("Termin um 14.30Uhr.", "de"), "Termin um vierzehn Uhr dreißig.");
+});
+
+/** Both spellings in both cases, plus the dotted forms, which are letters too. */
+const MERIDIEMS = ["am", "pm", "AM", "PM", "Am", "pM", "a.m.", "p.m."];
+
+// A spoken time is not written against a letter: `3:45pm` read *three
+// forty-fivepm*, one word to a listener, where `3:45 pm` read correctly. A
+// space in the source was deciding whether the meridiem was a word at all, and
+// nothing in any of the five suites asked.
+test("a spoken time is not written against a letter", () => {
+  for (const meridiem of MERIDIEMS) {
+    const text = `Call at 3:45${meridiem}.`;
+    assert.equal(expandTimes(text, "en"), `Call at three forty-five ${meridiem}.`, text);
+  }
+});
+
+// Every hour and minute of the clock, in every language: the glued form reads
+// exactly as the spaced one. The separator is the one the language treats as a
+// time, and the hour is written both bare and zero-padded, two matches.
+test("the space in the source decides nothing", () => {
+  for (const lang of supportedNumberLanguages()) {
+    const separator = decimalSeparator(lang) === "." ? ":" : ".";
+    for (const meridiem of ["pm", "a.m."]) {
+      for (let hour = 0; hour <= 24; hour++) {
+        for (const writtenHour of [String(hour), String(hour).padStart(2, "0")]) {
+          for (let minute = 0; minute < 60; minute++) {
+            const written =
+              `${writtenHour}${separator}${String(minute).padStart(2, "0")}`;
+            const glued = expandTimes(`at ${written}${meridiem} sharp`, lang);
+            const spaced = expandTimes(`at ${written} ${meridiem} sharp`, lang);
+            if (expandTimes(written, lang) === written) {
+              // Not a clock time here, `24:01` being the whole set: both forms
+              // keep every character.
+              assert.equal(glued, `at ${written}${meridiem} sharp`, `${lang} ${written}`);
+              continue;
+            }
+            assert.equal(glued, spaced, `${lang} ${written}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+// A letter is the only thing the rule reads: the guards that tell a time from a
+// date and a version are untouched, and a letter in front of the time is a
+// different question the shared fixture answers.
+test("only a letter separates a spoken time", () => {
+  for (const lang of supportedNumberLanguages()) {
+    for (const literal of ["12.03.2026", "1.2.3", "24:30", "10:30:45:60"]) {
+      assert.equal(expandTimes(literal, lang), literal, `${lang}: ${literal}`);
+    }
+    for (const text of ["at 14:30", "at 14:30.", "at 14:30, yes", "at 14:30!"]) {
+      const said = expandTimes(text, lang);
+      assert.ok(!said.includes("  "), `${lang}: ${said}`);
+      assert.equal(said.trimEnd(), said, `${lang}: ${said}`);
+    }
+  }
+  assert.equal(expandTimes("Meet at a14:30.", "en"), "Meet at afourteen thirty.");
+});
+
+// `3:45:00` says what `3:45` says, so the meridiem rule reads the same against
+// both and a zero seconds field adds no word.
+test("a zero seconds field reads as the minute alone", () => {
+  for (const lang of supportedNumberLanguages()) {
+    assert.equal(
+      expandTimes("3:45:00pm", lang),
+      expandTimes("3:45pm", lang),
+      `${lang}: 3:45:00pm`
+    );
+    assert.equal(
+      expandTimes("at 10:30:00.", lang),
+      expandTimes("at 10:30.", lang),
+      `${lang}: at 10:30:00.`
+    );
+  }
 });

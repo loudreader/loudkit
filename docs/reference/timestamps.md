@@ -7,7 +7,7 @@ timings" list that quietly mixed a measurement with an estimate would be worse
 than shipping neither.
 
 ```python
-result = engine.synthesize_long("One. Two. Three.", voice, seed=7)
+result = engine.synthesize("One. Two. Three.", voice, seed=7)
 for chunk in result.chunks:
     print(f"{chunk.start:6.3f}–{chunk.end:6.3f}  {chunk.text}")
     for word in chunk.words:
@@ -85,7 +85,7 @@ for part in engine.stream(text, voice, seed=7):
     at += part.duration
 ```
 
-`synthesize_long()` does exactly this internally, in samples rather than
+`synthesize()` does exactly this internally, in samples rather than
 seconds.
 
 ## Interaction with `speed`

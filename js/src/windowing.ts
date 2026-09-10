@@ -1,11 +1,12 @@
 /**
- * The renderer's geometry and randomness addressing — a port of
+ * The renderer's geometry and randomness addressing: a port of
  * `loudkit.models.windowing`. Everything here is pure data geometry shared by
  * every backend; the window recipe in particular is the entire measured
  * ANE-vs-torch mel deviation when implementations disagree, so it is pinned by
  * the conformance fixture rather than re-derived.
  */
 
+import { WindowOverflowError } from "./errors.js";
 import { AlgorithmConfig, VoiceProfile } from "./types.js";
 
 export const FLOW_NOISE_STREAM = 0;
@@ -35,6 +36,31 @@ export function timeGrid(config: AlgorithmConfig): number[] {
   return grid;
 }
 
+/** The geometry the exported graphs were built for. */
+const GRAPH_STATIC_LENGTH = 255;
+const GRAPH_STATIC_PROMPT_TOKENS = 238;
+
+/**
+ * Refuse a window the exported graphs were not built for.
+ *
+ * The ONNX graphs are static at these two lengths, so a ragged or differently
+ * framed window reaches onnxruntime as a shape mismatch, named after a tensor
+ * rather than after the manifest key that caused it. Python refuses the same
+ * config in `onnx_backend._require_static_window`; see
+ * `docs/design/execution-config.md`.
+ */
+export function requireStaticWindow(config: AlgorithmConfig): void {
+  const w = config.window;
+  if (w.staticLength !== GRAPH_STATIC_LENGTH || w.staticPromptTokens !== GRAPH_STATIC_PROMPT_TOKENS) {
+    throw new Error(
+      `the exported ONNX graphs are static at query ${GRAPH_STATIC_LENGTH} / ` +
+        `prompt ${GRAPH_STATIC_PROMPT_TOKENS}; this AlgorithmConfig frames ` +
+        `${w.staticLength}/${w.staticPromptTokens}. A different window is a ` +
+        "different algorithm: re-export the graphs rather than silently reframing here."
+    );
+  }
+}
+
 /** The token that fills unused static-window slots. */
 export function padTokenId(config: AlgorithmConfig): number {
   if (config.window.padTokenId !== null) return config.window.padTokenId;
@@ -54,7 +80,7 @@ export interface Framed {
 /**
  * Apply the window recipe. In static mode the prompt is framed to exactly
  * `staticPromptTokens` and the query to `staticLength`, with the silence unit
- * padding — the production recipe.
+ * padding: the production recipe.
  */
 export function frameWindows(
   config: AlgorithmConfig,
@@ -64,12 +90,12 @@ export function frameWindows(
   const w = config.window;
   const toks = Array.from(tokens);
   // Refused, not trimmed. Truncating at maxSpeechTokens hides the end of a
-  // long passage behind audio that still sounds fine —
-  // the only listener who notices is one who already knows the text. The
+  // long passage behind audio that still sounds fine, and the only listener
+  // who notices is one who already knows the text. The
   // Python engine refuses this loudly and says how much speech
   // would be lost.
   if (toks.length > w.maxSpeechTokens) {
-    throw new Error(
+    throw new WindowOverflowError(
       `${toks.length} speech tokens exceed the ${w.maxSpeechTokens}-token window ` +
         `by ${toks.length - w.maxSpeechTokens}; split the text first`
     );

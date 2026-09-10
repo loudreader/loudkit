@@ -1,5 +1,5 @@
-// Package timing mirrors loudkit.timing: where each chunk — and,
-// approximately, each word — lands in the waveform.
+// Package timing mirrors loudkit.timing: where each chunk, and approximately
+// each word, lands in the waveform.
 //
 // A reading app highlights the sentence it is speaking. That needs two
 // different kinds of answer, and this package is careful to keep them apart,
@@ -19,7 +19,7 @@
 // for a highlight at sentence scale and wrong in the ways you would expect: a
 // long word said fast, a short word held, a pause before a clause. The error
 // grows with the length of the chunk, because a single bad guess early shifts
-// everything after it — one sentence is usually fine, a long paragraph read as
+// everything after it, one sentence is usually fine, a long paragraph read as
 // one chunk is not. If you need real alignment, you need a forced aligner; this
 // is not one, and pretending otherwise would be worse than the estimate.
 //
@@ -51,7 +51,7 @@ type Span struct {
 //
 // Estimated, by proportional allocation. The chunk's real duration is divided
 // among its words in proportion to their length in code points. There is no
-// alignment model here and no per-word measurement — see the package comment
+// alignment model here and no per-word measurement: see the package comment
 // for what that costs you.
 type WordTiming struct {
 	// Text is the word as it appears in the chunk, punctuation included.
@@ -71,7 +71,7 @@ type WordTiming struct {
 // tier reads Start/End and ignores Words, and the field names make it
 // impossible to reach the estimate by accident.
 type ChunkTiming struct {
-	// Text is the chunk's text after the speech funnel — what was tokenised,
+	// Text is the chunk's text after the speech funnel: what was tokenised,
 	// which is not always what the caller passed in (Polish respells embedded
 	// English, and numbers are read as words).
 	Text string
@@ -121,7 +121,7 @@ func (c ChunkTiming) Shifted(by float64) ChunkTiming {
 // Offsets accumulate in samples, not seconds, and are divided by the rate once
 // at the end. Accumulating seconds instead would make chunk k's End and chunk
 // k+1's Start two different sums of the same floats, differing in the last bit
-// — a gap or an overlap of a few nanoseconds, invisible in a test that compares
+// a gap or an overlap of a few nanoseconds, invisible in a test that compares
 // with a tolerance and visible as a flicker in a highlight that switches on
 // time >= start.
 func Timeline(spans []Span, sampleRate int) []ChunkTiming {
@@ -148,11 +148,11 @@ func Timeline(spans []Span, sampleRate int) []ChunkTiming {
 // measure: a word's characters are the only thing known here, and they
 // correlate with duration well enough at sentence scale to drive a highlight.
 // Code points rather than bytes so that the same text weights the same way in
-// all five ports — a Polish "ł" is one character to a reader and two bytes to
+// all five ports: a Polish "ł" is one character to a reader and two bytes to
 // Go, and byte length would make an accented passage drift against the same
 // passage read by the Python engine.
 //
-// Whitespace itself is not charged for — the gap between two words belongs to
+// Whitespace itself is not charged for: the gap between two words belongs to
 // whichever side of the boundary the caller's player is on, and splitting it
 // would only invent a third kind of span.
 //

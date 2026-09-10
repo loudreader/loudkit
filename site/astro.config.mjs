@@ -7,10 +7,10 @@ import { SITE, BASE, REPO_URL, BRANCH } from './site.config.mjs';
 import { remarkRepoLinks } from './src/plugins/remark-repo-links.mjs';
 import { rehypeTableScroll } from './src/plugins/rehype-table-scroll.mjs';
 
-// The sidebar is ordered for a first-time reader: the three pages that get
-// something running, then the model, the rest of the guides, the measurements,
-// the platforms, the reference, and last the project's own index and promises.
-// docs/README.md keeps its own order, which is the repository's order.
+// The sidebar follows docs/README.md: the twelve pages a user needs first, in
+// the order that index lists them, then the reference, the platforms, the
+// measurements and the project's own promises. docs/design/ is not on the
+// site at all (see scripts/sync-docs.mjs).
 // Labels are given explicitly where a page's own H1 is a sentence rather than
 // a name; everything else inherits its title from the file.
 export default defineConfig({
@@ -25,8 +25,9 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'loudkit',
+      logo: { src: '../assets/logo-mark-flat.png', alt: '', replacesTitle: false },
       description:
-        'On-device text to speech. 20 voices across 10 languages, five language SDKs, ' +
+        'On-device text to speech. A searchable voice gallery, five language SDKs, ' +
         'and voice cloning from ten seconds of audio.',
       social: [
         { icon: 'github', label: 'GitHub', href: REPO_URL },
@@ -37,6 +38,9 @@ export default defineConfig({
       // matter instead; this base only enables the link.
       editLink: { baseUrl: `${REPO_URL}/edit/${BRANCH}/` },
       plugins: [starlightLlmsTxt()],
+      // The landing page's hero carries two playable voices beside the copy;
+      // every other page has no hero and renders nothing from this override.
+      components: { Hero: './src/components/Hero.astro' },
       // The site theme. Everything is expressed as Starlight's own --sl-*
       // custom properties plus a few `lk-` classes the landing page uses, so
       // no Starlight component is replaced and the sidebar, search and theme
@@ -53,71 +57,48 @@ export default defineConfig({
         '@fontsource/space-grotesk/700.css',
         './src/styles/loudkit.css',
       ],
-      // LoudReader's product favicons, in site/public/. Starlight applies the
-      // base path to `favicon` on its own; the two head links below are
-      // written by hand, so they carry BASE themselves. On Pages the site is
-      // served from /loudkit, and a root-relative /favicon-32x32.png would be
-      // a 404 there and correct only in local preview.
-      favicon: '/favicon.ico',
-      head: [
-        {
-          tag: 'meta',
-          attrs: { name: 'theme-color', content: '#f7f5f2' },
-        },
-        {
-          tag: 'link',
-          attrs: {
-            rel: 'icon',
-            type: 'image/png',
-            sizes: '32x32',
-            href: `${BASE}/favicon-32x32.png`,
-          },
-        },
-        {
-          tag: 'link',
-          attrs: {
-            rel: 'apple-touch-icon',
-            sizes: '180x180',
-            href: `${BASE}/apple-touch-icon.png`,
-          },
-        },
-      ],
+      favicon: '/loudkit.png',
+      head: [{ tag: 'meta', attrs: { name: 'theme-color', content: '#f7f5f2' } }],
       sidebar: [
         {
-          label: 'Quickstart',
+          label: 'Start',
           items: [
-            { slug: 'demo', label: 'Demo' },
-            { slug: 'guides/01-getting-started', label: 'Quickstart' },
-            { slug: 'guides/02-streaming-and-long-form' },
-            { slug: 'guides/03-cloning-a-voice' },
+            { slug: 'demo', label: 'Voice gallery' },
+            { slug: 'guides/01-getting-started', label: 'Getting started' },
+            { slug: 'guides/10-swift', label: 'Swift' },
+            { slug: 'guides/08-go', label: 'Go' },
+            { slug: 'guides/09-rust', label: 'Rust' },
+            { slug: 'guides/07-js-ts', label: 'JavaScript and TypeScript' },
+            { slug: 'guides/11-choosing-a-model', label: 'Choosing a model' },
+          ],
+        },
+        {
+          label: 'Guides',
+          items: [
+            { slug: 'guides/03-cloning-a-voice', label: 'Cloning a voice' },
+            { slug: 'guides/02-streaming-and-long-form', label: 'Long text and streaming' },
+            { slug: 'guides/04-server-and-agents', label: 'Server and agents' },
+            { slug: 'reference/troubleshooting', label: 'Troubleshooting' },
           ],
         },
         {
           label: 'The model',
           items: [
             { slug: 'model-card', label: 'Model card' },
+            { slug: 'model-card-turbo', label: 'Turbo model card' },
             { slug: 'voices', label: 'Voices' },
-            { slug: 'provenance-voice-encoder', label: 'Voice encoder provenance' },
           ],
         },
         {
-          label: 'Guides',
+          label: 'Reference',
           items: [
-            { slug: 'guides', label: 'About the guides' },
-            { slug: 'guides/04-server-and-agents' },
-            { slug: 'guides/05-benchmarking' },
-            { slug: 'guides/06-embedding' },
-            { slug: 'guides/07-js-ts' },
-            { slug: 'guides/08-go' },
-            { slug: 'guides/09-rust' },
-            { slug: 'guides/10-swift' },
-          ],
-        },
-        {
-          label: 'Performance',
-          items: [
-            { slug: 'benchmarks', label: 'Benchmarks' },
-            { slug: 'parity-measured', label: 'Measured parity' },
+            { slug: 'reference/compatibility', label: 'Compatibility' },
+            { slug: 'reference/errors', label: 'Errors' },
+            { slug: 'reference/timestamps', label: 'Timestamps' },
+            { slug: 'reference/speed', label: 'Speed' },
+            { slug: 'reference/provenance', label: 'Content Credentials' },
+            { slug: 'reference/identity-contract', label: 'Identity contract' },
+            { slug: 'provenance-voice-encoder', label: 'Voice encoder licence chain' },
           ],
         },
         {
@@ -129,26 +110,10 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Reference',
+          label: 'Performance',
           items: [
-            { slug: 'reference/troubleshooting', label: 'Troubleshooting' },
-            { slug: 'reference/errors', label: 'Errors' },
-            { slug: 'reference/compatibility', label: 'Compatibility' },
-            { slug: 'reference/timestamps', label: 'Timestamps' },
-            { slug: 'reference/speed', label: 'Speed' },
-            { slug: 'reference/provenance', label: 'Provenance' },
-          ],
-        },
-        {
-          label: 'Engine internals',
-          collapsed: true,
-          items: [
-            { slug: 'reference/architecture', label: 'Architecture map' },
-            { slug: 'reference/onnx-graphs', label: 'ONNX graphs' },
-            { slug: 'reference/identity-contract', label: 'Identity contract' },
-            { slug: 'reference/preprocess', label: 'Text normalization' },
-            { slug: 'reference/postprocess', label: 'Postprocess' },
-            { slug: 'reference/typing', label: 'Typing' },
+            { slug: 'benchmarks', label: 'Benchmarks' },
+            { slug: 'parity-measured', label: 'Measured parity' },
           ],
         },
         {

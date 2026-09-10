@@ -1,27 +1,19 @@
-"""The renderer's geometry and randomness addressing — torch-free.
+"""The renderer's geometry and randomness addressing, torch-free.
 
-Everything a renderer backend needs from the flow and vocoder modules that is
-*not* a torch module: the window framing recipe, the Euler time grid, and the
-Philox sub-stream ids that address the render randomness. A runtime-only
-backend (ONNX, CoreML) imports this file and never touches a torch module,
-which is the checkpoint module's promise ("a future runtime-only backend can
-load the same file without dragging torch in") kept for the parts that are
-pure geometry and bookkeeping.
-
-The window recipe is the entire measured ANE-vs-torch mel deviation (corr
-0.975–0.993) when implementations disagree, so it lives here as data, shared
-by every renderer — not re-derived per backend.
+See ``docs/design/models-notes.md``.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from typing import NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
 
 from ..config import AlgorithmConfig
+from ..contracts import MEL_BINS, TOKEN_MEL_RATIO
 from ..errors import WindowOverflowError
 from ..voice import VoiceProfile
 
@@ -31,16 +23,20 @@ __all__ = [
     "FLOW_NOISE_STREAM",
     "VOCODER_PHASE_STREAM",
     "VOCODER_NOISE_STREAM",
+    "VOCODER_HARMONICS",
+    "UPSAMPLE_PER_FRAME",
     "time_grid",
     "pad_token_id",
     "frame_windows",
+    "FramedWindow",
     "eos_floor",
 ]
 
 START_TEXT_TOKEN = 255
 """Text framing token that opens the transcript segment. A property of the T3
-text tokenizer family (shared with the torch generator module), moved here so
-the ONNX backend can frame the same way without importing torch."""
+text tokenizer family (shared with the torch generator module), and it lives
+here rather than beside the torch generator so the ONNX backend can frame the
+same way without importing torch."""
 
 STOP_TEXT_TOKEN = 0
 """Text framing token that closes the transcript segment. See
@@ -51,19 +47,29 @@ FLOW_NOISE_STREAM = 0
 are consumed by the Box–Muller pair; keep any future draw at >= 2."""
 
 VOCODER_PHASE_STREAM = 0
-"""Philox sub-stream for the 8 harmonic phase offsets (row 0 is pinned to 0 —
+"""Philox sub-stream for the 8 harmonic phase offsets (row 0 is pinned to 0 -
 the voiced fundamental must start at a zero crossing)."""
 
 VOCODER_NOISE_STREAM = 1
 """Philox sub-streams 1 and 2 (Box–Muller pair) for the excitation noise."""
 
-_TOKEN_MEL_RATIO = 2  # 25 Hz tokens -> 50 Hz mel frames
-_MEL_BINS = 80
+VOCODER_HARMONICS = 9
+"""Excitation rows the source module carries: harmonic_num 8 plus the fundamental.
+
+Here rather than beside the torch vocoder for the same reason as
+:data:`START_TEXT_TOKEN`: the graph backends draw the same noise and cannot
+import torch to learn its shape."""
+
+UPSAMPLE_PER_FRAME = 480
+"""Audio samples one mel frame becomes: 24 kHz over the 50 Hz mel rate.
+
+Every renderer sizes its excitation and cuts its output with this, so it is one
+number rather than one per backend."""
 
 
 def time_grid(config: AlgorithmConfig) -> list[float]:
     """The Euler time grid: the explicit one if the config carries it, else
-    the cosine schedule ``t_i = 1 − cos(i/K · π/2)`` — one implementation,
+    the cosine schedule ``t_i = 1 − cos(i/K · π/2)``, one implementation,
     shared by every renderer so "cosine" cannot be written two ways."""
     if config.euler_grid is not None:
         return list(config.euler_grid)
@@ -79,7 +85,7 @@ def pad_token_id(config: AlgorithmConfig) -> int:
         return config.sampling.silence_token_ids[0]
     raise ValueError(
         "static window needs a pad token: set WindowConfig.pad_token_id or "
-        "provide silence_token_ids — padding with token 0 bleeds +3 dB of "
+        "provide silence_token_ids: padding with token 0 bleeds +3 dB of "
         "high-band energy into the tail through the encoder's attention"
     )
 
@@ -90,26 +96,34 @@ def eos_floor(n_text_tokens: int, config: AlgorithmConfig) -> int:
     return max(s.min_tokens_floor, int(n_text_tokens * s.min_tokens_text_ratio))
 
 
+class FramedWindow(NamedTuple):
+    """One window as the renderers take it, from :func:`frame_windows`.
+
+    A tuple, so the positional unpack every backend already writes keeps
+    working; named, so a reader of ``framed[2]`` three modules away can tell
+    the prompt length from the token count.
+    """
+
+    row: NDArray[np.int64]
+    """Prompt and query token ids, concatenated."""
+    cond: NDArray[np.float32]
+    """The prompt mel the flow decoder conditions on."""
+    prompt_frames: int
+    """Mel frames of prompt, the offset the rendered audio starts at."""
+    n: int
+    """Speech tokens in the query, before any static padding."""
+
+
 def frame_windows(
     config: AlgorithmConfig, tokens: Sequence[int], voice: VoiceProfile
-) -> tuple[NDArray[np.int64], NDArray[np.float32], int, int]:
+) -> FramedWindow:
     """Apply the window recipe; shared by every renderer backend.
 
-    Returns ``(token_row (1, P+Q), cond (1, 80, 2·(P+Q)), prompt_frames, n)``
-    where ``n`` is the count of real speech tokens and ``prompt_frames`` the
-    mel region to cut after integration. In static mode the prompt is framed
-    to exactly ``static_prompt_tokens`` (truncate long, silence-pad short) and
-    the query to ``static_length`` — the production recipe, which is the
-    entire measured ANE-vs-torch mel deviation when implementations disagree.
+    See ``docs/design/models-notes.md``.
     """
     w = config.window
-    # Refused rather than trimmed, which is what Rust, Go, JS and Swift already
-    # do in this same function and what `Engine` does one layer up. Python was
-    # the last place a `.decode` called directly — bypassing the engine — took
-    # 300 tokens and returned 255 tokens of audio with nothing to say the rest
-    # had gone. In a reading tool that is the end of a passage simply not
-    # existing while the audio sounds perfectly fine; the only listener who
-    # notices is one who knows the text.
+    # Refused rather than trimmed, which is what Rust, Go, JS and Swift already do in
+    # this same function and what `Engine` does one layer up.
     toks_all = [int(t) for t in tokens]
     if len(toks_all) > w.max_speech_tokens:
         raise WindowOverflowError(
@@ -127,7 +141,9 @@ def frame_windows(
     query: NDArray[np.int64]
     if w.static_length is not None:
         pad = pad_token_id(config)
-        p_len = w.static_prompt_tokens or len(prompt_tokens)
+        p_len = (
+            w.static_prompt_tokens if w.static_prompt_tokens is not None else len(prompt_tokens)
+        )
         prompt = np.full(p_len, pad, dtype=np.int64)
         keep = min(len(prompt_tokens), p_len)
         prompt[:keep] = prompt_tokens[:keep]
@@ -138,9 +154,9 @@ def frame_windows(
         query = toks
 
     row = np.concatenate([prompt, query])[None]
-    t_mel = _TOKEN_MEL_RATIO * row.shape[1]
-    prompt_frames = _TOKEN_MEL_RATIO * len(prompt)
-    cond = np.zeros((1, _MEL_BINS, t_mel), dtype=np.float32)
+    t_mel = TOKEN_MEL_RATIO * row.shape[1]
+    prompt_frames = TOKEN_MEL_RATIO * len(prompt)
+    cond = np.zeros((1, MEL_BINS, t_mel), dtype=np.float32)
     keep_f = min(prompt_mel.shape[1], prompt_frames)
     cond[0, :, :keep_f] = prompt_mel[:, :keep_f]
-    return row, cond, prompt_frames, n
+    return FramedWindow(row, cond, prompt_frames, n)

@@ -1,16 +1,17 @@
-//! Playing faster without talking higher — WSOLA, from first principles.
+//! Playing faster without talking higher: WSOLA, from first principles.
 //!
 //! "Speed" in a reading app means what it means on a video player: 1.5x is the
 //! same voice, sooner. Resampling gives you a chipmunk; what is wanted is *time*
 //! stretched while *pitch* is left alone.
 //!
 //! **Why WSOLA and not a phase vocoder.** The phase vocoder is the other
-//! standard answer and is better on sustained, harmonic material — held notes,
+//! standard answer and is better on sustained, harmonic material, held notes,
 //! chords. Speech is the opposite kind of signal: it is mostly transients
 //! (plosives, the attack of every syllable) sitting on a pitch that moves
 //! continuously. A phase vocoder resynthesises from magnitudes and unwrapped
-//! phases, and its characteristic failure on that material is transient smearing
-//! — a /t/ arriving as a soft thud, "phasiness" on voiced segments — which is
+//! phases, and its characteristic failure on that material is transient
+//! smearing (a /t/ arriving as a soft thud, "phasiness" on voiced segments),
+//! which is
 //! precisely the part of speech intelligibility rests on. WSOLA never leaves the
 //! time domain: it copies real waveform segments and only chooses *where* to
 //! copy them from, so a plosive is either included whole or not at all. It
@@ -27,7 +28,7 @@
 //! search window set to zero, and it sounds like it: periodic warble at the
 //! frame rate.
 //!
-//! Everything here is deterministic — no RNG, no adaptivity, no libraries. The
+//! Everything here is deterministic: no RNG, no adaptivity, no libraries. The
 //! constants are derived from the sample rate rather than written as sample
 //! counts, so the same code is correct at 16 kHz or 48 kHz, and the five
 //! implementations derive them the same way.
@@ -44,8 +45,8 @@ use std::f64::consts::PI;
 
 /// The range worth offering, not the range that runs.
 ///
-/// Outside it the alignment search stops finding matches often enough — the
-/// required shift exceeds the ±10 ms it may look over — and the output is
+/// Outside it the alignment search stops finding matches often enough: the
+/// required shift exceeds the ±10 ms it may look over, and the output is
 /// recognisably processed rather than merely faster. Refused rather than
 /// clamped: a caller who asked for 3x and silently got 2x has a bug that only a
 /// stopwatch finds.
@@ -58,21 +59,22 @@ pub const MAX_SPEED: f64 = 2.0;
 /// one phone.
 const FRAME_MS: f64 = 25.0;
 
-/// How far the read position may move to find a better join — a bit under one
+/// How far the read position may move to find a better join: a bit under one
 /// pitch period at the low end of the voiced range, which is what the search is
 /// looking for.
 const SEARCH_MS: f64 = 10.0;
 
 /// Frames overlap by half. A periodic Hann window at hop = frame/2 sums to
-/// exactly one, so the overlap-add needs no normalisation of its own — the
+/// exactly one, so the overlap-add needs no normalisation of its own: the
 /// denominator below only ever corrects the ends and the places the alignment
 /// search moved a frame off the grid.
 const HANN_COLA_HOP: usize = 2;
 
 /// `Ok(())` if `speed` is usable, or the refusal that names the range.
 ///
-/// Kept here rather than in the engine so that every entry point — three engine
-/// methods and the CLI — refuses the same values with the same words, and a new
+/// Kept here rather than in the engine so that every entry point (three
+/// engine methods and the CLI) refuses the same values with the same words,
+/// and a new
 /// entry point cannot forget to.
 ///
 /// # Errors
@@ -123,7 +125,7 @@ pub fn stretched_length(n_samples: usize, speed: f64) -> usize {
 /// `speed` greater than one shortens, less than one lengthens. `1.0` is the
 /// bypass: the samples come back untouched, having entered no arithmetic at all.
 /// Rust cannot hand a borrowed slice back as an owned `Vec` without copying it,
-/// so unlike Python — which returns the caller's own array — this returns a
+/// so unlike Python, which returns the caller's own array, this returns a
 /// fresh allocation; the *values* are bit-identical, every byte the vocoder
 /// produced, and that is the property the default depends on.
 ///
@@ -131,8 +133,8 @@ pub fn stretched_length(n_samples: usize, speed: f64) -> usize {
 ///
 /// # Panics
 /// For a `speed` that [`validate_speed`] refuses. Every engine entry point
-/// validates at the door — before the six seconds of generation the caller would
-/// otherwise wait to discover a typo — so this is unreachable through the
+/// validates at the door: before the six seconds of generation the caller would
+/// otherwise wait to discover a typo, so this is unreachable through the
 /// engine, and it is a panic rather than a `Result` because there is no
 /// waveform to return for a speed that has no meaning. Silently substituting one
 /// is the clamp this feature exists to refuse.
@@ -153,12 +155,12 @@ pub fn time_stretch(audio: &[f32], sample_rate: usize, speed: f64) -> Vec<f32> {
         // Nothing to overlap-add: a fragment shorter than one frame has no
         // second frame to align against. Cut or zero-padded to the right length
         // instead, which is wrong in the way silence is wrong rather than in the
-        // way a pitch shift is. At 24 kHz a frame is 600 samples — a fortieth of
+        // way a pitch shift is. At 24 kHz a frame is 600 samples: a fortieth of
         // a second, below anything the engine renders.
         //
         // A zero hop joins that branch rather than looping forever. It takes a
         // sample rate under 60 Hz to reach, so it is not a behaviour difference
-        // in any case a caller can hit — it turns a hang, which no backtrace
+        // in any case a caller can hit, it turns a hang, which no backtrace
         // explains, into the short-fragment path.
         let mut out = vec![0.0f32; out_len];
         let take = out_len.min(n);
@@ -170,7 +172,7 @@ pub fn time_stretch(audio: &[f32], sample_rate: usize, speed: f64) -> Vec<f32> {
     // Periodic Hann, i.e. 2*pi*i/frame and not /(frame-1). The periodic form is
     // the one that sums to exactly one at 50 % overlap; the symmetric form is off
     // by a hair at every frame boundary, which reads as a low-level buzz at the
-    // frame rate — 40 Hz here, right in the range a listener notices.
+    // frame rate: 40 Hz here, right in the range a listener notices.
     let window: Vec<f64> = (0..frame)
         .map(|i| 0.5 - 0.5 * (2.0 * PI * i as f64 / frame as f64).cos())
         .collect();
@@ -229,7 +231,7 @@ pub fn time_stretch(audio: &[f32], sample_rate: usize, speed: f64) -> Vec<f32> {
 
 /// The offset within ±`search` of `ideal` whose frame best continues `target`.
 ///
-/// Scored by cross-correlation normalised by the *candidate's* energy only — the
+/// Scored by cross-correlation normalised by the *candidate's* energy only: the
 /// target's is the same for every candidate and cancels out of the ranking.
 /// Without that normalisation the search prefers whichever candidate is loudest
 /// rather than whichever fits, which at a syllable onset is exactly the wrong
@@ -269,4 +271,51 @@ fn best_match(x: &[f64], target: &[f64], ideal: i64, search: usize, frame: usize
         }
     }
     best_at as usize
+}
+
+/// The raised-cosine ramp [`fade_edges`] puts on both ends of a rendered window,
+/// in seconds. Below any speech feature, above the step it removes.
+pub const EDGE_FADE_SECONDS: f64 = 0.02;
+
+include!("edge_fade.rs");
+
+/// The pinned ramp of `n` samples, or `None` when no table covers that length.
+fn edge_fade_table(n: usize) -> Option<&'static [u32]> {
+    if n == EDGE_FADE_BITS_5MS.len() {
+        Some(&EDGE_FADE_BITS_5MS)
+    } else if n == EDGE_FADE_BITS_20MS.len() {
+        Some(&EDGE_FADE_BITS_20MS)
+    } else {
+        None
+    }
+}
+
+/// Taper both waveform edges; see docs/design/postprocess.md.
+///
+/// `EDGE_FADE_BITS` pins the 5 ms ramp bit for bit, so only a manifest
+/// declaring the legacy length takes that branch. Every shipped render is
+/// [`EDGE_FADE_SECONDS`] and computes its ramp.
+pub fn fade_edges(mut audio: Vec<f32>, sample_rate: usize, seconds: f64) -> Vec<f32> {
+    let n = (seconds * sample_rate as f64) as usize;
+    if n == 0 || audio.len() < 2 * n {
+        return audio;
+    }
+    let last = audio.len() - 1;
+    // A length no table covers is computed in double and narrowed. That ramp
+    // tracks the float32 reference to within two units in the last place, under
+    // 1.2e-07 at full scale, about -138 dBFS: the identity contract's
+    // equivalent class, not its bit-exact one.
+    let table = edge_fade_table(n);
+    for i in 0..n {
+        let w = if let Some(bits) = table {
+            f32::from_bits(bits[i])
+        } else if n == 1 {
+            0.0
+        } else {
+            (0.5 - 0.5 * (PI * i as f64 / (n - 1) as f64).cos()) as f32
+        };
+        audio[i] *= w;
+        audio[last - i] *= w;
+    }
+    audio
 }

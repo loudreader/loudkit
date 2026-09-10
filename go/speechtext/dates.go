@@ -6,26 +6,29 @@
 // arrives as "onest", because the number pass expands the digits and leaves the
 // suffix stuck to them.
 //
-// Every rule is data from the shared numbers.json — month names, day forms, the
+// Every rule is data from the shared numbers.json: month names, day forms, the
 // infixes Spanish and Portuguese speak between the parts, the German oblique
 // triggers, the ordinal tables. What is code here is the shape: which written
 // forms are dates at all, and how each language reads a year.
 //
 // Two refusals are as deliberate as anything it does. A yearless "12.3." is
-// never matched — its closing period is indistinguishable from a sentence's, so
+// never matched: its closing period is indistinguishable from a sentence's, so
 // "Die Zahl ist 3.5." would otherwise come out as "dritte Mai". And 3/12/2026 is left alone in
 // English, where it is March twelfth to half the world and the third of December
 // to the other half: a listener recovers from hearing digits, not from a
-// confident wrong month.//
-// Python reference: `loudkit/frontend/dates.py`.
+// confident wrong month.
+//
+// Python reference: loudkit/frontend/dates.py.
 package speechtext
 
 import (
-	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
+
+	"github.com/loudreader/loudkit/go/internal/unicase"
 )
 
 const (
@@ -63,6 +66,13 @@ type dateRules struct {
 	OrdTeens        map[int]string
 	OrdTens         map[int]string
 	OrdJoiner       string
+	// The three date patterns, compiled once in loadDateRules. textualDates
+	// and ExpandOrdinals run on every chunk and the patterns are fixed per
+	// language, so building them per call was three regex compilations a
+	// chunk. nil where the language has no table to build one from.
+	dayFirstRe   *regexp.Regexp
+	monthFirstRe *regexp.Regexp
+	ordinalRe    *regexp.Regexp
 }
 
 var (
@@ -71,38 +81,7 @@ var (
 )
 
 func loadDateRules() {
-	var doc struct {
-		Languages map[string]struct {
-			Dates *struct {
-				DayWords        map[string]string `json:"day_words"`
-				DayWordsOblique map[string]string `json:"day_words_oblique"`
-				ObliqueTriggers []string          `json:"oblique_triggers"`
-				DayOneWord      string            `json:"day_one_word"`
-				Months          []string          `json:"months"`
-				DayMonthInfix   string            `json:"day_month_infix"`
-				MonthYearInfix  string            `json:"month_year_infix"`
-				DayFirstPrefix  string            `json:"day_first_prefix"`
-				DayFirstInfix   string            `json:"day_first_infix"`
-				YearRule        string            `json:"year_rule"`
-				YearUnits       map[string]string `json:"year_units"`
-				YearTeens       map[string]string `json:"year_teens"`
-				YearTens        map[string]string `json:"year_tens"`
-				YearTwoThousand string            `json:"year_two_thousand"`
-				DottedAmbiguous bool              `json:"dotted_is_ambiguous"`
-				NoDottedDates   bool              `json:"no_dotted_dates"`
-			} `json:"dates"`
-			Ordinals *struct {
-				Suffixes   []string          `json:"suffixes"`
-				Units      map[string]string `json:"units"`
-				Teens      map[string]string `json:"teens"`
-				Tens       map[string]string `json:"tens"`
-				TensJoiner string            `json:"tens_joiner"`
-			} `json:"ordinals"`
-		} `json:"languages"`
-	}
-	if err := json.Unmarshal(numbersJSON, &doc); err != nil {
-		panic("speechtext: embedded numbers.json is unreadable: " + err.Error())
-	}
+	langs := grammarDocument()
 	ints := func(m map[string]string) map[int]string {
 		out := make(map[int]string, len(m))
 		for k, v := range m {
@@ -112,8 +91,8 @@ func loadDateRules() {
 		}
 		return out
 	}
-	dateTable = make(map[string]*dateRules, len(doc.Languages))
-	for lang, e := range doc.Languages {
+	dateTable = make(map[string]*dateRules, len(langs))
+	for lang, e := range langs {
 		if e.Dates == nil {
 			continue
 		}
@@ -138,7 +117,41 @@ func loadDateRules() {
 				r.OrdJoiner = e.Ordinals.TensJoiner
 			}
 		}
+		compileDatePatterns(r)
 		dateTable[lang] = r
+	}
+}
+
+// compileDatePatterns fills the three cached patterns from the tables above.
+func compileDatePatterns(r *dateRules) {
+	if len(r.OrdSuffixes) > 0 {
+		r.ordinalRe = regexp.MustCompile(`(?i)([0-9]+)(` + strings.Join(r.OrdSuffixes, "|") + `)`)
+	}
+	if len(r.Months) != 12 {
+		return
+	}
+	names := make([]string, 0, 12)
+	for _, m := range r.Months {
+		names = append(names, regexp.QuoteMeta(m))
+	}
+	joined := strings.Join(names, "|")
+	// Spanish and Portuguese speak a preposition between every part, so the
+	// written form carries it too: "12 de marzo de 2026".
+	infix, yinfix := "", ""
+	if r.DayMonthInfix != "" {
+		infix = `(?:\s+` + regexp.QuoteMeta(r.DayMonthInfix) + `)?`
+	}
+	if r.MonthYearInfix != "" {
+		yinfix = `(?:\s+` + regexp.QuoteMeta(r.MonthYearInfix) + `)?`
+	}
+	r.dayFirstRe = regexp.MustCompile(
+		`(?i)([0-3]?[0-9])\.?` + infix + `\s+(` + joined + `)(?:` + yinfix + `\s+([12][0-9]{3}))?`)
+	// Month-first is an English shape. Reading it in a language that never
+	// writes it would be inventing a construction nobody used, so a language
+	// without the infix that selects it gets no pattern.
+	if r.DayFirstInfix != "" {
+		r.monthFirstRe = regexp.MustCompile(
+			`(?i)(` + joined + `)\s+([0-3]?[0-9])(?:st|nd|rd|th)?,?(?:\s+([12][0-9]{3}))?`)
 	}
 }
 
@@ -165,7 +178,7 @@ func MonthName(month int, language string) string {
 }
 
 // OrdinalDay is the day-of-month word, in whatever form this language's dates
-// take. `oblique` is German only — the -en ending that am/den/vom select.
+// take. `oblique` is German only: the -en ending that am/den/vom select.
 func OrdinalDay(day int, language string, oblique bool) string {
 	r, ok := dates()[language]
 	if !ok || day < 1 || day > 31 {
@@ -190,7 +203,7 @@ func OrdinalDay(day int, language string, oblique bool) string {
 // SayYear reads a year the way this language reads years.
 //
 // English and Norwegian split it; German, Dutch and Swedish group it in
-// hundreds; the rest say one plain cardinal. Spanish is the explicit case — the
+// hundreds; the rest say one plain cardinal. Spanish is the explicit case: the
 // RAE writes that a year is read as its cardinal and not in two-figure blocks as
 // in English, so 2021 is "dos mil veintiuno".
 func SayYear(year int, language string) string {
@@ -226,7 +239,7 @@ func yearEnglish(year int) string {
 		if rest == 0 {
 			return card(century, "en") + " hundred"
 		}
-		// "nineteen oh five" — never "nineteen five", which nobody says.
+		// "nineteen oh five", never "nineteen five", which nobody says.
 		if rest < 10 {
 			return card(century, "en") + " oh " + card(rest, "en")
 		}
@@ -350,10 +363,20 @@ func spokenDate(day, month, year int, hasYear bool, language string, oblique boo
 	return strings.Join(parts, " ")
 }
 
+// A written date is bounded by a word boundary, and not by digits alone: a run
+// that continues into a letter is an identifier, and `25/03/2026x` is no more a
+// date than `x25/03/2026` is. Each callback below asks wordBoundaryBefore and
+// wordBoundaryAfter as well as the separators its own form names.
 var (
-	isoDate = regexp.MustCompile(`([12][0-9]{3})-([01][0-9])-([0-3][0-9])`)
+	// The `T` before a clock time is taken with the date: it is a field
+	// separator and not a letter, and left behind it glues to the last word of
+	// the date. RE2 has no lookahead, so the time itself is captured too and
+	// written back verbatim, which leaves the string Python's zero-width look
+	// leaves.
+	isoDate = regexp.MustCompile(
+		`([12][0-9]{3})-([01][0-9])-([0-3][0-9])(?:(T)([0-2][0-9]:[0-5][0-9]))?`)
 	// With the year, which is what makes it a date rather than a guess. The
-	// yearless "12.3." is deliberately not matched — see the package note.
+	// yearless "12.3." is deliberately not matched: see the package note.
 	dottedDate = regexp.MustCompile(`([0-3]?[0-9])\.([01]?[0-9])\.([12][0-9]{3})`)
 	// Day-first in every language here; English is handled in the callback,
 	// where the field order is genuinely ambiguous.
@@ -373,13 +396,24 @@ func ExpandDates(text, language string) string {
 		y, _ := strconv.Atoi(g[1])
 		m, _ := strconv.Atoi(g[2])
 		d, _ := strconv.Atoi(g[3])
-		if !boundedBefore(whole, at, ".,:/-") || !boundedAfter(whole, at+len(g[0]), "-") {
+		if !wordBoundaryBefore(whole, at) || !boundedBefore(whole, at, ".,:/-") {
+			return ""
+		}
+		// The separator becomes the space that keeps the date and the time two
+		// spoken units, and the time is handed back to the passes that read it.
+		// A word for the separator would be a per-language fact this grammar
+		// does not carry, and a plainer reading is not a wrong one.
+		tail := ""
+		if g[4] != "" {
+			tail = " " + g[5]
+		} else if !wordBoundaryAfter(whole, at+len(g[0])) ||
+			!boundedAfter(whole, at+len(g[0]), "-") {
 			return ""
 		}
 		if !dateValid(d, m, y, true) {
 			return ""
 		}
-		return spokenDate(d, m, y, true, language, isObliqueGo(whole, at, r))
+		return spokenDate(d, m, y, true, language, isObliqueGo(whole, at, r)) + tail
 	})
 	out = replaceDates(out, dottedDate, func(g []string, at int, whole string) string {
 		// Swedish marks an ordinal with a colon (1:a), never a trailing period,
@@ -392,7 +426,8 @@ func ExpandDates(text, language string) string {
 		d, _ := strconv.Atoi(g[1])
 		m, _ := strconv.Atoi(g[2])
 		y, _ := strconv.Atoi(g[3])
-		if !boundedBefore(whole, at, ".,:/-") || !wordBoundaryAfter(whole, at+len(g[0])) {
+		if !wordBoundaryBefore(whole, at) || !boundedBefore(whole, at, ".,:/-") ||
+			!wordBoundaryAfter(whole, at+len(g[0])) {
 			return ""
 		}
 		if !dateValid(d, m, y, true) {
@@ -404,7 +439,9 @@ func ExpandDates(text, language string) string {
 		d, _ := strconv.Atoi(g[1])
 		m, _ := strconv.Atoi(g[2])
 		y, _ := strconv.Atoi(g[3])
-		if !boundedBefore(whole, at, ".,:/-") || !boundedAfter(whole, at+len(g[0]), "/") {
+		if !wordBoundaryBefore(whole, at) || !boundedBefore(whole, at, ".,:/-") ||
+			!wordBoundaryAfter(whole, at+len(g[0])) ||
+			!boundedAfter(whole, at+len(g[0]), "/") {
 			return ""
 		}
 		// 3/12/2026 is March twelfth to half the English-speaking world and the
@@ -424,12 +461,12 @@ func ExpandDates(text, language string) string {
 // and `(?![\d/])` are checked here against the characters either side of a
 // match. Same rule, expressed where the engine can express it.
 //
-// A digit either side is refused by both, always — every call site's class has
+// A digit either side is refused by both, always: every call site's class has
 // `\d` in it. It is tested in code rather than passed in as text because the
 // `\d` written into the class *was* passed in as text, and `strings.ContainsRune`
 // read it as the two literal runes `\` and `d`: no digit ever matched, and
 // `42.3.2026` in German reached the dotted-date reading as *4zweite März
-// zweitausendsechsundzwanzig* — a wrong day welded to a stray digit.
+// zweitausendsechsundzwanzig*: a wrong day welded to a stray digit.
 //
 // `marks` is what is left: the separators, as literal runes.
 func boundedBefore(s string, at int, marks string) bool {
@@ -448,57 +485,61 @@ func boundedAfter(s string, end int, marks string) bool {
 	return !isASCIIDigit(c) && !strings.ContainsRune(marks, rune(c))
 }
 
+// wordBoundaryAfter is the lookahead the four other ports spell `(?!\p{L}\p{Nd}_)`.
+//
+// The rune after the position, not the byte. Byte-wise ASCII read a CJK
+// ideograph glued to a year as a boundary, so this port spoke a date the other
+// four left written: `12.03.2026\u4e00` read aloud here and raw there, one
+// string with two readings under one fingerprint.
 func wordBoundaryAfter(s string, end int) bool {
 	if end >= len(s) {
 		return true
 	}
-	c := s[end]
-	return !(c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+	r, _ := utf8.DecodeRuneInString(s[end:])
+	return !(r == '_' || isLetterOrDigit(r))
+}
+
+// wordBefore is the word standing immediately before offset at, folded to lower
+// case and stripped of a trailing clause mark, or "" when nothing stands there.
+//
+// Read out of the string the pass is substituting over, so the neighbour is the
+// previous pass's output rather than the original text.
+func wordBefore(whole string, at int) string {
+	if at > len(whole) {
+		return ""
+	}
+	fields := strings.Fields(whole[:at])
+	if len(fields) == 0 {
+		return ""
+	}
+	return unicase.ToLower(strings.Trim(fields[len(fields)-1], ",;:"))
 }
 
 // isObliqueGo reports whether am/den/vom sits before the date. German only.
 func isObliqueGo(whole string, at int, r *dateRules) bool {
-	if len(r.ObliqueTriggers) == 0 || at > len(whole) {
+	if len(r.ObliqueTriggers) == 0 {
 		return false
 	}
-	before := strings.TrimRight(whole[:at], " \t\n")
-	fields := strings.Fields(before)
-	if len(fields) == 0 {
+	tail := wordBefore(whole, at)
+	if tail == "" {
 		return false
 	}
-	tail := strings.ToLower(strings.Trim(fields[len(fields)-1], ",;:"))
 	for _, w := range r.ObliqueTriggers {
-		if strings.ToLower(w) == tail {
+		if unicase.ToLower(w) == tail {
 			return true
 		}
 	}
 	return false
 }
 
-// textualDates handles "12 marca 2026", "12. März 2026", "March 12, 2026" — a
+// textualDates handles "12 marca 2026", "12. März 2026", "March 12, 2026": a
 // written month name beside a bare day. The name is the disambiguator, so this
 // runs for every language including English.
 func textualDates(text, language string, r *dateRules) string {
-	if len(r.Months) != 12 {
+	if r.dayFirstRe == nil {
 		return text
 	}
-	names := make([]string, 0, 12)
-	for _, m := range r.Months {
-		names = append(names, regexp.QuoteMeta(m))
-	}
-	joined := strings.Join(names, "|")
-	// Spanish and Portuguese speak a preposition between every part, so the
-	// written form carries it too: "12 de marzo de 2026".
-	infix, yinfix := "", ""
-	if r.DayMonthInfix != "" {
-		infix = `(?:\s+` + regexp.QuoteMeta(r.DayMonthInfix) + `)?`
-	}
-	if r.MonthYearInfix != "" {
-		yinfix = `(?:\s+` + regexp.QuoteMeta(r.MonthYearInfix) + `)?`
-	}
-	dayFirst := regexp.MustCompile(
-		`(?i)([0-3]?[0-9])\.?` + infix + `\s+(` + joined + `)(?:` + yinfix + `\s+([12][0-9]{3}))?`)
-	out := replaceDates(text, dayFirst, func(g []string, at int, whole string) string {
+	out := replaceDates(text, r.dayFirstRe, func(g []string, at int, whole string) string {
 		if !wordBoundaryBefore(whole, at) || !wordBoundaryAfter(whole, at+len(g[0])) {
 			return ""
 		}
@@ -521,7 +562,10 @@ func textualDates(text, language string, r *dateRules) string {
 				rest = append(rest, SayYear(y, language))
 			}
 			prefix := ""
-			if r.DayFirstPrefix != "" {
+			if r.DayFirstPrefix != "" && wordBefore(whole, at) != unicase.ToLower(r.DayFirstPrefix) {
+				// The sentence may already carry the article: "the 3 April
+				// minutes" is a noun phrase whose determiner is written, and a
+				// second one is a stammer.
 				prefix = r.DayFirstPrefix + " "
 			}
 			join := " "
@@ -533,14 +577,10 @@ func textualDates(text, language string, r *dateRules) string {
 		return spokenDate(d, m, y, hasYear, language, isObliqueGo(whole, at, r))
 	})
 
-	// Month-first is an English shape. Reading it in a language that never
-	// writes it would be inventing a construction nobody used.
-	if r.DayFirstInfix == "" {
+	if r.monthFirstRe == nil {
 		return out
 	}
-	monthFirst := regexp.MustCompile(
-		`(?i)(` + joined + `)\s+([0-3]?[0-9])(?:st|nd|rd|th)?,?(?:\s+([12][0-9]{3}))?`)
-	return replaceDates(out, monthFirst, func(g []string, at int, whole string) string {
+	return replaceDates(out, r.monthFirstRe, func(g []string, at int, whole string) string {
 		if !wordBoundaryBefore(whole, at) || !wordBoundaryAfter(whole, at+len(g[0])) {
 			return ""
 		}
@@ -562,18 +602,24 @@ func textualDates(text, language string, r *dateRules) string {
 	})
 }
 
+// wordBoundaryBefore is the lookbehind the four other ports spell `(?<![\p{L}\p{Nd}_])`.
+//
+// Byte-wise ASCII here read `\u00e92` as a boundary and `e2` as not one, so a
+// digit glued to a non-ASCII letter was read aloud in this port and left
+// written in the other four. The rune before the position is what the question
+// is about, so it is decoded rather than indexed.
 func wordBoundaryBefore(s string, at int) bool {
 	if at == 0 {
 		return true
 	}
-	c := s[at-1]
-	return !(c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+	r, _ := utf8.DecodeLastRuneInString(s[:at])
+	return !(r == '_' || isLetterOrDigit(r))
 }
 
 func monthIndexGo(name string, r *dateRules) int {
-	lowered := strings.ToLower(name)
+	lowered := unicase.ToLower(name)
 	for i, candidate := range r.Months {
-		if strings.ToLower(candidate) == lowered {
+		if unicase.ToLower(candidate) == lowered {
 			return i + 1
 		}
 	}
@@ -584,8 +630,9 @@ func monthIndexGo(name string, r *dateRules) int {
 // table for it.
 //
 // Composed rather than enumerated past ninety-nine: the hundreds and above stay
-// cardinal and only the last two digits become an ordinal, so 101st is "one
-// hundred and first".
+// cardinal and only the last two digits become an ordinal, joined by a space
+// and nothing else, so 101st is "one hundred first". The reference spells it
+// the same way.
 func Ordinal(value int, language string) string {
 	r, ok := dates()[language]
 	if !ok || len(r.OrdUnits) == 0 || value < 0 {
@@ -634,11 +681,10 @@ func twoDigitOrdinal(value int, r *dateRules) string {
 // stuck to them: "onest", "fiveth place", "twenty-twond".
 func ExpandOrdinals(text, language string) string {
 	r, ok := dates()[language]
-	if !ok || len(r.OrdSuffixes) == 0 {
+	if !ok || r.ordinalRe == nil {
 		return text
 	}
-	re := regexp.MustCompile(`(?i)([0-9]+)(` + strings.Join(r.OrdSuffixes, "|") + `)`)
-	return replaceDates(text, re, func(g []string, at int, whole string) string {
+	return replaceDates(text, r.ordinalRe, func(g []string, at int, whole string) string {
 		if !wordBoundaryBefore(whole, at) || !wordBoundaryAfter(whole, at+len(g[0])) {
 			return ""
 		}
@@ -652,7 +698,7 @@ func ExpandOrdinals(text, language string) string {
 
 // replaceDates rewrites every match, right to left so earlier offsets stay
 // valid. The callback gets the capture groups (index 0 is the whole match), the
-// match offset, and the string being scanned — the last two because the German
+// match offset, and the string being scanned: the last two because the German
 // oblique test reads the word before the date, and because RE2 cannot express
 // the lookaround Python uses. Returning "" leaves that match exactly as
 // written, which is this module's answer whenever the evidence runs out.

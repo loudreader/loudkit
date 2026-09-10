@@ -22,7 +22,7 @@ final class CarryFromTests: XCTestCase {
 /// stopped being handed to the generator's prefix, every assertion here would
 /// still pass. That half is pinned in Python, by
 /// tests/test_engine.py::TestCrossRequestContext, against a fake generator
-/// that records the context it was given — building an equivalent seam in four
+/// that records the context it was given, building an equivalent seam in four
 /// more languages would cost four engine refactors to re-assert one fact.
     private let prefixTokens = ChunkConfig().prefixTokens
     private let startSpeechToken = AlgorithmConfig().startSpeechToken
@@ -92,7 +92,7 @@ final class CarryFromTests: XCTestCase {
     func testTheWholeInputIsCheckedAndNotOnlyTheSliceThatIsUsed() {
         // An id out of range means the sequence was built wrong. Reporting that
         // only when it happens to land in the last six tokens would make the
-        // failure depend on how long the caller's text happened to be — the
+        // failure depend on how long the caller's text happened to be, the
         // same bad input passing or failing for no reason the caller can see.
         var previous = Array(repeating: 42, count: 100)
         previous[0] = startSpeechToken + 1
@@ -107,5 +107,22 @@ final class CarryFromTests: XCTestCase {
             try Engine.carryFrom(
                 edge, prefixTokens: prefixTokens, startSpeechToken: startSpeechToken),
             edge)
+    }
+}
+
+final class PairCarryTests: XCTestCase {
+    func testEveryParityAndShortTail() throws {
+        for count in 0...13 {
+            for wanted in 0...9 {
+                var end = count - count % 2
+                var start = end - wanted
+                if start % 2 != 0 { start -= 1 }
+                if wanted == 0 { end = 0; start = 0 }
+                let source = Array(0..<count)
+                XCTAssertEqual(try Engine.carryFrom(source, prefixTokens: wanted,
+                                                     startSpeechToken: 6561, decode: "fusion_mtp2"),
+                               Array(source[max(0, start)..<end]))
+            }
+        }
     }
 }

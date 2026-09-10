@@ -1,0 +1,85 @@
+{
+ "generated_by": "tools/make_conformance.py --fixtures-only",
+ "cases": [
+  {
+   "pattern": "*.safetensors",
+   "name": "voices/joe.safetensors",
+   "match": true
+  },
+  {
+   "pattern": "*.safetensors",
+   "name": "loudr-1.safetensors",
+   "match": true
+  },
+  {
+   "pattern": "*.safetensors",
+   "name": "loudr-1.safetensors.part",
+   "match": false
+  },
+  {
+   "pattern": "*.safetensors",
+   "name": "voices/en/nested.safetensors",
+   "match": true
+  },
+  {
+   "pattern": "voices/*",
+   "name": "voices/joe.safetensors",
+   "match": true
+  },
+  {
+   "pattern": "voices/*",
+   "name": "voice.json",
+   "match": false
+  },
+  {
+   "pattern": "onnx/t3_step.onnx",
+   "name": "onnx/t3_step.onnx",
+   "match": true
+  },
+  {
+   "pattern": "onnx/t3_step.onnx",
+   "name": "onnx/t3_step.onnx.bak",
+   "match": false
+  },
+  {
+   "pattern": "manifest.json",
+   "name": "coreml/x.mlpackage/Manifest.json",
+   "match": false
+  },
+  {
+   "pattern": "coreml/vocoder.mlpackage/*",
+   "name": "coreml/vocoder.mlpackage/Data/x",
+   "match": true
+  },
+  {
+   "pattern": "*",
+   "name": "anything/at/all",
+   "match": true
+  },
+  {
+   "pattern": "*.onnx",
+   "name": "onnx/t3.onnx.tmp",
+   "match": false
+  },
+  {
+   "pattern": "onnx/t3_?tep.onnx",
+   "name": "onnx/t3_step.onnx",
+   "match": true
+  },
+  {
+   "pattern": "a?c",
+   "name": "abc",
+   "match": true
+  },
+  {
+   "pattern": "a?c",
+   "name": "ac",
+   "match": false
+  },
+  {
+   "pattern": "ve.safetensors",
+   "name": "ve.safetensors.bak",
+   "match": false
+  }
+ ]
+}

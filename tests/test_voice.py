@@ -10,12 +10,14 @@ says so. These use safetensors directly, so no weights and no torch.
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from loudkit.voice import (
     ENROLMENT_FIRST_WINDOW,
+    ENROLMENT_PAUSE_CUT,
     VOICE_FORMAT_VERSION,
     VoiceProfile,
 )
@@ -32,11 +34,39 @@ def _voice(**overrides: object) -> VoiceProfile:
         "cond_prompt_tokens": rng.integers(0, 6561, size=150).astype(np.int64),
     }
     base.update(overrides)
-    return VoiceProfile(**base)  # type: ignore[arg-type]
+    return VoiceProfile(**base)
 
 
 class TestRoundTrip:
-    def test_all_fields_survive_exactly(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_cropped_enrollment_mel_survives_save(self, tmp_path) -> None:
+        mel = np.arange(80 * 483, dtype=np.float32).reshape(80, 483)[:, :482]
+        assert not mel.flags.c_contiguous
+        original = _voice(prompt_mel=mel)
+        loaded = VoiceProfile.load(original.save(tmp_path / "cropped.safetensors"))
+        np.testing.assert_array_equal(loaded.prompt_mel, mel)
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "speaker_embedding",
+            "flow_embedding",
+            "prompt_tokens",
+            "prompt_mel",
+            "cond_prompt_tokens",
+        ],
+    )
+    def test_strided_tensors_survive_save(self, tmp_path, field: str) -> None:
+        original = _voice()
+        value = getattr(original, field)
+        backing = np.zeros((*value.shape[:-1], value.shape[-1] * 2), dtype=value.dtype)
+        view = backing[..., ::2]
+        view[...] = value
+        assert not view.flags.c_contiguous
+        original = dataclasses.replace(original, **{field: view})
+        loaded = VoiceProfile.load(original.save(tmp_path / "strided.safetensors"))
+        np.testing.assert_array_equal(getattr(loaded, field), value)
+
+    def test_all_fields_survive_exactly(self, tmp_path) -> None:
         original = _voice(name="alice", source_sample_rate=44_100, language="pl")
         path = original.save(tmp_path / "alice.safetensors")
 
@@ -53,7 +83,7 @@ class TestRoundTrip:
         ):
             np.testing.assert_array_equal(getattr(loaded, field), getattr(original, field))
 
-    def test_load_records_the_file_digest(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_load_records_the_file_digest(self, tmp_path) -> None:
         """A loaded profile knows the SHA-256 of the file it came from, and a
         profile that never touched disk carries the empty string."""
         import hashlib
@@ -63,25 +93,25 @@ class TestRoundTrip:
         assert loaded.source_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
         assert _voice().source_sha256 == ""
 
-    def test_load_returns_a_distinct_object(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_load_returns_a_distinct_object(self, tmp_path) -> None:
         original = _voice()
         loaded = VoiceProfile.load(original.save(tmp_path / "v.safetensors"))
         # mutating the loaded profile must not touch the loaded-from file
         assert loaded is not original
 
-    def test_defaults_round_trip(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_defaults_round_trip(self, tmp_path) -> None:
         loaded = VoiceProfile.load(_voice().save(tmp_path / "v.safetensors"))
         assert loaded.source_sample_rate == 24_000
         assert loaded.language == "en"
 
-    def test_path_parent_is_created(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_path_parent_is_created(self, tmp_path) -> None:
         nested = tmp_path / "voices" / "dir"
         path = _voice().save(nested / "v.safetensors")
         assert path.exists()
 
 
 class TestValidation:
-    def test_save_writes_a_recognisable_header(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_save_writes_a_recognisable_header(self, tmp_path) -> None:
         from safetensors import safe_open
 
         path = _voice().save(tmp_path / "v.safetensors")
@@ -94,7 +124,7 @@ class TestValidation:
         assert header["format_version"] == VOICE_FORMAT_VERSION
         assert header["name"] == "voice"
 
-    def test_future_format_version_is_refused(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_future_format_version_is_refused(self, tmp_path) -> None:
         import json
 
         from safetensors.numpy import save_file
@@ -109,12 +139,22 @@ class TestValidation:
         with pytest.raises(ValueError, match="voice format version"):
             VoiceProfile.load(path)
 
-    def test_file_without_a_voice_header_is_refused(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_file_without_a_voice_header_is_refused(self, tmp_path) -> None:
         from safetensors.numpy import save_file
 
         path = tmp_path / "not_a_voice.safetensors"
         save_file({"x": np.zeros(4, np.float32)}, str(path), metadata={"other": "1"})
         with pytest.raises(ValueError, match="voice format version"):
+            VoiceProfile.load(path)
+
+    def test_a_header_that_is_not_an_object_is_refused(self, tmp_path) -> None:
+        """Valid JSON of the wrong shape is still a malformed header, and it
+        used to reach `.get` and crash with an AttributeError."""
+        from safetensors.numpy import save_file
+
+        path = tmp_path / "list_header.safetensors"
+        save_file({"x": np.zeros(4, np.float32)}, str(path), metadata={"voice": "[1, 2]"})
+        with pytest.raises(ValueError, match="expected a JSON object"):
             VoiceProfile.load(path)
 
 
@@ -188,7 +228,7 @@ class TestDegenerateProfilesAreRefused:
             VoiceProfile.load(path)
 
 
-def _open_numpy(path):  # type: ignore[no-untyped-def]
+def _open_numpy(path):
     from safetensors import safe_open
 
     return safe_open(str(path), framework="numpy")
@@ -197,15 +237,10 @@ def _open_numpy(path):  # type: ignore[no-untyped-def]
 class TestTheProfileCarriesItsOwnLanguage:
     """`VoiceProfile.language` is what an omitted `language=` falls back to.
 
-    The field existed, was documented as the voice's own, and `_resolve_language`
-    has always used it — and `enroll()` had no parameter for it, so every cloned
-    voice claimed English by construction. All eighteen shipped profiles said
-    `en`, the Dutch and Polish and Portuguese ones included, so
-    `engine.synthesize(polish_text, tomasz)` read Polish through the English
-    funnel: "Mam twenty-five lat i three point five kilograma."
-
-    Three rounds of review missed it because seeing it means loading a profile,
-    which means having the weights.
+    `_resolve_language` reads the field, so `enroll()` has to record it: a
+    profile that cannot be told its language claims English by construction,
+    and `engine.synthesize(polish_text, tomasz)` then reads Polish through the
+    English funnel, "Mam twenty-five lat i three point five kilograma."
     """
 
     def test_enroll_takes_a_language(self) -> None:
@@ -240,7 +275,7 @@ class TestTheProfileCarriesItsOwnLanguage:
         repo = Path(__file__).resolve().parents[1]
         provenance = repo / "docs" / "voices" / "roster" / "provenance.json"
         voices = _json.loads(provenance.read_text(encoding="utf-8"))
-        assert len(voices) == 20, f"roster holds {len(voices)} voices, expected 20"
+        assert len(voices) == 28, f"roster holds {len(voices)} voices, expected 28"
 
         known_licences = {"CC0-1.0", "CC-BY-4.0"}
         incomplete = []
@@ -275,6 +310,15 @@ class TestTheEnrolmentStrategyIsRecorded:
     def test_it_survives_a_round_trip(self, tmp_path) -> None:
         path = _voice().save(tmp_path / "v.safetensors")
         assert VoiceProfile.load(path).enrolment == ENROLMENT_FIRST_WINDOW
+
+    def test_a_pause_cut_prompt_carries_its_own_label_through_a_round_trip(
+        self, tmp_path
+    ) -> None:
+        """`loudkit clone` cuts the prompt at a pause; the label must say so, or the
+        check above would wave through a voice made a different way."""
+        cut = dataclasses.replace(_voice(), enrolment=ENROLMENT_PAUSE_CUT)
+        path = cut.save(tmp_path / "v.safetensors")
+        assert VoiceProfile.load(path).enrolment == ENROLMENT_PAUSE_CUT
 
     def test_a_profile_without_the_field_reads_as_the_original_strategy(self, tmp_path) -> None:
         """Every voice enrolled before the field existed was cut this way.
@@ -319,3 +363,62 @@ class TestTheEnrolmentStrategyIsRecorded:
         """
         with pytest.raises(ValueError, match="enrolment strategy"):
             dataclasses.replace(_voice(), enrolment="best-window")
+
+
+class TestAHeaderValueOfTheWrongTypeIsRefused:
+    """`str()` and `int()` coerce; a voice header is JSON and does not.
+
+    `language: 5` read as the language id `"5"`, and language selects the text
+    funnel, so a voice would have been read through a funnel nobody chose. The
+    manifest reader refuses the same shape for the same reason.
+    """
+
+    @staticmethod
+    def _with_header(tmp_path, header: dict) -> Path:
+        import json
+
+        from safetensors.numpy import save_file
+
+        path = _voice().save(tmp_path / "v.safetensors")
+        tensors = {}
+        with _open_numpy(path) as f:
+            for k in f.keys():  # noqa: SIM118 — safe_open is not iterable
+                tensors[k] = f.get_tensor(k)
+        full = {"format_version": VOICE_FORMAT_VERSION, "name": "v", **header}
+        save_file(tensors, str(path), metadata={"voice": json.dumps(full)})
+        return path
+
+    @pytest.mark.parametrize("bad", [5, True, None, ["en"], {"id": "en"}])
+    def test_a_non_string_language(self, tmp_path, bad: object) -> None:
+        path = self._with_header(tmp_path, {"language": bad})
+        with pytest.raises(ValueError, match="'language' must be a string"):
+            VoiceProfile.load(path)
+
+    @pytest.mark.parametrize("key", ["name", "enrolment"])
+    def test_the_other_two_strings(self, tmp_path, key: str) -> None:
+        path = self._with_header(tmp_path, {key: 5})
+        with pytest.raises(ValueError, match=f"{key}' must be a string"):
+            VoiceProfile.load(path)
+
+    @pytest.mark.parametrize("bad", [True, "24000", None, 24000.5])
+    def test_a_non_whole_sample_rate(self, tmp_path, bad: object) -> None:
+        path = self._with_header(tmp_path, {"source_sample_rate": bad})
+        with pytest.raises(ValueError, match="source_sample_rate"):
+            VoiceProfile.load(path)
+
+    def test_a_boolean_format_version(self, tmp_path) -> None:
+        """`true` is an int subclass in Python, so it read as version one and
+        the file loaded as a voice."""
+        path = self._with_header(tmp_path, {"format_version": True})
+        with pytest.raises(ValueError, match="format_version"):
+            VoiceProfile.load(path)
+
+    def test_the_shipped_header_still_round_trips(self, tmp_path) -> None:
+        path = self._with_header(
+            tmp_path,
+            {"language": "pl", "enrolment": ENROLMENT_PAUSE_CUT, "source_sample_rate": 16_000},
+        )
+        loaded = VoiceProfile.load(path)
+        assert loaded.language == "pl"
+        assert loaded.enrolment == ENROLMENT_PAUSE_CUT
+        assert loaded.source_sample_rate == 16_000

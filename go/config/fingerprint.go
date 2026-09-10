@@ -4,14 +4,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/loudreader/loudkit/go/internal/pyfmt"
 )
 
 // FingerprintSchema is bumped only when the *set* of hashed fields changes,
 // never when a value does. Adding a field with a default must not
-// re-fingerprint an algorithm that did not change — a check that cries wolf on
+// re-fingerprint an algorithm that did not change: a check that cries wolf on
 // every upgrade is a check people learn to override.
 const FingerprintSchema = 1
 
@@ -19,14 +20,14 @@ const FingerprintSchema = 1
 //
 // Every other cross-language check in this project compares a behaviour
 // somebody thought to compare: the speech funnel because there are 30 fixture
-// cases for it, the splitter because there are 18. This compares the *whole*
+// cases for it, the splitter because there are 48. This compares the *whole*
 // algorithm configuration in one string, so a field nobody wrote a test for
 // still cannot drift silently.
 //
 // The failure mode is concrete: an euler_grid parsed by one port and ignored
 // by another; a silence_token_ids that accepts a JSON string and iterates its
 // characters; a chunking.prefix_tokens read from the manifest by some ports and
-// guessed by others — each invisible to behaviour comparison alone. This
+// guessed by others: each invisible to behaviour comparison alone. This
 // finds all of them at once, and the next one for free.
 //
 // Built by hand rather than through encoding/json: the byte-for-byte output is
@@ -34,7 +35,7 @@ const FingerprintSchema = 1
 // orders a map between releases. Three rules make it portable:
 //
 //   - floats are their shortest round-tripping decimal, as a JSON *string*.
-//     Python emits repr(float) — "0.8", not 0.8 — quoted, so no JSON parser
+//     Python emits repr(float) ("0.8", not 0.8) quoted, so no JSON parser
 //     anywhere gets to re-render the number with its own idea of precision.
 //   - keys are sorted, at every level.
 //   - only schema-known fields are hashed, with an explicit schema version.
@@ -43,26 +44,29 @@ func CanonicalForm(cfg AlgorithmConfig) string {
 	for _, sep := range cfg.Chunking.SplitOn {
 		splitOn = append(splitOn, jsonString(sep))
 	}
+	// Keys sorted, as everywhere in this form: "abbreviations" before
+	// "cap_resplit" before "enabled", and "mid_sentence_period" between
+	// "max_tokens" and "prefix_tokens". Five canonical forms are hand-written and a new field's
+	// position in that order is part of the contract.
+	abbreviations := make([]string, 0, len(cfg.Chunking.Abbreviations))
+	for _, a := range cfg.Chunking.Abbreviations {
+		abbreviations = append(abbreviations, jsonString(a))
+	}
 	chunking := fmt.Sprintf(
-		`{"enabled":%t,"max_tokens":%d,"prefix_tokens":%d,"split_on":[%s]}`,
-		cfg.Chunking.Enabled, cfg.Chunking.MaxTokens, cfg.Chunking.PrefixTokens,
+		`{"abbreviations":[%s],"cap_resplit":%s,"enabled":%t,"max_tokens":%d,`+
+			`"mid_sentence_period":%s,"prefix_tokens":%d,"split_on":[%s]}`,
+		strings.Join(abbreviations, ","), jsonString(cfg.Chunking.CapResplit),
+		cfg.Chunking.Enabled, cfg.Chunking.MaxTokens,
+		jsonString(cfg.Chunking.MidSentencePeriod), cfg.Chunking.PrefixTokens,
 		strings.Join(splitOn, ","))
 
-	// Sorted, because the manifest's order is whatever the packer wrote and
-	// the hash must not depend on it.
-	silence := append([]int(nil), cfg.Sampling.SilenceTokenIds...)
-	sort.Ints(silence)
-	ids := make([]string, 0, len(silence))
-	for _, id := range silence {
-		ids = append(ids, strconv.Itoa(id))
-	}
 	sampling := fmt.Sprintf(
 		`{"max_new_tokens":%d,"min_p":%s,"min_tokens_floor":%d,`+
 			`"min_tokens_text_ratio":%s,"repetition_penalty":%s,`+
 			`"silence_token_ids":[%s],"temperature":%s}`,
 		cfg.Sampling.MaxNewTokens, jsonFloat(cfg.Sampling.MinP),
 		cfg.Sampling.MinTokensFloor, jsonFloat(cfg.Sampling.MinTokensTextRatio),
-		jsonFloat(cfg.Sampling.RepetitionPenalty), strings.Join(ids, ","),
+		jsonFloat(cfg.Sampling.RepetitionPenalty), jsonInts(cfg.Sampling.SilenceTokenIds),
 		jsonFloat(cfg.Sampling.Temperature))
 
 	window := fmt.Sprintf(
@@ -72,12 +76,13 @@ func CanonicalForm(cfg AlgorithmConfig) string {
 		jsonOptInt(cfg.Window.StaticLength), jsonOptInt(cfg.Window.StaticPromptTokens))
 
 	// Keys sorted, as everywhere in this form. The detectors remove tokens, so
-	// a port using a different threshold produces different audio — exactly the
+	// a port using a different threshold produces different audio: exactly the
 	// silent drift a whole-config hash exists to catch.
 	pp := cfg.Postprocess
 	postprocess := fmt.Sprintf(
 		`{"ceiling_slack_tokens":%d,"ceiling_speech_per_text_token":%s,`+
 			`"desperation_band_floor":%d,"desperation_band_ratio":%s,`+
+			`"desperation_min_keep_per_text_token":%s,`+
 			`"desperation_min_text_tokens":%d,"desperation_speech_per_text_token":%s,`+
 			`"dropout_min_tokens":%d,`+
 			`"echo_strong_eos_probability":%s,"echo_strong_max_tail":%d,`+
@@ -86,13 +91,17 @@ func CanonicalForm(cfg AlgorithmConfig) string {
 			`"ended_tail_blip_max":%d,"ended_tail_keep":%d,`+
 			`"ended_tail_silence_run":%d,"ended_tail_word_max":%d,`+
 			`"filler_max_speech_after_run":%d,"filler_min_eos_probability":%s,`+
-			`"mode":%s,"pacing_tolerance":%s,`+
+			`"mode":%s,"pacing_tolerance":%s,"quiet_render_ids":[%s],`+
 			`"repetition_max_period":%d,"repetition_min_cycles":%d,`+
-			`"repetition_min_span":%d,"retry_max_attempts":%d,`+
+			`"repetition_min_span":%d,"repetition_resume":%s,`+
+			`"repetition_silence":%s,`+
+			`"retry_max_attempts":%d,`+
+			`"silence_render_ids":[%s],"stall_run_tokens":%d,`+
 			`"trailing_filler_threshold":%s,`+
 			`"trailing_silence_run_tokens":%d}`,
 		pp.CeilingSlackTokens, jsonFloat(pp.CeilingSpeechPerTextToken),
 		pp.DesperationBandFloor, jsonFloat(pp.DesperationBandRatio),
+		jsonFloat(pp.DesperationMinKeepPerTextToken),
 		pp.DesperationMinTextTokens, jsonFloat(pp.DesperationSpeechPerTextToken),
 		pp.DropoutMinTokens,
 		jsonFloat(pp.EchoStrongEosProbability), pp.EchoStrongMaxTail,
@@ -101,9 +110,12 @@ func CanonicalForm(cfg AlgorithmConfig) string {
 		pp.EndedTailBlipMax, pp.EndedTailKeep,
 		pp.EndedTailSilenceRun, pp.EndedTailWordMax,
 		pp.FillerMaxSpeechAfterRun, jsonFloat(pp.FillerMinEosProbability),
-		jsonString(pp.Mode), jsonFloat(pp.PacingTolerance),
+		jsonString(pp.Mode), jsonFloat(pp.PacingTolerance), jsonInts(pp.QuietRenderIds),
 		pp.RepetitionMaxPeriod, pp.RepetitionMinCycles,
-		pp.RepetitionMinSpan, pp.RetryMaxAttempts,
+		pp.RepetitionMinSpan, jsonString(pp.RepetitionResume),
+		jsonString(pp.RepetitionSilence),
+		pp.RetryMaxAttempts,
+		jsonInts(pp.SilenceRenderIds), pp.StallRunTokens,
 		jsonFloat(pp.TrailingFillerThreshold),
 		pp.TrailingSilenceRunTokens)
 
@@ -119,12 +131,12 @@ func CanonicalForm(cfg AlgorithmConfig) string {
 	// The funnel's identity travels in the fingerprint: its code version, and
 	// the digest of the grammar file this port reads. Each implementation hashes
 	// its *own* copy, so a port whose data has drifted computes a different
-	// fingerprint and the engine refuses to start — which is how the drift is
+	// fingerprint and the engine refuses to start, which is how the drift is
 	// caught, rather than by someone eventually hearing it.
 	// Go has no field defaults, so a config built as a literal arrives with an
 	// empty Text. An empty digest is never a real one, so it means "unset"
 	// rather than "different", and filling it here keeps every construction
-	// path — literal, manifest, test — hashing the same algorithm.
+	// path (literal, manifest, test) hashing the same algorithm.
 	textCfg := cfg.Text
 	if textCfg.Recipe == "" {
 		textCfg.Recipe = TextRecipe
@@ -135,12 +147,20 @@ func CanonicalForm(cfg AlgorithmConfig) string {
 	text := fmt.Sprintf(`{"grammar":%s,"recipe":%s}`,
 		jsonString(textCfg.Grammar), jsonString(textCfg.Recipe))
 
+	decode := ""
+	if cfg.DecodeMode != "" && cfg.DecodeMode != DecodeSingle {
+		decode = `"decode_mode":` + jsonString(cfg.DecodeMode) + ","
+	}
+	fade := ""
+	if cfg.EdgeFade() != 0.005 {
+		fade = `"edge_fade_seconds":` + jsonFloat(cfg.EdgeFade()) + ","
+	}
 	body := fmt.Sprintf(
-		`{"chunking":%s,"euler_grid":%s,"euler_steps":%d,"guidance":%s,`+
+		`{"chunking":%s,%s%s"euler_grid":%s,"euler_steps":%d,"guidance":%s,`+
 			`"guidance_rate":%s,"postprocess":%s,"recipe_version":%s,"sample_rate":%d,`+
 			`"sampling":%s,"speech_vocab_size":%d,"start_speech_token":%d,`+
 			`"stop_speech_token":%d,"text":%s,"token_rate_hz":%s,"window":%s}`,
-		chunking, eulerGrid, cfg.EulerSteps, jsonString(cfg.Guidance),
+		chunking, decode, fade, eulerGrid, cfg.EulerSteps, jsonString(cfg.Guidance),
 		jsonFloat(cfg.GuidanceRate), postprocess, jsonString(cfg.RecipeVersion),
 		cfg.SampleRate, sampling, cfg.SpeechVocabSize, cfg.StartSpeech,
 		cfg.StopSpeech, text, jsonFloat(cfg.TokenRateHz), window)
@@ -151,7 +171,7 @@ func CanonicalForm(cfg AlgorithmConfig) string {
 // Fingerprint is the first 16 hex characters of SHA-256 over CanonicalForm.
 //
 // Two engines whose fingerprints differ are computing different things,
-// whatever their outputs happen to sound like — which is the point: the
+// whatever their outputs happen to sound like, which is the point: the
 // guidance defect this project was built around produced plausible audio on
 // both sides of the mismatch, so no listening test could have found it.
 func Fingerprint(cfg AlgorithmConfig) string {
@@ -162,24 +182,18 @@ func Fingerprint(cfg AlgorithmConfig) string {
 // jsonFloat renders a float the way Python's repr() does, as a JSON string.
 //
 // 'g' with -1 precision gives the shortest decimal that round-trips, which is
-// what repr() gives — except that Go renders 25.0 as "25" while Python renders
+// what repr() gives: except that Go renders 25.0 as "25" while Python renders
 // it "25.0". That one character is the difference between a matching
 // fingerprint and a mysterious one.
 func jsonFloat(v float64) string {
 	return jsonString(pyFloat(v))
 }
 
-// pyFloat is the repr() rendering itself, for the log lines that print a float
-// unquoted. Shared with jsonFloat so the two cannot drift: a describe line that
-// says temp=0.8 and a canonical form that says "0.80" would send a reader
-// hunting for a difference that is not there.
-func pyFloat(v float64) string {
-	s := strconv.FormatFloat(v, 'g', -1, 64)
-	if !strings.ContainsAny(s, ".eEni") { // no point, no exponent, not inf/nan
-		s += ".0"
-	}
-	return s
-}
+// pyFloat is the repr() rendering itself, for the log lines and the refusals
+// that print a float unquoted. Shared with jsonFloat so the two cannot drift:
+// a describe line that says temp=0.8 and a canonical form that says "0.80"
+// would send a reader hunting for a difference that is not there.
+func pyFloat(v float64) string { return pyfmt.Float(v) }
 
 // jsonString escapes the way encoding/json escapes, minus the HTML escaping
 // that json.Marshal applies by default and Python's json.dumps does not.
@@ -199,10 +213,21 @@ func jsonString(s string) string {
 		case '\r':
 			b.WriteString(`\r`)
 		default:
+			// Python's json.dumps defaults to ensure_ascii=True, so every
+			// non-ASCII character in the canonical form is a \uXXXX escape and
+			// an astral one is a surrogate pair. No hashed string had a
+			// non-ASCII character in it until `chunking.abbreviations` carried
+			// "\u015bw", and the raw UTF-8 spelling hashed differently from the
+			// reference in every port at once.
 			if r < 0x20 {
 				fmt.Fprintf(&b, `\u%04x`, r)
-			} else {
+			} else if r < 0x7f {
 				b.WriteRune(r)
+			} else if r > 0xffff {
+				v := r - 0x10000
+				fmt.Fprintf(&b, `\u%04x\u%04x`, 0xd800+(v>>10), 0xdc00+(v&0x3ff))
+			} else {
+				fmt.Fprintf(&b, `\u%04x`, r)
 			}
 		}
 	}
@@ -215,4 +240,20 @@ func jsonOptInt(v *int) string {
 		return "null"
 	}
 	return strconv.Itoa(*v)
+}
+
+// jsonInts renders an id list for the canonical form, in the order the
+// manifest gave it.
+//
+// Not sorted. Python, Rust and Swift hash the list as written, and nothing
+// sorts on the way in, so sorting here gave one manifest two fingerprints
+// depending on which port was asked. The fingerprint is the mechanism that
+// catches cross-port drift; it cannot be the thing that drifts. The shipped
+// 0.1.1 lists happen to be ascending, so the shipped number does not move.
+func jsonInts(ids []int) string {
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, strconv.Itoa(id))
+	}
+	return strings.Join(parts, ",")
 }

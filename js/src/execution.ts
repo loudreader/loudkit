@@ -2,7 +2,7 @@
  * Which onnxruntime execution provider runs the exported graphs.
  *
  * The execution layer, mirroring `loudkit.config.ExecutionConfig`: it decides
- * how fast, and — unlike the algorithm layer — a GPU provider is allowed to
+ * how fast, and, unlike the algorithm layer, a GPU provider is allowed to
  * move the last bits. Nothing here is part of the fingerprint.
  *
  * Before this, every port asked onnxruntime for nothing and got the CPU
@@ -23,7 +23,7 @@ export const ONNX_PROVIDERS = ["auto", "cpu", "cuda", "coreml", "directml"] as c
 
 export type ONNXProvider = (typeof ONNX_PROVIDERS)[number];
 
-/** A provider that names hardware — what `"auto"` resolves to. */
+/** A provider that names hardware: what `"auto"` resolves to. */
 export type ResolvedONNXProvider = Exclude<ONNXProvider, "auto">;
 
 /**
@@ -33,7 +33,7 @@ export type ResolvedONNXProvider = Exclude<ONNXProvider, "auto">;
  */
 export interface ExecutionOptions {
   /**
-   * Execution provider for every ONNX graph. `"auto"` — the default — takes
+   * Execution provider for every ONNX graph. `"auto"`, the default, takes
    * the best one this build and machine offer. An explicit value that is not
    * available is an error, never a quiet downgrade to CPU: a benchmark row
    * that says `cuda` and ran on CPU is the failure this option exists to
@@ -45,13 +45,14 @@ export interface ExecutionOptions {
 /**
  * The order `"auto"` searches. Not the same list as {@link ONNX_PROVIDERS},
  * which is a vocabulary and carries no preference.
+ *
+ * `auto` prefers a provider only where a measurement says it is faster. CoreML
+ * EP measured 0.66x against the CPU provider's 1.36x on an M3 Pro, cost 25s of
+ * session load against 2s, and moved the token stream at index 41
+ * (docs/benchmarks.md). DirectML has never been run by this project. Both stay
+ * selectable by name; neither is a default. CUDA leads until it is measured,
+ * and drops out the same way if it loses.
  */
-// auto prefers a provider only where a measurement says it is faster.
-// CoreML EP measured 0.66x against the CPU provider's 1.36x on an M3 Pro,
-// cost 25s of session load against 2s, and moved the token stream at index
-// 41 (docs/benchmarks.md). DirectML has never been run by this project.
-// Both stay selectable by name; neither is a default. CUDA leads until it
-// is measured, and drops out the same way if it loses.
 const REPORT_ORDER: readonly ResolvedONNXProvider[] = ["cuda", "coreml", "directml", "cpu"];
 
 // What `auto` is willing to choose, which is narrower than what the build
@@ -76,7 +77,7 @@ const BY_ORT_BACKEND = new Map<string, ResolvedONNXProvider>(
  * missing one reads.
  *
  * onnxruntime-node ships one prebuilt binary per platform and arch, and which
- * providers that binary carries is fixed at build time — there is no separate
+ * providers that binary carries is fixed at build time: there is no separate
  * npm package to install for CUDA or DirectML, so the honest advice is the
  * platform matrix plus "build from source". CUDA is the one exception worth
  * naming: the binding carries it on linux/x64, but the EP's own shared
@@ -86,7 +87,7 @@ const BY_ORT_BACKEND = new Map<string, ResolvedONNXProvider>(
 const PROVENANCE: Record<ResolvedONNXProvider, string> = {
   cpu:
     "every onnxruntime-node build carries the CPU provider, so a build that does not " +
-    "is damaged — reinstall onnxruntime-node",
+    "is damaged. Reinstall onnxruntime-node",
   cuda:
     "CUDA is in the linux/x64 prebuilt binary only (CUDA 12), and the EP's libraries are " +
     "fetched by the package's postinstall step, which `--onnxruntime-node-install=skip` " +
@@ -101,7 +102,7 @@ const PROVENANCE: Record<ResolvedONNXProvider, string> = {
  * The build is asked rather than guessed from `process.platform`: the platform
  * says which prebuilt binary was downloaded, not what a locally built binding
  * was compiled with. Backends onnxruntime reports that loudkit has no name for
- * (`webgpu`, `tensorrt`) are dropped — a name outside the shared vocabulary
+ * (`webgpu`, `tensorrt`) are dropped: a name outside the shared vocabulary
  * cannot be asked for, so listing it would only make the error longer.
  *
  * Takes the backend list as an argument so the resolution and its error can be
@@ -151,8 +152,8 @@ const COREML_REFUSED =
  *
  * One element for an explicit request, because an explicit request has no
  * fallback. For `"auto"` the whole available preference order, so that a
- * provider the build offers but the machine cannot actually run — a CUDA
- * binding whose EP libraries were never downloaded — costs a warning rather
+ * provider the build offers but the machine cannot actually run (a CUDA
+ * binding whose EP libraries were never downloaded) costs a warning rather
  * than a failed load. Falling back is `"auto"`'s job and only `"auto"`'s; the
  * fallback itself lives in `openSessions`, which is where a session actually
  * gets opened.
@@ -174,7 +175,7 @@ export function resolveOnnxProvider(
     if (available.length === 0) {
       throw new Error(
         "onnxruntime-node reports no execution provider loudkit can use. Every build " +
-          "carries the CPU provider, so this one is damaged — reinstall onnxruntime-node."
+          "carries the CPU provider, so this one is damaged. Reinstall onnxruntime-node."
       );
     }
     return AUTO_PREFERENCE.filter((p) => available.includes(p));

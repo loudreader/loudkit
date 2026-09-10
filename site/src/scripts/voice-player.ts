@@ -13,8 +13,10 @@
 */
 const player = new Audio();
 let current: HTMLButtonElement | null = null;
+let playback = 0;
 
-function stop() {
+export function stop() {
+  playback++;
   player.pause();
   if (current) {
     current.classList.remove('is-playing');
@@ -35,13 +37,19 @@ document.addEventListener('click', (event) => {
   stop();
   if (wasCurrent) return;
 
-  button.dataset.label = button.getAttribute('aria-label') ?? 'Play';
+  button.dataset.label ??= button.getAttribute('aria-label') ?? 'Play';
   player.src = button.dataset.src ?? '';
   player.currentTime = 0;
-  void player.play();
   button.classList.add('is-playing');
   button.setAttribute('aria-label', `Stop ${button.dataset.name ?? ''}`);
   current = button;
+  button.removeAttribute('title');
+  const request = ++playback;
+  void player.play().catch(() => {
+    // Switching voices aborts the previous play promise; it must not stop the new one.
+    if (request !== playback) return;
+    stop();
+    button.title = 'Audio could not play. Press play to retry.';
+    button.setAttribute('aria-label', 'Audio could not play. Press play to retry.');
+  });
 });
-
-export {};

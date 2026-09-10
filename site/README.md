@@ -71,9 +71,8 @@ sees real link nodes.
 One rule, in `routeId()`: drop the `docs/` prefix, lowercase the filename, turn
 underscores into hyphens. `docs/reference/errors.md` becomes
 `/loudkit/reference/errors/` and `docs/MODEL_CARD.md` becomes
-`/loudkit/model-card/`. Two files are renamed by hand because they are indexes
-rather than pages named "README": `docs/README.md` is `/loudkit/overview/` and
-`docs/guides/README.md` is `/loudkit/guides/`.
+`/loudkit/model-card/`. One file is renamed by hand because it is the index
+rather than a page named "README": `docs/README.md` is `/loudkit/overview/`.
 
 `docs/coreml-execution.md` is excluded by name. It is gitignored — the shipped
 Apple execution path is not part of this release — so it exists on some working
@@ -124,3 +123,13 @@ rather than a squeeze.
 - **MDX and Starlight's components** are installed and working. The landing
   page uses `<Tabs>` for the five install commands, which is the shape the
   five-language examples will want when they are written.
+
+## Voice gallery data
+
+`docs/voices/roster/provenance.json` records the included model voices.
+`docs/voices/preview/catalog.json` supplies eight standalone English preview profiles
+and shared comparison samples for all ten English voices. The gallery merges these
+records by name; preview status never changes the release roster.
+`tools/build_voices_md.py` reads the same records for the documentation table.
+The header and favicon use `assets/logo-mark-flat.png`, a transparent flat variant
+of the repository’s original brand mark. The wordmark in README remains unchanged.

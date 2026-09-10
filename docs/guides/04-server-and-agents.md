@@ -8,22 +8,23 @@ engine:
   process: loudkit's own REST routes, and OpenAI's
   `POST /v1/audio/speech`;
 - a **gRPC service**
-  ([`proto/loudkit.proto`](../../proto/loudkit.proto), `loudkit grpc`);
-- an **MCP server** for agents (`loudkit mcp`);
+  ([`proto/loudkit.proto`](../../proto/loudkit.proto), `loudkit serve --grpc`);
+- an **MCP server** for agents (`loudkit serve --mcp`);
 - a **Speech Dispatcher module**
   ([`integrations/speech-dispatcher/`](../../integrations/speech-dispatcher/)),
   which forwards to a running `loudkit serve` and makes loudkit a voice for
-  every Linux application that speaks -- Orca, Firefox, `spd-say`.
+  every Linux application that speaks: Orca, Firefox, `spd-say`.
 
-HTTP, gRPC and Speech Dispatcher are supported. MCP is a preview: `loudkit mcp`
-runs but is not one of the eight commands `loudkit --help` lists.
+One command starts any of the first three: `loudkit serve` speaks HTTP, and
+`--grpc` or `--mcp` picks the other transport. HTTP, gRPC and Speech Dispatcher
+are supported; MCP is a preview.
 None of them holds **a synthesis path of its own**. Each builds an `Engine` and
 calls it, so a request cannot reach code the library tests do not cover.
 
 ```bash
-pip install "loudkit[server]"    # REST, and the OpenAI-compatible route with it
-pip install "loudkit[mcp]"       # MCP (pulls the server's engine too)
-pip install "loudkit[grpc]"      # gRPC
+pip install "loudkit[server,hub]"    # REST, and the OpenAI-compatible route with it
+pip install "loudkit[mcp,hub]"       # MCP (pulls the server's engine too)
+pip install "loudkit[grpc,hub]"      # gRPC
 ```
 
 ## Scope
@@ -63,12 +64,11 @@ something that authenticates and terminates TLS, or keep it on loopback.
 ## The REST server
 
 ```bash
-loudkit serve --checkpoint loudr-1.safetensors \
-    --voices voices --port 8765
+loudkit serve --checkpoint loudreader/loudr-1 --port 8765
 ```
 
-Binds to localhost. The voice library is a directory, and a request names a voice
-**by name**, not by path. Anyone who reaches the port can speak in any voice on
+Binds to localhost and uses the included voices. Pass `--voices <directory>`
+to use a directory of your own profiles. Requests select a voice **by name**. Anyone who reaches the port can speak in any voice on
 disk, but cannot read arbitrary files.
 
 The API is under `/v1`: `/v1/voices`, `/v1/synthesize`, `/v1/synthesize/stream`.
@@ -101,6 +101,16 @@ Three bounds are enforced rather than described:
   the answer is `503` with `Retry-After`. An unbounded queue turns a slow engine
   into unbounded memory, with every client still holding a connection.
 
+Before it reports ready the server renders once in the first voice it finds and
+throws the audio away, so the first real request does not pay for it. The line
+`warm: first-use costs paid on voice '<name>'` goes to stderr and says it
+happened and how long it took. `--grpc` and `--mcp` do the same.
+
+Put `LOUDKIT_NO_WARM` in the environment to skip it and start sooner. It is a
+switch, not a boolean: any value counts, `LOUDKIT_NO_WARM=0` included, so
+unset it rather than setting it to zero when you want the warm-up back. A
+warm-up that fails prints why and the server starts anyway.
+
 ### One-shot synthesis
 
 ```bash
@@ -114,7 +124,7 @@ The headers describe the audio in the body:
 X-Loudkit-Duration      1.96
 X-Loudkit-Tokens        49
 X-Loudkit-Sample-Rate   24000
-X-Loudkit-Fingerprint   79f71f5821477353
+X-Loudkit-Fingerprint   <16 hex digits naming the algorithm build>
 X-Loudkit-Truncated     false
 X-Loudkit-Continuation  312,4088,77,1901,55,640
 ```
@@ -162,7 +172,7 @@ Past that, `422`. Full contract in
 **Omit `language` and the voice decides.** Left out, the request is read in the
 language the voice was enrolled in, falling back to `en` for a profile that
 carries none. The chain is
-[the same everywhere](../reference/preprocess.md#which-language-this-layer-runs-as), and
+[the same everywhere](../design/preprocess.md#which-language-this-layer-runs-as), and
 the server does not have a copy of it. Name a `language` only for cross-lingual
 synthesis, such as an English voice reading Polish text.
 
@@ -182,7 +192,10 @@ curl -N -X POST localhost:8765/v1/synthesize/stream -H 'Content-Type: applicatio
 ```
 
 Each event is a JSON object with the chunk's audio in base64 plus its
-`media_type`, duration, token count and `truncated`. The final event is
+`media_type`, duration, token count, `truncated`, `sample_rate` and
+`fingerprint`. The rate rides on every chunk, and on the response as
+`X-Loudkit-Sample-Rate`, because raw `pcm16` frames state it nowhere
+themselves. The final event is
 `{"done": true, ...}` and carries the aggregate `truncated` across every chunk,
 so a client that reads only the terminal event still learns that something was
 cut off. Streaming is delivery, not a second synthesis: it is the engine's
@@ -222,14 +235,24 @@ within one step. That is what makes barge-in possible for a voice agent:
 interrupt the speaker and the GPU is free within one decode step, not at the
 end of the current ~10 s chunk. A kernel already running is not interrupted.
 
+`/v1/synthesize` does the same. It has one response and no chunk boundary, so
+a client that hangs up used to be rendered for to the last token while everyone
+else waited on the engine. Both routes now stop within one decode step.
+
+A client that stays connected and stops *reading* is not a disconnect, and no
+poll can see it: the write blocks, the response never ends, and the engine slot
+is never released. Both the HTTP stream and the gRPC one are capped at ten
+minutes of wall clock from the moment they take the engine, which is far longer
+than any real passage.
+
 ## The MCP server (preview)
 
-`loudkit mcp` is registered and runnable, and it is not part of the advertised
-surface. Any MCP-aware agent (Claude Code, Cursor, Cline, and so on) can speak
-in a cloned voice:
+`loudkit serve --mcp` speaks the Model Context Protocol on stdio, so any
+MCP-aware agent (Claude Code, Cursor, Cline, and so on) can speak in a cloned
+voice:
 
 ```bash
-loudkit mcp --checkpoint loudr-1.safetensors --voices voices
+loudkit serve --mcp --checkpoint loudreader/loudr-1
 ```
 
 Three tools ship: `list_voices`,
@@ -327,7 +350,7 @@ The same engine behind a typed schema, for clients generated from
 [`proto/loudkit.proto`](../../proto/loudkit.proto):
 
 ```bash
-loudkit grpc --checkpoint loudr-1.safetensors --voices voices
+loudkit serve --grpc --checkpoint loudreader/loudr-1
 ```
 
 Four methods: `Synthesize`, `SynthesizeStream`, `Describe`, `ListVoices`.
@@ -352,8 +375,8 @@ The contract, in the order a request meets it:
   clients cap a message at 4 MiB. The preflight estimates the reply from the
   text as it will be spoken, after normalization, because the funnel expands:
   a thousand characters of digits become about five thousand characters of
-  number words. It also reserves headroom for the WAV header, the provenance
-  manifest and protobuf framing. The refusal names `SynthesizeStream`, which
+  number words. It also reserves headroom for the WAV header, the Content
+  Credentials box and protobuf framing. The refusal names `SynthesizeStream`, which
   has no such ceiling.
 * **Cancelling a call stops the work, on both RPCs.** A cancel and an expired
   deadline both set the flag the engine polls on every token decode step.
@@ -387,10 +410,11 @@ are identical to calling the engine directly, and the MCP tool, the gRPC service
 and the OpenAI-compatible route all resolve through the same `render_bytes`. One
 engine, four transports, one path.
 
-## Next
-
-Measure your hardware, stage by stage.
-
 > Behind a reverse proxy every client shares the proxy's address, so the
 > per-client rate limiter collapses into one global bucket. Give the proxy its
 > own per-client limit.
+
+## Next
+
+[Troubleshooting](../reference/troubleshooting.md) has the server section's
+usual failures and their fixes.

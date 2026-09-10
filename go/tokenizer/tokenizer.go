@@ -1,4 +1,4 @@
-// Package tokenizer implements the grapheme BPE tokenizer — a bit-parity port
+// Package tokenizer implements the grapheme BPE tokenizer: a bit-parity port
 // of loudkit's frontend over the HF tokenizers.json format.
 //
 // The algorithm mirrors the JS port (@huggingface/tokenizers) exactly:
@@ -58,7 +58,15 @@ func ParseJSON(path string) (*TokenizerJSON, error) {
 		return nil, fmt.Errorf("%s: bad tokenizer JSON: %w", path, err)
 	}
 	t := &TokenizerJSON{}
-	model, _ := raw["model"].(map[string]interface{})
+	// Refused, not comma-ok: a nil model map answers every index below
+	// with a zero value, so the vocabulary stays empty and the tokenizer emits
+	// unk id 0 for a whole passage with no error anywhere. Python refuses such
+	// a file at load, and a library reports bad input rather than rendering it.
+	model, ok := raw["model"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("%s: no model block (got %T); not a tokenizer.json",
+			path, raw["model"])
+	}
 	t.Model.Type, _ = model["type"].(string)
 	t.Model.UnkToken, _ = model["unk_token"].(string)
 	t.Model.ContinuingSubwordPrefix, _ = model["continuing_subword_prefix"].(string)
@@ -142,7 +150,6 @@ func boolVal(x interface{}) bool {
 // Tokenizer is a loaded, runnable tokenizer.
 type Tokenizer struct {
 	vocab     map[string]int
-	unkToken  string
 	unkID     int
 	merges    map[[2]string]int
 	addedMap  map[string]int
@@ -154,7 +161,6 @@ type Tokenizer struct {
 func New(t *TokenizerJSON) *Tokenizer {
 	tk := &Tokenizer{
 		vocab:     t.Model.Vocab,
-		unkToken:  t.Model.UnkToken,
 		merges:    map[[2]string]int{},
 		addedMap:  map[string]int{},
 		endOfWord: t.Model.EndOfWordSuffix,
@@ -256,8 +262,10 @@ func (t *Tokenizer) bpe(token string) []string {
 }
 
 // whitespaceRegex implements the Whitespace pre-tokenizer: \w+|[^\w\s]+.
-// \w is Unicode-aware (any letter, digit or underscore), matching the Rust
-// reference regex the fixture was generated with.
+//
+// Both classes are Unicode-aware, matching the Rust reference regex the
+// fixture was generated with: \w is any letter, digit, mark or underscore, and
+// \s is the White_Space property rather than the six ASCII blanks.
 func whitespaceRegex(text string) []string {
 	out := []string{}
 	runes := []rune(text)
@@ -274,7 +282,13 @@ func whitespaceRegex(text string) []string {
 		switch {
 		case isWord(r):
 			kind = 1
-		case r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\f' || r == '\v':
+		case unicode.IsSpace(r):
+			// `\s` in the reference regex is Unicode's White_Space, not the
+			// six ASCII blanks. The four that survive the frontend's NFKD
+			// (U+0085 NEL, U+1680, U+2028, U+2029; the rest decompose to a
+			// plain space) were pretokens here and dropped everywhere else, so
+			// "Alphabeta" reached the model with an [UNK] in the middle
+			// of the word in this port alone.
 			kind = 0 // whitespace drops out
 		default:
 			kind = 2

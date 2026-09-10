@@ -10,7 +10,7 @@ import (
 //
 // Without the voice link, Synthesize("Cześć", polishVoice, seed, "", nil) runs
 // Polish text through the English frontend: an empty language becomes "en"
-// outright and a profile's own Language — recorded at enrollment — is never
+// outright and a profile's own Language (recorded at enrollment) is never
 // consulted. The chain is argument, then voice, then "en", and these are its
 // links.
 //
@@ -29,7 +29,7 @@ func TestResolveLanguage(t *testing.T) {
 		t.Errorf("an explicit language should override the profile, got %q", got)
 	}
 	// A hand-built profile can carry an empty Language, and an empty language id
-	// is not a language — it would tag the text "[]". A header that simply omits
+	// is not a language: it would tag the text "[]". A header that simply omits
 	// the key loads as "en" instead, so it never reaches this branch.
 	if got := resolveLanguage("", &voice.Profile{Language: ""}); got != "en" {
 		t.Errorf("a profile without a language should fall back to English, got %q", got)

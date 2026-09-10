@@ -1,47 +1,31 @@
 """An MCP server, so any MCP-aware agent can speak in a cloned voice.
 
-The same philosophy as :mod:`loudkit.server`, carried to a second protocol:
-the server holds **no synthesis path of its own**. Its tools build nothing and
-decide nothing — they resolve a voice and call :func:`~loudkit.server.render_bytes`
-and the engine's methods, so a request cannot reach code the library tests do
-not cover.
-
-That shared implementation is deliberate and worth keeping strict. A second
-synthesis path is a second thing to keep in agreement, and this library exists
-because two paths drifted. The MCP server and the HTTP server are two transports
-for one engine, not two engines.
-
-Tools exposed: ``list_voices``, ``synthesize`` (text, voice, seed, language,
-speed, previous_tokens, format → audio), ``describe`` (the resolved
-algorithm/execution, i.e. the line every run should be able to answer about
-itself). ``synthesize`` returns the audio as base64 — WAV by default, or any
-other :data:`~loudkit.synthesis.AudioFormat`; ``flac`` carries the same
-samples at about a quarter the size, which matters here more than over HTTP
-because the reply lands in a model's context — plus duration, token count and
-the ``continuation`` tail to chain the next call from: the same facts the HTTP
-route puts in its headers.
-
-Install with ``pip install "loudkit[mcp]"``. Run with
-``loudkit mcp --checkpoint <path> --voices <dir>``.
+Three tools over stdio: ``list_voices``, ``synthesize`` and ``describe``. The
+server holds no synthesis path of its own; ``synthesize`` resolves a voice
+and calls :func:`~loudkit.synthesis.render_bytes`, behind the request caps
+and the wait bound in :mod:`.limits` that HTTP and gRPC apply too. The reply
+carries the audio as base64 with the facts the HTTP route puts in headers.
+See ``docs/design/transports.md``.
 """
 
 from __future__ import annotations
 
 import base64
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast, get_args
 
-from ..errors import UnsupportedLanguageError, VoiceNotFoundError
-from ..synthesis import (
-    _MAX_PREVIOUS_TOKENS,
-    _MAX_TEXT_LEN,
-    _MAX_WAIT_S,
-    AudioFormat,
-    VoiceLibrary,
-)
+from ..engine import Engine
+from ..errors import LoudkitError, UnsupportedLanguageError, VoiceNotFoundError, error_code
+from ..models.timestretch import MAX_SPEED, MIN_SPEED
+from ..synthesis import AudioFormat, Rendered, VoiceLibrary, warm_engine
+from ..voice import VoiceProfile
+from .limits import _MAX_WAIT_S, EngineBusyError, ThreadQueue, _queue_depth_for, over_cap
+from .resolve import open_release
 
 _AUDIO_FORMATS: frozenset[str] = frozenset(get_args(AudioFormat))
-"""What ``synthesize`` accepts as ``format`` — derived from the one
+"""What ``synthesize`` accepts as ``format``, derived from the one
 :data:`~loudkit.synthesis.AudioFormat` rather than repeated, so this transport
 cannot offer an encoding the synthesis surface does not have."""
 
@@ -50,41 +34,11 @@ __all__ = ["build_server", "run_stdio"]
 _MISSING_EXTRA = 'the MCP server needs the "mcp" package.\n  pip install "loudkit[mcp]"'
 
 
-def _over_cap(text: str, previous_tokens: list[int] | None) -> dict[str, Any] | None:
-    """A refusal for input past the HTTP surface's caps, or ``None``.
-
-    ``/v1/synthesize`` bounds both of these through its pydantic model, and this
-    entry point had no schema doing it — so the same single-flight engine was
-    reachable over stdio with an unbounded prompt and an unbounded conditioning
-    history, from a host that hands the tool whatever a model emitted. The
-    constants are imported rather than repeated: a caller finding one door
-    stricter than the other is how the looser one gets used.
-    """
-    if not text.strip():
-        # `SpeakRequest.text` is `Field(min_length=1)`, so HTTP refuses this at
-        # the schema with a message naming the field. Over stdio it went to the
-        # engine, which raises "nothing to speak" from three frames deeper — the
-        # same refusal, worse addressed, from the transport whose caller is a
-        # model reading the error rather than a person.
-        return {"error": "text is empty", "error_kind": "bad_request"}
-    if len(text) > _MAX_TEXT_LEN:
-        return {
-            "error": f"text is {len(text)} characters; the cap is {_MAX_TEXT_LEN}",
-            "error_kind": "bad_request",
-        }
-    if previous_tokens is not None and len(previous_tokens) > _MAX_PREVIOUS_TOKENS:
-        return {
-            "error": (
-                f"previous_tokens has {len(previous_tokens)} entries; "
-                f"the cap is {_MAX_PREVIOUS_TOKENS}"
-            ),
-            "error_kind": "bad_request",
-        }
-    return None
-
-
 def _load_mcp() -> Any:
-    """Import the MCP SDK, with a name that says what to install."""
+    """Import the MCP SDK, with a name that says what to install.
+
+    ``Any``: the SDK is an optional extra, so its server class has no type here.
+    """
     try:
         from mcp.server.mcpserver import MCPServer
     except ModuleNotFoundError as exc:  # pragma: no cover - depends on extras
@@ -97,77 +51,57 @@ def build_server(
     voices: str | Path | None = None,
     *,
     device: str | None = None,
-    engine: Any | None = None,
+    engine: Engine | None = None,
+    warm: bool = False,
 ) -> Any:
-    """Build an MCP server backed by a warm engine and a voice library.
+    """Build an MCP server backed by an engine and a voice library.
 
-    Args:
-        checkpoint: the synthesis ``.safetensors``, or a repo id.
-        voices: directory of voice profiles. Defaults to ``voices/`` beside the
-            checkpoint, matching :func:`~loudkit.server.serve`.
-        engine: an already-loaded :class:`~loudkit.engine.Engine`. When given,
-            ``checkpoint`` is used only to locate the default voices directory;
-            this is how tests inject a fake engine without a 747 MB load. Give
-            ``voices`` as well and ``checkpoint`` is not read at all, so a repo
-            id there costs nothing and needs no ``hub`` extra installed.
+    ``warm`` pays the first render's extra cost here, on the first voice in the
+    library, whether the engine was loaded here or handed in. Off by default,
+    like the other two transports' builders; :func:`run_stdio` turns it on.
 
-    Returns:
-        A configured :class:`mcp.server.mcpserver.MCPServer`.
+    The return is ``Any`` because it is the MCP SDK's own server object, from an
+    optional extra that mypy does not see; everything this module owns is typed.
+
+    See ``docs/design/transports.md``.
     """
     mcp_server_cls = _load_mcp()
+    # The SDK's own scheduler, so the render runs on a worker thread the
+    # framework can abandon. Imported here, after `_load_mcp`, because it
+    # arrives with the SDK: a build without the extra refuses above rather
+    # than at an import this module could not have satisfied either.
+    import anyio.to_thread
 
     from .. import __version__, load
 
     if engine is not None and voices is not None:
-        # Both questions the checkpoint answers have been answered by the
-        # caller: the engine is loaded and the voice directory was named. It is
-        # the only argument left, and nothing reads it. Resolving it anyway
-        # would fetch the release -- 747 MB, and the `hub` extra -- to compute a
-        # path that is then discarded, which is the cost the `engine` argument
-        # exists to avoid.
+        # Both questions the checkpoint answers have been answered by the caller: the
+        # engine is loaded and the voice directory was named. So nothing is
+        # resolved, and a repo id here fetches nothing.
         library = VoiceLibrary(Path(voices))
     else:
-        from ..hub import backend_for_device, resolve_checkpoint
-
-        # A repo id resolves to the checkpoint *inside the snapshot the hub
-        # returned*, so the default voice directory below is the snapshot's own
-        # `voices/`. Handing the raw id to `Path` instead computed
-        # `Path("org/repo").parent / "voices"` — a directory that does not exist
-        # — and the server started with the release's voices silently absent.
-        # The same seam `serve` uses in the HTTP and gRPC transports.
-        #
-        # Normalised whatever shape it has, and by the backend the device needs.
-        # Two things went wrong when this ran only for a repo id and always
-        # fetched torch: a local *directory* kept its own name, so the voices
-        # below were looked for one level above the release; and `device="onnx"`
-        # fetched a snapshot holding no graphs, which the backend then could not
-        # run. `resolve_checkpoint` answers all three shapes: a file is itself, a
-        # directory yields the checkpoint inside it, a repo id fetches the set.
-        ckpt = resolve_checkpoint(str(checkpoint), backend=backend_for_device(device))
-        library = VoiceLibrary(Path(voices) if voices else ckpt.parent / "voices")
+        ckpt, library = open_release(checkpoint, voices, device)
     if engine is None:
-        # `device` reaches `load` here. The CLI parsed `--device` for every
-        # subcommand and this one dropped it, so `loudkit mcp --device cuda:3`
-        # was accepted and ignored — a different device, a different memory
-        # profile and a different speed from the one the operator asked for,
-        # with no warning at all.
         engine = load(str(ckpt), device=device)
-        names = library.names()
-        if names:
-            # First-use costs belong to startup, not the first tool call —
-            # see Engine.warm.
-            engine.warm(library.load(names[0]))
+    if warm:
+        warm_engine(engine, library)
 
     # The engine is single-flight (same as the HTTP server): a CUDA graph
     # capture is not reentrant, and torch modules are not thread-safe. MCP tool
     # calls can be dispatched concurrently by the host, so synthesis must
     # serialise behind a lock.
-    import threading
-
-    # Same bound as the HTTP server's queue wait: a wedged render must not hold
-    # every tool call open indefinitely.
+    # The wait is `_MAX_WAIT_S` under its own name, the same bound as the HTTP
+    # server's queue wait: a wedged render must not hold every tool call open
+    # indefinitely.
     _synth_lock = threading.Lock()
-    _synth_lock_timeout_s = _MAX_WAIT_S
+
+    # The depth bound, which is the half of the wait the time bound cannot
+    # stand in for. A waiter here holds a worker thread for as long as it
+    # waits, so past a bound the queue puts every thread on the lock and the
+    # tools that need no engine stop answering: `list_voices` is a directory
+    # listing and must not wait behind a render. Counted on the loop and
+    # refused there, before a thread is taken.
+    _engine_queue = ThreadQueue()
 
     server = mcp_server_cls(
         name="loudkit",
@@ -193,23 +127,25 @@ def build_server(
             "Turn text into speech in a named voice. Returns the audio as "
             "base64 plus the audio duration and token count. `format` is "
             '"wav" by default; "flac" is the same samples, losslessly, at '
-            "about a quarter the size — worth asking for when the reply is "
+            "about a quarter the size: worth asking for when the reply is "
             "saved to a file rather than played. Same text, voice and seed "
             "give the same bytes. Omit `language` to read the text in the "
             "voice's own language; pass one only to read text in a language the "
             "voice was not enrolled in. `speed` is playback speed in [0.5, 2.0] "
-            "with the pitch preserved — 1.0, the default, is an exact bypass. "
+            "with the pitch preserved: 1.0, the default, is an exact bypass. "
             "To read a long text as several calls without an audible restart at "
             "each join, pass the previous reply's `continuation` list back as "
             "`previous_tokens`. "
             "Check `truncated`: when true the "
             "utterance hit the token cap and the speech is cut off mid-sentence. "
             "A refusal comes back as `error` with `error_kind` "
-            '"bad_request" — something about this call to fix, and `supported` '
-            "or `available` listing what would have worked."
+            '"bad_request": something about this call to fix, and `supported` '
+            "or `available` listing what would have worked, and `code` from "
+            "the same frozen catalog the HTTP and gRPC doors name the "
+            "condition with."
         ),
     )
-    def synthesize(  # noqa: PLR0911 - each error kind is its own answer
+    async def synthesize(  # noqa: PLR0911 - each error kind is its own answer
         text: str,
         voice: str,
         seed: int = 0,
@@ -218,32 +154,58 @@ def build_server(
         previous_tokens: list[int] | None = None,
         format: str = "wav",  # noqa: A002 - the HTTP surface's name for the same choice
     ) -> dict[str, Any]:
-        refusal = _over_cap(text, previous_tokens)
+        refusal = over_cap(text, previous_tokens)
         if refusal is not None:
-            return refusal
+            # The same caps and the same code as the HTTP and gRPC doors, so
+            # the host cannot reach the engine with a request they refuse.
+            return {"error": refusal, "error_kind": "bad_request", "code": "invalid_request"}
         if format not in _AUDIO_FORMATS:
             return {
                 "error": f"unknown format {format!r}",
                 "error_kind": "bad_request",
+                "code": "invalid_request",
                 "supported": sorted(_AUDIO_FORMATS),
+            }
+        if not MIN_SPEED <= speed <= MAX_SPEED:
+            # The same bound the HTTP and gRPC doors check before the engine;
+            # out of range is something about this call to fix, not a defect.
+            return {
+                "error": f"speed {speed} is outside [{MIN_SPEED}, {MAX_SPEED}]",
+                "error_kind": "bad_request",
+                "code": "invalid_request",
             }
         try:
             profile = library.load(voice)
         except VoiceNotFoundError as exc:
-            return {"error": str(exc), "error_kind": "bad_request", "available": exc.available}
-        except ValueError as exc:  # not a voice *name* — a path, an empty string
-            return {"error": str(exc), "error_kind": "bad_request"}
-        try:
-            if not _synth_lock.acquire(timeout=_synth_lock_timeout_s):
-                return {
-                    "error": (
-                        "engine busy: another synthesis is holding the lock "
-                        f"(waited {_synth_lock_timeout_s:.0f}s)"
-                    ),
-                    "error_kind": "busy",
-                }
+            return {
+                "error": str(exc),
+                "error_kind": "bad_request",
+                "code": error_code(exc),
+                "available": exc.available,
+            }
+        except ValueError as exc:  # not a voice *name*, a path, an empty string
+            return {"error": str(exc), "error_kind": "bad_request", "code": error_code(exc)}
+        # One flag for the one way this call ends early, the wiring the HTTP
+        # and gRPC doors already have: `render_bytes` polls it on every decode
+        # step, so a cancel stops the render inside a forward pass instead of
+        # at the end of the passage.
+        cancelled = threading.Event()
+
+        def take_engine_and_render() -> Rendered:
+            """The blocking half, off the event loop.
+
+            The acquire is here rather than beside the caps because it blocks
+            for up to ``_MAX_WAIT_S``, and a loop stalled that long cannot
+            deliver the very notification that would cancel this call.
+            """
+            if not _synth_lock.acquire(timeout=_MAX_WAIT_S):
+                raise EngineBusyError(
+                    "engine busy: another synthesis is holding the lock "
+                    f"(waited {_MAX_WAIT_S:.0f}s)",
+                    retry_after=30,
+                )
             try:
-                rendered = _render(
+                return _render(
                     engine,
                     profile,
                     text,
@@ -252,24 +214,52 @@ def build_server(
                     speed=speed,
                     previous_tokens=previous_tokens,
                     audio_format=cast(AudioFormat, format),
+                    should_cancel=cancelled.is_set,
                 )
             finally:
                 _synth_lock.release()
+
+        # The pool a waiter would hold a thread from, read here because the
+        # limiter belongs to the running loop. Half of it may queue; the rest
+        # answers `list_voices` and `describe` while synthesis is saturated.
+        depth = _queue_depth_for(anyio.to_thread.current_default_thread_limiter().total_tokens)
+        try:
+            # `abandon_on_cancel`: a cancel returns here at once and leaves the
+            # render on its own thread, which the `finally` below stops.
+            # Waiting for it instead would sit out the whole passage being
+            # cancelled, holding the lock against every other caller.
+            with _engine_queue.admit(depth):
+                rendered = await anyio.to_thread.run_sync(
+                    take_engine_and_render, abandon_on_cancel=True
+                )
+        except EngineBusyError as exc:
+            # Both bounds land here, the depth one from `admit` before a thread
+            # is taken and the wait one from the render thread, and both are
+            # the same answer with a different reason. `busy` is what HTTP
+            # answers a full queue with, out of `_CODE_BY_STATUS[503]`, and
+            # what gRPC sends beside RESOURCE_EXHAUSTED.
+            return {"error": exc.detail, "error_kind": "busy", "code": "busy"}
         except UnsupportedLanguageError as exc:
             # UnsupportedLanguageError, not the builtin NotImplementedError.
-            # Both are answers rather than transport failures — an agent that
-            # gets a protocol error learns nothing, while the message names the
-            # twelve languages that do work. But they are different answers:
-            # "you asked for Chinese" versus "a backend method is a stub", and
-            # an agent that cannot tell them apart will helpfully retry the
-            # request that was never the problem.
             return {
                 "error": str(exc),
                 "error_kind": "bad_request",
+                "code": error_code(exc),
                 "supported": list(exc.supported),
             }
-        except ValueError as exc:  # over-window without chunking, bad config
-            return {"error": str(exc), "error_kind": "bad_request"}
+        except ValueError as exc:
+            # `LoudkitError` is the line, as on the other two transports: a
+            # bare `ValueError` out of the renderer is a defect, and returning
+            # its message as `bad_request` both hands the agent whatever it
+            # says and tells it to retry a request that was never wrong.
+            if not isinstance(exc, LoudkitError):
+                raise
+            return {"error": str(exc), "error_kind": "bad_request", "code": error_code(exc)}
+        finally:
+            # Set on every exit. After a render that finished this is a no-op;
+            # on the cancel path the framework unwinds this coroutine while the
+            # render is still on its thread, and this is what ends it.
+            cancelled.set()
         # Deliberately not caught: a bare NotImplementedError is a defect here,
         # not a question about the call. Swallowing it into the same
         # {"error": ...} shape told the agent its request was wrong and hid a
@@ -310,15 +300,15 @@ def build_server(
             "algorithm": engine.algorithm.describe(),
             "execution": engine.execution.describe(),
             "fingerprint": engine.algorithm.fingerprint(),
-            "device": engine.execution.device,
+            "device": engine.execution.resolved_device(),
         }
 
     return server
 
 
 def _render(
-    engine: Any,
-    profile: Any,
+    engine: Engine,
+    profile: VoiceProfile,
     text: str,
     *,
     seed: int,
@@ -326,12 +316,17 @@ def _render(
     speed: float = 1.0,
     previous_tokens: list[int] | None = None,
     audio_format: AudioFormat = "wav",
-) -> Any:
+    should_cancel: Callable[[], bool] | None = None,
+) -> Rendered:
     """The one place audio is made, shared with the HTTP server.
 
     Imported here rather than at module top so a missing ``soundfile`` (the
     ``audio`` extra) fails at tool-call time with its own message, not at
     import of a server the caller may only be inspecting.
+
+    ``should_cancel`` reaches the decode loop, as it does from the HTTP and
+    gRPC doors: a cancelled call that ran to the end would render a passage
+    nobody will hear while holding ``_synth_lock`` against every other caller.
     """
     from ..synthesis import render_bytes
 
@@ -344,44 +339,14 @@ def _render(
         speed=speed,
         previous_tokens=previous_tokens,
         audio_format=audio_format,
+        should_cancel=should_cancel,
     )
 
 
 def run_stdio(
     checkpoint: str, voices: str | Path | None = None, *, device: str | None = None
 ) -> None:
-    """Run the MCP server over stdio, for stdio-only clients."""
-    server = build_server(checkpoint, voices, device=device)
+    """Run the MCP server over stdio; what ``loudkit serve --mcp`` calls."""
+    # warm: the first render's extra cost is startup's, not the first tool call's.
+    server = build_server(checkpoint, voices, device=device, warm=True)
     server.run(transport="stdio")
-
-
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for ``loudkit mcp``."""
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        prog="loudkit mcp", description="Serve loudkit over the Model Context Protocol."
-    )
-    parser.add_argument(
-        "--checkpoint",
-        required=True,
-        type=Path,
-        help="the synthesis .safetensors, or a repo id",
-    )
-    parser.add_argument("--voices", type=Path, help="directory of voice profiles")
-    parser.add_argument("--device", help="backend: cpu, cuda, cuda:<index>, mps, coreml, onnx")
-    args = parser.parse_args(argv)
-
-    run_stdio(args.checkpoint, args.voices, device=args.device)
-    return 0
-
-
-# Deliberately not in `[project.scripts]`, and kept only for `python -m`.
-#
-# `loudkit mcp` is the entry point: it shares `--checkpoint`, `--voices` and
-# `--device` with every other subcommand, and its `--help` is the one a reader
-# finds. This parser accepted a different spelling with a different help text
-# for the same program — two CLIs for one thing, which is how a flag gets fixed
-# in one of them.
-if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())

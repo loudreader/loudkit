@@ -1,5 +1,5 @@
-// Polish lexical respelling — a bit-parity port of
-// loudkit.frontend.polish.lexical_respelling (Python) / respell.ts (JS) / the
+// Polish lexical respelling: a bit-parity port of
+// loudkit.frontend.speechtext.lexical_respelling (Python) / respell.ts (JS) / the
 // Swift engine's LexicalRespelling.
 //
 // English words embedded in Polish text are respelled the way a Polish reader
@@ -18,20 +18,28 @@ import (
 	"sync"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/loudreader/loudkit/go/internal/unicase"
 )
 
 func unicodeIsLetter(r rune) bool { return unicode.IsLetter(r) }
 func unicodeIsDigit(r rune) bool  { return unicode.IsDigit(r) }
 func unicodeIsUpper(r rune) bool  { return unicode.IsUpper(r) }
 func unicodeToUpper(r rune) rune  { return unicode.ToUpper(r) }
-func unicodeLower(r rune) rune    { return unicode.ToLower(r) }
 
 func init() {
 	for _, w := range keepPolishList {
 		keepPolish[w] = true
 	}
-	for _, w := range wordAcronymsList {
-		wordAcronyms[w] = true
+	// The ASCII half of the shared Polish letter table, and only that half.
+	// `letter_names` also names the nine Polish letters, and spelling those
+	// would read Ż1 as "żet jeden": a token written with Polish letters is a
+	// Polish word, and a reader reads it rather than spelling it. What this
+	// path spells is identifiers, and those are written in ASCII.
+	for r := 'a'; r <= 'z'; r++ {
+		if n := LetterName(string(r), "pl"); n != "" {
+			letterNames[string(r)] = n
+		}
 	}
 	for _, w := range polishFunctionWordsList {
 		polishFunctionWords[w] = true
@@ -48,11 +56,11 @@ func init() {
 var respellJSON []byte
 
 // RespellBytes is the embedded lexicon exactly as this binary carries it.
-// Exported so the fingerprint can hash the bytes this port actually reads —
+// Exported so the fingerprint can hash the bytes this port actually reads,
 // hashing a file on disk would say nothing about what got compiled in.
 func RespellBytes() []byte { return respellJSON }
 
-// Multi-word anglicisms respelled as a unit, BEFORE the word pass — "release
+// Multi-word anglicisms respelled as a unit, BEFORE the word pass: "release
 // notes" word-by-word would read "notes" as the Polish homograph.
 var phrases = [][2]string{
 	{"release notes", "rilis nołc"},
@@ -62,36 +70,23 @@ var phrases = [][2]string{
 	{"happy hour", "hepi ałer"},
 }
 
-// English words that are ALSO everyday Polish words — the word pass leaves
+// English words that are ALSO everyday Polish words: the word pass leaves
 // them alone, and only a phrase above may respell them.
 var keepPolish = map[string]bool{}
 var keepPolishList = strings.Fields("notes pilot problem prom kit bug buga bugi bugach bugów log logi logach spam port host linux unix python ruby")
 
-// GPT → "gie-pe-te": an all-caps token is read letter by letter with POLISH
-// letter names. A short allowlist covers acronyms said as WORDS (NASA, RAM).
-var letterNames = map[rune]string{
-	'a': "a", 'b': "be", 'c': "ce", 'd': "de", 'e': "e", 'f': "ef",
-	'g': "gie", 'h': "ha", 'i': "i", 'j': "jot", 'k': "ka", 'l': "el",
-	'm': "em", 'n': "en", 'o': "o", 'p': "pe", 'q': "ku", 'r': "er",
-	's': "es", 't': "te", 'u': "u", 'v': "fał", 'w': "wu", 'x': "iks",
-	'y': "igrek", 'z': "zet",
-}
+// R2 → "er dwa": a code token is read character by character with POLISH letter
+// names. Filled in init from the shared table in numbers.json, which is where
+// every implementation reads them; see the note there.
+var letterNames = map[string]string{}
 
-var wordAcronyms = map[string]bool{}
-var wordAcronymsList = strings.Fields("nasa ram rom pin vat sim lot pesel nato zus nfz pit")
-
-// Polish function words that happen to spell English words — never span
+// Polish function words that happen to spell English words, never span
 // members, or a span eats the Polish conjunction after it.
 var polishFunctionWords = map[string]bool{}
 var polishFunctionWordsList = strings.Fields("i a o u w z no to ta ten on ona my ja do po za na od ale czy tak nie co jak go mu je ma by się był mam dam")
 
 // Polish case/derivation endings these loanwords actually take.
 var polishEndings = map[string]bool{}
-
-var units = []string{"", "jeden", "dwa", "trzy", "cztery", "pięć", "sześć", "siedem", "osiem", "dziewięć"}
-var teens = []string{"dziesięć", "jedenaście", "dwanaście", "trzynaście", "czternaście", "piętnaście", "szesnaście", "siedemnaście", "osiemnaście", "dziewiętnaście"}
-var tens = []string{"", "", "dwadzieścia", "trzydzieści", "czterdzieści", "pięćdziesiąt", "sześćdziesiąt", "siedemdziesiąt", "osiemdziesiąt", "dziewięćdziesiąt"}
-var hundreds = []string{"", "sto", "dwieście", "trzysta", "czterysta", "pięćset", "sześćset", "siedemset", "osiemset", "dziewięćset"}
 
 var digitWords = map[rune]string{
 	'0': "zero", '1': "jeden", '2': "dwa", '3': "trzy", '4': "cztery",
@@ -149,7 +144,7 @@ var lexicon = map[string]string{
 	"weekend": "łikend", "wow": "łał",
 }
 
-// Math and unit symbols the model cannot say, as Polish words — with context
+// Math and unit symbols the model cannot say, as Polish words, with context
 // guards, because "-" is also a hyphen and "/" is also a path. RE2 has no
 // lookbehind, so the "preceded by a digit" guards are expressed with a
 // capturing group whose match is restored by the replacement.
@@ -180,17 +175,20 @@ var englishWords = map[string]bool{}
 
 // sync.Once, not a plain bool: loadPayload writes three package-level maps and
 // is reached from the exported respelling entry points, which the server calls
-// concurrently. An unsynchronised lazy init here is a concurrent map write —
+// concurrently. An unsynchronised lazy init here is a concurrent map write,
 // a hard runtime crash, not merely a torn read.
 var payloadOnce sync.Once
 
 func loadPayload() {
 	payloadOnce.Do(func() {
 		if err := json.Unmarshal(respellJSON, &payload); err != nil {
-			// The embedded file is generated and always valid; a failure here
-			// is a broken build. Keep going with empty tables rather than
-			// panic.
-			return
+			// Panic, as the four sibling loaders do on the same condition.
+			// Carrying on with empty tables made LexicalRespelling return its
+			// input unchanged, so a Polish voice read embedded English words
+			// with Polish letter values, with no error anywhere.
+			// The embedded file is generated, so this is a broken build and it
+			// should say so rather than speak wrongly.
+			panic("speechtext: embedded pl_en_respell.json is unreadable: " + err.Error())
 		}
 		for _, w := range payload.Polish {
 			polishSet[w] = true
@@ -229,52 +227,20 @@ func lookup(word string) (string, bool) {
 	return v, ok
 }
 
+// spelledAcronym asks whether this word is an acronym, and how Polish spells
+// it. The spelling itself is SpellAcronym's, from the shared letter table.
+//
+// The five-letter cap is applied here rather than left to SpellAcronym, which
+// checks its word list first: UNESCO, UNICEF and INTERPOL are on that list, and
+// this path has never had an answer for a word that long.
 func spelledAcronym(word string) (string, bool) {
-	if len([]rune(word)) < 2 || len([]rune(word)) > 5 {
+	if n := len([]rune(word)); n < minAcronymLetters || n > maxAcronymLetters {
 		return "", false
 	}
-	allUpper := true
-	for _, r := range word {
-		if !(r >= 'A' && r <= 'Z') {
-			allUpper = false
-			break
-		}
+	if s := SpellAcronym(word, "pl"); s != "" {
+		return s, true
 	}
-	if !allUpper {
-		return "", false
-	}
-	lower := strings.ToLower(word)
-	if wordAcronyms[lower] {
-		return lower, true
-	}
-	var names []string
-	for _, r := range lower {
-		n, ok := letterNames[r]
-		if !ok {
-			return "", false
-		}
-		names = append(names, n)
-	}
-	return strings.Join(names, "-"), true
-}
-
-func under1000(n int) []string {
-	var parts []string
-	if n >= 100 {
-		parts = append(parts, hundreds[n/100])
-	}
-	rest := n % 100
-	if rest >= 10 && rest <= 19 {
-		parts = append(parts, teens[rest-10])
-	} else {
-		if rest >= 20 {
-			parts = append(parts, tens[rest/10])
-		}
-		if rest%10 > 0 {
-			parts = append(parts, units[rest%10])
-		}
-	}
-	return parts
+	return "", false
 }
 
 // decimalValue is the value of a decimal digit in any script, as int(token)
@@ -285,17 +251,43 @@ func under1000(n int) []string {
 // An ASCII-only 'r < 0 || r > 9' test rejects "١٢٣" outright,
 // so the Polish number path would leave the glyphs in the text where Python says
 // "sto dwadzieścia trzy".
+// adjacentDigitBlockStart reports whether r begins an Nd block whose preceding
+// code point is itself a decimal digit. Only the four mathematical styled runs
+// qualify; every other block is separated from its neighbour by a non-digit.
+func adjacentDigitBlockStart(r rune) bool {
+	return r == 0x1D7D8 || r == 0x1D7E2 || r == 0x1D7EC || r == 0x1D7F6
+}
+
 func decimalValue(r rune) (int, bool) {
 	if !unicode.IsDigit(r) {
 		return 0, false
 	}
+	// Bounded to nine steps. Five pairs of Nd blocks are adjacent (double-
+	// struck at U+1D7D8 runs straight into sans-serif at U+1D7E2, and Myanmar
+	// Eastern Pwo Karen abuts its neighbour), so an unbounded walk crosses the
+	// boundary and reports a value of ten or more. Python uses int() and Swift
+	// wholeNumberValue, both of which know the block table; this is the hand-
+	// rolled equivalent and it has to stop itself.
+	// Four block starts are listed because their predecessor is also a decimal
+	// digit: the mathematical double-struck, sans-serif, sans-serif-bold and
+	// monospace runs sit back to back, so walking down from a sans-serif '1'
+	// crosses into double-struck and keeps going. Sixty-four of the sixty-eight
+	// Nd blocks stop the walk on their own. Verified against Python's own
+	// unicodedata over every code point in Unicode: zero disagreements.
 	zero := r
-	for zero > 0 && unicode.IsDigit(zero-1) {
+	for zero > 0 && !adjacentDigitBlockStart(zero) && unicode.IsDigit(zero-1) {
 		zero--
 	}
 	return int(r - zero), true
 }
 
+// numberWords says a run of digits as a Polish cardinal, or refuses.
+//
+// The saying is Cardinal's, out of the shared grammar. What belongs to this
+// path is the two refusals: a leading zero is a code, a PIN or a house number
+// and not a quantity, and past six digits the reading is longer than the
+// digits and less use to a listener. Both leave the token to the digit-by-digit
+// fallback in `respelled`.
 func numberWords(token string) (string, bool) {
 	// RuneCountInString, not len: len is bytes, so a four-digit Arabic-Indic
 	// number (8 bytes) failed a check meant to count six digits.
@@ -305,37 +297,19 @@ func numberWords(token string) (string, bool) {
 	if strings.HasPrefix(token, "0") && token != "0" {
 		return "", false
 	}
-	value := 0
+	value := int64(0)
 	for _, r := range token {
 		d, ok := decimalValue(r)
 		if !ok {
 			return "", false
 		}
-		value = value*10 + d
+		value = value*10 + int64(d)
 	}
-	if value == 0 {
-		return "zero", true
+	s, err := Cardinal(value, "pl", "")
+	if err != nil {
+		return "", false
 	}
-	var parts []string
-	thousands := value / 1000
-	if thousands > 0 {
-		if thousands == 1 {
-			parts = append(parts, "tysiąc")
-		} else {
-			parts = append(parts, under1000(thousands)...)
-			lastTwo := thousands % 100
-			last := thousands % 10
-			if lastTwo >= 12 && lastTwo <= 14 {
-				parts = append(parts, "tysięcy")
-			} else if last >= 2 && last <= 4 {
-				parts = append(parts, "tysiące")
-			} else {
-				parts = append(parts, "tysięcy")
-			}
-		}
-	}
-	parts = append(parts, under1000(value%1000)...)
-	return strings.Join(parts, " "), true
+	return s, true
 }
 
 // maxSpelledCode: spelling `R2` character by character is how a Polish
@@ -359,8 +333,8 @@ func spelledCodeToken(word string) (string, bool) {
 	var parts []string
 	runes := []rune(word)
 	// All or nothing: a token is spelled whole or refused. Skipping a character
-	// with no letter name turns `Müller123` into *em el el e er jeden dwa* —
-	// the `ü` gone, a name changed rather than mispronounced — and an
+	// with no letter name turns `Müller123` into *em el el e er jeden dwa*,
+	// the `ü` gone, a name changed rather than mispronounced, and an
 	// eight-character cap that truncates instead of refusing drops the last
 	// digits of `żelazny2024`. Either way a token half-read is worse than one
 	// left written, because the listener cannot tell that anything was dropped.
@@ -370,7 +344,7 @@ func spelledCodeToken(word string) (string, bool) {
 	for i := 0; i < len(runes); i++ {
 		if d, ok := digitWords[runes[i]]; ok {
 			parts = append(parts, d)
-		} else if n, ok := letterNames[unicodeLower(runes[i])]; ok {
+		} else if n, ok := letterNames[unicase.ToLower(string(runes[i]))]; ok {
 			parts = append(parts, n)
 		} else {
 			// A letter this table has no name for. Refusing the whole token
@@ -397,37 +371,50 @@ func matchCase(original, respelled string) string {
 }
 
 func respelled(word string) string {
-	// No acronym branch here any more. `spellAcronyms` owns that decision for
-	// all twelve languages and takes it earlier in the funnel, where the
-	// surrounding capitals are still visible — this pass sees one word at a time
-	// and so could not tell an initialism from a shout. It spelled "THIS IS
-	// FINE" as te-ha-i-es i-es ef-i-en-e, and "CIA CIA" as ce-i-a ce-i-a where
-	// the earlier pass had already decided that a run of capitals is emphasis.
-	// `spelledAcronym` stays: the English-run test below still asks it whether a
-	// word is an acronym, which is a different question from spelling one.
+	// No acronym branch here. `spellAcronyms` owns that decision for all
+	// twelve languages and takes it earlier in the funnel, where the
+	// surrounding capitals are still visible; this pass sees one word at a
+	// time and cannot tell an initialism from a shout. Taken here, "THIS IS
+	// FINE" reads as te-ha-i-es i-es ef-i-en-e and "CIA CIA" as ce-i-a
+	// ce-i-a, where the earlier pass has already decided that a run of
+	// capitals is emphasis. `spelledAcronym` answers a different question:
+	// the English-run test below asks it whether a word is an acronym, not
+	// how to spell one.
 	if c, ok := spelledCodeToken(word); ok {
 		return c
 	}
-	lower := strings.ToLower(word)
+	lower := unicase.ToLower(word)
 	if hit, ok := lookup(lower); ok {
 		return matchCase(word, hit)
 	}
 	// Digits-only tokens: cardinal words when sane, digit-by-digit when weird.
-	allDigits := true
+	//
+	// "No letter", not "every character is a digit". The word collector keeps
+	// an apostrophe inside a word, so a quoted address arrives here as `'192`,
+	// which has no letters and is not all digits: the two tests disagree on
+	// every quoted number, and the four other ports all ask the first one.
+	// Under the second, `'192.168.0.1` came out as "192.sto sześćdziesiąt
+	// osiem przecinek zero.1", half read and half written.
+	hasLetter := false
 	for _, r := range word {
-		if !unicode.IsDigit(r) {
-			allDigits = false
+		if unicodeIsLetter(r) {
+			hasLetter = true
 			break
 		}
 	}
-	if allDigits {
+	if !hasLetter {
 		if cardinal, ok := numberWords(word); ok {
 			return cardinal
 		}
-		var parts []string
+		// Character by character, and never to *nothing*: a character with no
+		// digit name is written out as itself rather than dropped, or the
+		// apostrophes around `'192` would disappear from the utterance.
+		parts := make([]string, 0, len(word))
 		for _, r := range word {
 			if d, ok := digitWords[r]; ok {
 				parts = append(parts, d)
+			} else {
+				parts = append(parts, string(r))
 			}
 		}
 		return strings.Join(parts, " ")
@@ -446,7 +433,7 @@ func respelled(word string) string {
 		stem := string(runes[:cut])
 		suffix := string(runes[cut:])
 		// DecodeRuneInString, not suffix[1:]: the slice is by BYTES, and "’"
-		// is three of them — so a typographic apostrophe leaves two stray
+		// is three of them, so a typographic apostrophe leaves two stray
 		// continuation bytes glued to the ending and no ending ever matches.
 		// "deadline’u" comes out unchanged where Python reads "dedlajnu".
 		if r, size := utf8.DecodeRuneInString(suffix); r == '\'' || r == '’' {
@@ -460,29 +447,55 @@ func respelled(word string) string {
 			continue
 		}
 		// The respelling's trailing vowel folds into a vowel-initial ending.
-		if base != "" && strings.ContainsRune("aeiouy", []rune(base)[len([]rune(base))-1]) &&
-			suffix != "" && strings.ContainsRune("aeiouy", []rune(suffix)[0]) {
-			base = base[:len([]rune(base))-1]
+		// The respellings carry Polish letters, so the fold counts characters:
+		// slicing the bytes at a character index cuts one of them in half.
+		baseRunes := []rune(base)
+		first, _ := utf8.DecodeRuneInString(suffix)
+		if len(baseRunes) > 0 && strings.ContainsRune("aeiouy", baseRunes[len(baseRunes)-1]) &&
+			suffix != "" && strings.ContainsRune("aeiouy", first) {
+			base = string(baseRunes[:len(baseRunes)-1])
 		}
 		return matchCase(word, base+suffix)
 	}
 	return word
 }
 
+// The two respelling tables are fixed literals above, so their patterns are
+// built at package init rather than per call: both functions run once per
+// chunk and were compiling the whole table each time.
+var (
+	symbolPatterns = compileRules(respelSymbolRules, func(written string) string { return written })
+	phrasePatterns = compileRules(phrases, func(written string) string { return `(?i)` + regexp.QuoteMeta(written) })
+)
+
+// compileRules pairs each rule's compiled match with its replacement, keeping
+// the table's order: the phrase table is longest-first and a shorter entry
+// must not eat a longer one.
+func compileRules(rules [][2]string, pattern func(string) string) []respellRule {
+	out := make([]respellRule, 0, len(rules))
+	for _, rule := range rules {
+		out = append(out, respellRule{regexp.MustCompile(pattern(rule[0])), rule[1]})
+	}
+	return out
+}
+
+type respellRule struct {
+	from *regexp.Regexp
+	to   string
+}
+
 func respellSymbols(text string) string {
 	out := text
-	for _, rule := range respelSymbolRules {
-		re := regexp.MustCompile(rule[0])
-		out = re.ReplaceAllString(out, rule[1])
+	for _, rule := range symbolPatterns {
+		out = rule.from.ReplaceAllString(out, rule.to)
 	}
 	return out
 }
 
 func respellPhrases(text string) string {
 	out := text
-	for _, phrase := range phrases {
-		re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(phrase[0]))
-		out = re.ReplaceAllString(out, phrase[1])
+	for _, rule := range phrasePatterns {
+		out = rule.from.ReplaceAllString(out, rule.to)
 	}
 	return out
 }
@@ -527,7 +540,7 @@ func respellWords(text string) string {
 	// in a row read better with the real English lexicon. Short bursts stay.
 	isEnglish := make([]bool, len(words))
 	for i, word := range words {
-		lower := strings.ToLower(word)
+		lower := unicase.ToLower(word)
 		_, acr := spelledAcronym(word)
 		_, lk := lookup(lower)
 		isEnglish[i] = !acr && !keepPolish[lower] && !polishFunctionWords[lower] && (lk || isEnglishWord(lower))
@@ -538,7 +551,7 @@ func respellWords(text string) string {
 	for i < len(words) {
 		// The whole run of digit groups is measured before any of it is read,
 		// because the decision belongs to the run and not to its first pair.
-		// Two groups is a decimal — "dwa przecinek pięć". Three or more is a
+		// Two groups is a decimal: "dwa przecinek pięć". Three or more is a
 		// version, an address or a date, and is left exactly as written.
 		//
 		// Reading only the first pair turns "192.168.0.1" into "sto
@@ -606,10 +619,10 @@ func respellWords(text string) string {
 			}
 			if j-i >= 4 {
 				// Inside a detected English span every word transliterates,
-				// gate ignored — "brown" alone stays Polish, "brown" inside
+				// gate ignored: "brown" alone stays Polish, "brown" inside
 				// "the quick brown fox" becomes "brałn".
 				for k := i; k < j; k++ {
-					lower := strings.ToLower(words[k])
+					lower := unicase.ToLower(words[k])
 					hit, ok := lexicon[lower]
 					if !ok {
 						hit, ok = respellAll()[lower]

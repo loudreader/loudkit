@@ -17,14 +17,14 @@ import (
 // no weight-free engine seam: engine.Engine holds six concrete *onnx.Session
 // values, so nothing can drive the pipeline without a checkpoint and a runtime.
 // The slice is the whole of the behaviour and it is a pure function of the
-// config, so an Engine carrying nothing but a config is the practical unit here —
+// config, so an Engine carrying nothing but a config is the practical unit here,
 // language_test.go and mel_test.go test in-package for the same reason.
 //
 // What this therefore does NOT cover is the wiring: if the helper's result
 // stopped being handed to the generator's prefix, every assertion here would
 // still pass. That half is pinned in Python, by
 // tests/test_engine.py::TestCrossRequestContext, against a fake generator that
-// records the context it was given — building an equivalent seam in four more
+// records the context it was given: building an equivalent seam in four more
 // languages would cost four engine refactors to re-assert one fact.
 func carryEngine(prefixTokens int) *Engine {
 	return &Engine{config: config.AlgorithmConfig{
@@ -101,7 +101,7 @@ func TestAZeroPrefixCarriesNothingRatherThanEverything(t *testing.T) {
 // the length of the caller's text.
 func TestAnIdOutsideTheCodebookIsRefusedWhereverItIs(t *testing.T) {
 	e := carryEngine(6)
-	// 6562 is the stop token — an id the generator emits and the renderer
+	// 6562 is the stop token: an id the generator emits and the renderer
 	// cannot read. First in the history, so the tail alone would never see it.
 	_, err := e.carryFrom([]int{6562, 1, 2, 3, 4, 5, 6, 7})
 	if err == nil {
@@ -115,8 +115,8 @@ func TestAnIdOutsideTheCodebookIsRefusedWhereverItIs(t *testing.T) {
 	}
 }
 
-// The carry outlives the call that produced it — it is fed to the generator one
-// synthesis later — so it must not alias a slice the caller still owns.
+// The carry outlives the call that produced it: it is fed to the generator one
+// synthesis later, so it must not alias a slice the caller still owns.
 func TestCarryFromCopiesRatherThanAliasing(t *testing.T) {
 	e := carryEngine(2)
 	previous := []int{1, 2, 3, 4}

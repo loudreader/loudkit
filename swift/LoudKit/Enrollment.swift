@@ -1,7 +1,7 @@
 import CoreML
 import Foundation
 
-/// Enrollment: reference audio to a `VoiceProfile` — a bit-parity port of
+/// Enrollment: reference audio to a `VoiceProfile`, a bit-parity port of
 /// `loudkit.models.enroll` over the exported enrollment CoreML graphs.
 ///
 /// The DSP (resampler, filterbanks, trim) is implemented here and held to the
@@ -27,13 +27,90 @@ public enum Enrollment {
     static let partialFrames = 160
     static let partialStep = 77
 
+    // --------------------------------------------------- reference recording
+
+    /// Shortest clip a speaker can be estimated from. The utterance encoder's
+    /// first partial alone covers 1.6 s and is zero-padded under it, so a
+    /// sub-second clip enrolls mostly padding.
+    static let minEnrollSeconds = 1.0
+
+    /// Longest clip the input contract stays honest over. The prompt uses the
+    /// first 10 s and the speaker embedding reads the whole clip, so a
+    /// five-minute recording produces a voice mostly shaped by audio the docs
+    /// say is ignored. Refused rather than truncated: the user picked that
+    /// recording for a reason, and silently using a different slice of it is
+    /// worse than asking them to choose.
+    static let maxEnrollSeconds = 30.0
+
+    /// A clip whose loudest sample is under this is silence at any playback
+    /// level; there is no voice in it to enroll.
+    static let silencePeak: Float = 1e-4
+
+    private static let goodInput =
+        "A good input is 5 to 10 seconds of one person speaking, clean, "
+        + "without music or a second voice."
+
+    /// Refuse a recording the enrollment contract cannot honour.
+    ///
+    /// The whole preflight, before any DSP runs, with the same five sentences
+    /// as `loudkit.models.enrollment_audio.validate_reference_audio`. Without
+    /// it a clip shorter than 721 samples indexes past the end of the reflect
+    /// padding in `matchaMel` and kills the process, a sub-second clip enrolls
+    /// padding, and NaN samples poison every statistic downstream.
+    ///
+    /// See `docs/design/models-notes.md`.
+    public static func validateReferenceAudio(_ audio: [Float], sampleRate: Int) throws {
+        // A non-positive rate reaches the resampler as a division by zero, which
+        // traps and kills the process. Callers and tests in every port match on
+        // this one-word message, so it stays word for word.
+        guard sampleRate > 0 else {
+            throw LoudKitError.shape("sample rate must be positive, got \(sampleRate)")
+        }
+        // Finiteness before anything arithmetic: one NaN poisons every statistic
+        // below and every tensor downstream.
+        guard audio.allSatisfy({ $0.isFinite }) else {
+            throw LoudKitError.shape(
+                "the recording contains NaN or Inf samples, so no voice can be "
+                + "derived from it. Re-export the file. " + goodInput)
+        }
+        let seconds = Double(audio.count) / Double(sampleRate)
+        guard seconds >= minEnrollSeconds else {
+            throw LoudKitError.shape(
+                "the recording is \(String(format: "%.2f", seconds)) s: too short to "
+                + "enroll a speaker from (minimum "
+                + "\(String(format: "%g", minEnrollSeconds)) s). " + goodInput)
+        }
+        guard seconds <= maxEnrollSeconds else {
+            throw LoudKitError.shape(
+                "the recording is \(String(format: "%.1f", seconds)) s. Only the first "
+                + "10 s become the voice prompt, and the whole clip shapes the speaker "
+                + "embedding, so a long recording enrolls something the prompt does not "
+                + "carry. Trim it to the best 5 to 10 seconds (at most "
+                + "\(String(format: "%g", maxEnrollSeconds)) s). " + goodInput)
+        }
+        let peak = audio.reduce(Float(0)) { Swift.max($0, Swift.abs($1)) }
+        guard peak >= silencePeak else {
+            throw LoudKitError.shape(
+                "the recording is silent (peak \(String(format: "%.1e", peak))); there is "
+                + "no voice in it to enroll. " + goodInput)
+        }
+    }
+
     // ---------------------------------------------------------------- tables
 
-    private static func table(_ name: String) -> [Float] {
+    /// One bundled float32 table, by resource name.
+    ///
+    /// Throws rather than returning an empty array: an absent table otherwise
+    /// reaches `melMultiply` as a zero-length filter bank and traps on an index
+    /// far from the missing file, or reaches `centredPowerSpectra` as a zero
+    /// `nfft`.
+    static func table(_ name: String) throws -> [Float] {
         guard let url = Bundle.module.url(
             forResource: name, withExtension: "f32", subdirectory: "Resources"
         ), let data = try? Data(contentsOf: url) else {
-            return []
+            throw LoudKitError.asset(
+                "\(name).f32 is missing from the package resources; the enrollment "
+                + "filterbanks cannot be built without it")
         }
         // `loadUnaligned`, like `Safetensors.floats`. `Data` from a bundled file
         // gives no four-byte alignment guarantee, and `bindMemory` requires
@@ -109,7 +186,9 @@ public enum Enrollment {
 
     // ------------------------------------------------------------ filterbanks
 
-    private static func basis(_ nfft: Int) -> ([[Double]], [[Double]]) {
+    /// The `cos` and `sin` tables of a real DFT of length `nfft`, `bins` rows
+    /// each. Depends only on `nfft`, which takes three values here.
+    static func basis(_ nfft: Int) -> ([[Double]], [[Double]]) {
         let bins = nfft / 2 + 1
         var cosTable = [[Double]](repeating: [Double](repeating: 0, count: nfft), count: bins)
         var sinTable = [[Double]](repeating: [Double](repeating: 0, count: nfft), count: bins)
@@ -123,8 +202,15 @@ public enum Enrollment {
         return (cosTable, sinTable)
     }
 
-    private static func powerSpectrum(_ frame: [Double], _ nfft: Int) -> [Double] {
-        let (cosT, sinT) = basis(nfft)
+    /// One frame's power spectrum against a basis the caller built.
+    ///
+    /// The basis is two `bins x nfft` tables of `cos` and `sin` that depend only
+    /// on `nfft`, so it is built once per call site rather than once per frame:
+    /// building it inside the frame loop cost a 10 s clip about 1.8 billion
+    /// trigonometric evaluations on the matcha path alone. Same multiply
+    /// accumulate order, same values.
+    static func powerSpectrum(_ frame: [Double], _ nfft: Int,
+                              _ cosT: [[Double]], _ sinT: [[Double]]) -> [Double] {
         let bins = nfft / 2 + 1
         var out = [Double](repeating: 0, count: bins)
         for k in 0..<bins {
@@ -165,6 +251,7 @@ public enum Enrollment {
         var frames = samples.count / hop160 + 1
         if dropLast { frames -= 1 }
         let bins = nfft / 2 + 1
+        let (cosT, sinT) = basis(nfft)
         var out = [[Double]](repeating: [Double](repeating: 0, count: frames), count: bins)
         for f in 0..<frames {
             let start = f * hop160
@@ -172,15 +259,15 @@ public enum Enrollment {
             for i in 0..<nfft {
                 frame[i] = padded[start + i] * Double(window[i])
             }
-            let sp = powerSpectrum(frame, nfft)
+            let sp = powerSpectrum(frame, nfft, cosT, sinT)
             for k in 0..<bins { out[k][f] = sp[k] }
         }
         return out
     }
 
-    private static func tokenizerMel(_ samples: [Double]) -> (values: [Float], frames: Int) {
-        let s3hann = table("s3_hann400")
-        let s3mel = table("s3_mel_filters")
+    private static func tokenizerMel(_ samples: [Double]) throws -> (values: [Float], frames: Int) {
+        let s3hann = try table("s3_hann400")
+        let s3mel = try table("s3_mel_filters")
         let spectra = centredPowerSpectra(samples, s3hann, dropLast: true)
         let frames = spectra[0].count
         var mel = melMultiply(s3mel, 128, 201, spectra, frames)
@@ -199,9 +286,9 @@ public enum Enrollment {
         return (mel, frames)
     }
 
-    private static func matchaMel(_ samples: [Double]) -> [Float] {
-        let matchaHann = table("matcha_hann1920")
-        let matchaMelF = table("matcha_mel_filters")
+    private static func matchaMel(_ samples: [Double]) throws -> [Float] {
+        let matchaHann = try table("matcha_hann1920")
+        let matchaMelF = try table("matcha_mel_filters")
         let pad = (matchaNFFT - matchaHop) / 2
         var padded = [Double](repeating: 0, count: samples.count + 2 * pad)
         for i in 0..<pad { padded[i] = samples[pad - i] }
@@ -210,6 +297,7 @@ public enum Enrollment {
 
         let frames = (padded.count - matchaNFFT) / matchaHop + 1
         let bins = matchaNFFT / 2 + 1
+        let (cosT, sinT) = basis(matchaNFFT)
         var spectra = [[Double]](repeating: [Double](repeating: 0, count: frames), count: bins)
         for f in 0..<frames {
             let start = f * matchaHop
@@ -217,7 +305,7 @@ public enum Enrollment {
             for i in 0..<matchaNFFT {
                 frame[i] = padded[start + i] * Double(matchaHann[i])
             }
-            var sp = powerSpectrum(frame, matchaNFFT)
+            var sp = powerSpectrum(frame, matchaNFFT, cosT, sinT)
             for i in 0..<sp.count { sp[i] = (sp[i] + 1e-9).squareRoot() }
             for k in 0..<bins { spectra[k][f] = sp[k] }
         }
@@ -227,11 +315,12 @@ public enum Enrollment {
         return mel
     }
 
-    private static func kaldiFbank(_ samples: [Double]) -> [Float] {
-        let kaldiMel = table("kaldi_mel_filters")
-        let kaldiPovey = table("kaldi_povey400")
+    private static func kaldiFbank(_ samples: [Double]) throws -> [Float] {
+        let kaldiMel = try table("kaldi_mel_filters")
+        let kaldiPovey = try table("kaldi_povey400")
         let frames = (samples.count - frame400) / hop160 + 1
         let bins = kaldiFFT / 2 + 1
+        let (cosT, sinT) = basis(kaldiFFT)
         var spectra = [[Double]](repeating: [Double](repeating: 0, count: frames), count: bins)
 
         for f in 0..<frames {
@@ -250,7 +339,7 @@ public enum Enrollment {
             }
             frame[0] -= 0.97 * prev
             for i in 0..<frame400 { frame[i] *= Double(kaldiPovey[i]) }
-            let sp = powerSpectrum(frame, kaldiFFT)
+            let sp = powerSpectrum(frame, kaldiFFT, cosT, sinT)
             for k in 0..<bins { spectra[k][f] = sp[k] }
         }
 
@@ -270,9 +359,9 @@ public enum Enrollment {
         return out
     }
 
-    private static func voiceEncoderMel(_ samples: [Double]) -> (values: [Float], frames: Int) {
-        let veHann = table("voiceenc_hann400")
-        let veMel = table("voiceenc_mel_filters")
+    private static func voiceEncoderMel(_ samples: [Double]) throws -> (values: [Float], frames: Int) {
+        let veHann = try table("voiceenc_hann400")
+        let veMel = try table("voiceenc_mel_filters")
         let spectra = centredPowerSpectra(samples, veHann, dropLast: false)
         let frames = spectra[0].count
         let binMajor = melMultiply(veMel, 40, 201, spectra, frames)
@@ -321,6 +410,9 @@ public enum Enrollment {
         private let camp: MLModel
         private let ve: MLModel
 
+        /// Load the three enrollment graphs from a release's `coreml`
+        /// directory. All three run on the CPU: the enrollment path runs once
+        /// per voice and bit parity with the reference matters more than speed.
         public init(coremlDir: URL) throws {
             tokenizer = try MLHelpers.loadModel(
                 packageURL: coremlDir.appendingPathComponent("s3_tokenizer.mlpackage"),
@@ -335,13 +427,9 @@ public enum Enrollment {
 
         /// An enrolled voice, before wrapping in a `VoiceProfile`.
         public func enroll(_ audio: [Float], sampleRate: Int) throws -> EnrolledVoice {
-            // A non-positive rate reaches the resampler as a division by zero, which
-            // traps here and kills the process. Go refused it at this point, Python raised
-            // from inside a kernel calculation, and this and Rust died. Same sentence as
-            // Go's, at the same place.
-            guard sampleRate > 0 else {
-                throw LoudKitError.shape("sample rate must be positive, got \(sampleRate)")
-            }
+            // The whole preflight before any DSP or model runs, the five refusals
+            // `validate_reference_audio` makes on the Python side.
+            try Enrollment.validateReferenceAudio(audio, sampleRate: sampleRate)
             let wav = audio.map(Double.init)
             let wav24Full = sampleRate == Enrollment.melSR
                 ? wav
@@ -354,20 +442,20 @@ public enum Enrollment {
             let wav16T3 = Enrollment.resample(wav24Full.map(Float.init), origFreq: Enrollment.melSR,
                                               newFreq: Enrollment.s3SR).map(Double.init)
 
-            let promptMel = Enrollment.matchaMel(wav24)
+            let promptMel = try Enrollment.matchaMel(wav24)
             let promptMelFrames = promptMel.count / 80
 
-            let (tokMel, _) = Enrollment.tokenizerMel(wav16Flow)
+            let (tokMel, _) = try Enrollment.tokenizerMel(wav16Flow)
             let tokens = try tokenize(tokMel)
             let nTok = min(tokens.count, promptMelFrames / 2)
             let promptTokens = Array(tokens.prefix(nTok))
             let promptMelOut = Array(promptMel.prefix(80 * 2 * nTok))
 
             let condSamples = min(Enrollment.condSeconds * Enrollment.s3SR, wav16T3.count)
-            let (condMel, _) = Enrollment.tokenizerMel(Array(wav16T3.prefix(condSamples)))
+            let (condMel, _) = try Enrollment.tokenizerMel(Array(wav16T3.prefix(condSamples)))
             let condTokens = try tokenizeCapped(condMel, cap: 150)
 
-            let fbank = Enrollment.kaldiFbank(wav16Flow)
+            let fbank = try Enrollment.kaldiFbank(wav16Flow)
             let flowEmbedding = try camEmbedding(fbank)
 
             let speakerEmbedding = try speakerEmbedding(wav16T3)
@@ -397,7 +485,7 @@ public enum Enrollment {
         }
 
         /// The FSQ base-3 fold: 8 dims of {0,1,2} to a token id. Mirrors
-        /// `_fold_codes` in the export tool — the graph emits the codes, the
+        /// `_fold_codes` in the export tool, the graph emits the codes, the
         /// host owns the integer encode.
         static func foldCodes(_ codes: [Float], nFrames: Int) -> [Int] {
             var out = [Int](repeating: 0, count: nFrames)
@@ -426,7 +514,7 @@ public enum Enrollment {
 
         private func speakerEmbedding(_ wav16T3: [Double]) throws -> [Float] {
             let trimmed = Enrollment.trim(wav16T3)
-            let (mel, frames) = Enrollment.voiceEncoderMel(trimmed)
+            let (mel, frames) = try Enrollment.voiceEncoderMel(trimmed)
 
             var nWins = 0
             var rem = 0
@@ -472,11 +560,18 @@ public enum Enrollment {
 }
 
 /// An enrolled voice's five tensors, before wrapping in a `VoiceProfile`.
-public struct EnrolledVoice {
+public struct EnrolledVoice: Sendable {
+    /// 256-d utterance embedding, unit norm, from the voice encoder.
     public let speakerEmbedding: [Float]
+    /// 192-d speaker embedding from the CAM++ graph, read by the flow decoder.
     public let flowEmbedding: [Float]
+    /// Prompt speech tokens, at most `promptMelFrames / 2` of them.
     public let promptTokens: [Int]
+    /// The prompt mel, 80 bins, frame major, two frames per prompt token.
     public let promptMel: [Float]
+    /// Frames in `promptMel`, since `promptMel` is flat.
     public let promptMelFrames: Int
+    /// Prompt tokens for the token generator, capped at its conditioning
+    /// length of 150.
     public let condPromptTokens: [Int]
 }

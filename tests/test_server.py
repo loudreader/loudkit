@@ -14,9 +14,12 @@ anything, and the point is that chunked delivery matches sequential delivery.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import json
 import secrets
+import sys
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -26,118 +29,56 @@ from loudkit.config import AlgorithmConfig
 from loudkit.contracts import Mel, Sampler, SpeechTokens, Waveform
 from loudkit.engine import Engine
 from loudkit.errors import (
+    CancelledError,
     UnsupportedLanguageError,
     VoiceNotFoundError,
     WindowOverflowError,
 )
 from loudkit.models.timestretch import MAX_SPEED, MIN_SPEED
 from loudkit.synthesis import VoiceLibrary, render_bytes, render_stream_chunks
-from loudkit.transports.http import _MIN_TOKEN_CHARS, build_app
+from loudkit.transports.http import build_app
+from loudkit.transports.limits import _MIN_TOKEN_CHARS
 from loudkit.voice import VoiceProfile
+
+# The shared weight-free set, one definition for every suite that uses it.
+from .conftest import (
+    FakeGenerator,
+    FakeMelDecoder,
+    FakeVocoder,
+    _SplitFrontend,
+    _stub_checkpoint,
+    _voice,
+    _voices,
+    chunking_engine,
+)
 
 fastapi = pytest.importorskip("fastapi")
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
+_ARRIVAL_GRACE_S = 0.25
+"""How long a request that nothing is holding back needs to reach the engine.
 
-def _voice() -> VoiceProfile:
-    return VoiceProfile(
-        name="fake",
-        speaker_embedding=np.full(256, 0.0625, np.float32),
-        flow_embedding=np.full(192, 0.0625, np.float32),
-        prompt_tokens=np.zeros(8, np.int64),
-        prompt_mel=np.zeros((80, 16), np.float32),
-        cond_prompt_tokens=np.zeros(8, np.int64),
-    )
+Read after every request is past ``voices.load`` and racing for the engine
+slot, so what is left is a semaphore acquire on the loop and one handoff to a
+worker thread: tens of microseconds. A quarter of a second is the margin, paid
+once by a test that has to prove nothing arrived rather than that something
+did, and a widened slot fills the count well inside it."""
 
 
-class _SplitFrontend:
-    """Splits on full stops so streaming has more than one chunk."""
+def _fake_uvicorn(run) -> type:
+    """A stand-in `uvicorn` module whose `run` is the callable given.
 
-    def encode(self, text: str, language: str = "en") -> np.ndarray:
-        words = text.replace(".", " .").split()
-        return np.arange(len(words), dtype=np.int64)
-
-
-class _FakeGenerator:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def generate(
-        self,
-        text_tokens: np.ndarray,
-        voice: VoiceProfile,
-        *,
-        sampler: Sampler,
-        max_new_tokens: int | None = None,
-        prefix: SpeechTokens = (),
-        should_cancel=None,
-    ) -> SpeechTokens:
-        n = max(1, len(text_tokens))
-        return [*range(n), self.config.stop_speech_token]
-
-    def teacher_forced_logits(
-        self, text_tokens: np.ndarray, voice: VoiceProfile, forced: SpeechTokens
-    ) -> np.ndarray:
-        return np.zeros((len(forced) + 1, self.config.speech_vocab_size), np.float32)
-
-
-class _FakeMelDecoder:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def decode(self, tokens: SpeechTokens, voice: VoiceProfile, *, seed: int) -> Mel:
-        return np.full((80, max(1, len(tokens)) * 2), float(seed % 97), np.float32)
-
-
-class _FakeVocoder:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def synthesize(self, mel: Mel, voice: VoiceProfile, *, seed: int) -> Waveform:
-        return np.zeros(mel.shape[1] * 256, np.float32)
-
-
-def _stub_checkpoint(tmp_path) -> Path:
-    """A checkpoint file that exists but is never read.
-
-    These tests inject an engine, so nothing loads the weights -- but `serve`
-    hands its checkpoint argument to the hub whatever shape it has, and the hub
-    will not hand back a path to nothing. It sits in a directory of its own so a
-    test that also passes ``voices=tmp_path`` does not find it offered as a
-    voice.
+    `serve` does `import uvicorn` inside its body, so the interception point is
+    `sys.modules`, not an attribute on the transport. One spelling, because four
+    of them read as four different mechanisms.
     """
-    holder = tmp_path / "checkpoint"
-    holder.mkdir(exist_ok=True)
-    path = holder / "ckpt.safetensors"
-    path.write_bytes(b"x")
-    return path
-
-
-def _engine() -> Engine:
-    from dataclasses import replace
-
-    # max_tokens=2 makes the fake split "one. two. three." into small chunks;
-    # prefix_tokens=0 keeps it from tripping the prefix < max_tokens check.
-    chunking = replace(AlgorithmConfig().chunking, max_tokens=2, prefix_tokens=0)
-    algo = AlgorithmConfig().with_(chunking=chunking)
-    return Engine(
-        frontend=_SplitFrontend(),
-        token_generator=_FakeGenerator(algo),
-        mel_decoder=_FakeMelDecoder(algo),
-        vocoder=_FakeVocoder(algo),
-        algorithm=algo,
-    )
-
-
-def _voices(tmp_path) -> VoiceLibrary:
-    """A voice library with one voice named 'fake', written to disk."""
-    voice = _voice()
-    voice.save(tmp_path / "fake.safetensors")
-    return VoiceLibrary(tmp_path)
+    return type("_FakeUvicorn", (), {"run": staticmethod(run)})
 
 
 def _client(tmp_path):
-    return TestClient(build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765")
+    return TestClient(
+        build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+    )
 
 
 def test_public_host_refused_without_flag(tmp_path, monkeypatch) -> None:
@@ -145,7 +86,7 @@ def test_public_host_refused_without_flag(tmp_path, monkeypatch) -> None:
     import loudkit
     import loudkit.transports.http as server_mod
 
-    monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: _engine())
+    monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: chunking_engine())
 
     with pytest.raises(SystemExit, match="refusing to bind 0.0.0.0"):
         server_mod.serve(_stub_checkpoint(tmp_path), host="0.0.0.0")
@@ -153,22 +94,45 @@ def test_public_host_refused_without_flag(tmp_path, monkeypatch) -> None:
 
 def test_public_host_allowed_with_flag(tmp_path, monkeypatch) -> None:
     """--allow-public is the explicit opt-in for a non-loopback bind."""
-    import sys
-
     import loudkit
     import loudkit.transports.http as server_mod
 
-    monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: _engine())
+    monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: chunking_engine())
 
     started = {}
 
     def fake_uvicorn(*args, host, port, **kwargs):
         started["host"], started["port"] = host, port
 
-    monkeypatch.setitem(sys.modules, "uvicorn", type("U", (), {"run": fake_uvicorn}))
+    monkeypatch.setitem(sys.modules, "uvicorn", _fake_uvicorn(fake_uvicorn))
 
     server_mod.serve(_stub_checkpoint(tmp_path), host="0.0.0.0", allow_public=True)
     assert started == {"host": "0.0.0.0", "port": 8765}
+
+
+@pytest.mark.parametrize("host", ["localhost", "::1", "127.0.0.2"])
+def test_serve_calls_every_loopback_address_loopback(tmp_path, monkeypatch, host) -> None:
+    """`serve` decides "public bind" with the rule the guard applies to `Host`.
+
+    So a bind on any loopback address needs no `--allow-public`, and a token
+    given for one is ignored, as documented; 127.0.0.2 is as loopback as
+    127.0.0.1, and a rule that named three spellings refused it.
+    """
+    import loudkit
+    import loudkit.transports.http as server_mod
+
+    monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: chunking_engine())
+    built = {}
+
+    def fake_build_app(engine, library, *, token, allow_public, warm):
+        built["token"], built["allow_public"] = token, allow_public
+        return object()
+
+    monkeypatch.setattr(server_mod, "build_app", fake_build_app)
+    monkeypatch.setitem(sys.modules, "uvicorn", _fake_uvicorn(lambda *_a, **_k: None))
+
+    server_mod.serve(_stub_checkpoint(tmp_path), host=host, token="a-token-long-enough")
+    assert built == {"token": None, "allow_public": False}
 
 
 def test_synthesize_returns_wav(tmp_path) -> None:
@@ -180,38 +144,113 @@ def test_synthesize_returns_wav(tmp_path) -> None:
     assert "X-Loudkit-Tokens" in resp.headers
 
 
+def test_long_form_is_the_wires_name_for_single_window(tmp_path) -> None:
+    """The one negation on the route, asserted in both directions.
+
+    `render_bytes` maps `long_form=false` to `single_window=True`. An inverted
+    boolean is invisible from outside: both values return audio for anything
+    that fits, and the difference only shows on text that does not. Nothing
+    else in the suite sends the field at all.
+    """
+    from dataclasses import replace
+
+    algo = AlgorithmConfig()
+    algo = algo.with_(
+        window=type(algo.window)(max_speech_tokens=4),
+        chunking=replace(algo.chunking, max_tokens=2, prefix_tokens=0),
+        sampling=replace(algo.sampling, max_new_tokens=4),
+    )
+    engine = Engine(
+        frontend=_SplitFrontend(),
+        token_generator=_CappedGenerator(algo),
+        mel_decoder=FakeMelDecoder(algo),
+        vocoder=FakeVocoder(algo),
+        algorithm=algo,
+    )
+    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")
+    text = "one two three four five six."
+
+    split = client.post("/v1/synthesize", json={"text": text, "voice": "fake"})
+    assert split.status_code == 200, split.text
+
+    refused = client.post(
+        "/v1/synthesize", json={"text": text, "voice": "fake", "long_form": False}
+    )
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "window_overflow"
+
+
 def test_concurrent_synthesis_is_serialised(tmp_path) -> None:
     """The engine is single-flight: concurrent requests must not interleave.
-    FastAPI runs sync routes in a threadpool, so without the lock N requests
-    enter the same Engine at once — a real hazard under --cuda-graphs. Every
-    response must still be a complete, valid WAV.
 
-    Uses ``with client:`` so every thread shares one portal, i.e. one event
-    loop — that's what a real uvicorn worker gives concurrent requests.
-    Without it, each ``client.post`` from a fresh OS thread spins its own
-    portal/event loop, and ``_engine_lock`` (an ``anyio.Lock``, bound to the
-    loop that first acquires it) hangs forever when a second loop awaits it —
-    a TestClient artifact, not a server bug, but one that hides the real
-    concurrency behaviour if the portal isn't shared."""
+    Asserted on the engine, not on the responses. FastAPI runs the render in
+    the worker pool, so without the slot N requests are inside one Engine at
+    once, which is a real hazard under CUDA graph capture; and every one of
+    them still returns 200 with a complete WAV, because two interleaved
+    renders both finish. The observable is the most renders the engine ever
+    held open at once, which the slot exists to keep at 1.
+
+    The window is opened rather than guessed. Every render is held inside the
+    engine until this test lets it go, and the count is read once all sixteen
+    requests are past ``voices.load``, which the routes call before they ask
+    for the slot. From there a request that the slot is not holding back is a
+    thread handoff away from the engine, and ``_ARRIVAL_GRACE_S`` is three
+    orders of magnitude more than that handoff takes; a slot that admits the
+    crowd fills the count inside it.
+
+    Uses ``with client:`` so every thread shares one portal, that is, one
+    event loop, which is what a real uvicorn worker gives concurrent
+    requests. Without it each ``client.post`` from a fresh OS thread spins its
+    own portal and loop, and the slot's semaphore, bound to the loop that
+    first acquires it, hangs when a second loop awaits it. A TestClient
+    artifact rather than a server bug, but one that hides the behaviour this
+    test is about.
+    """
+    import time
     from concurrent.futures import ThreadPoolExecutor
 
-    with _client(tmp_path) as client, ThreadPoolExecutor(max_workers=8) as pool:
+    n = 16
+    engine = _CountedHeldEngine()
+    _voice().save(tmp_path / "fake.safetensors")
+    voices = _CountingLibrary(tmp_path)
+    client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")
+
+    with client, ThreadPoolExecutor(max_workers=n) as pool:
         futures = [
             pool.submit(
                 client.post,
                 "/v1/synthesize",
                 json={"text": f"request {i}", "voice": "fake", "seed": 7},
             )
-            for i in range(16)
+            for i in range(n)
         ]
-        for f in futures:
-            resp = f.result()
-            assert resp.status_code == 200, resp.text
-            assert resp.headers["content-type"].startswith("audio/wav")
-            assert b"RIFF" in resp.content
+        for i in range(n):
+            assert voices.loads.acquire(timeout=60.0), f"only {i} of {n} requests arrived"
+        assert engine.rendering.wait(30.0), "no request reached the engine"
+        time.sleep(_ARRIVAL_GRACE_S)
+        peak_under_contention = engine.peak_open
+        engine.release.set()
+        responses = [f.result(timeout=60.0) for f in futures]
+
+    assert peak_under_contention == 1, (
+        f"{peak_under_contention} renders were inside the single-flight engine at "
+        f"once while {n} requests contended for it"
+    )
+    assert engine.peak_open == 1, (
+        f"{engine.peak_open} renders were inside the single-flight engine at once"
+    )
+    assert engine.open_streams == 0, "a render was left open"
+    assert len(engine.languages) == n, (
+        f"{len(engine.languages)} of {n} requests reached the engine; a test that "
+        "never renders cannot see two renders overlap"
+    )
+    for resp in responses:
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"].startswith("audio/wav")
+        assert b"RIFF" in resp.content
 
 
-class _CountingGenerator(_FakeGenerator):
+class _CountingGenerator(FakeGenerator):
     """A generator with a real decode loop, so cancellation depth is observable.
 
     The plain fake returns a token list in one go, which cannot distinguish
@@ -247,7 +286,7 @@ class _CountingGenerator(_FakeGenerator):
 def _counting_engine() -> tuple[Engine, _CountingGenerator]:
     """An engine whose chunks are *long*, so mid-chunk cancellation is visible.
 
-    The shared ``_engine()`` uses ``max_tokens=2`` to force many chunks out of a
+    The shared ``chunking_engine()`` uses ``max_tokens=2`` to force many chunks out of a
     short string, which is exactly wrong here: with one token per chunk, every
     cancellation looks like a boundary cancellation and the test cannot fail.
     """
@@ -260,8 +299,8 @@ def _counting_engine() -> tuple[Engine, _CountingGenerator]:
         Engine(
             frontend=_SplitFrontend(),
             token_generator=gen,
-            mel_decoder=_FakeMelDecoder(algo),
-            vocoder=_FakeVocoder(algo),
+            mel_decoder=FakeMelDecoder(algo),
+            vocoder=FakeVocoder(algo),
             algorithm=algo,
         ),
         gen,
@@ -317,7 +356,7 @@ def test_cancel_lands_inside_the_chunk_not_at_its_boundary() -> None:
     assert gen.steps < baseline.steps
 
 
-class _CappedGenerator(_FakeGenerator):
+class _CappedGenerator(FakeGenerator):
     """Runs to the token cap without ever emitting a stop token.
 
     That is what a broken EOS path looks like from the engine's side, and it is
@@ -349,8 +388,8 @@ def _capped_engine() -> Engine:
     return Engine(
         frontend=_SplitFrontend(),
         token_generator=_CappedGenerator(algo),
-        mel_decoder=_FakeMelDecoder(algo),
-        vocoder=_FakeVocoder(algo),
+        mel_decoder=FakeMelDecoder(algo),
+        vocoder=FakeVocoder(algo),
         algorithm=algo,
     )
 
@@ -370,7 +409,9 @@ def test_truncation_is_reported_over_http(tmp_path) -> None:
     assert resp.headers["X-Loudkit-Truncated"] == "true"
 
     # And the negative case, so the header is not simply always "true".
-    ok = TestClient(build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765")
+    ok = TestClient(
+        build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+    )
     resp = ok.post("/v1/synthesize", json={"text": "one. two.", "voice": "fake"})
     assert resp.headers["X-Loudkit-Truncated"] == "false"
 
@@ -380,7 +421,7 @@ def test_truncation_is_reported_in_the_stream(tmp_path) -> None:
 
     A client that only reads ``done`` must still learn that some chunk was cut
     off, which is why the aggregate is ORed across chunks exactly as
-    ``Engine.synthesize_long`` does it.
+    ``Engine.synthesize`` does it.
     """
     client = TestClient(
         build_app(_capped_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
@@ -446,7 +487,7 @@ def test_stream_yields_one_event_per_chunk_then_done(tmp_path) -> None:
         assert ev["audio"]
         assert ev["duration"] > 0
         assert ev["tokens"] > 0
-        assert b"RIFF" in __import__("base64").b64decode(ev["audio"])
+        assert b"RIFF" in base64.b64decode(ev["audio"])
 
 
 def test_stream_same_audio_as_whole_passage(tmp_path) -> None:
@@ -455,7 +496,7 @@ def test_stream_same_audio_as_whole_passage(tmp_path) -> None:
     This is the server's version of the one-path rule: streaming is delivery,
     not a second synthesis.
     """
-    engine = _engine()
+    engine = chunking_engine()
     voice = _voice()
     text = "one. two. three."
 
@@ -472,6 +513,38 @@ def test_stream_same_audio_as_whole_passage(tmp_path) -> None:
     chunked_pcm = np.concatenate([sf.read(io.BytesIO(c), dtype="float32")[0] for c in chunks])
     assert len(chunked_pcm) == len(whole_pcm)
     assert np.array_equal(chunked_pcm, whole_pcm)
+
+
+def test_the_route_returns_the_bytes_the_library_returns(tmp_path) -> None:
+    """The claim the transport exists to keep, on HTTP.
+
+    `render_bytes` is the only place this library makes audio, so
+    `/v1/synthesize` has to hand back exactly what a direct call hands back,
+    byte for byte. Everything else in this file would pass against a transport
+    that re-encoded, dropped the provenance trailer or passed a different seed:
+    the stream test compares the library with itself, and the OpenAI test
+    compares one route with another. Both formats, because the encoder is
+    chosen per request.
+
+    `test_grpc_returns_the_same_bytes_as_the_library` is the same assertion on
+    the third door.
+    """
+    engine = chunking_engine()
+    library = _voices(tmp_path)
+    client = TestClient(build_app(engine, library), base_url="http://127.0.0.1:8765")
+    text = "one. two."
+
+    for audio_format, media_type in (("wav", "audio/wav"), ("flac", "audio/flac")):
+        direct = render_bytes(
+            engine, text, library.load("fake"), seed=7, audio_format=audio_format
+        )
+        resp = client.post(
+            "/v1/synthesize",
+            json={"text": text, "voice": "fake", "seed": 7, "format": audio_format},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.headers["content-type"].startswith(media_type)
+        assert resp.content == direct.data, f"{audio_format}: the route made its own audio"
 
 
 def test_health_reports_fingerprint(tmp_path) -> None:
@@ -507,6 +580,33 @@ def test_voice_library_rejects_path_traversal(tmp_path) -> None:
 
     # A plain name still loads.
     assert lib.load("fake") is not None
+
+
+def test_voice_library_accepts_the_hub_cache_layout(tmp_path) -> None:
+    """A release the Hub cache holds is a snapshot of symlinks, one per file,
+    into its cache entry's own blob store. Those links are the release, not an
+    escape from it, so the library lists and loads through them. A link that
+    leaves the entry is still refused, by the same check."""
+    entry = tmp_path / "hub" / "models--loudreader--loudr-1"
+    blobs = entry / "blobs"
+    voices = entry / "snapshots" / ("0" * 40) / "voices"
+    blobs.mkdir(parents=True)
+    voices.mkdir(parents=True)
+    blob = blobs / ("ab" * 20)
+    _voice().save(blob)
+    outside = tmp_path / "secret.safetensors"
+    _voice().save(outside)
+    try:
+        (voices / "joe.safetensors").symlink_to(Path("../../../blobs") / blob.name)
+        (voices / "leak.safetensors").symlink_to(outside)
+    except OSError as exc:  # pragma: no cover - platform-dependent
+        pytest.skip(f"cannot create a symlink on this machine: {exc}")
+
+    lib = VoiceLibrary(voices)
+    assert lib.names() == ["joe"]
+    assert lib.load("joe") is not None
+    with pytest.raises(VoiceNotFoundError):
+        lib.load("leak")
 
 
 def test_voice_library_rejects_symlink_out_of_the_library(tmp_path) -> None:
@@ -555,7 +655,19 @@ class _SlowEngine:
         self.execution = type("_Exec", (), {"describe": staticmethod(lambda: "test")})()
         self.backend = "fake"
         self.checkpoint_sha256 = ""
+        self.wedged: str | None = None
+        """What `/health` reads to tell "slow" from "unusable". This double
+        stands in for a working engine, so it is never wedged."""
         self.slices = 0
+        self.rendering = threading.Event()
+        """Set the moment a render is inside this engine.
+
+        The observable a concurrency test actually wants. Both routes take the
+        engine slot before they reach here, so a set flag means the slot is
+        taken and held; a test that slept 50 ms instead was asserting on a
+        guess, and on a loaded runner the guess is wrong in the direction that
+        reads as a pass.
+        """
         self.languages: list[str | None] = []
         """Every `language` this engine was handed, verbatim.
 
@@ -592,21 +704,103 @@ class _SlowEngine:
             for _ in range(self.SLICES_PER_CHUNK):
                 if should_cancel is not None and should_cancel():
                     return
+                self.rendering.set()
                 self.slices += 1
                 self._t.sleep(0.01)
             yield _FakeResult()
 
     def synthesize(
-        self, text, voice, *, seed=0, language=None, speed=1.0, previous_tokens=None
+        self,
+        text,
+        voice,
+        *,
+        seed=0,
+        language=None,
+        speed=1.0,
+        previous_tokens=None,
+        single_window=False,
+        should_cancel=None,
     ):
         self.languages.append(language)
+        if single_window:
+            return _FakeResult()
+        # The one-shot path does the same work as `stream`, in one call and
+        # with no chunk boundary to stop at. Polled per slice for the same
+        # reason: a route that stops answering while the engine keeps decoding
+        # has cancelled nothing.
+        for _ in range(self.CHUNKS * self.SLICES_PER_CHUNK):
+            if should_cancel is not None and should_cancel():
+                raise CancelledError("cancelled: should_cancel returned true")
+            self.rendering.set()
+            self.slices += 1
+            self._t.sleep(0.01)
         return _FakeResult()
 
-    def synthesize_long(
-        self, text, voice, *, seed=0, language=None, speed=1.0, previous_tokens=None
-    ):
-        self.languages.append(language)
+
+class _HeldEngine(_SlowEngine):
+    """The same engine, held on an event instead of ground through in sleeps.
+
+    A contention test needs a render that is *in progress* while other requests
+    arrive; it does not need that render to be slow, and the difference is the
+    whole cost of the test. Every render here announces itself and then waits,
+    so the window is as long as the asking takes and not a second longer.
+
+    The ceiling is a deadlock's, not a duration's: nothing should ever reach it,
+    and a run that does has found the hang this file is about.
+    """
+
+    HOLD_CEILING_S = 120.0
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.release = threading.Event()
+
+    def _hold(self) -> None:
+        self.rendering.set()
+        assert self.release.wait(self.HOLD_CEILING_S), "a render was never released"
+
+    def stream(self, text, voice, **kw):
+        self.languages.append(kw.get("language"))
+        self._hold()
+        for _ in range(self.CHUNKS):
+            self.slices += self.SLICES_PER_CHUNK
+            yield _FakeResult()
+
+    def synthesize(self, text, voice, **kw):
+        self.languages.append(kw.get("language"))
+        if kw.get("single_window"):
+            return _FakeResult()
+        self._hold()
+        self.slices += self.CHUNKS * self.SLICES_PER_CHUNK
         return _FakeResult()
+
+
+class _CountingLibrary:
+    """A voice library that says when a request has reached the server.
+
+    ``load`` is the first thing either synthesis route does with something this
+    suite owns, and it runs before the engine slot is asked for -- so counting
+    it counts arrivals, including the requests that go on to be refused for a
+    full queue. A semaphore rather than a counter, because the waiting side
+    wants to block until the crowd is there, not poll for it.
+
+    Around a library rather than derived from one: ``VoiceLibrary`` is frozen
+    and slotted, so a subclass has nowhere to put the semaphore. The two
+    methods forwarded are the two the routes call.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self._inner = VoiceLibrary(root)
+        self.loads = threading.Semaphore(0)
+
+    def names(self) -> list[str]:
+        return self._inner.names()
+
+    def load(self, name: str) -> VoiceProfile:
+        try:
+            return self._inner.load(name)
+        finally:
+            self.loads.release()
 
 
 class _FakeResult:
@@ -675,7 +869,7 @@ def test_stream_does_not_freeze_health(tmp_path) -> None:
 
     engine = _SlowEngine()
     voices = _voices(tmp_path)
-    client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")  # type: ignore[arg-type]
+    client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         stream_fut = pool.submit(
@@ -687,13 +881,235 @@ def test_stream_does_not_freeze_health(tmp_path) -> None:
         )
         import time
 
-        time.sleep(0.05)  # let the stream start and take the lock
+        # The state the next line needs, waited for rather than guessed at:
+        # `/health` is only interesting while the stream holds the slot, and a
+        # stream that has not started yet holds nothing.
+        assert engine.rendering.wait(30.0), "the stream never reached the engine"
         t0 = time.time()
         resp = client.get("/health")
         elapsed = time.time() - t0
         assert resp.status_code == 200, resp.text
         assert elapsed < 1.0, f"/health blocked by in-flight stream: {elapsed:.2f}s"
         stream_fut.result().close()
+
+
+def test_a_disconnect_stops_the_one_shot_render_too(tmp_path) -> None:
+    """The route that had no way to stop.
+
+    `/v1/synthesize` returns one response at the end, so there was nothing to
+    notice a departed client with: the render ran to its last token holding the
+    engine's single slot, and only then discovered nobody was listening. A
+    passage is the longest thing this library does, which makes this the worst
+    place for that and the last one to get the watcher.
+
+    Driven as raw ASGI for the same reason the streaming test is: `TestClient`
+    never emits `http.disconnect`, so the same test through it would pass
+    whether or not the watcher exists.
+    """
+    import anyio
+
+    engine = _SlowEngine()
+    app = build_app(engine, _voices(tmp_path))
+    total = _SlowEngine.CHUNKS * _SlowEngine.SLICES_PER_CHUNK
+    body = json.dumps({"text": "one. two. three.", "voice": "fake"}).encode()
+
+    async def drive() -> None:
+        sent: list[dict] = []
+        polls = 0
+
+        async def receive() -> dict:
+            # Never awaits. Starlette calls `receive()` from inside an
+            # already-cancelled scope, so anything that suspends is cancelled
+            # and the message is lost: a `receive` that sleeps before returning
+            # the disconnect delivers it never.
+            nonlocal polls
+            if not sent:
+                sent.append({})
+                return {"type": "http.request", "body": body, "more_body": False}
+            polls += 1
+            if polls < 3:
+                # Not a disconnect, so the watcher keeps waiting. Two poll
+                # intervals of work happen before the client leaves, which is
+                # what makes "it stopped early" a real measurement rather than
+                # "it never started".
+                return {"type": "http.request", "body": b"", "more_body": False}
+            return {"type": "http.disconnect"}
+
+        async def send(message: dict) -> None:
+            del message
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.1"},
+            "http_version": "1.1",
+            "method": "POST",
+            "path": "/v1/synthesize",
+            "raw_path": b"/v1/synthesize",
+            "query_string": b"",
+            "root_path": "",
+            "scheme": "http",
+            "headers": [
+                (b"host", b"127.0.0.1:8765"),
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+            "client": ("testclient", 50000),
+            "server": ("127.0.0.1", 8765),
+        }
+        with anyio.move_on_after(5):
+            await app(scope, receive, send)
+
+    anyio.run(drive)
+
+    assert engine.slices > 0, "the render should have started"
+    assert engine.slices < total, (
+        f"engine ran all {total} slices after the client left — the one-shot "
+        "route stopped answering but not synthesising"
+    )
+
+
+def test_a_defect_is_not_reported_as_the_callers_fault(tmp_path) -> None:
+    """A bare `ValueError` out of the renderer is a defect, not a bad request.
+
+    The one-shot route answered 422 with `str(exc)` for any `ValueError`, so a
+    failure inside the renderer reached an unauthenticated caller as its own
+    message — a checkpoint path, in the case that found this — and as "your
+    request was wrong". Two harms: the leak, and a classification an agent
+    retries forever, because `bad_request` is documented as retryable.
+
+    The stream route has classified since it existed. This is the same line.
+    """
+    engine = _SlowEngine()
+    secret = "/srv/models/private-ckpt.safetensors: operands could not be broadcast"
+
+    def boom(*_a, **_kw):
+        raise ValueError(secret)
+
+    object.__setattr__(engine, "synthesize", boom)
+    app = build_app(engine, _voices(tmp_path))
+    client = TestClient(app, raise_server_exceptions=False, base_url="http://127.0.0.1:8765")
+
+    for path, body in (
+        ("/v1/synthesize", {"text": "hi", "voice": "fake"}),
+        ("/v1/audio/speech", {"input": "hi", "voice": "fake", "model": "loudkit"}),
+    ):
+        r = client.post(path, json=body)
+        assert r.status_code == 500, path
+        assert secret not in r.text, f"{path} leaked the defect's message"
+        assert "private-ckpt" not in r.text
+
+
+def test_a_non_finite_float_is_a_refusal_not_a_crash(tmp_path) -> None:
+    """`json.loads` accepts `NaN`; `json.dumps` refuses it.
+
+    Pydantic rejected the value correctly and embedded it in the error list it
+    hands back — so the one payload guaranteed to contain something `json`
+    cannot write was a validation error about something `json` cannot write.
+    The 422 became a 500 while being rendered, for any field.
+    """
+    app = build_app(_SlowEngine(), _voices(tmp_path))
+    client = TestClient(app, raise_server_exceptions=False, base_url="http://127.0.0.1:8765")
+    headers = {"content-type": "application/json"}
+    for body in (
+        '{"text":"hi","voice":"fake","speed":NaN}',
+        '{"text":"hi","voice":"fake","seed":NaN}',
+        '{"text":"hi","voice":"fake","speed":Infinity}',
+    ):
+        r = client.post("/v1/synthesize", content=body, headers=headers)
+        assert r.status_code == 422, body
+        assert r.json()["code"] == "invalid_request"
+    assert (
+        client.post("/v1/synthesize", json={"text": "hi", "voice": "fake"}).status_code == 200
+    )
+
+
+def test_an_over_long_voice_name_is_refused_before_the_filesystem_sees_it(tmp_path) -> None:
+    """The filesystem's own bound answers with `OSError`, which is neither
+    `VoiceNotFoundError` nor `ValueError`, so it escaped every ladder: HTTP
+    answered 500 and gRPC put the voices directory on the wire inside the errno
+    message — the one thing the not-found message deliberately withholds."""
+    app = build_app(_SlowEngine(), _voices(tmp_path))
+    client = TestClient(app, raise_server_exceptions=False, base_url="http://127.0.0.1:8765")
+    r = client.post("/v1/synthesize", json={"text": "hi", "voice": "a" * 5000})
+    assert r.status_code == 400
+    assert "not a voice name" in r.json()["detail"]
+    assert str(tmp_path) not in r.text
+
+
+def test_a_peer_that_stops_reading_does_not_hold_the_engine_forever(
+    tmp_path, monkeypatch
+) -> None:
+    """The gap the disconnect watcher cannot see.
+
+    `is_disconnected()` answers about a peer that *hung up*. A peer that stays
+    connected and stops reading is still there, so the watcher never fires —
+    and TCP backpressure blocks the body generator inside Starlette's `send`,
+    at a `yield`. The generator never resumes, the response never ends, and the
+    engine slot is never released: every synthesis route answers `busy` and
+    `/health` answers `stuck` for as long as that socket is open. One local
+    process is enough.
+
+    Setting the cancel flag is not the fix. It stops the render, and the render
+    is not what is stuck; the generator is parked on a send that no flag is
+    read after. `_MAX_STREAM_S` cancels the response task, and the unwind
+    reaches `_LeasedStream.__call__`'s `finally`, which is the one path that
+    gives the slot back on every exit.
+
+    Driven as raw ASGI with a `send` that never returns, which is what a
+    blocked write is.
+    """
+    import anyio
+
+    from loudkit.transports import limits as limits_module
+
+    engine = _SlowEngine()
+    app = build_app(engine, _voices(tmp_path))
+    body = json.dumps({"text": "one. two. three.", "voice": "fake"}).encode()
+
+    async def drive() -> None:
+        sent: list[dict] = []
+        blocked = anyio.Event()
+        finished = anyio.Event()
+
+        async def receive() -> dict:
+            if not sent:
+                sent.append({})
+                return {"type": "http.request", "body": body, "more_body": False}
+            # Connected and idle: never a disconnect, and nothing more to
+            # read. Returning an empty body message instead would spin the
+            # body reader and hang the *test* rather than the send.
+            await anyio.sleep_forever()
+            raise AssertionError("unreachable")
+
+        async def send(message: dict) -> None:
+            if message["type"] == "http.response.body":
+                blocked.set()
+                await anyio.sleep_forever()  # the write that never drains
+
+        scope = _stream_scope(body)
+        # The harness bound is a backstop, not the thing under test — so what
+        # is asserted is that the *app* returned, not that this scope did. With
+        # no cap the app never returns and `move_on_after` rescues the test,
+        # which is a pass that proves nothing; that is what the earlier version
+        # of this test did.
+        with anyio.move_on_after(20):
+            await app(scope, receive, send)
+            finished.set()
+        assert blocked.is_set(), "the peer never reached the blocked write"
+        assert finished.is_set(), (
+            "the response never ended on its own: a peer that stops reading "
+            "holds the engine slot for as long as it keeps the socket open"
+        )
+
+    monkeypatch.setattr(limits_module, "_MAX_STREAM_S", 2.0)
+    anyio.run(drive)
+
+    # The whole point: the engine is usable afterwards. If the slot had leaked,
+    # this render would wait `_MAX_WAIT_S` and answer `busy`.
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    assert (
+        client.post("/v1/synthesize", json={"text": "hi", "voice": "fake"}).status_code == 200
+    )
 
 
 def test_disconnect_stops_the_render_it_does_not_just_stop_sending(tmp_path) -> None:
@@ -714,7 +1130,7 @@ def test_disconnect_stops_the_render_it_does_not_just_stop_sending(tmp_path) -> 
     import anyio
 
     engine = _SlowEngine()
-    app = build_app(engine, _voices(tmp_path))  # type: ignore[arg-type]
+    app = build_app(engine, _voices(tmp_path))
     total = _SlowEngine.CHUNKS * _SlowEngine.SLICES_PER_CHUNK
     body = json.dumps({"text": "one. two. three.", "voice": "fake"}).encode()
 
@@ -737,24 +1153,7 @@ def test_disconnect_stops_the_render_it_does_not_just_stop_sending(tmp_path) -> 
             if message["type"] == "http.response.body" and message.get("body"):
                 disconnect_after.set()
 
-        scope = {
-            "type": "http",
-            "asgi": {"version": "3.0", "spec_version": "2.1"},
-            "http_version": "1.1",
-            "method": "POST",
-            "path": "/v1/synthesize/stream",
-            "raw_path": b"/v1/synthesize/stream",
-            "query_string": b"",
-            "root_path": "",
-            "scheme": "http",
-            "headers": [
-                (b"host", b"127.0.0.1:8765"),
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(body)).encode()),
-            ],
-            "client": ("testclient", 50000),
-            "server": ("127.0.0.1", 8765),
-        }
+        scope = _stream_scope(body)
         with anyio.move_on_after(5):
             await app(scope, receive, send)
 
@@ -803,30 +1202,60 @@ def _stream_scope(body: bytes) -> dict:
     }
 
 
-class _CountedStreamEngine(_SlowEngine):
-    """Reports whether two callers were ever inside `stream()` at once.
+class _CountsOpenRenders:
+    """How many callers were inside the engine at once, and the most there were.
 
     The engine is single-flight because it is not reentrant, so "the slot came
     back" and "the engine is free" are different claims and only the second one
-    matters. This fake makes the difference observable: it counts open
-    `stream()` frames and remembers if a second one ever opened while the first
-    was still there, which is what the slot exists to prevent.
+    matters. This makes the difference observable: it counts open render frames
+    and reports the peak, which is what the slot exists to keep at 1.
+
+    Mixed in ahead of an engine double, and counted around both entry points,
+    because that is where a second caller collides with the first. Guarded by a
+    lock: the callers being counted are on different threads, and an unguarded
+    ``+= 1`` drops exactly the increment a contention test is looking for.
     """
 
     def __init__(self) -> None:
         super().__init__()
+        self._open_lock = threading.Lock()
         self.open_streams = 0
-        self.overlapped = False
+        self.peak_open = 0
 
-    def stream(self, text, voice, **kwargs):  # type: ignore[no-untyped-def]
-        self.open_streams += 1
-        self.overlapped = self.overlapped or self.open_streams > 1
+    @property
+    def overlapped(self) -> bool:
+        return self.peak_open > 1
+
+    @contextlib.contextmanager
+    def _counted(self):
+        with self._open_lock:
+            self.open_streams += 1
+            self.peak_open = max(self.peak_open, self.open_streams)
         try:
-            yield from super().stream(text, voice, **kwargs)
+            yield
         finally:
             # Runs when the generator is closed, which is the only signal the
             # engine gets that an abandoned stream is over.
-            self.open_streams -= 1
+            with self._open_lock:
+                self.open_streams -= 1
+
+    def stream(self, text, voice, **kwargs):
+        with self._counted():
+            yield from super().stream(text, voice, **kwargs)
+
+    def synthesize(self, text, voice, **kwargs):
+        with self._counted():
+            return super().synthesize(text, voice, **kwargs)
+
+
+class _CountedStreamEngine(_CountsOpenRenders, _SlowEngine):
+    """A render that grinds through sleeps, counted, so a stream can be
+    abandoned partway and the next caller's collision observed."""
+
+
+class _CountedHeldEngine(_CountsOpenRenders, _HeldEngine):
+    """A render that stays inside the engine until released, counted, so the
+    window a crowd would collide in is open by construction."""
 
 
 def test_a_disconnect_gives_the_slot_back_only_once_the_engine_is_free(tmp_path) -> None:
@@ -846,7 +1275,7 @@ def test_a_disconnect_gives_the_slot_back_only_once_the_engine_is_free(tmp_path)
     import anyio
 
     engine = _CountedStreamEngine()
-    app = build_app(engine, _voices(tmp_path))  # type: ignore[arg-type]
+    app = build_app(engine, _voices(tmp_path))
     body = json.dumps({"text": "one. two. three.", "voice": "fake"}).encode()
     open_when_next_began: list[int] = []
 
@@ -926,11 +1355,11 @@ def test_a_socket_that_dies_at_response_start_does_not_leak_the_slot(
 
     monkeypatch.setattr(server_mod, "_MAX_QUEUED", 1)
     engine = _CountedStreamEngine()
-    app = build_app(engine, _voices(tmp_path))  # type: ignore[arg-type]
+    app = build_app(engine, _voices(tmp_path))
     body = json.dumps({"text": "one. two. three.", "voice": "fake"}).encode()
     statuses: list[int] = []
 
-    def a_receive():  # type: ignore[no-untyped-def]
+    def a_receive():
         """One request's `receive`. A fresh one per request: the body is
         delivered exactly once, and a reused closure would starve the second
         request of the body it is waiting for."""
@@ -983,16 +1412,20 @@ def test_stream_and_sync_synthesis_do_not_deadlock(tmp_path) -> None:
     occupies a worker it can't make progress on."""
     from concurrent.futures import ThreadPoolExecutor
 
-    engine = _SlowEngine()
-    voices = _voices(tmp_path)
+    engine = _HeldEngine()
+    _voice().save(tmp_path / "fake.safetensors")
+    voices = _CountingLibrary(tmp_path)
     # `with client:` shares one portal (one event loop) across every thread
     # below — what a real uvicorn worker gives concurrent requests. Without
     # it, each call spins its own portal/loop and `_engine_lock` (bound to
     # whichever loop first acquires it) hangs when awaited from another.
-    client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")  # type: ignore[arg-type]
+    client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")
 
     # More concurrent /v1/synthesize calls than AnyIO's default worker limiter
-    # (40), to actually exhaust the pool the way the deadlock needed.
+    # (40), to actually exhaust the pool the way the deadlock needed. The count
+    # is the precondition, so it stays; what does not have to stay is paying
+    # for it in wall time, and this test used to spend eleven and a half
+    # seconds grinding thirty sleeping slices per admitted render.
     n_sync = 48
 
     with client, ThreadPoolExecutor(max_workers=n_sync + 1) as pool:
@@ -1003,14 +1436,25 @@ def test_stream_and_sync_synthesis_do_not_deadlock(tmp_path) -> None:
                 json={"text": "one. two. three.", "voice": "fake"},
             ).__enter__()
         )
-        import time
-
-        time.sleep(0.05)  # let the stream start and take the lock
+        # The stream holds the engine from here until this test lets it go, so
+        # the window the crowd arrives into is open by construction rather than
+        # for as long as a sleep guessed it would be.
+        assert engine.rendering.wait(30.0), "the stream never reached the engine"
+        assert voices.loads.acquire(timeout=30.0), "the stream loaded no voice"
 
         sync_futs = [
             pool.submit(client.post, "/v1/synthesize", json={"text": "hi", "voice": "fake"})
             for _ in range(n_sync)
         ]
+
+        # Every one of them is now inside the server, counted where the route
+        # first touches something this test owns: `voices.load` runs before the
+        # engine slot is asked for, so it counts the requests that were shed
+        # for a full queue as well as the ones that queued. Only once all 48
+        # are in does letting the stream advance mean anything.
+        for i in range(n_sync):
+            assert voices.loads.acquire(timeout=60.0), f"only {i} of {n_sync} requests arrived"
+        engine.release.set()
 
         # Generous on purpose. The failure this guards against is a deadlock,
         # which is infinite — so a long ceiling costs nothing and a short one
@@ -1036,7 +1480,7 @@ def test_oversized_body_is_refused_before_it_is_read(tmp_path) -> None:
     characters too long. The bound now applies to the body itself, from the
     Content-Length header, before anything is read.
     """
-    from loudkit.transports.http import _MAX_BODY_BYTES
+    from loudkit.transports.limits import _MAX_BODY_BYTES
 
     client = _client(tmp_path)
     resp = client.post(
@@ -1058,7 +1502,7 @@ def test_oversized_chunked_body_is_also_refused(tmp_path) -> None:
     swallowed once the limit is passed, because everything it says after that
     point is a reaction to a disconnect this middleware invented.
     """
-    from loudkit.transports.http import _MAX_BODY_BYTES
+    from loudkit.transports.limits import _MAX_BODY_BYTES
 
     client = _client(tmp_path)
     payload = json.dumps({"text": "a" * (_MAX_BODY_BYTES * 2), "voice": "fake"}).encode()
@@ -1093,7 +1537,7 @@ def test_a_full_queue_answers_busy_rather_than_growing(tmp_path, monkeypatch) ->
     monkeypatch.setattr(server_mod, "_MAX_QUEUED", 2)
 
     engine = _SlowEngine()
-    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")  # type: ignore[arg-type]
+    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")
     n = 8
 
     # `with client` matters: outside its context TestClient spins a fresh
@@ -1116,7 +1560,7 @@ def test_a_token_locks_the_server(tmp_path) -> None:
     A bearer token is the smallest thing that makes a non-loopback bind
     defensible; `serve` requires one for any non-loopback host.
     """
-    app = build_app(_engine(), _voices(tmp_path), token="s3cret-real-token")
+    app = build_app(chunking_engine(), _voices(tmp_path), token="s3cret-real-token")
     client = TestClient(app, base_url="http://127.0.0.1:8765")
 
     assert client.get("/health").status_code == 401
@@ -1139,9 +1583,14 @@ def test_a_public_bind_rate_limits_synthesis_but_never_health(tmp_path) -> None:
     limiting it would take an instance out of rotation for being busy, which is
     the moment its health matters most.
     """
-    from loudkit.transports.http import _RATE_CAPACITY
+    from loudkit.transports.limits import _RATE_CAPACITY
 
-    app = build_app(_engine(), _voices(tmp_path), token="s3cret-real-token")
+    app = build_app(
+        chunking_engine(),
+        _voices(tmp_path),
+        token="s3cret-real-token",
+        allow_public=True,
+    )
     client = TestClient(app, base_url="http://127.0.0.1:8765")
     auth = {"Authorization": "Bearer s3cret-real-token"}
 
@@ -1159,17 +1608,24 @@ def test_a_public_bind_rate_limits_synthesis_but_never_health(tmp_path) -> None:
     assert client.get("/health", headers=auth).status_code == 200
 
 
-def test_loopback_is_not_rate_limited(tmp_path) -> None:
-    """No token means loopback, and a limiter there only locks the operator out.
+@pytest.mark.parametrize("token", [None, "s3cret-real-token"])
+def test_loopback_is_not_rate_limited(tmp_path, token) -> None:
+    """A limiter on loopback only locks the operator out.
 
     The caller is already on the machine: anything the bucket would stop, they
-    could do by calling the library directly.
+    could do by calling the library directly. `allow_public` is the flag that
+    lifts the Host pin, so an app without it answers only requests that came
+    from here, token or no token. A token on loopback is defence in depth an
+    embedder may want, not a statement that strangers can reach the port, and
+    reading it as one shed a batch client's thirteenth call.
     """
     client = TestClient(
-        build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+        build_app(chunking_engine(), _voices(tmp_path), token=token),
+        base_url="http://127.0.0.1:8765",
     )
+    auth = {} if token is None else {"Authorization": f"Bearer {token}"}
     for _ in range(40):
-        r = client.post("/v1/synthesize", json={"text": "hi", "voice": "nope"})
+        r = client.post("/v1/synthesize", json={"text": "hi", "voice": "nope"}, headers=auth)
         assert r.status_code == 404
 
 
@@ -1185,21 +1641,14 @@ def test_public_bind_generates_a_token_rather_than_running_open(
     import loudkit
     import loudkit.transports.http as server_mod
 
-    monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: _engine())
+    monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: chunking_engine())
 
     captured = {}
-    monkeypatch.setattr(
-        server_mod,
-        "uvicorn",
-        None,
-        raising=False,
-    )
 
     def fake_run(app, **kwargs):
         captured["app"] = app
 
-    fake_uvicorn = type("_U", (), {"run": staticmethod(fake_run)})
-    monkeypatch.setitem(__import__("sys").modules, "uvicorn", fake_uvicorn)
+    monkeypatch.setitem(sys.modules, "uvicorn", _fake_uvicorn(fake_run))
 
     server_mod.serve(
         _stub_checkpoint(tmp_path), voices=tmp_path, host="0.0.0.0", allow_public=True
@@ -1246,14 +1695,17 @@ class _RefusingEngine(_SlowEngine):
                 supported=("en", "pl"),
             )
 
-    def synthesize_long(
-        self, text, voice, *, seed=0, language=None, speed=1.0, previous_tokens=None
-    ):
-        self._check(language)
-        return super().synthesize_long(text, voice, seed=seed, language=language)
-
     def synthesize(
-        self, text, voice, *, seed=0, language=None, speed=1.0, previous_tokens=None
+        self,
+        text,
+        voice,
+        *,
+        seed=0,
+        language=None,
+        speed=1.0,
+        previous_tokens=None,
+        single_window=False,
+        should_cancel=None,
     ):
         self._check(language)
         return super().synthesize(text, voice, seed=seed, language=language)
@@ -1286,13 +1738,17 @@ class _BuggyEngine(_SlowEngine):
     fine.
     """
 
-    def synthesize_long(
-        self, text, voice, *, seed=0, language=None, speed=1.0, previous_tokens=None
-    ):
-        raise NotImplementedError("mel decoder for this backend is a stub")
-
     def synthesize(
-        self, text, voice, *, seed=0, language=None, speed=1.0, previous_tokens=None
+        self,
+        text,
+        voice,
+        *,
+        seed=0,
+        language=None,
+        speed=1.0,
+        previous_tokens=None,
+        single_window=False,
+        should_cancel=None,
     ):
         raise NotImplementedError("mel decoder for this backend is a stub")
 
@@ -1376,7 +1832,7 @@ def test_a_full_queue_answers_busy_on_the_stream_too(tmp_path, monkeypatch) -> N
     # the refusal itself rather than winning a scheduling coin flip.
     monkeypatch.setattr(server_mod, "_MAX_QUEUED", 0)
     client = TestClient(
-        build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+        build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
     )
     body = {"text": "one. two.", "voice": "fake"}
 
@@ -1386,6 +1842,28 @@ def test_a_full_queue_answers_busy_on_the_stream_too(tmp_path, monkeypatch) -> N
             assert resp.status_code == 503, f"{route}: got {resp.status_code}"
             assert resp.headers.get("Retry-After") == "1", f"{route}: no Retry-After"
             assert "queued for the engine" in resp.text, f"{route}: {resp.text[:120]}"
+
+
+def test_a_full_queue_answers_busy_in_openai_envelope_too(tmp_path, monkeypatch) -> None:
+    """The OpenAI route re-dresses the 503 like every other refusal: their
+    client reads `error.message`, and `server_error` is their name for a 5xx."""
+    import loudkit.transports.http as server_mod
+
+    monkeypatch.setattr(server_mod, "_MAX_QUEUED", 0)
+    client = TestClient(
+        build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+    )
+    with client:
+        resp = client.post("/v1/audio/speech", json={"input": "one.", "voice": "fake"})
+    assert resp.status_code == 503
+    assert resp.json() == {
+        "error": {
+            "message": "0 requests already queued for the engine",
+            "type": "server_error",
+            "param": None,
+            "code": None,
+        }
+    }
 
 
 def test_the_queue_slot_is_given_back_when_a_stream_ends(tmp_path, monkeypatch) -> None:
@@ -1400,7 +1878,7 @@ def test_the_queue_slot_is_given_back_when_a_stream_ends(tmp_path, monkeypatch) 
 
     monkeypatch.setattr(server_mod, "_MAX_QUEUED", 1)
     client = TestClient(
-        build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+        build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
     )
     body = {"text": "one. two.", "voice": "fake"}
 
@@ -1411,6 +1889,40 @@ def test_the_queue_slot_is_given_back_when_a_stream_ends(tmp_path, monkeypatch) 
             assert _events(resp.content)[-1]["done"] is True
         # And the sync route can still get in, so the lock came back too.
         assert client.post("/v1/synthesize", json=body).status_code == 200
+
+
+def test_nothing_between_the_acquire_and_the_lease_leaks_it(tmp_path, monkeypatch) -> None:
+    """The slot is given back by the response object, which does not exist yet.
+
+    Between `_engine_slot.acquire()` and the `_LeasedStream` that wires
+    `_return_the_slot` there is no `finally`, so anything that raises in that
+    window holds the engine until the process ends. The reads of the engine's
+    config sit above the acquire for that reason; this makes one of them raise
+    and asserts the next request still gets in, which is the only way the leak
+    is visible from outside.
+    """
+    import loudkit.transports.http as server_mod
+    from loudkit.config import AlgorithmConfig as Algo
+
+    monkeypatch.setattr(server_mod, "_MAX_QUEUED", 1)
+    client = TestClient(
+        build_app(chunking_engine(), _voices(tmp_path)),
+        raise_server_exceptions=False,
+        base_url="http://127.0.0.1:8765",
+    )
+    body = {"text": "one. two.", "voice": "fake"}
+
+    def boom(_self) -> str:
+        raise RuntimeError("the config could not be hashed")
+
+    with client:
+        monkeypatch.setattr(Algo, "fingerprint", boom)
+        broken = client.post("/v1/synthesize/stream", json=body)
+        assert broken.status_code == 500
+        monkeypatch.undo()
+        after = client.post("/v1/synthesize/stream", json=body)
+        assert after.status_code == 200, "the failed request kept the engine"
+        assert _events(after.content)[-1]["done"] is True
 
 
 def test_an_omitted_language_reaches_the_engine_as_none(tmp_path) -> None:
@@ -1427,7 +1939,7 @@ def test_an_omitted_language_reaches_the_engine_as_none(tmp_path) -> None:
     a fake that ignores language.
     """
     engine = _SlowEngine()
-    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")  # type: ignore[arg-type]
+    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")
     with client:
         body = {"text": "hi", "voice": "fake"}
         assert client.post("/v1/synthesize", json=body).status_code == 200
@@ -1439,7 +1951,7 @@ def test_an_explicit_language_passes_through_verbatim(tmp_path) -> None:
     """The other half: a named language must not be re-resolved or normalised
     on the way through. The server is a transport, not a second frontend."""
     engine = _SlowEngine()
-    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")  # type: ignore[arg-type]
+    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")
     with client:
         body = {"text": "hi", "voice": "fake", "language": "pl"}
         assert client.post("/v1/synthesize", json=body).status_code == 200
@@ -1466,7 +1978,7 @@ def test_a_backends_own_not_implemented_error_is_a_server_fault(tmp_path) -> Non
     status a real client over a real socket receives.
     """
     client = TestClient(
-        build_app(_BuggyEngine(), _voices(tmp_path)),  # type: ignore[arg-type]
+        build_app(_BuggyEngine(), _voices(tmp_path)),
         raise_server_exceptions=False,
         base_url="http://127.0.0.1:8765",
     )
@@ -1481,8 +1993,8 @@ def test_an_unsupported_language_is_the_callers_problem(tmp_path) -> None:
     `NotImplementedError` is a subclass of `RuntimeError`, so the routes'
     `except ValueError` never saw it and it escaped to FastAPI's 500 handler:
     a caller who asked a question about their own request was told the server
-    had failed. The CLI has printed `unsupported: ...` since 30626c7; the two
-    agent-facing transports had not caught up.
+    had failed. The CLI prints `unsupported: ...`; the two agent-facing
+    transports have to refuse the same way.
 
     The refusal is now a named type rather than the builtin — see
     :func:`test_a_backends_own_not_implemented_error_is_a_server_fault` for the
@@ -1490,7 +2002,7 @@ def test_an_unsupported_language_is_the_callers_problem(tmp_path) -> None:
     """
     client = TestClient(
         build_app(_RefusingEngine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
-    )  # type: ignore[arg-type]
+    )
     body = {"text": "你好。", "voice": "fake", "language": "zh"}
 
     with client:
@@ -1524,7 +2036,7 @@ def test_a_mid_stream_failure_is_named_rather_than_truncated(tmp_path) -> None:
     """
     client = TestClient(
         build_app(_FailsAfterOneChunk(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
-    )  # type: ignore[arg-type]
+    )
 
     with client:
         resp = client.post(
@@ -1544,7 +2056,7 @@ def test_a_mid_stream_failure_is_named_rather_than_truncated(tmp_path) -> None:
     buggy = TestClient(
         build_app(_FailsWithABugAfterOneChunk(), _voices(tmp_path)),
         base_url="http://127.0.0.1:8765",
-    )  # type: ignore[arg-type]
+    )
     with buggy:
         resp = buggy.post(
             "/v1/synthesize/stream", json={"text": "one. two. three.", "voice": "fake"}
@@ -1570,20 +2082,36 @@ def test_a_legal_text_fits_the_body_bound_however_the_client_encodes_it(tmp_path
     httpx happens to encode with `ensure_ascii=False`, which is why every
     existing test missed this: the bodies are written the way the standard
     library and `requests` write them.
-    """
-    from loudkit.transports.http import _MAX_TEXT_LEN
 
-    client = TestClient(
-        build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
-    )
+    The worst case carries a continuation as well as the text. Both caps are
+    published, both are reachable at once by the multi-call reading the API
+    advertises, and the bound has to hold every capped field at its widest
+    encoding rather than the text alone.
+    """
+    from loudkit.transports.limits import _MAX_PREVIOUS_TOKENS, _MAX_TEXT_LEN
+
+    engine = chunking_engine()
+    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765")
+    # The widest continuation id this engine can hand back, which is the widest
+    # one a caller can hand it: anything above the start marker is refused by
+    # the engine rather than admitted at four digits.
+    widest_ids = [engine.algorithm.start_speech_token - 1] * _MAX_PREVIOUS_TOKENS
     with client:
         # An astral character costs twelve bytes under `ensure_ascii`: a
         # surrogate pair is two escapes. A CJK Extension B ideograph rather
         # than an emoji, because the speech funnel scrubs symbols — an emoji
         # passage is legal at the transport and empty by the time it reaches
         # the splitter, which would test the funnel rather than the bound.
-        for label, ch in (("ascii", "a"), ("polish", "ą"), ("astral", "𠀋")):
-            body = json.dumps({"text": ch * _MAX_TEXT_LEN, "voice": "fake"}).encode()
+        for label, ch, previous in (
+            ("ascii", "a", None),
+            ("polish", "ą", None),
+            ("astral", "𠀋", None),
+            ("astral+continuation", "𠀋", widest_ids),
+        ):
+            payload: dict[str, object] = {"text": ch * _MAX_TEXT_LEN, "voice": "fake"}
+            if previous is not None:
+                payload["previous_tokens"] = previous
+            body = json.dumps(payload).encode()
             resp = client.post(
                 "/v1/synthesize", content=body, headers={"content-type": "application/json"}
             )
@@ -1596,9 +2124,9 @@ def test_the_streaming_helper_enforces_the_text_cap_too(tmp_path) -> None:
     beside it in `__all__`, did not. Over HTTP pydantic covers the gap — an
     embedder calling the helper directly had no bound at all.
     """
-    from loudkit.transports.http import _MAX_TEXT_LEN
+    from loudkit.transports.limits import _MAX_TEXT_LEN
 
-    engine = _engine()
+    engine = chunking_engine()
     voice = _voice()
     over = "a " * _MAX_TEXT_LEN
 
@@ -1613,7 +2141,7 @@ class TestSpeed:
     engine's bounds — a transport that re-implements the range is a second
     place for it to drift."""
 
-    def test_the_default_is_a_bypass(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_default_is_a_bypass(self, tmp_path) -> None:
         """Byte-identical to the request that never mentioned speed, which is
         the promise every existing client is holding."""
         client = _client(tmp_path)
@@ -1623,7 +2151,7 @@ class TestSpeed:
         )
         assert plain.content == explicit.content
 
-    def test_faster_is_shorter(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_faster_is_shorter(self, tmp_path) -> None:
         client = _client(tmp_path)
         plain = client.post("/v1/synthesize", json={"text": "one. two.", "voice": "fake"})
         fast = client.post(
@@ -1633,7 +2161,7 @@ class TestSpeed:
             float(plain.headers["X-Loudkit-Duration"]) / 2, rel=0.02
         )
 
-    def test_out_of_range_is_a_422_naming_the_range(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_out_of_range_is_a_422_naming_the_range(self, tmp_path) -> None:
         client = _client(tmp_path)
         resp = client.post(
             "/v1/synthesize", json={"text": "hello", "voice": "fake", "speed": 4.0}
@@ -1643,7 +2171,7 @@ class TestSpeed:
         assert "speed" in body
         assert "2" in body, "the refusal has to name the bound that was crossed"
 
-    def test_the_stream_route_stretches_too(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_stream_route_stretches_too(self, tmp_path) -> None:
         client = _client(tmp_path)
 
         def durations(payload: dict[str, object]) -> float:
@@ -1671,23 +2199,23 @@ class TestCrossRequestContext:
     that a non-zero prefix produces.
     """
 
-    def _client(self, tmp_path):  # type: ignore[no-untyped-def]
+    def _client(self, tmp_path):
         from dataclasses import replace
 
         chunking = replace(AlgorithmConfig().chunking, max_tokens=4, prefix_tokens=2)
         algo = AlgorithmConfig().with_(chunking=chunking)
         engine = Engine(
             frontend=_SplitFrontend(),
-            token_generator=_FakeGenerator(algo),
-            mel_decoder=_FakeMelDecoder(algo),
-            vocoder=_FakeVocoder(algo),
+            token_generator=FakeGenerator(algo),
+            mel_decoder=FakeMelDecoder(algo),
+            vocoder=FakeVocoder(algo),
             algorithm=algo,
         )
         return TestClient(
             build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765"
         )
 
-    def test_the_reply_hands_back_what_to_send_next(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_reply_hands_back_what_to_send_next(self, tmp_path) -> None:
         """A header rather than a body field: the body is a WAV, and the
         alternative was multipart — which every audio client would then have to
         learn in order to play a sound."""
@@ -1698,7 +2226,7 @@ class TestCrossRequestContext:
         assert all(part.lstrip("-").isdigit() for part in tail.split(","))
         assert len(tail.split(",")) == 2
 
-    def test_nothing_to_carry_means_no_header_at_all(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_nothing_to_carry_means_no_header_at_all(self, tmp_path) -> None:
         """An empty `X-Loudkit-Continuation: ` breaks the obvious client parse,
         `[int(t) for t in header.split(",")]`. A header a client must
         special-case is worse than one it can check for — so a recipe that
@@ -1712,7 +2240,7 @@ class TestCrossRequestContext:
         assert resp.status_code == 200
         assert "X-Loudkit-Continuation" not in resp.headers
 
-    def test_what_comes_back_is_accepted_going_out(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_what_comes_back_is_accepted_going_out(self, tmp_path) -> None:
         """The round trip is the feature: a client should be able to feed the
         header straight back without knowing anything about token ids."""
         client = self._client(tmp_path)
@@ -1725,13 +2253,42 @@ class TestCrossRequestContext:
         assert second.status_code == 200
         assert second.headers["X-Loudkit-Continuation"]
 
-    def test_the_stream_carries_the_tail_on_the_done_event(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
-        """On ``done`` rather than on every chunk: what a chaining client needs
-        is the tail of the passage, not of each piece of it."""
-        client = self._client(tmp_path)
-        resp = client.post(
-            "/v1/synthesize/stream", json={"text": "one. two. three.", "voice": "fake"}
+    def _shaped_client(self, tmp_path, *, max_tokens: int, prefix_tokens: int):
+        """A client whose chunking is the test's, not the class's.
+
+        `_client` fills its prefix on every chunk, so a per-chunk tail and a
+        passage tail are the same list there and no assertion can tell them
+        apart.
+        """
+        from dataclasses import replace
+
+        chunking = replace(
+            AlgorithmConfig().chunking, max_tokens=max_tokens, prefix_tokens=prefix_tokens
         )
+        algo = AlgorithmConfig().with_(chunking=chunking)
+        engine = Engine(
+            frontend=_SplitFrontend(),
+            token_generator=FakeGenerator(algo),
+            mel_decoder=FakeMelDecoder(algo),
+            vocoder=FakeVocoder(algo),
+            algorithm=algo,
+        )
+        return TestClient(
+            build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+        )
+
+    def test_the_stream_carries_the_tail_on_the_done_event(self, tmp_path) -> None:
+        """On ``done`` rather than on every chunk: what a chaining client needs
+        is the tail of the passage, not of each piece of it.
+
+        Asserted against the one-shot header rather than a length, because a
+        length passes for the tail of the last chunk as readily as for the
+        tail of the passage.
+        """
+        client = self._client(tmp_path)
+        body = {"text": "one. two. three.", "voice": "fake"}
+        whole = client.post("/v1/synthesize", json=body)
+        resp = client.post("/v1/synthesize/stream", json=body)
         events = [
             json.loads(line[len("data: ") :])
             for line in resp.text.splitlines()
@@ -1739,8 +2296,97 @@ class TestCrossRequestContext:
         ]
         assert events[-1]["done"] is True
         assert len(events[-1]["continuation"]) == 2
+        assert events[-1]["continuation"] == [
+            int(t) for t in whole.headers["X-Loudkit-Continuation"].split(",")
+        ]
 
-    def test_an_oversized_history_is_a_422(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_streams_tail_is_the_passages_even_when_the_last_chunk_is_short(
+        self, tmp_path
+    ) -> None:
+        """A closing sentence shorter than the prefix still owes the full tail.
+
+        The two routes read the same passage, so the two answers are the same
+        list; the gRPC stream folds chunk by chunk for this reason and its
+        `test_the_final_chunks_continuation_is_the_passages_tail` says so. Four
+        prefix ids and a final chunk of one token is the shape that separates
+        the fold from the last chunk's own tail.
+        """
+        client = self._shaped_client(tmp_path, max_tokens=5, prefix_tokens=4)
+        body = {"text": "One two three four five. Go.", "voice": "fake"}
+        whole = client.post("/v1/synthesize", json=body)
+        resp = client.post("/v1/synthesize/stream", json=body)
+        events = [
+            json.loads(line[len("data: ") :])
+            for line in resp.text.splitlines()
+            if line.startswith("data: ")
+        ]
+        expected = [int(t) for t in whole.headers["X-Loudkit-Continuation"].split(",")]
+        assert len(expected) == 4, "the one-shot route did not fill the prefix"
+        assert events[-1]["continuation"] == expected
+
+    def test_the_stream_states_its_rate_and_its_fingerprint_in_the_headers(
+        self, tmp_path
+    ) -> None:
+        """A `pcm16` stream client can read the rate nowhere else.
+
+        Raw frames carry no header of their own, so without these two the
+        answer to "at what rate do these samples play" is absent from the
+        response itself. Both are the one-shot route's values for the same
+        engine.
+        """
+        client = self._client(tmp_path)
+        body = {"text": "one. two. three.", "voice": "fake", "format": "pcm16"}
+        whole = client.post("/v1/synthesize", json={**body, "format": "wav"})
+        resp = client.post("/v1/synthesize/stream", json=body)
+        assert resp.status_code == 200
+        assert resp.headers["X-Loudkit-Sample-Rate"] == whole.headers["X-Loudkit-Sample-Rate"]
+        assert resp.headers["X-Loudkit-Fingerprint"] == whole.headers["X-Loudkit-Fingerprint"]
+
+    def test_every_chunk_event_states_its_rate_and_its_fingerprint(self, tmp_path) -> None:
+        """The facts travel with the audio, as they do on gRPC's chunks.
+
+        A header only reaches a client holding the response. An event handed
+        on -- re-framed by a proxy, queued, logged, replayed -- carries
+        whatever is inside it and nothing else, and base64 `pcm16` with no
+        rate beside it cannot be played. gRPC's `SynthesizeChunk` has carried
+        both per chunk all along; this is the same claim for SSE.
+        """
+        client = self._client(tmp_path)
+        body = {"text": "one. two. three.", "voice": "fake", "format": "pcm16"}
+        whole = client.post("/v1/synthesize", json={**body, "format": "wav"})
+        resp = client.post("/v1/synthesize/stream", json=body)
+        assert resp.status_code == 200
+        events = [
+            json.loads(line[len("data: ") :])
+            for line in resp.text.splitlines()
+            if line.startswith("data: ")
+        ]
+        chunks = [e for e in events if not e.get("done")]
+        assert chunks, "no chunk event to read the rate off"
+        rate = int(whole.headers["X-Loudkit-Sample-Rate"])
+        fingerprint = whole.headers["X-Loudkit-Fingerprint"]
+        for event in chunks:
+            assert event["sample_rate"] == rate, event
+            assert event["fingerprint"] == fingerprint, event
+
+    def test_whitespace_only_text_is_a_status_code_on_both_routes(self, tmp_path) -> None:
+        """The stream states everything that can be a status before it answers.
+
+        `min_length=1` admits `"   "`, and the engine refuses it only once the
+        response has begun, so the caller reads a 200 and has to parse `done`
+        to learn nothing was spoken. Emptiness is knowable at the door, so it
+        is refused there, with the sentence the one-shot route gives.
+        """
+        client = self._client(tmp_path)
+        body = {"text": "   ", "voice": "fake"}
+        whole = client.post("/v1/synthesize", json=body)
+        streamed = client.post("/v1/synthesize/stream", json=body)
+        assert whole.status_code == 422
+        assert streamed.status_code == 422
+        assert streamed.json()["detail"] == whole.json()["detail"]
+        assert streamed.json()["code"] == "invalid_request"
+
+    def test_an_oversized_history_is_a_422(self, tmp_path) -> None:
         """The body bound would not stop a megabyte of integers that this
         process then parses into a list of Python ints."""
         client = self._client(tmp_path)
@@ -1750,7 +2396,7 @@ class TestCrossRequestContext:
         )
         assert resp.status_code == 422
 
-    def test_a_token_outside_the_codebook_is_a_422(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_a_token_outside_the_codebook_is_a_422(self, tmp_path) -> None:
         client = self._client(tmp_path)
         resp = client.post(
             "/v1/synthesize",
@@ -1760,10 +2406,10 @@ class TestCrossRequestContext:
         assert "acoustic speech token" in json.dumps(resp.json())
 
 
-class _SignalVocoder(_FakeVocoder):
+class _SignalVocoder(FakeVocoder):
     """A vocoder that renders something a codec has to actually encode.
 
-    The module's ``_FakeVocoder`` emits zeros, which is right for the streaming
+    The module's ``FakeVocoder`` emits zeros, which is right for the streaming
     assertions — chunked delivery matching sequential delivery does not care
     what the samples are — and useless for asserting that two encoders agree,
     because **silence round-trips identically through every codec**. The format
@@ -1793,7 +2439,7 @@ class TestOutputFormats:
     are four encodings of *one* synthesis — decode any of them and the samples
     come back."""
 
-    def _client(self, tmp_path):  # type: ignore[no-untyped-def]
+    def _client(self, tmp_path):
         """An engine whose vocoder is audible. See ``_SignalVocoder``."""
         from dataclasses import replace
 
@@ -1801,8 +2447,8 @@ class TestOutputFormats:
         algo = AlgorithmConfig().with_(chunking=chunking)
         engine = Engine(
             frontend=_SplitFrontend(),
-            token_generator=_FakeGenerator(algo),
-            mel_decoder=_FakeMelDecoder(algo),
+            token_generator=FakeGenerator(algo),
+            mel_decoder=FakeMelDecoder(algo),
             vocoder=_SignalVocoder(algo),
             algorithm=algo,
         )
@@ -1810,7 +2456,7 @@ class TestOutputFormats:
             build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765"
         )
 
-    def _decode(self, body: bytes, media_type: str):  # type: ignore[no-untyped-def]
+    def _decode(self, body: bytes, media_type: str):
         import io
 
         import soundfile as sf
@@ -1822,7 +2468,7 @@ class TestOutputFormats:
         data, _ = sf.read(io.BytesIO(body), dtype="float32")
         return np.asarray(data, dtype=np.float32)
 
-    def test_wav_is_byte_identical_to_before(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_wav_is_byte_identical_to_before(self, tmp_path) -> None:
         """The default must not have moved. Every existing client is holding
         these exact bytes."""
         client = self._client(tmp_path)
@@ -1841,7 +2487,7 @@ class TestOutputFormats:
             ("ogg", "audio/ogg"),
         ],
     )
-    def test_each_format_is_labelled_and_decodes(self, tmp_path, fmt, media_type) -> None:  # type: ignore[no-untyped-def]
+    def test_each_format_is_labelled_and_decodes(self, tmp_path, fmt, media_type) -> None:
         client = self._client(tmp_path)
         resp = client.post(
             "/v1/synthesize", json={"text": "one. two.", "voice": "fake", "format": fmt}
@@ -1852,7 +2498,7 @@ class TestOutputFormats:
         samples = self._decode(resp.content, media_type)
         assert samples.size > 0
 
-    def test_the_lossless_formats_carry_the_same_samples(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_lossless_formats_carry_the_same_samples(self, tmp_path) -> None:
         """WAV, raw PCM and FLAC are three containers around one quantisation.
 
         Equal, not merely close — and only because the server quantises to
@@ -1878,7 +2524,7 @@ class TestOutputFormats:
         assert np.array_equal(got["wav"], got["pcm16"])
         assert np.array_equal(got["wav"], got["flac"])
 
-    def test_ogg_is_the_same_length_and_close(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_ogg_is_the_same_length_and_close(self, tmp_path) -> None:
         """Vorbis is lossy: same frames, not the same numbers. Asserted with a
         tolerance rather than skipped, because a silent failure to encode would
         otherwise look exactly like a pass.
@@ -1908,7 +2554,7 @@ class TestOutputFormats:
         assert float(np.max(np.abs(error))) < 0.15
         assert float(np.sqrt(np.mean(np.square(error.astype(np.float64))))) < 0.05
 
-    def test_an_unknown_format_is_a_422_listing_the_real_ones(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_an_unknown_format_is_a_422_listing_the_real_ones(self, tmp_path) -> None:
         client = self._client(tmp_path)
         resp = client.post(
             "/v1/synthesize", json={"text": "hi", "voice": "fake", "format": "mp3"}
@@ -1918,7 +2564,7 @@ class TestOutputFormats:
         for name in ("wav", "pcm16", "flac", "ogg"):
             assert name in body, body
 
-    def test_the_stream_takes_pcm16(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_stream_takes_pcm16(self, tmp_path) -> None:
         client = self._client(tmp_path)
         resp = client.post(
             "/v1/synthesize/stream",
@@ -1940,7 +2586,7 @@ class TestOutputFormats:
             # format is streamable and the containers are not.
             assert len(base64.b64decode(event["audio"])) % 2 == 0
 
-    def test_the_stream_takes_flac_as_self_contained_files(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_stream_takes_flac_as_self_contained_files(self, tmp_path) -> None:
         """Every FLAC event is a complete file: header, frames, end-of-stream.
         Decoded alone it yields the same samples the one-shot route encodes,
         which is what "complete, playable payload" means here — and why FLAC
@@ -1972,7 +2618,7 @@ class TestOutputFormats:
             assert np.asarray(data).size > 0
 
     @pytest.mark.parametrize("fmt", ["ogg"])
-    def test_the_stream_refuses_containers_with_the_allowed_set(self, tmp_path, fmt) -> None:  # type: ignore[no-untyped-def]
+    def test_the_stream_refuses_containers_with_the_allowed_set(self, tmp_path, fmt) -> None:
         """Ogg's bitstream state spans the whole stream, so a per-chunk
         container mislabels the bytes. Refused before the queue slot, because
         nothing about it will change while the server runs. FLAC was refused
@@ -2000,23 +2646,23 @@ class TestABadTokenListIsTheCallersProblem:
     route was already right, which is how the two came to disagree.
     """
 
-    def _client(self, tmp_path):  # type: ignore[no-untyped-def]
+    def _client(self, tmp_path):
         from dataclasses import replace
 
         chunking = replace(AlgorithmConfig().chunking, max_tokens=4, prefix_tokens=2)
         algo = AlgorithmConfig().with_(chunking=chunking)
         engine = Engine(
             frontend=_SplitFrontend(),
-            token_generator=_FakeGenerator(algo),
-            mel_decoder=_FakeMelDecoder(algo),
-            vocoder=_FakeVocoder(algo),
+            token_generator=FakeGenerator(algo),
+            mel_decoder=FakeMelDecoder(algo),
+            vocoder=FakeVocoder(algo),
             algorithm=algo,
         )
         return TestClient(
             build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1:8765"
         ), algo
 
-    def test_the_stream_calls_it_a_bad_request(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_the_stream_calls_it_a_bad_request(self, tmp_path) -> None:
         client, algo = self._client(tmp_path)
         resp = client.post(
             "/v1/synthesize/stream",
@@ -2032,7 +2678,7 @@ class TestABadTokenListIsTheCallersProblem:
         assert resp.status_code == 422
         assert "acoustic speech token" in json.dumps(resp.json())
 
-    def test_it_is_refused_before_a_queue_slot_is_taken(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_it_is_refused_before_a_queue_slot_is_taken(self, tmp_path) -> None:
         """A list that was never usable should not wait behind every other
         synthesis in order to fail. Asserted by the engine never being asked:
         the generator records nothing."""
@@ -2050,7 +2696,7 @@ class TestABadTokenListIsTheCallersProblem:
         but the classification is the actual defect and is pinned on its own:
         any later raise site validating caller-supplied ids inherits it."""
         from loudkit.errors import InvalidTokensError
-        from loudkit.transports.http import _error_kind
+        from loudkit.transports.schemas import _error_kind
 
         assert _error_kind(InvalidTokensError("x", token=9, limit=8)) == "bad_request"
 
@@ -2234,7 +2880,7 @@ class TestTheOpenAICompatibleRoute:
         and this is the test that fails if that ever stops being true.
         """
         client = TestClient(
-            build_app(_engine(), _voices(tmp_path), token="s3cret-real-token"),
+            build_app(chunking_engine(), _voices(tmp_path), token="s3cret-real-token"),
             base_url="http://127.0.0.1:8765",
         )
         body = {"input": "hi", "voice": "fake"}
@@ -2258,7 +2904,9 @@ class TestTheOpenAICompatibleRoute:
         """
         openai = pytest.importorskip("openai")
 
-        client = TestClient(build_app(_engine(), _voices(tmp_path), token="s3cret-real-token"))
+        client = TestClient(
+            build_app(chunking_engine(), _voices(tmp_path), token="s3cret-real-token")
+        )
         # The API key is the server's bearer token — no second mechanism.
         sdk = openai.OpenAI(
             api_key="s3cret-real-token", base_url="http://127.0.0.1:8765/v1", http_client=client
@@ -2321,7 +2969,7 @@ def test_a_request_whose_words_the_funnel_strips_is_refused(tmp_path) -> None:
     cannot see in the audio.
     """
     client = TestClient(
-        build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+        build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
     )
     with client:
         body = {"text": "🎉🎉®™", "voice": "fake"}
@@ -2356,7 +3004,7 @@ class TestAnEmbedderCannotBuildAnOpenServer:
 
     def test_public_without_a_token_is_refused_at_construction(self, tmp_path) -> None:
         with pytest.raises(ValueError) as caught:
-            build_app(_engine(), _voices(tmp_path), allow_public=True)
+            build_app(chunking_engine(), _voices(tmp_path), allow_public=True)
         message = str(caught.value)
         # The message has to name the cause and the remedy: this is raised at
         # import-adjacent wiring time, far from any request that would show it.
@@ -2365,7 +3013,7 @@ class TestAnEmbedderCannotBuildAnOpenServer:
 
     def test_public_with_a_token_builds(self, tmp_path) -> None:
         app = build_app(
-            _engine(), _voices(tmp_path), token="s3cret-real-token", allow_public=True
+            chunking_engine(), _voices(tmp_path), token="s3cret-real-token", allow_public=True
         )
         client = TestClient(app, base_url="http://loudkit.example:8765")
         body = {"text": "hi", "voice": "fake"}
@@ -2379,12 +3027,12 @@ class TestAnEmbedderCannotBuildAnOpenServer:
     def test_the_loopback_default_still_needs_nothing(self, tmp_path) -> None:
         """The developer path: no token, no flag, and the Host pin still on."""
         client = TestClient(
-            build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+            build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
         )
         body = {"text": "hi", "voice": "fake"}
         assert client.post("/v1/synthesize", json=body).status_code == 200
         pinned = TestClient(
-            build_app(_engine(), _voices(tmp_path)), base_url="http://evil.example:8765"
+            build_app(chunking_engine(), _voices(tmp_path)), base_url="http://evil.example:8765"
         )
         assert pinned.get("/v1/voices").status_code == 403
 
@@ -2396,14 +3044,17 @@ class TestAnEmbedderCannotBuildAnOpenServer:
         argument is about loopback: it says nothing about a bind where the
         callers are strangers and the engine synthesises one at a time.
         """
-        from loudkit.transports.http import _RATE_CAPACITY, _Guard
+        from loudkit.transports.limits import _RATE_CAPACITY, _Guard
 
         assert _Guard(None, token=None, allow_public=False).buckets is None
         assert _Guard(None, token="t", allow_public=True).buckets is not None
 
         client = TestClient(
             build_app(
-                _engine(), _voices(tmp_path), token="s3cret-real-token", allow_public=True
+                chunking_engine(),
+                _voices(tmp_path),
+                token="s3cret-real-token",
+                allow_public=True,
             ),
             base_url="http://loudkit.example:8765",
         )
@@ -2452,7 +3103,7 @@ class TestATokenHasToBeUsableAsOne:
         self, tmp_path, token, reason
     ) -> None:
         with pytest.raises(ValueError) as caught:
-            build_app(_engine(), _voices(tmp_path), token=token, allow_public=True)
+            build_app(chunking_engine(), _voices(tmp_path), token=token, allow_public=True)
         # Named, not just refused: this is raised at wiring time, where the
         # only diagnosis the operator gets is the string.
         assert reason in str(caught.value)
@@ -2464,10 +3115,12 @@ class TestATokenHasToBeUsableAsOne:
         loopback is the same non-check with a smaller audience.
         """
         with pytest.raises(ValueError, match="empty"):
-            build_app(_engine(), _voices(tmp_path), token="")
+            build_app(chunking_engine(), _voices(tmp_path), token="")
 
     def test_a_real_token_is_accepted_and_enforced(self, tmp_path) -> None:
-        app = build_app(_engine(), _voices(tmp_path), token=self.GOOD, allow_public=True)
+        app = build_app(
+            chunking_engine(), _voices(tmp_path), token=self.GOOD, allow_public=True
+        )
         client = TestClient(app, base_url="http://loudkit.example:8765")
         assert client.get("/health").status_code == 401
         head = {"Authorization": f"Bearer {self.GOOD}"}
@@ -2476,16 +3129,16 @@ class TestATokenHasToBeUsableAsOne:
     def test_the_minimum_is_a_boundary_not_a_gesture(self, tmp_path) -> None:
         """Exactly `_MIN_TOKEN_CHARS` passes; one character less does not."""
         assert (
-            build_app(_engine(), _voices(tmp_path), token="a" * _MIN_TOKEN_CHARS).title
+            build_app(chunking_engine(), _voices(tmp_path), token="a" * _MIN_TOKEN_CHARS).title
             == "loudkit"
         )
         with pytest.raises(ValueError, match="minimum"):
-            build_app(_engine(), _voices(tmp_path), token="a" * (_MIN_TOKEN_CHARS - 1))
+            build_app(chunking_engine(), _voices(tmp_path), token="a" * (_MIN_TOKEN_CHARS - 1))
 
     def test_the_loopback_default_still_builds_with_no_token(self, tmp_path) -> None:
         """The developer path takes no credential and must not acquire one."""
         client = TestClient(
-            build_app(_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
+            build_app(chunking_engine(), _voices(tmp_path)), base_url="http://127.0.0.1:8765"
         )
         assert client.get("/health").status_code == 200
 
@@ -2517,21 +3170,15 @@ class TestATokenHasToBeUsableAsOne:
             )
 
     def test_serve_still_takes_a_real_token(self, tmp_path, monkeypatch) -> None:
-        import sys
-
         import loudkit
         import loudkit.transports.http as server_mod
 
-        monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: _engine())
+        monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: chunking_engine())
         captured = {}
         monkeypatch.setitem(
             sys.modules,
             "uvicorn",
-            type(
-                "_U",
-                (),
-                {"run": staticmethod(lambda app, **_kw: captured.update(app=app))},
-            ),
+            _fake_uvicorn(lambda app, **_kw: captured.update(app=app)),
         )
 
         server_mod.serve(

@@ -10,8 +10,13 @@
     "intent stays readable. Build one by concatenating segments in order:",
     "  ['speech', n] -> n tokens, the i-th being 20 + (i mod 60)",
     "  ['quiet',  n] -> n tokens, the i-th being      (i mod 8)",
+    "  ['sil',    n] -> n tokens, the i-th being      (i mod 4)",
+    "  ['breath', n] -> n tokens, the i-th being  4 + (i mod 4)",
     "The index restarts at 0 for every segment. Silence ids are 0..7, so 'quiet'",
-    "is silence and 'speech' never is."
+    "is silence and 'speech' never is. 'sil' and 'breath' exist for the stall",
+    "section, which tells true digital silence (ids 0..3) apart from the",
+    "contextually-quiet breath family (ids 4..7); everywhere else 'quiet'",
+    "already covers both."
   ],
   "silence_token_ids": [
     0,
@@ -525,7 +530,7 @@
     },
     {
       "name": "silence tail wins over everything below it",
-      "why": "the peak-anchored rescue is consulted first on a row that never stopped",
+      "why": "the peak-anchored rescue is consulted first on a row that never stopped; the seam sits under the stall run, so the rescue rather than the condemnation owns it",
       "shape": [
         [
           "speech",
@@ -533,7 +538,7 @@
         ],
         [
           "quiet",
-          40
+          20
         ],
         [
           "speech",
@@ -563,7 +568,7 @@
         ],
         [
           "quiet",
-          40
+          20
         ],
         [
           "speech",
@@ -578,7 +583,7 @@
       "is_terminal": true,
       "hit_ceiling": true,
       "expect": {
-        "keep": 103,
+        "keep": 83,
         "reason": "clean",
         "suspect": false
       }
@@ -692,6 +697,36 @@
       "hit_ceiling": false,
       "expect": {
         "keep": 96,
+        "reason": "clean",
+        "suspect": false
+      }
+    },
+    {
+      "name": "a continuation chunk is never silence-tail trimmed",
+      "why": "the three sibling rules guard on is_terminal and each has a continuation case; this one did not, and its guard was the one added last. Removing `is_terminal` from the predicate left every suite in all five languages green while trimming 23 tokens of real mid-passage speech",
+      "shape": [
+        [
+          "speech",
+          60
+        ],
+        [
+          "quiet",
+          20
+        ],
+        [
+          "speech",
+          3
+        ]
+      ],
+      "text_tokens": 40,
+      "min_tokens": 48,
+      "eos_peak_at": 60,
+      "eos_peak_prob": 0.2,
+      "ended": false,
+      "is_terminal": false,
+      "hit_ceiling": true,
+      "expect": {
+        "keep": 83,
         "reason": "clean",
         "suspect": false
       }
@@ -1233,6 +1268,858 @@
           1,
           3
         ]
+      }
+    ]
+  },
+  "stall": {
+    "about": [
+      "The rule for a decoder trapped in silence: interior-stall study,",
+      "2026-08 (docs/design/silence-classes.md). Detection is two-class:",
+      "silence_render_ids below are the ids that render true digital silence",
+      "(the gate: only they count toward the run), quiet_render_ids the",
+      "breath/decay family (they extend a run without counting). A case with",
+      "render_ids=false runs WITHOUT the censuses configured — the fallback",
+      "for a checkpoint packed before them, where only the run trigger fires,",
+      "keyed to the fixture's silence_token_ids.",
+      "",
+      "stalled is the bare rule's answer; expect is the full resolver's",
+      "verdict on the same row, because the wiring (after repetition, before",
+      "every tail rescue) is part of the contract."
+    ],
+    "silence_render_ids": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "quiet_render_ids": [
+      4,
+      5,
+      6,
+      7
+    ],
+    "cases": [
+      {
+        "name": "a mute row is condemned, never clean",
+        "why": "255/255 tokens in the silence-or-quiet family is a chunk that swallowed its text; measured a seed lottery (recurs at 3/18 re-renders) and a retry rescues 9/10",
+        "shape": [
+          [
+            "sil",
+            120
+          ],
+          [
+            "breath",
+            3
+          ],
+          [
+            "sil",
+            132
+          ]
+        ],
+        "render_ids": true,
+        "text_tokens": 50,
+        "min_tokens": 60,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": true,
+        "stalled": true,
+        "expect": {
+          "keep": 255,
+          "reason": "stall",
+          "suspect": true
+        }
+      },
+      {
+        "name": "an interior run survives a breath token",
+        "why": "25 true-silence tokens with one breath mid-run are one second of dead air, not two short pauses; single-set counting split a 47-token measured run into two below-threshold halves",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "sil",
+            13
+          ],
+          [
+            "breath",
+            1
+          ],
+          [
+            "sil",
+            12
+          ],
+          [
+            "speech",
+            30
+          ]
+        ],
+        "render_ids": true,
+        "text_tokens": 40,
+        "min_tokens": 48,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "stalled": true,
+        "expect": {
+          "keep": 86,
+          "reason": "stall",
+          "suspect": true
+        }
+      },
+      {
+        "name": "one token short of the run does not fire",
+        "why": "24 gated tokens is under the calibrated threshold; healthy interior runs top out at 13-19 across ten languages and the margin is the rule's whole claim to safety",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "sil",
+            12
+          ],
+          [
+            "breath",
+            1
+          ],
+          [
+            "sil",
+            12
+          ],
+          [
+            "speech",
+            30
+          ]
+        ],
+        "render_ids": true,
+        "text_tokens": 40,
+        "min_tokens": 48,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "stalled": false,
+        "expect": {
+          "keep": 85,
+          "reason": "clean",
+          "suspect": false
+        }
+      },
+      {
+        "name": "a ceiling overrun that is mostly silence is reachable",
+        "why": "the ceiling clips a 100-text-token row to 255, under the 450 the desperation rule would need, so this row was structurally unreachable and shipped clean; a tail run on a cap-hit row is a stall the cap interrupted, not a natural tail",
+        "shape": [
+          [
+            "speech",
+            80
+          ],
+          [
+            "sil",
+            175
+          ]
+        ],
+        "render_ids": true,
+        "text_tokens": 100,
+        "min_tokens": 120,
+        "eos_peak_at": 80,
+        "eos_peak_prob": 0.02,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": true,
+        "stalled": true,
+        "expect": {
+          "keep": 255,
+          "reason": "stall",
+          "suspect": true
+        }
+      },
+      {
+        "name": "a pause-heavy healthy row does not fire",
+        "why": "clause pauses of 19 and 15 tokens are rhythm, inside the measured healthy band; condemning them would re-render good audio and pay the retry tax on ordinary prose",
+        "shape": [
+          [
+            "speech",
+            25
+          ],
+          [
+            "sil",
+            19
+          ],
+          [
+            "speech",
+            25
+          ],
+          [
+            "sil",
+            15
+          ],
+          [
+            "speech",
+            20
+          ],
+          [
+            "sil",
+            4
+          ]
+        ],
+        "render_ids": true,
+        "text_tokens": 45,
+        "min_tokens": 54,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "stalled": false,
+        "expect": {
+          "keep": 108,
+          "reason": "clean",
+          "suspect": false
+        }
+      },
+      {
+        "name": "fallback: the run trigger keys to the configured list",
+        "why": "a checkpoint without the censuses still catches a one-second interior run, keyed to silence_token_ids — the measured-safe subset of the rule",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "quiet",
+            26
+          ],
+          [
+            "speech",
+            10
+          ]
+        ],
+        "render_ids": false,
+        "text_tokens": 25,
+        "min_tokens": 30,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "stalled": true,
+        "expect": {
+          "keep": 66,
+          "reason": "stall",
+          "suspect": true
+        }
+      },
+      {
+        "name": "fallback: a mute row is beyond the configured list's authority",
+        "why": "13 of the configured list's 31 ids render audible speech, so whole-row membership does not prove a mute row; without a census the whole-row and majority triggers stay off — degraded-but-safe beats a fallback that lies",
+        "shape": [
+          [
+            "quiet",
+            80
+          ]
+        ],
+        "render_ids": false,
+        "text_tokens": 30,
+        "min_tokens": 36,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": true,
+        "stalled": false,
+        "expect": {
+          "keep": 80,
+          "reason": "clean",
+          "suspect": false
+        }
+      },
+      {
+        "name": "a mute row that stopped on its own is still condemned",
+        "why": "the whole-row trigger is the only one that can fire here: the run is the tail, so the interior trigger is excluded by construction, and without a ceiling overrun the majority trigger is dormant. The section's other mute row hits the ceiling, so trigger two was covering for trigger one and disabling it left all five suites green",
+        "shape": [
+          [
+            "sil",
+            60
+          ],
+          [
+            "breath",
+            2
+          ],
+          [
+            "sil",
+            38
+          ]
+        ],
+        "render_ids": true,
+        "text_tokens": 45,
+        "min_tokens": 54,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "stalled": true,
+        "expect": {
+          "keep": 100,
+          "reason": "stall",
+          "suspect": true
+        }
+      }
+    ]
+  },
+  "starved_rescue": {
+    "about": [
+      "The starved rescue: acceptance adversary, 2026-08-29, the one row that",
+      "survived the stall fix. soren/da0028 chunk 4 seed 1234 burned 132",
+      "tokens to the ceiling (text 23, cap 4.0x+40 = 132) and the desperation",
+      "seam cut kept 36 - 1.44 s in which 33 of the 36 kept tokens render",
+      "near-silent through ids OUTSIDE both manifest censuses, so no",
+      "set-membership rule can see them; the trim shipped a mute chunk and",
+      "seeds 7/99 render the same window clean. The law: on a cap-hit row a",
+      "desperation cut keeping fewer than desperation_min_keep_per_text_token",
+      "speech tokens per text token (1.7, under the 1.75 floor of the measured",
+      "healthy band, so a full read is never condemned) is suspect - condemned",
+      "into the retry ladder. The cut stands as the keep: an exhausted ladder",
+      "ships the trim, flagged, rather than the untrimmed babble.",
+      "",
+      "No censuses configured here on purpose: the trigger is a length test",
+      "and must fire identically on a checkpoint packed before the censuses.",
+      "These cases run through the full resolver only; there is no bare-rule",
+      "function to consult."
+    ],
+    "cases": [
+      {
+        "name": "the da0028 survivor is condemned",
+        "why": "raw 132 to the cap, seam cut at 36 = 1.57 per text token, under the 1.7 floor; the kept 1.44 s rendered mute and a retry is near-certain rescue (seeds 7/99 render clean)",
+        "shape": [
+          [
+            "speech",
+            36
+          ],
+          [
+            "sil",
+            12
+          ],
+          [
+            "speech",
+            84
+          ]
+        ],
+        "text_tokens": 23,
+        "min_tokens": 27,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": true,
+        "expect": {
+          "keep": 36,
+          "reason": "desperation",
+          "suspect": true
+        }
+      },
+      {
+        "name": "a keep just over the floor ships the trim as today",
+        "why": "40 kept of 23 text tokens is 1.74 per text token, at the healthy band floor; joe/en0058 kept 40 of 11 text tokens and the audio carried the sentence - a keep the floor admits is a rescue, not a starvation",
+        "shape": [
+          [
+            "speech",
+            40
+          ],
+          [
+            "sil",
+            12
+          ],
+          [
+            "speech",
+            80
+          ]
+        ],
+        "text_tokens": 23,
+        "min_tokens": 27,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": true,
+        "expect": {
+          "keep": 40,
+          "reason": "desperation",
+          "suspect": false
+        }
+      },
+      {
+        "name": "the sv0003 shape is condemned",
+        "why": "nils/sv0003 window 3: raw 156 to the cap (text 29), cut at 45 = 1.55 per text token; the kept 1.8 s measured zero voiced frames - the second mute trim in the calibration set, caught by the same floor",
+        "shape": [
+          [
+            "speech",
+            45
+          ],
+          [
+            "sil",
+            12
+          ],
+          [
+            "speech",
+            99
+          ]
+        ],
+        "text_tokens": 29,
+        "min_tokens": 34,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": true,
+        "expect": {
+          "keep": 45,
+          "reason": "desperation",
+          "suspect": true
+        }
+      },
+      {
+        "name": "an ended row is never starved",
+        "why": "same tokens, same tiny keep, but the model sampled its own stop: the trim is corroborated and ships - the floor is a cap-hit rule only, because a cap-hit row's second half was never generated",
+        "shape": [
+          [
+            "speech",
+            36
+          ],
+          [
+            "sil",
+            12
+          ],
+          [
+            "speech",
+            84
+          ]
+        ],
+        "text_tokens": 23,
+        "min_tokens": 27,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "expect": {
+          "keep": 36,
+          "reason": "desperation",
+          "suspect": false
+        }
+      }
+    ]
+  },
+  "repetition_silence": {
+    "about": [
+      "The loop exemption's silence family: kathleen, en0023, seed 1234,",
+      "2026-08 (docs/design/silence-classes.md). A mid-chunk pause parked on",
+      "ids 6486 (x7) then 6405 (x24) - both render true silence, both in the",
+      "manifest's silence_render_ids, neither in the sampler's",
+      "silence_token_ids. Keyed to the sampler list, the all-silence-cycle",
+      "exemption could not see them: the period-1 run fired as a loop and the",
+      "cut deleted the pause plus the six seconds of correctly-read speech",
+      "behind it, two whole sentences, verdict repetition, audibly fluent.",
+      "Six of the checkpoint's eight truly-silent ids sit outside the sampler",
+      "list. The law: with repetition_silence 'acoustic' (the default) the",
+      "exemption reads the union of the sampler list and both render",
+      "censuses, so such a pause is never a loop; the row then falls through",
+      "to stall, which condemns it into the retry ladder. The tail rules stay",
+      "keyed to the sampler list they were calibrated against.",
+      "",
+      "Extra shape segments, shared with the repetition_resume section:",
+      "  ['dead', n]          -> n copies of id 12: true silence only the",
+      "                          render census knows (the 6405 class)",
+      "  ['sigh', n]          -> n copies of id 13: breath only the quiet",
+      "                          census knows",
+      "  ['cycle_dead', p, k] -> k copies of a p-token cycle whose second",
+      "                          half is id 12: the stutter, with the pause",
+      "                          on a census-only id",
+      "",
+      "loop is the bare rule's answer with this section's censuses",
+      "configured; expect is the full resolver's verdict on the same row."
+    ],
+    "silence_render_ids": [
+      0,
+      1,
+      2,
+      3,
+      12
+    ],
+    "quiet_render_ids": [
+      4,
+      5,
+      6,
+      7,
+      13
+    ],
+    "cases": [
+      {
+        "name": "a pause parked on a census-only id is not a loop",
+        "why": "the en0023 mechanism: a 31-token period-1 run of a render-census-only silent id must not fire as a loop (the old cut kept 31 and deleted the pause plus everything behind it); repetition declines, and stall condemns the 31-token interior dead-air run into the retry ladder",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "dead",
+            31
+          ],
+          [
+            "speech",
+            30
+          ]
+        ],
+        "text_tokens": 40,
+        "min_tokens": 48,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": null,
+        "expect": {
+          "keep": 91,
+          "reason": "stall",
+          "suspect": true
+        }
+      },
+      {
+        "name": "a genuine speech loop still cuts exactly as today",
+        "why": "the censuses must not soften the rule where it is right: a locked decoder repeating a speech token is cut one cycle past the loop's start, censuses configured or not",
+        "shape": [
+          [
+            "speech",
+            20
+          ],
+          [
+            "cycle",
+            1,
+            30
+          ]
+        ],
+        "text_tokens": 20,
+        "min_tokens": 24,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 21,
+        "expect": {
+          "keep": 21,
+          "reason": "repetition",
+          "suspect": false
+        }
+      },
+      {
+        "name": "the stutter on a census-only pause still counts",
+        "why": "a cycle mixing speech with silence is a word-then-pause stutter and stays a loop even when the pause id is census-only: the exemption is for cycles that are entirely silence, not for cycles that contain any",
+        "shape": [
+          [
+            "speech",
+            20
+          ],
+          [
+            "cycle_dead",
+            2,
+            15
+          ]
+        ],
+        "text_tokens": 20,
+        "min_tokens": 24,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 22,
+        "expect": {
+          "keep": 22,
+          "reason": "repetition",
+          "suspect": false
+        }
+      },
+      {
+        "name": "one token under the stall gate survives whole",
+        "why": "the boundary: a 24-token census-only pause is under stall's 25 and exempt from repetition, so the row ships untouched - the exemption must not hand the pause to any other cutter",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "dead",
+            24
+          ],
+          [
+            "speech",
+            30
+          ]
+        ],
+        "text_tokens": 40,
+        "min_tokens": 48,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": null,
+        "expect": {
+          "keep": 84,
+          "reason": "clean",
+          "suspect": false
+        }
+      },
+      {
+        "name": "a breath run the quiet census alone knows is not a loop",
+        "why": "the union includes the quiet family: a 30-token breath run renders inaudible, is no loop, and is no stall either (quiet ids extend a run without counting), so the row is clean",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "sigh",
+            30
+          ],
+          [
+            "speech",
+            30
+          ]
+        ],
+        "text_tokens": 40,
+        "min_tokens": 48,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": null,
+        "expect": {
+          "keep": 90,
+          "reason": "clean",
+          "suspect": false
+        }
+      }
+    ]
+  },
+  "repetition_resume": {
+    "about": [
+      "The guard that holds without a census: kathleen, en0023, seed 1234 on",
+      "the published census-less pack (docs/design/silence-classes.md). The",
+      "manifest carries no render censuses, so the acoustic union of",
+      "repetition_silence degenerates to the sampler list and the same pause",
+      "- 6486 (x8) then 6405 (x24) - fires as a period-1 loop again: the cut",
+      "kept 52 of 206 tokens and deleted the pause plus the 131 tokens of",
+      "correctly-read speech behind it, two sentences, verdict repetition,",
+      "no retry, audibly fluent.",
+      "",
+      "The law: a genuine lock-up is a tail pathology - its repeating region",
+      "runs to the end of the row, and a ceiling can truncate at most one",
+      "incomplete copy (period - 1 tokens). With repetition_resume 'condemn'",
+      "(the default) a qualifying loop followed by a full period or more of",
+      "other content is a decoder that resumed, so it was never locked: the",
+      "row is handed back whole - keep is the full row, verdict repetition,",
+      "suspect - and the retry ladder re-renders it. A loop whose region",
+      "reaches within one period of the row's end still cuts exactly as",
+      "before. 'cut' names the pre-amendment law. No silence knowledge is",
+      "needed, so the guard covers every checkpoint, censused or not.",
+      "",
+      "This section configures NO censuses - it is the census-less arm the",
+      "repetition_silence section cannot reach. 'dead' (id 12) is defined",
+      "there; here nothing knows it is silent, which is the point.",
+      "",
+      "loop is the bare rule's answer; expect is the full resolver's verdict."
+    ],
+    "cases": [
+      {
+        "name": "the en0023 cut is refused: a resumed loop is condemned",
+        "why": "the specimen at its measured proportions: the period-1 run anchors at 51 and the old cut kept 52 of 206; the region ends at 82 and 124 tokens follow, so the decoder resumed and the row is condemned whole into the retry ladder",
+        "shape": [
+          [
+            "speech",
+            51
+          ],
+          [
+            "dead",
+            31
+          ],
+          [
+            "speech",
+            124
+          ]
+        ],
+        "text_tokens": 67,
+        "min_tokens": 80,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 52,
+        "expect": {
+          "keep": 206,
+          "reason": "repetition",
+          "suspect": true
+        }
+      },
+      {
+        "name": "a genuine loop still cuts exactly as today",
+        "why": "the guard must not soften the rule where it is right: a locked decoder repeats to the end of the row, resumes by zero tokens, and is cut one cycle past the loop's start",
+        "shape": [
+          [
+            "speech",
+            20
+          ],
+          [
+            "cycle",
+            1,
+            30
+          ]
+        ],
+        "text_tokens": 20,
+        "min_tokens": 24,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 21,
+        "expect": {
+          "keep": 21,
+          "reason": "repetition",
+          "suspect": false
+        }
+      },
+      {
+        "name": "truncation debris under one period still cuts",
+        "why": "the boundary's cut side: a ceiling can interrupt a copy mid-cycle, so up to period - 1 trailing tokens (here 4 of 5) are debris, not resumption, and the cut stands",
+        "shape": [
+          [
+            "speech",
+            20
+          ],
+          [
+            "cycle",
+            5,
+            6
+          ],
+          [
+            "quiet",
+            4
+          ]
+        ],
+        "text_tokens": 20,
+        "min_tokens": 24,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 25,
+        "expect": {
+          "keep": 25,
+          "reason": "repetition",
+          "suspect": false
+        }
+      },
+      {
+        "name": "a full period of resumed content condemns",
+        "why": "the boundary's condemn side: resume >= period is exact - five tokens after a period-5 region cannot be debris (a matching copy would have counted as a cycle), so the decoder resumed and the row is handed back whole",
+        "shape": [
+          [
+            "speech",
+            20
+          ],
+          [
+            "cycle",
+            5,
+            6
+          ],
+          [
+            "quiet",
+            5
+          ]
+        ],
+        "text_tokens": 20,
+        "min_tokens": 24,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": false,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 25,
+        "expect": {
+          "keep": 55,
+          "reason": "repetition",
+          "suspect": true
+        }
+      },
+      {
+        "name": "one resumed token refuses a period-1 cut",
+        "why": "the pause class is period-1, so a single token of speech behind the run is a full period of resumption: no speech behind a pause can ever ride out with a cut, which is what makes the en0023 defect unreachable rather than unlikely",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "dead",
+            24
+          ],
+          [
+            "speech",
+            1
+          ]
+        ],
+        "text_tokens": 40,
+        "min_tokens": 48,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 31,
+        "expect": {
+          "keep": 55,
+          "reason": "repetition",
+          "suspect": true
+        }
+      },
+      {
+        "name": "a run to the row's end is a tail, and still cuts",
+        "why": "resume 0: a 25-token trailing run on an id nothing knows is silent reads as a loop that never stopped, and the cut - now a pure tail operation, like every other rule in the layer - removes only the run",
+        "shape": [
+          [
+            "speech",
+            30
+          ],
+          [
+            "dead",
+            25
+          ]
+        ],
+        "text_tokens": 40,
+        "min_tokens": 48,
+        "eos_peak_at": -1,
+        "eos_peak_prob": 0.0,
+        "ended": true,
+        "is_terminal": true,
+        "hit_ceiling": false,
+        "loop": 31,
+        "expect": {
+          "keep": 31,
+          "reason": "repetition",
+          "suspect": false
+        }
       }
     ]
   }

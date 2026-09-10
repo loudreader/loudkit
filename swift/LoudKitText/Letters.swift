@@ -4,7 +4,7 @@ import Foundation
 /// Acronyms, spelled in the language being read.
 ///
 /// `CIA` is *see-eye-ay* in an English render and *ce-i-a* in a Polish one, and
-/// those are not two spellings of one thing — they are what the two languages
+/// those are not two spellings of one thing, they are what the two languages
 /// actually say. The engine is grapheme-based with a single language tag per
 /// utterance, so the letter name has to be written in the target language's own
 /// orthography: English `see` reads as /siː/ under English letter-to-sound
@@ -30,7 +30,7 @@ public enum Letters {
 
     /// Above five letters an all-caps run is far more often a shout, a product
     /// name or a heading than an initialism, and spelling one out is a worse
-    /// error than leaving it — the listener can read `SIGGRAPH`; they cannot
+    /// error than leaving it, the listener can read `SIGGRAPH`; they cannot
     /// un-hear *ess-eye-gee-gee-ar-ay-pee-aitch*.
     private static let maxLetters = 5
 
@@ -40,13 +40,8 @@ public enum Letters {
     }
 
     private static let tables: [String: Table] = {
-        guard let url = Bundle.module.url(forResource: "numbers", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let doc = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let languages = doc["languages"] as? [String: [String: Any]]
-        else { return [:] }
         var out: [String: Table] = [:]
-        for (lang, entry) in languages {
+        for (lang, entry) in Numbers.grammarLanguages {
             guard let names = entry["letter_names"] as? [String: String], !names.isEmpty
             else { continue }
             let words = Set((entry["word_acronyms"] as? [String]) ?? [])
@@ -71,7 +66,7 @@ public enum Letters {
 
     /// `word` as spelled-out letters, or `nil` if it should be left alone.
     ///
-    /// `nil` — "not an acronym, or not one I can spell" — for a word that is not
+    /// `nil`, "not an acronym, or not one I can spell", for a word that is not
     /// all-caps, is too short or too long, is a word in this language, or
     /// contains a letter this language has no name for.
     public static func spellAcronym(_ word: String, language: String) -> String? {
@@ -86,7 +81,7 @@ public enum Letters {
             // is about how long a thing may be
             // before spelling it becomes worse than leaving it, and it has
             // nothing to say about a word. With the cap first, every entry over
-            // five letters is dead — UNESCO, UNICEF and INTERPOL never reach
+            // five letters is dead, UNESCO, UNICEF and INTERPOL never reach
             // this branch, so the table could grow entries that do nothing.
             return lowered
         }
@@ -105,8 +100,8 @@ public enum Letters {
     ///
     /// **Shouting is left alone**, and the rule for telling it from an
     /// initialism is context rather than anything inside the word. An initialism
-    /// appears as a single capitalised island in ordinary text — "the CIA said"
-    /// — while emphasis comes in runs. That distinction is not available from
+    /// appears as a single capitalised island in ordinary text, "the CIA said",
+    /// while emphasis comes in runs. That distinction is not available from
     /// the word itself: `IT` is a word, an initialism and a shout depending only
     /// on what sits beside it, and no table can separate those. So a capitalised
     /// word spells out only when neither neighbour is also capitalised, and a
@@ -123,7 +118,7 @@ public enum Letters {
             // The whole text is capitals: someone pasted a shout, or a headline.
             //
             // More than one word, though. A text that is a single capitalised
-            // token — `prepared("GPT")` — is an acronym on its own, not a shout:
+            // token, `prepared("GPT")`, is an acronym on its own, not a shout:
             // there is no run to read emphasis from, and refusing it would mean
             // the one call shaped exactly like "say this acronym" was the one
             // that did not.
@@ -138,8 +133,8 @@ public enum Letters {
         var out = tokens
         for (i, token) in tokens.enumerated() where isCaps(i) {
             // Neighbours, skipping the separator token between words.
-            let before = i >= 2 ? isCaps(i - 2) : false
-            let after = i + 2 < tokens.count ? isCaps(i + 2) : false
+            let before = isCaps(i - 2)
+            let after = isCaps(i + 2)
             if before || after { continue }  // part of a run: emphasis
             if let said = spellAcronym(token, language: language) { out[i] = said }
         }
@@ -167,22 +162,22 @@ public enum Letters {
         token.count > 1 && token.allSatisfy { $0.isLetter }
     }
 
-    /// `re.split(r"(\W+)", text)` — separators kept, so the pieces rejoin
+    /// `re.split(r"(\W+)", text)`, separators kept, so the pieces rejoin
     /// exactly. Word characters are letters, digits and underscore, which is
     /// what Python's `\w` means under its default Unicode rules.
     ///
     /// Walked by *unicode scalar* and not by `Character`, because Python's
     /// regex splits on code points and Swift's `Character` is a grapheme
     /// cluster. A base letter and a combining mark are two code points to
-    /// Python — `a̬CIA` splits into `a`, the mark, and `CIA`, so the acronym
-    /// stands alone and is spelled — and one `Character` here, which made
+    /// Python, `a̬CIA` splits into `a`, the mark, and `CIA`, so the acronym
+    /// stands alone and is spelled, and one `Character` here, which made
     /// `a̬CIA` a single mixed-case token that no longer looked like an acronym
     /// at all. NFC has already run, so the marks that survive to this point are
     /// the ones with no precomposed form, exactly the ones Python treats as
     /// separators.
     private static func splitOnNonWord(_ text: String) -> [String] {
         // Python's `\w` is `str.isalnum()` plus underscore, which is the general
-        // categories L* and N* — not the Alphabetic *property*, whose
+        // categories L* and N*, not the Alphabetic *property*, whose
         // Other_Alphabetic half pulls in combining marks and would undo the
         // scalar walk above.
         func isWordScalar(_ s: Unicode.Scalar) -> Bool {
@@ -197,7 +192,7 @@ public enum Letters {
         }
         var out: [String] = []
         var current = ""
-        var currentIsWord: Bool? = nil
+        var currentIsWord: Bool?
         for scalar in text.unicodeScalars {
             let isWord = isWordScalar(scalar)
             if currentIsWord == nil || isWord == currentIsWord {
@@ -211,6 +206,9 @@ public enum Letters {
         }
         if !current.isEmpty { out.append(current) }
         // Python's split starts and ends on a word field, even an empty one.
+        // Only the leading one is reproduced: it decides whether index 0 is a
+        // word, which the caller reads. A trailing empty field changes no
+        // join and is not a word token, so it would be carried for nothing.
         if let first = out.first, let head = first.unicodeScalars.first, !isWordScalar(head) {
             out.insert("", at: 0)
         }

@@ -2,8 +2,8 @@
 //
 // Nothing here pins a waveform, and there is deliberately no shared byte-level
 // fixture across the five ports. The alignment search ranks candidates by a
-// cross-correlation whose last bit can differ between languages — Go sums a
-// frame of products in a plain loop, NumPy sums it pairwise — and one offset
+// cross-correlation whose last bit can differ between languages: Go sums a
+// frame of products in a plain loop, NumPy sums it pairwise, and one offset
 // chosen differently moves every sample after it. A fixture would then fail for
 // a reason that is not a defect, which is the worst kind of red test: the one
 // people learn to re-record.
@@ -26,7 +26,7 @@ const sampleRate = 24_000
 var speeds = []float64{0.5, 0.75, 0.9, 1.25, 1.5, 2.0}
 
 // signal is a voiced-ish test signal: a low fundamental, a harmonic, and a
-// sweep. Deterministic by construction — no RNG anywhere in this file, because
+// sweep. Deterministic by construction, no RNG anywhere in this file, because
 // the stretcher has none either and a flaky DSP test is worse than no DSP test.
 func signal(seconds, f0 float64) []float32 {
 	n := int(float64(sampleRate) * seconds)
@@ -41,7 +41,7 @@ func signal(seconds, f0 float64) []float32 {
 }
 
 // pitchHz estimates the fundamental by autocorrelation. Enough to catch a
-// chipmunk, which is the failure this is looking for — a resampler would move
+// chipmunk, which is the failure this is looking for: a resampler would move
 // the fundamental by exactly speed.
 func pitchHz(x []float32) float64 {
 	const window = 4096
@@ -79,7 +79,7 @@ func rms(x []float32) float64 {
 }
 
 // stretch is TimeStretch with the error turned into a failure, because every
-// call below passes a speed the range already allows — the refusal has its own
+// call below passes a speed the range already allows: the refusal has its own
 // test, and repeating four lines of error handling around each property would
 // bury the property.
 func stretch(t *testing.T, audio []float32, rate int, speed float64) []float32 {
@@ -92,7 +92,7 @@ func stretch(t *testing.T, audio []float32, rate int, speed float64) []float32 {
 }
 
 // Identity, not equality. The engine's default must not depend on a DSP path
-// being lossless — it must not enter the DSP path at all.
+// being lossless: it must not enter the DSP path at all.
 func TestUnitySpeedHandsBackTheSameSlice(t *testing.T) {
 	x := signal(0.3, 220)
 	got := stretch(t, x, sampleRate, 1.0)
@@ -113,7 +113,7 @@ func TestTheOutputIsExactlyAsLongAsAsked(t *testing.T) {
 
 // Python rounds halves to even; Go, Rust, Swift and JavaScript do not. A
 // one-sample disagreement on an exact half is found six months later, in a
-// conformance run, by somebody else — so the formula is written as
+// conformance run, by somebody else, so the formula is written as
 // floor(n/speed + 0.5) in all five and never as the language's round().
 func TestTheLengthFormulaIsHalfUpNotHalfEven(t *testing.T) {
 	if got := StretchedLength(5, 2.0); got != 3 {
@@ -124,7 +124,7 @@ func TestTheLengthFormulaIsHalfUpNotHalfEven(t *testing.T) {
 // The guard that no implementation tested, which is how two of the five shipped
 // without it.
 //
-// Below ~60 Hz the derived frame is one sample, so the hop — frame/2 — is zero,
+// Below ~60 Hz the derived frame is one sample, so the hop (frame/2) is zero,
 // and the overlap-add loop advances by it. TypeScript and Swift computed the hop
 // *after* the degenerate-shape guard and never tested it, so both looped forever
 // on an input Go returned from in microseconds; nothing was red, because nothing
@@ -148,7 +148,7 @@ func TestASampleRateTooLowToHaveAHopDoesNotHang(t *testing.T) {
 	}
 }
 
-// No overlap to align, so it is cut or padded. At 24 kHz this is under 25 ms —
+// No overlap to align, so it is cut or padded. At 24 kHz this is under 25 ms,
 // below anything the engine renders, and the alternative is an index out of
 // range on the degenerate case.
 func TestAFragmentShorterThanAFrameIsStillTheRightLength(t *testing.T) {
@@ -263,7 +263,7 @@ func TestTheBoundsThemselvesAreAllowed(t *testing.T) {
 
 // An out-of-range speed reaching this far is a caller that skipped
 // ValidateSpeed, and it is refused rather than silently bypassed: handing back
-// the input would be the exact failure MinSpeed refuses by name — asked for 3x,
+// the input would be the exact failure MinSpeed refuses by name: asked for 3x,
 // silently got 1x, and only a stopwatch finds it. The engine refuses first,
 // where the refusal saves six seconds of generation; this is the last line.
 func TestAnUnvalidatedSpeedIsRefusedRatherThanBypassed(t *testing.T) {
@@ -277,5 +277,43 @@ func TestAnUnvalidatedSpeedIsRefusedRatherThanBypassed(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatal("a refusal must not also hand back samples")
+	}
+}
+
+func TestFadeEdgesStartsAndEndsAtZero(t *testing.T) {
+	audio := make([]float32, 24000)
+	for i := range audio {
+		audio[i] = 0.25
+	}
+	out := FadeEdges(audio, 24000, EdgeFadeSeconds)
+	if out[0] != 0 || out[len(out)-1] != 0 {
+		t.Fatalf("edges not at zero: %v %v", out[0], out[len(out)-1])
+	}
+	if audio[0] != 0.25 {
+		t.Fatal("input was modified")
+	}
+	n := int(EdgeFadeSeconds * 24000)
+	for i := n; i < len(out)-n; i++ {
+		if out[i] != audio[i] {
+			t.Fatalf("middle changed at %d", i)
+		}
+	}
+	for i := 1; i < n; i++ {
+		if out[i] < out[i-1] {
+			t.Fatalf("ramp not monotonic at %d", i)
+		}
+		if d := out[i] - out[len(out)-1-i]; d > 1e-7 || d < -1e-7 {
+			t.Fatalf("ramp not symmetric at %d: %v", i, d)
+		}
+	}
+}
+
+func TestFadeEdgesLeavesAShortWindowAlone(t *testing.T) {
+	audio := []float32{1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+	out := FadeEdges(audio, 24000, EdgeFadeSeconds)
+	for i := range out {
+		if out[i] != 1 {
+			t.Fatalf("short window changed at %d", i)
+		}
 	}
 }

@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
-import importlib.util
+import importlib
 import json
 import os
 import re
@@ -45,15 +45,40 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import pytest
+
+from .conftest import tool
 
 if TYPE_CHECKING:  # pragma: no cover - annotations only
     from collections.abc import Sequence
 
 REPO = Path(__file__).resolve().parent.parent
 BUILDER = REPO / "tools" / "build_release.py"
+
+
+class _PackedSource(TypedDict):
+    """What ``_packed_checkpoint`` wrote, for the split to be checked against."""
+
+    names: list[str]
+    tensors: dict[str, Any]
+
+
+class _TurboPieces(TypedDict):
+    """The artefact set ``preflight.turbo`` takes, spelled out so a fixture
+    that drifts from its signature is caught here rather than by a keyword
+    error inside the builder."""
+
+    ckpt: Path
+    tokenizer: Path
+    voice_encoder: Path
+    voices: dict[str, Path]
+    roster: Sequence[str]
+    enrollment: Path
+    onnx_dir: Path
+    coreml_dir: Path
+    samples: Path
 
 
 def _make_fake_release(tmp_path: Path) -> Path:
@@ -93,7 +118,7 @@ def _make_fake_release(tmp_path: Path) -> Path:
     return out
 
 
-def _tomllib():  # type: ignore[no-untyped-def]
+def _tomllib():
     """`tomllib`, or `tomli` on the Python this project still promises.
 
     `requires-python` says >=3.10 and the CI matrix runs 3.10, where `tomllib`
@@ -236,7 +261,7 @@ def test_coreml_enrollment_gate_uses_the_shipped_cpu_placement() -> None:
     export_gate = ast.literal_eval(assignment.value)
     placement = "compute_units=ct.ComputeUnit.CPU_ONLY"
 
-    assert module._COREML_ENROLL.count(placement) == 1
+    assert module.audit._COREML_ENROLL.count(placement) == 1
     assert export_gate.count(placement) == 1
 
 
@@ -297,7 +322,7 @@ def test_sdist_target_is_explicit_allowlist() -> None:
         assert banned not in allowed, f"sdist allowlist permits monorepo dir: {banned}"
 
     excluded = set(sdist.get("exclude", []))
-    assert "python/loudkit/models/data/dsp/*.f32" in excluded
+    assert "python/loudkit/models/data/dsp/*.f32" not in excluded
 
 
 def _extras() -> dict[str, set[str]]:
@@ -334,10 +359,9 @@ def _extras() -> dict[str, set[str]]:
 def test_documented_extras_can_actually_synthesise() -> None:
     """Every extra the README tells a stranger to install must be sufficient.
 
-    This is the packaging equivalent of the founding defect: an extra that
-    installs everything except the thing that makes sound produces a documented
-    command that fails, and no test of the library itself notices — the modules
-    are fine, the install is not.
+    An extra that installs everything except the thing that makes sound
+    produces a documented command that fails, and no test of the library
+    itself notices: the modules are fine, the install is not.
 
     ``[server]`` and ``[mcp]`` both end up calling ``loudkit.load()``, whose
     default device is the torch backend, so both need torch. ``[dev]`` needs it
@@ -364,12 +388,19 @@ def test_documented_extras_can_actually_synthesise() -> None:
 
 
 def test_mcp_imports_the_synthesis_surface_not_the_http_transport() -> None:
-    """``loudkit.mcp`` takes render_bytes from ``synthesis``, not from ``server``.
+    """``loudkit.transports.mcp`` takes render_bytes from ``synthesis``.
 
     Pinned as an import edge because the dependency list follows from it: while
     mcp imports only synthesis (transport-agnostic, fastapi-free), the ``[mcp]``
-    extra must not carry fastapi. If mcp ever imports ``loudkit.server`` again,
+    extra must not carry fastapi. If mcp ever imports the HTTP transport again,
     that is the moment to reintroduce the inheritance — consciously, here.
+
+    The half that watches for the bad edge could not fire. It collected module
+    names through a filter that kept only ``"synthesis"``, then asserted
+    ``"server" not in`` that set — true of every possible input. It also
+    watched for a module named ``server``, which has not existed since the
+    transports became peers; the edge worth refusing today is
+    ``transports.http``.
     """
     import ast
 
@@ -379,13 +410,87 @@ def test_mcp_imports_the_synthesis_surface_not_the_http_transport() -> None:
     modules = {
         node.module
         for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module == "synthesis"
+        if isinstance(node, ast.ImportFrom) and node.module
     }
     assert "synthesis" in modules, "loudkit.transports.mcp must import loudkit.synthesis"
-    assert "server" not in modules, (
-        "loudkit.transports.mcp imports loudkit.server — transports are peers; take the "
-        "synthesis surface from loudkit.synthesis"
+    forbidden = {"http", "transports.http", "loudkit.transports.http", "server"}
+    assert not (modules & forbidden), (
+        f"loudkit.transports.mcp imports {sorted(modules & forbidden)} — transports are "
+        "peers; take the synthesis surface from loudkit.synthesis"
     )
+
+
+def test_a_stray_inside_a_coreml_package_is_refused(tmp_path) -> None:
+    """The audit allowlists a package by prefix, so anything inside one ships.
+
+    An `.mlpackage` is a directory tree whose layout belongs to coremltools, so
+    the profile names it by prefix rather than by leaf — and `copy_tree` copies
+    every file under it and checksums each one. `RELEASING.md` mandates cutting
+    on macOS, which makes a `.DS_Store` inside a package near-certain, and it
+    would have been published as part of the release.
+    """
+    module = _builder()
+    src = tmp_path / "flow_encoder.mlpackage"
+    (src / "Data").mkdir(parents=True)
+    (src / "Manifest.json").write_text("{}", encoding="utf-8")
+    (src / "Data" / ".DS_Store").write_bytes(b"junk")
+    out = tmp_path / "out"
+    with pytest.raises(ValueError, match="dotfile inside an exported package"):
+        module.assemble.copy_tree(src, out / "pkg", out, "coreml/flow_encoder.mlpackage")
+
+
+def test_a_symlink_inside_a_coreml_package_is_refused(tmp_path) -> None:
+    """`shutil.copy2` follows a link, so the bundle-level symlink check never
+    sees one: the target's bytes arrive under the link's name."""
+    module = _builder()
+    outside = tmp_path / "elsewhere.bin"
+    outside.write_bytes(b"not ours")
+    src = tmp_path / "vocoder.mlpackage"
+    src.mkdir()
+    (src / "Manifest.json").write_text("{}", encoding="utf-8")
+    (src / "sneaky").symlink_to(outside)
+    out = tmp_path / "out"
+    with pytest.raises(ValueError, match="is a symlink"):
+        module.assemble.copy_tree(src, out / "pkg", out, "coreml/vocoder.mlpackage")
+
+
+def test_the_cosine_gate_refuses_a_zero_vector_rather_than_passing_it() -> None:
+    """`nan <= x` is `False`, and `False` is the branch where a gate succeeds.
+
+    A graph returning zeros is the standard mis-export failure, so the one
+    output most likely to be wrong produced `0/0` = NaN, and NaN passed both
+    `if c <= 0.999` and `if c <= 0.9999`. The bundle was stamped
+    `"verified": true` with `cosine nan` printed beside it.
+    """
+    import numpy as np
+
+    module = _builder()
+    good = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    assert module.audit._cos(good, good) == pytest.approx(1.0)
+
+    for _label, a, b in (
+        ("zero vector", np.zeros(3, dtype=np.float32), good),
+        ("zero on the right", good, np.zeros(3, dtype=np.float32)),
+        ("nan", np.array([float("nan"), 1.0, 1.0], dtype=np.float32), good),
+        ("inf", np.array([float("inf"), 1.0, 1.0], dtype=np.float32), good),
+    ):
+        with pytest.raises(ValueError, match="cosine"):
+            module.audit._cos(a, b)
+
+
+def test_both_cosine_gates_read_the_passing_side() -> None:
+    """The source, because the gates run only in a 4.6 GB strict cut.
+
+    Every strict test in this file stubs `verify`, so neither gate is entered
+    by anything in the repository — their first execution is the real release.
+    A comparison written the other way round is exactly the shape that would
+    survive that.
+    """
+    source = (REPO / "tools" / "release" / "audit.py").read_text(encoding="utf-8")
+    assert "if not (c > 0.999):" in source
+    assert "if not (c > 0.9999):" in source
+    assert "if c <= 0.999" not in source
+    assert "if c <= 0.9999" not in source
 
 
 # --------------------------------------------------------------- attribution
@@ -473,8 +578,31 @@ def test_crates_release_bootstraps_once_then_uses_short_lived_oidc() -> None:
 def test_release_tags_name_the_isolated_public_branch_explicitly() -> None:
     """Running the release commands on a private branch must not expose it."""
     releasing = (REPO / "RELEASING.md").read_text(encoding="utf-8")
-    assert "git tag v0.1.0 public-main" in releasing
-    assert "git tag go/v0.1.0 public-main" in releasing
+    # Read from pyproject rather than written out: the literal needs bumping
+    # every release otherwise, and a test that fails only because the version
+    # moved teaches people to edit tests during a release.
+    version = (
+        _tomllib()
+        .loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+        .split(".dev")[0]
+    )
+    assert f"git tag v{version} public-main" in releasing
+    assert f"git tag go/v{version} public-main" in releasing
+
+
+def test_turbo_parity_revision_is_pinned_or_explicitly_blocked() -> None:
+    workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    parity = workflow.split("\n  parity:\n", 1)[1].split("\n  packaging:\n", 1)[0]
+    match = re.search(r'LOUDKIT_TURBO_HF_REVISION: "([^"]*)"', parity)
+    assert match, "parity must declare the turbo revision"
+    revision = match.group(1)
+    assert not revision or re.fullmatch(r"[0-9a-f]{40}", revision)
+    assert '--revision "$LOUDKIT_TURBO_HF_REVISION"' in parity
+    if not revision:
+        gate = parity.split("- name: Require published model revisions", 1)[1]
+        gate = gate.split("- uses:", 1)[0]
+        assert '"$LOUDKIT_TURBO_HF_REVISION" =~ ^[0-9a-f]{40}$' in gate
+        assert "exit 1" in gate
 
 
 def test_parity_uses_a_pinned_public_release_on_an_isolated_runner() -> None:
@@ -566,15 +694,15 @@ def test_every_published_manifest_carries_the_same_version() -> None:
     pyproject = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     cargo = tomllib.loads((REPO / "rust" / "Cargo.toml").read_text(encoding="utf-8"))
     package = json.loads((REPO / "js" / "package.json").read_text(encoding="utf-8"))
-    init = (REPO / "python" / "loudkit" / "__init__.py").read_text(encoding="utf-8")
+    init = (REPO / "python" / "loudkit" / "_version.py").read_text(encoding="utf-8")
     dunder = re.search(r'^__version__ = "([^"]+)"', init, re.MULTILINE)
-    assert dunder, "python/loudkit/__init__.py no longer defines __version__"
+    assert dunder, "python/loudkit/_version.py no longer defines __version__"
 
     expected = _normalised_version(pyproject["project"]["version"])
     for label, raw in (
         ("js/package.json", package["version"]),
         ("rust/Cargo.toml", cargo["package"]["version"]),
-        ("python/loudkit/__init__.py __version__", dunder.group(1)),
+        ("python/loudkit/_version.py __version__", dunder.group(1)),
     ):
         assert _normalised_version(raw) == expected, (
             f"{label} says {raw!r} and pyproject.toml says "
@@ -643,19 +771,16 @@ def test_the_release_table_names_the_versions_the_files_carry() -> None:
 # ------------------------------------------------------- attacking the builder
 
 
-def _builder():  # type: ignore[no-untyped-def]
-    """``tools/build_release.py`` as a module, for the unit-level checks.
+def _builder():
+    """The ``tools/release`` package, for the unit-level checks.
 
-    ``tools/`` is not a package and is not on the path, so the module is loaded
-    from its file. The tests below that drive the command line use a
-    subprocess instead; this import is only for the pure functions.
+    The names live in the phase modules (``preflight``, ``assemble``,
+    ``verify``, ``audit``); ``main`` is on the package. The tests below that
+    drive the command line use a subprocess instead.
     """
-    spec = importlib.util.spec_from_file_location("build_release", BUILDER)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    release = tool("release")
+    importlib.import_module("release.__main__")  # `release.main` imports it lazily
+    return release
 
 
 def _roster() -> list[str]:
@@ -715,12 +840,18 @@ def _split_pair(
     roles: tuple[str, str] = ("synthesis", "enrollment"),
     synthesis_name: str = "loudr-1.safetensors",
     enrollment_source_payload: str = "a" * 64,
+    role_filenames: dict[str, str] | None = None,
 ) -> None:
     """Both halves, with the split provenance a real split would have written.
 
     ``source_names`` defaults to the union, which is what makes the pair
     complete; passing a longer list is how a test says "a tensor went missing
     between the split and here" without deleting a file.
+
+    ``role_filenames`` is what the split recorded under ``split.roles``, which
+    is a separate claim from ``synthesis_name``, the name the file is written
+    under: the packer's ``--out`` decides the second and the model decides the
+    first, and a turbo half is exactly where the two come apart.
     """
     module = _builder()
     whole = sorted(source_names if source_names is not None else [*synthesis, *enrollment])
@@ -728,7 +859,7 @@ def _split_pair(
         "source_payload_sha256": "a" * 64,
         "source_tensor_names_sha256": hashlib.sha256("\n".join(whole).encode()).hexdigest(),
         "source_tensor_count": len(whole),
-        "roles": module.ROLE_FILENAMES,
+        "roles": role_filenames if role_filenames is not None else module.ROLE_FILENAMES,
     }
     halves = (
         (roles[0], synthesis, synthesis_name, _fixture_payload_sha256(synthesis), block),
@@ -794,6 +925,27 @@ def _fake_sources(
         (coreml / name / "Data").mkdir(parents=True)
         (coreml / name / "Manifest.json").write_text("{}", encoding="utf-8")
         (coreml / name / "Data" / "model.mlmodel").write_bytes(b"fake package")
+    # The records that say each set came from one export. A release requires
+    # both, because files in one folder are not files from one run and a
+    # release is where re-exporting is possible.
+    (coreml / module.EXPORT_RECORD).write_text(
+        json.dumps(
+            {
+                "format": "loudkit-coreml-export",
+                "packages": dict.fromkeys(module.SYNTHESIS_COREML, {}),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (onnx / module.EXPORT_RECORD).write_text(
+        json.dumps(
+            {
+                "format": "loudkit-onnx-export",
+                "graphs": dict.fromkeys(module.SYNTHESIS_ONNX, {}),
+            }
+        ),
+        encoding="utf-8",
+    )
     return src
 
 
@@ -844,7 +996,7 @@ def _build_strict(monkeypatch: pytest.MonkeyPatch, src: Path, out: Path, *args: 
     requires, are faked.
     """
     module = _builder()
-    monkeypatch.setattr(module, "verify", lambda _out, **_kw: 0)
+    monkeypatch.setattr(module.audit, "verify", lambda _out, **_kw: 0)
     monkeypatch.setattr(sys, "platform", "darwin")
     checkpoint = _synthesis_half(src)
     monkeypatch.setattr(
@@ -970,7 +1122,9 @@ def test_strict_ships_only_what_the_profile_names(
     shipped = {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}
     assert "onnx/leftover.tmp.onnx" not in shipped
     module = _builder()
-    paths, prefixes = module._allowlist(roster=_roster(), ships_onnx=True, ships_coreml=True)
+    paths, prefixes = module.verify._allowlist(
+        roster=_roster(), ships_onnx=True, ships_coreml=True
+    )
     unexpected = {p for p in shipped - paths if not p.startswith(prefixes)}
     assert not unexpected, f"the bundle carries files the profile does not name: {unexpected}"
 
@@ -988,8 +1142,10 @@ def test_the_allowlist_audit_rejects_a_stray_file(tmp_path: Path) -> None:
     (root / "loudr-1.safetensors").write_bytes(b"x")
     (root / "notes.txt").write_bytes(b"left behind")
 
-    paths, prefixes = module._allowlist(roster=["joe"], ships_onnx=False, ships_coreml=False)
-    drift = module._audit(root, paths, prefixes)
+    paths, prefixes = module.verify._allowlist(
+        roster=["joe"], ships_onnx=False, ships_coreml=False
+    )
+    drift = module.verify._audit(root, paths, prefixes)
     assert any("notes.txt" in line for line in drift)
     assert any("voices/joe.safetensors" in line for line in drift)
 
@@ -1086,12 +1242,45 @@ def test_the_last_copy_of_the_previous_release_is_not_reclaimed(tmp_path: Path) 
     out.parent.mkdir(parents=True, exist_ok=True)
     orphan = _staging_stub(out, _dead_pid(), suffix="previous")
 
-    module._sweep_stale(out)
+    module.assemble._sweep_stale(out)
     assert orphan.is_dir(), "the only surviving copy of the last release was removed"
 
     out.mkdir()
-    module._sweep_stale(out)
+    module.assemble._sweep_stale(out)
     assert not orphan.exists(), "a duplicate of a release that is in place was kept"
+
+
+def test_a_commit_does_not_reclaim_what_the_sweep_kept(tmp_path: Path) -> None:
+    """The other end of the same rule, which ``_commit`` was not holding.
+
+    ``_commit`` cleared ``.{out}.previous-{pid}`` before it had a bundle in
+    place. Pids come round again after a reboot, so a new build can be handed
+    the very name a crashed one left behind, and the tree the sweep kept
+    because no release sat beside it was removed on the way in. The staging
+    tree is left untouched by the refusal, so nothing publishable is lost
+    either.
+    """
+    module = _builder()
+    out = tmp_path / "release"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    orphan = _staging_stub(out, os.getpid(), suffix="previous")
+    staging = _staging_stub(out, os.getpid())
+
+    with pytest.raises(FileExistsError, match="only surviving copy of the last release"):
+        module.assemble._commit(staging, out)
+
+    assert (orphan / "voices" / "carmen.safetensors").is_file(), (
+        "the only surviving copy of the last release was removed by a new build"
+    )
+    assert staging.is_dir(), "the refusal took the staging tree with it"
+
+    # With a release beside it the tree is a duplicate, and committing over it
+    # is the ordinary path.
+    out.mkdir()
+    (out / "stale.txt").write_bytes(b"the previous release")
+    module.assemble._commit(staging, out)
+    assert (out / "voices" / "carmen.safetensors").is_file()
+    assert not orphan.exists(), "a duplicate was kept after a successful commit"
 
 
 def test_a_successful_build_replaces_the_previous_one_atomically(
@@ -1199,7 +1388,7 @@ def test_a_gate_that_touches_the_bundle_is_refused(
         (staging / "onnx" / "dropped.onnx").write_bytes(b"a passenger from the gate")
         return 0
 
-    monkeypatch.setattr(module, "verify", hostile)
+    monkeypatch.setattr(module.audit, "verify", hostile)
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(
         sys,
@@ -1261,7 +1450,7 @@ def test_verify_only_refuses_a_bundle_with_no_profile(tmp_path: Path) -> None:
     root.mkdir()
     (root / "release.json").write_text('{"checkpoint": {}}', encoding="utf-8")
     (root / "SHA256SUMS").write_text("", encoding="utf-8")
-    problems = module.check_bundle(root)
+    problems = module.verify.check_bundle(root)
     assert any("profile" in p for p in problems)
 
 
@@ -1279,7 +1468,7 @@ def test_check_bundle_refuses_a_symlink(tmp_path: Path) -> None:
     (root / "SHA256SUMS").write_text(
         f"{module.sha256(root / 'release.json')}  release.json\n", encoding="utf-8"
     )
-    problems = module.check_bundle(root)
+    problems = module.verify.check_bundle(root)
     assert any("symlink" in p and "linked.bin" in p for p in problems)
 
 
@@ -1307,7 +1496,9 @@ def test_the_checksum_count_is_the_file_count_less_the_one_written_last(
     )
 
 
-def test_the_roster_is_twenty_voices_two_per_language(tmp_path: Path) -> None:
+def test_the_roster_is_28_voices_with_ten_english(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """``roster_names`` refuses anything that is not the canonical roster.
 
     The builder reads the roster rather than hard-coding it, so a truncated
@@ -1315,15 +1506,16 @@ def test_the_roster_is_twenty_voices_two_per_language(tmp_path: Path) -> None:
     requires without anyone editing the builder.
     """
     module = _builder()
-    names = module.roster_names()
-    assert len(names) == module.ROSTER_SIZE == 20
+    names = module.verify.roster_names()
+    assert len(names) == module.ROSTER_SIZE == 28
     assert len(set(names)) == len(names)
 
     entries = json.loads(module.ROSTER_PATH.read_text(encoding="utf-8"))
-    module.ROSTER_PATH = tmp_path / "short.json"
-    module.ROSTER_PATH.write_text(json.dumps(entries[:19]), encoding="utf-8")
+    short = tmp_path / "short.json"
+    short.write_text(json.dumps(entries[:27]), encoding="utf-8")
+    monkeypatch.setattr(module.verify, "ROSTER_PATH", short)
     with pytest.raises(module.BuildRefusedError):
-        module.roster_names()
+        module.verify.roster_names()
 
 
 # ------------------------------------------------- the two halves of the checkpoint
@@ -1436,7 +1628,9 @@ def test_the_release_carries_both_halves(
     manifest = json.loads((out / "release.json").read_text(encoding="utf-8"))
     assert manifest["enrollment_checkpoint"]["path"] == enrollment
     assert enrollment in (out / "SHA256SUMS").read_text(encoding="utf-8")
-    paths, _prefixes = module._allowlist(roster=_roster(), ships_onnx=True, ships_coreml=True)
+    paths, _prefixes = module.verify._allowlist(
+        roster=_roster(), ships_onnx=True, ships_coreml=True
+    )
     assert enrollment in paths
 
 
@@ -1446,7 +1640,7 @@ def test_the_release_carries_both_halves(
 SPLITTER = REPO / "tools" / "split_checkpoint.py"
 
 
-def _packed_checkpoint(path: Path, extra: str | None = None) -> dict[str, object]:
+def _packed_checkpoint(path: Path, extra: str | None = None) -> _PackedSource:
     """A packed checkpoint of tiny tensors, one per group the split routes.
 
     Small enough to write in a test, shaped like the real one where the split
@@ -1474,10 +1668,7 @@ def _packed_checkpoint(path: Path, extra: str | None = None) -> dict[str, object
     # A real digest, by the tool's own recipe: the splitter refuses a source
     # whose manifest cannot vouch for its tensors, and a fixture that skipped
     # this would be testing a path no real checkpoint takes.
-    sys.path.insert(0, str(REPO / "tools"))
-    from split_checkpoint import payload_sha256
-
-    manifest["tensor_payload_sha256"] = payload_sha256(tensors)
+    manifest["tensor_payload_sha256"] = tool("split_checkpoint").payload_sha256(tensors)
     path.parent.mkdir(parents=True, exist_ok=True)
     save_file(
         {k: tensors[k] for k in sorted(tensors)},
@@ -1530,29 +1721,29 @@ def test_the_split_is_disjoint_complete_and_byte_identical(tmp_path: Path) -> No
     }
     landed: dict[str, list[str]] = {}
     for role, half in halves.items():
-        manifest, names = module._read_header(half)
+        manifest, names = module.verify._read_header(half)
         assert manifest["artifact_role"] == role
         assert manifest["recipe_version"] == "loudkit-1"
         landed[role] = names
         for group in manifest["dtype_map"]:
             assert any(n == group or n.startswith(group + ".") for n in names), group
         for name, tensor in load_file(str(half)).items():
-            assert tensor.equal(source["tensors"][name]), name  # type: ignore[index]
+            assert tensor.equal(source["tensors"][name]), name
 
     assert set(landed["synthesis"]) == set(SYNTHESIS_TENSORS)
     assert set(landed["enrollment"]) == set(ENROLLMENT_TENSORS)
     assert not set(landed["synthesis"]) & set(landed["enrollment"])
-    assert set(landed["synthesis"]) | set(landed["enrollment"]) == set(source["names"])  # type: ignore[arg-type]
+    assert set(landed["synthesis"]) | set(landed["enrollment"]) == set(source["names"])
 
     sibling = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
-    synthesis_manifest, _names = module._read_header(halves["synthesis"])
+    synthesis_manifest, _names = module.verify._read_header(halves["synthesis"])
     assert sibling == synthesis_manifest, (
         "the sibling manifest.json must describe the half it ships beside, or a "
         "loader checking the payload digest against it refuses a correct release"
     )
 
     assert (
-        module._split_problems(
+        module.verify._split_problems(
             {
                 module.CHECKPOINT_NAME: halves["synthesis"],
                 module.ENROLLMENT_CHECKPOINT_NAME: halves["enrollment"],
@@ -1614,7 +1805,7 @@ class TestTheBytesAreCheckedNotJustTheHeaders:
         return out
 
     def test_a_clean_pair_passes(self, tmp_path: Path) -> None:
-        assert _builder()._payload_agreement(self._pair(tmp_path)) == []
+        assert _builder().verify._payload_agreement(self._pair(tmp_path)) == []
 
     def test_a_flipped_tensor_byte_is_caught_and_named(self, tmp_path: Path) -> None:
         out = self._pair(tmp_path)
@@ -1623,7 +1814,7 @@ class TestTheBytesAreCheckedNotJustTheHeaders:
         data = bytearray(target.read_bytes())
         data[-1] ^= 0x01
         target.write_bytes(bytes(data))
-        problems = module._payload_agreement(out)
+        problems = module.verify._payload_agreement(out)
         assert problems, "a flipped tensor byte passed the payload check"
         assert module.ENROLLMENT_CHECKPOINT_NAME in problems[0]
 
@@ -1632,7 +1823,7 @@ class TestTheBytesAreCheckedNotJustTheHeaders:
         out = self._pair(tmp_path)
         module = _builder()
         (out / module.CHECKPOINT_NAME).write_bytes(b"not a safetensors container")
-        problems = module._payload_agreement(out)
+        problems = module.verify._payload_agreement(out)
         assert any("cannot read" in p for p in problems), problems
 
     def test_a_digest_that_is_not_a_sha256_is_refused(self, tmp_path: Path) -> None:
@@ -1644,8 +1835,67 @@ class TestTheBytesAreCheckedNotJustTheHeaders:
             SYNTHESIS_TENSORS,
             {"artifact_role": "synthesis", "tensor_payload_sha256": 12345},
         )
-        problems = module._payload_agreement(out)
+        problems = module.verify._payload_agreement(out)
         assert any("not a sha256" in p for p in problems), problems
+
+
+class TestTheTurboPairIsKeyedByTheNameItShipsUnder:
+    """The turbo preflight prints "shipping X as loudr-1-turbo.safetensors".
+
+    It then keyed the pair check by the file's own name, and
+    ``_provenance_problems`` refuses whenever ``split.roles.synthesis`` differs
+    from that key. So a turbo checkpoint arriving under any other name was
+    refused two checks later, after the note said it would not be. The note is
+    the contract: the name the bundle ships under is the name the pair is
+    judged by.
+    """
+
+    def _pair(self, tmp_path: Path, *, filename: str) -> tuple[Path, Path]:
+        module = _builder()
+        src = tmp_path / "src"
+        src.mkdir()
+        _split_pair(
+            src,
+            synthesis_name=filename,
+            role_filenames={
+                "synthesis": module.TURBO_CHECKPOINT_NAME,
+                "enrollment": module.ENROLLMENT_CHECKPOINT_NAME,
+            },
+        )
+        return src / filename, src / module.ENROLLMENT_CHECKPOINT_NAME
+
+    def test_a_canonically_named_turbo_pair_passes(self, tmp_path: Path) -> None:
+        module = _builder()
+        ckpt, enrollment = self._pair(tmp_path, filename=module.TURBO_CHECKPOINT_NAME)
+        assert (
+            module.preflight._pair_refusal(
+                ckpt, enrollment, synthesis_name=module.TURBO_CHECKPOINT_NAME
+            )
+            == []
+        )
+
+    def test_a_turbo_half_under_another_name_is_still_the_pair(self, tmp_path: Path) -> None:
+        """What the "Not fatal" note promises, held to."""
+        module = _builder()
+        ckpt, enrollment = self._pair(tmp_path, filename="model.safetensors")
+        assert (
+            module.preflight._pair_refusal(
+                ckpt, enrollment, synthesis_name=module.TURBO_CHECKPOINT_NAME
+            )
+            == []
+        )
+
+    def test_the_loudr1_default_is_the_canonical_name(self, tmp_path: Path) -> None:
+        """The other side keeps its rule: `loudr1` refuses a non-canonical name
+        outright, so keying by the canonical one changes no outcome there."""
+        module = _builder()
+        src = tmp_path / "src"
+        src.mkdir()
+        _split_pair(src)
+        problems = module.preflight._pair_refusal(
+            src / module.CHECKPOINT_NAME, src / module.ENROLLMENT_CHECKPOINT_NAME
+        )
+        assert problems == []
 
 
 @pytest.mark.requires_torch
@@ -1685,3 +1935,343 @@ class TestTheSplitterWontVouchForWhatItCannotCheck:
         assert run.returncode != 0, f"{why} was accepted"
         assert "sha256" in run.stderr, run.stderr
         assert not (tmp_path / "out").exists(), "a refused split left a directory"
+
+
+# ------------------------------------------------------ the second model
+
+
+FUSION_TENSORS = ("t3.head2.weight", "t3.fuse.0.weight", "t3.fuse.2.weight")
+"""What `tools/pack_turbo.py` adds and a one-token checkpoint cannot have."""
+
+
+def _turbo_checkpoint(
+    path: Path,
+    *,
+    mode: str = "fusion_mtp2",
+    version: int = 2,
+    tokenizer_sha256: str | None = None,
+) -> Path:
+    """A file that reads as the packed turbo checkpoint, in miniature.
+
+    ``mode="single", version=1`` is the impostor: a loudr-1-shaped checkpoint
+    sitting where the turbo one should be, which is what passing the wrong
+    ``--checkpoint`` produces.
+    """
+    manifest: dict[str, object] = {
+        "format": "loudkit-checkpoint",
+        "format_version": version,
+        "name": "loudkit-v0.1-turbo" if mode != "single" else "loudkit-v0.1",
+        "recipe_version": "loudkit-1",
+        "n_cfm_timesteps": 1,
+    }
+    names = list(SYNTHESIS_TENSORS)
+    if mode != "single":
+        manifest["decode"] = {"mode": mode}
+        names += list(FUSION_TENSORS)
+    if tokenizer_sha256 is not None:
+        manifest["tokenizer_sha256"] = tokenizer_sha256
+    whole = sorted([*names, *ENROLLMENT_TENSORS])
+    split = {
+        "source_payload_sha256": "a" * 64,
+        "source_tensor_names_sha256": hashlib.sha256("\n".join(whole).encode()).hexdigest(),
+        "source_tensor_count": len(whole),
+        "roles": {"synthesis": path.name, "enrollment": "loudr-1-enrollment.safetensors"},
+    }
+    manifest.update(
+        artifact_role="synthesis",
+        split=split,
+        tensor_payload_sha256=_fixture_payload_sha256(names),
+    )
+    _write_safetensors(path, names, manifest)
+    _write_safetensors(
+        path.parent / "loudr-1-enrollment.safetensors",
+        ENROLLMENT_TENSORS,
+        {
+            **manifest,
+            "artifact_role": "enrollment",
+            "tensor_payload_sha256": _fixture_payload_sha256(ENROLLMENT_TENSORS),
+        },
+    )
+    return path
+
+
+def _apart_from_the_host(problems: list) -> list:
+    """The preflight's problems, minus the one about the machine it ran on.
+
+    `turbo-0.1` refuses to build anywhere but macOS, because half its closing
+    gate is CoreML packages that open on Apple platforms and nowhere else. That
+    refusal is correct and is not what these tests are about, so the two that
+    compare the whole list drop it rather than passing on a laptop and failing
+    on the Linux runner.
+    """
+    return [p for p in problems if p[0] != "Apple platform"]
+
+
+class TestTheTurboBundleIsRefusedBeforeItIsBuilt:
+    """The turbo builder ships 1.2 GB, so every refusal is worth having early.
+
+    Two of them are the ones that would otherwise be discovered by whoever
+    downloaded the result: a checkpoint that is not the turbo model at all
+    (the way to build the wrong bundle is to pass the wrong ``--checkpoint``
+    and have every other check pass), and a tokenizer that does not belong to
+    these weights, which every ``load()`` refuses after the download.
+    """
+
+    def _pieces(self, tmp_path: Path) -> _TurboPieces:
+        tokenizer = tmp_path / "tokenizer.json"
+        tokenizer.write_text('{"model": "test"}', encoding="utf-8")
+        # The manifest's claim about the tokenizer has to be true of the file
+        # this set ships, or the honest case cannot be told from the broken
+        # one: with no claim recorded the check is skipped entirely.
+        ckpt = _turbo_checkpoint(
+            tmp_path / "loudr-1-turbo.safetensors",
+            tokenizer_sha256=hashlib.sha256(tokenizer.read_bytes()).hexdigest(),
+        )
+        encoder = tmp_path / "ve.safetensors"
+        encoder.write_bytes(b"ve")
+        voices = {f"{name}.safetensors": tokenizer for name in _roster()}
+        module = _builder()
+        enrollment = tmp_path / "loudr-1-enrollment.safetensors"
+        for kind, suffix, extra in (
+            ("onnx", ".onnx", module.ENROLL_ONNX),
+            ("coreml", ".mlpackage", module.ENROLL_COREML),
+        ):
+            directory = tmp_path / kind
+            directory.mkdir()
+            for name in module.synthesis_files("fusion_mtp2", suffix) + extra:
+                target = directory / name
+                if suffix == ".mlpackage":
+                    target.mkdir()
+                    target = target / "model.bin"
+                target.write_bytes(b"graph")
+            (directory / "export.json").write_text("{}")
+        samples = tmp_path / "samples"
+        samples.mkdir()
+        for _, name in module.SAMPLES:
+            (samples / Path(name).name).write_bytes(b"sample")
+        return {
+            "ckpt": ckpt,
+            "tokenizer": tokenizer,
+            "voice_encoder": encoder,
+            "voices": voices,
+            "roster": _roster(),
+            "enrollment": enrollment,
+            "onnx_dir": tmp_path / "onnx",
+            "coreml_dir": tmp_path / "coreml",
+            "samples": samples,
+        }
+
+    def test_a_complete_set_has_nothing_to_refuse(self, tmp_path: Path) -> None:
+        p = self._pieces(tmp_path)
+        builder = _builder().preflight
+        assert _apart_from_the_host(builder.turbo(**p)) == []
+
+    @pytest.mark.parametrize(
+        "relative",
+        [
+            "onnx/t3_pair_step.onnx",
+            "onnx/t3_head2.onnx",
+            "coreml/t3_head2.mlpackage",
+            "onnx/voice_encoder.onnx",
+            "samples/joe.opus",
+            "loudr-1-enrollment.safetensors",
+        ],
+    )
+    def test_missing_decode_or_cloning_assets_are_refused(
+        self, tmp_path: Path, relative: str
+    ) -> None:
+        pieces = self._pieces(tmp_path)
+        builder = _builder().preflight
+        target = tmp_path / relative
+        target.rename(target.with_name(target.name + ".missing"))
+        problems = builder.turbo(**pieces)
+        assert any(str(target) == where or relative == what for what, where, _ in problems), (
+            problems
+        )
+
+    def test_unreadable_enrollment_is_a_structured_refusal(self, tmp_path: Path) -> None:
+        pieces = self._pieces(tmp_path)
+        builder = _builder().preflight
+        enrollment = tmp_path / "loudr-1-enrollment.safetensors"
+        enrollment.write_bytes(b"bad")
+        problems = builder.turbo(**pieces)
+        assert any(
+            what == "enrollment" and "unreadable manifest" in how for what, _, how in problems
+        )
+
+    def test_a_one_token_checkpoint_is_not_the_turbo_model(self, tmp_path: Path) -> None:
+        p = self._pieces(tmp_path)
+        builder = _builder().preflight
+        _turbo_checkpoint(p["ckpt"], mode="single", version=1)
+        problems = builder.turbo(**p)
+        assert any("decode.mode" in how for _what, _where, how in problems), problems
+        assert any("build_release.py" in how for _what, _where, how in problems), (
+            "say which builder ships a one-token model, rather than only that this one will not"
+        )
+
+    def test_a_foreign_tokenizer_is_refused(self, tmp_path: Path) -> None:
+        """A different tokenizer reads the same text as different ids, and
+        nothing downstream reports it. The checkpoint records which one these
+        weights expect; this is a file that is not it."""
+        p = self._pieces(tmp_path)
+        builder = _builder().preflight
+        _turbo_checkpoint(p["ckpt"], tokenizer_sha256="0" * 64)
+        problems = _apart_from_the_host(builder.turbo(**p))
+        assert [what for what, _where, _how in problems] == ["tokenizer"], problems
+
+    def test_a_missing_voice_names_it(self, tmp_path: Path) -> None:
+        p = self._pieces(tmp_path)
+        builder = _builder().preflight
+        voices = dict(p["voices"])
+        dropped = f"{_roster()[3]}.safetensors"
+        del voices[dropped]
+        p["voices"] = voices
+        problems = builder.turbo(**p)
+        assert any(_roster()[3] in how for _what, _where, how in problems), problems
+
+    def test_skip_verify_is_refused_before_a_byte_moves(self, tmp_path: Path) -> None:
+        """``turbo-0.1`` has no lenient sibling, so the flag is a plain refusal,
+        and it lands in the preflight with the others rather than after 1.2 GB
+        has been copied."""
+        p = self._pieces(tmp_path)
+        voices = tmp_path / "voices"
+        voices.mkdir()
+        for name in _roster():
+            (voices / f"{name}.safetensors").write_bytes(b"fake voice")
+        out = tmp_path / "release"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPO / "tools" / "build_turbo_release.py"),
+                "--checkpoint",
+                str(p["ckpt"]),
+                "--tokenizer",
+                str(p["tokenizer"]),
+                "--voice-encoder",
+                str(p["voice_encoder"]),
+                "--voices",
+                str(voices),
+                "--out",
+                str(out),
+                "--skip-verify",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO,
+        )
+        assert result.returncode != 0, result.stdout
+        assert "--skip-verify" in result.stderr
+        assert "turbo-0.1" in result.stderr
+        assert "--profile lenient" not in result.stderr, "turbo has no lenient profile"
+        assert "assembling" not in result.stdout, "the refusal came after copying started"
+        _nothing_left(out)
+
+
+class TestTheShimsStandForOneModel:
+    """`tools/build_release.py` is `--model loudr-1` and
+    `tools/build_turbo_release.py` is `--model turbo`, by name. A `--model`
+    the user adds is refused with one sentence before the parser runs: had
+    the shim passed it through, the later flag would have won and the
+    script's name would have lied.
+    """
+
+    @pytest.mark.parametrize(
+        ("shim", "model", "other"),
+        [
+            ("build_release.py", "loudr-1", "turbo"),
+            ("build_turbo_release.py", "turbo", "loudr-1"),
+        ],
+    )
+    def test_a_user_model_is_refused(self, shim: str, model: str, other: str) -> None:
+        for spelling in (["--model", other], [f"--model={other}"], ["--model", model]):
+            result = subprocess.run(
+                [sys.executable, str(REPO / "tools" / shim), *spelling],
+                capture_output=True,
+                text=True,
+                check=False,
+                cwd=REPO,
+            )
+            assert result.returncode != 0, spelling
+            assert f"{shim} builds {model}" in result.stderr, result.stderr
+            assert "--checkpoint" not in result.stderr, "the parser ran before the refusal"
+
+    def test_without_a_model_the_shim_reaches_the_parser(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(REPO / "tools" / "build_turbo_release.py")],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO,
+        )
+        assert result.returncode != 0
+        assert "--checkpoint is required" in result.stderr, result.stderr
+
+
+class TestTheTurboProfileIsJudgedByTheSameChecker:
+    """One definition of "assembled correctly", for two models.
+
+    `release.verify.check_bundle` is what a `--model turbo` build runs before
+    its rename and what `--verify-only` runs before an upload. A checker that
+    did not know `turbo-0.1` would report the release it was asked to bless as
+    nameless, and would not hold it to `verified: true` at all.
+    """
+
+    def test_the_profile_is_known_and_is_a_release(self) -> None:
+        module = _builder()
+        assert module.TURBO_PROFILE in module.KNOWN_PROFILES
+        assert module.TURBO_PROFILE in module.RELEASE_PROFILES
+        assert module.TURBO_PROFILE not in module.PROFILES, (
+            "`--model loudr-1` cannot build it; turbo has its own synthesis half "
+            "with its own decode-specific graphs"
+        )
+
+    def test_the_allowlist_requires_both_graph_families_and_shared_cloning(self) -> None:
+        module = _builder()
+        paths, prefixes = module.verify.turbo_allowlist(_roster())
+        assert module.TURBO_CHECKPOINT_NAME in paths
+        assert module.CHECKPOINT_NAME not in paths
+        assert module.ENROLLMENT_CHECKPOINT_NAME in paths
+        assert module.VOICE_ENCODER_NAME in paths
+        assert "onnx/t3_pair_step.onnx" in paths
+        assert "onnx/t3_head2.onnx" in paths
+        assert "onnx/t3_step.onnx" not in paths
+        assert "coreml/t3_pair_step.mlpackage/" in prefixes
+        assert "coreml/voice_encoder.mlpackage/" in prefixes
+        assert "samples/joe.opus" in paths
+        assert len([p for p in paths if p.startswith("voices/")]) == len(_roster())
+
+    def test_an_unverified_turbo_bundle_is_reported(self, tmp_path: Path) -> None:
+        module = _builder()
+        out = tmp_path / "bundle"
+        out.mkdir()
+        (out / "release.json").write_text(
+            json.dumps({"profile": module.TURBO_PROFILE, "verified": False}), encoding="utf-8"
+        )
+        (out / "SHA256SUMS").write_text("", encoding="utf-8")
+        problems = module.verify.check_bundle(out)
+        assert any("verified: true" in p for p in problems), problems
+
+    def test_the_gate_reads_the_weights_back(self, tmp_path: Path) -> None:
+        """The turbo-only gate step: is this actually the two-token model?
+
+        A loudr-1 checkpoint copied under the turbo name passes every other
+        check in the builder, because every other check is about layout.
+        """
+        module = _builder()
+        good = _turbo_checkpoint(tmp_path / "loudr-1-turbo.safetensors")
+        assert module.audit._verify_turbo_identity(good) == 0
+        wrong = _turbo_checkpoint(tmp_path / "impostor.safetensors", mode="single", version=1)
+        assert module.audit._verify_turbo_identity(wrong) == 1
+
+    def test_the_builder_and_the_resolver_name_the_same_files(self) -> None:
+        """Both spell the canonical names out, so nothing enforces that they
+        agree except this. A bundle built under a name `hub` does not resolve
+        is a release nobody can load by its directory."""
+        from loudkit import hub
+
+        module = _builder()
+        assert module.TURBO_CHECKPOINT_NAME == hub.TURBO_CHECKPOINT_NAME
+        assert module.CHECKPOINT_NAME == hub.CHECKPOINT_NAME
+        assert module.ENROLLMENT_CHECKPOINT_NAME == hub.ENROLLMENT_NAME
+        assert module.VOICE_ENCODER_NAME == hub.VOICE_ENCODER_NAME

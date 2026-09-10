@@ -1,0 +1,2410 @@
+{
+ "version": 1,
+ "about": "English reading passages for the order-balanced pairwise judge. Public-domain Project Gutenberg prose, 250-500 characters, no dialogue, no digits. Present in the training data of most open TTS systems; this set measures reading quality on familiar material, not generalisation.",
+ "language": "en",
+ "seed": 20260828,
+ "count": 400,
+ "passages": [
+  {
+   "id": "en0000",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "A lake is the landscape’s most beautiful and expressive feature. It is earth’s eye; looking into which the beholder measures the depth of his own nature. The fluviatile trees next the shore are the slender eyelashes which fringe it, and the wooded hills and cliffs around are its overhanging brows."
+  },
+  {
+   "id": "en0001",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Tom kissed her, with a choking sensation in his throat, and made a show of being confident of finding the searchers or an escape from the cave; then he took the kite-line in his hand and went groping down one of the passages on his hands and knees, distressed with hunger and sick with bodings of coming doom."
+  },
+  {
+   "id": "en0002",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Hélène welcomed Natásha delightedly and was loud in admiration of her beauty and her dress. Soon after their arrival Mademoiselle George went out of the room to change her costume. In the drawing room people began arranging the chairs and taking their seats. Anatole moved a chair for Natásha and was about to sit down beside her, but the count, who never lost sight of her, took the seat himself. Anatole sat down behind her."
+  },
+  {
+   "id": "en0003",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "Some hours passed thus; but by degrees, as the sun declined towards the horizon, the wind died away into a gentle breeze and the sea became free from breakers. But these gave place to a heavy swell; I felt sick and hardly able to hold the rudder, when suddenly I saw a line of high land towards the south."
+  },
+  {
+   "id": "en0004",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Bulstrode shrank—there was a visible quivering in his face and hands. He was totally unprepared to have his advances met in this way, or to find himself urged into more revelation than he had beforehand set down as needful. But at that moment he dared not tell a lie, and he felt suddenly uncertain of his ground which he had trodden with some confidence before."
+  },
+  {
+   "id": "en0005",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "They halted about the door of the mortuary chapel. Mr Bloom stood behind the boy with the wreath looking down at his sleekcombed hair and at the slender furrowed neck inside his brandnew collar. Poor boy! Was he there when the father? Both unconscious. Lighten up at the last moment and recognise for the last time. All he might have done. I owe three shillings to O’Grady. Would he understand? The mutes bore the coffin into the chapel. Which end is his head?"
+  },
+  {
+   "id": "en0006",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Yet notwithstanding all this, the boy grew more and more melancholy and pale and dejected. She added hot baths, sitz baths, shower baths, and plunges. The boy remained as dismal as a hearse. She began to assist the water with a slim oatmeal diet and blister-plasters. She calculated his capacity as she would a jug’s, and filled him up every day with quack cure-alls."
+  },
+  {
+   "id": "en0007",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Amy Lawrence was proud and glad, and she tried to make Tom see it in her face—but he wouldn’t look. She wondered; then she was just a grain troubled; next a dim suspicion came and went—came again; she watched; a furtive glance told her worlds—and then her heart broke, and she was jealous, and angry, and the tears came and she hated everybody. Tom most of all (she thought)."
+  },
+  {
+   "id": "en0008",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "On the morning of a fine June day my first bonny little nursling, and the last of the ancient Earnshaw stock, was born. We were busy with the hay in a far-away field, when the girl that usually brought our breakfasts came running an hour too soon across the meadow and up the lane, calling me as she ran."
+  },
+  {
+   "id": "en0009",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Coming down somewhat later than usual, I saw, by the sunbeams piercing the chinks of the shutters, Miss Catherine still seated near the fireplace. The house-door was ajar, too; light entered from its unclosed windows; Hindley had come out, and stood on the kitchen hearth, haggard and drowsy."
+  },
+  {
+   "id": "en0010",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "He was quite unconscious that he was the victim of a plot which his friends, Mr Cunningham, Mr M’Coy and Mr Power had disclosed to Mrs Kernan in the parlour. The idea had been Mr Power’s but its development was entrusted to Mr Cunningham. Mr Kernan came of Protestant stock and, though he had been converted to the Catholic faith at the time of his marriage, he had not been in the pale of the Church for twenty years. He was fond, moreover, of giving side-thrusts at Catholicism."
+  },
+  {
+   "id": "en0011",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "I have frequently seen a poet withdraw, having enjoyed the most valuable part of a farm, while the crusty farmer supposed that he had got a few wild apples only. Why, the owner does not know it for many years when a poet has put his farm in rhyme, the most admirable kind of invisible fence, has fairly impounded it, milked it, skimmed it, and got all the cream, and left the farmer only the skimmed milk."
+  },
+  {
+   "id": "en0012",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "Jim only had time to grab us by the hand and squeeze it; then the nigger come back, and we said we’d come again some time if the nigger wanted us to; and he said he would, more particular if it was dark, because the witches went for him mostly in the dark, and it was good to have folks around then."
+  },
+  {
+   "id": "en0013",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "The curate brought him a glass of plain porter. The man drank it at a gulp and asked for a caraway seed. He put his penny on the counter and, leaving the curate to grope for it in the gloom, retreated out of the snug as furtively as he had entered it."
+  },
+  {
+   "id": "en0014",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "I had heard of her as leading a most unhappy life, and as being separated from her husband, who had used her with great cruelty, and who had become quite renowned as a compound of pride, avarice, brutality, and meanness. And I had heard of the death of her husband, from an accident consequent on his ill-treatment of a horse. This release had befallen her some two years before; for anything I knew, she was married again."
+  },
+  {
+   "id": "en0015",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "But that morning something exciting had happened at the Hall. A letter had come to Celia which made her cry silently as she read it; and when Sir James, unused to see her in tears, asked anxiously what was the matter, she burst out in a wail such as he had never heard from her before."
+  },
+  {
+   "id": "en0016",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "The chief steward, a very stupid but cunning man who saw perfectly through the naïve and intelligent count and played with him as with a toy, seeing the effect these prearranged receptions had on Pierre, pressed him still harder with proofs of the impossibility and above all the uselessness of freeing the serfs, who were quite happy as it was."
+  },
+  {
+   "id": "en0017",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Until now Will had never fully seen the chasm between himself and Dorothea—until now that he was come to the brink of it, and saw her on the other side. He began, not without some inward rage, to think of going away from the neighborhood: it would be impossible for him to show any further interest in Dorothea without subjecting himself to disagreeable imputations—perhaps even in her mind, which others might try to poison."
+  },
+  {
+   "id": "en0018",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "She indeed veiled her grief and strove to act the comforter to us all. She looked steadily on life and assumed its duties with courage and zeal. She devoted herself to those whom she had been taught to call her uncle and cousins. Never was she so enchanting as at this time, when she recalled the sunshine of her smiles and spent them upon us. She forgot even her own regret in her endeavours to make us forget."
+  },
+  {
+   "id": "en0019",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "Ben Rogers said he couldn’t get out much, only Sundays, and so he wanted to begin next Sunday; but all the boys said it would be wicked to do it on Sunday, and that settled the thing. They agreed to get together and fix a day as soon as they could, and then we elected Tom Sawyer first captain and Jo Harper second captain of the Gang, and so started home."
+  },
+  {
+   "id": "en0020",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Linton had sunk prostrate again in another paroxysm of helpless fear, caused by his father’s glance towards him, I suppose: there was nothing else to produce such humiliation. He made several efforts to obey, but his little strength was annihilated for the time, and he fell back again with a moan. Mr. Heathcliff advanced, and lifted him to lean against a ridge of turf."
+  },
+  {
+   "id": "en0021",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "Having reached the door, he turned the key and opened it. He did not even glance at the murdered man. He felt that the secret of the whole thing was not to realize the situation. The friend who had painted the fatal portrait to which all his misery had been due had gone out of his life. That was enough."
+  },
+  {
+   "id": "en0022",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "It seemed that everybody of mark had been earlier than they. But there were still spaces left near the head of the large central table, and they made their way thither. Mr. Farebrother sat opposite, not far from Mr. Hawley; all the medical men were there; Mr. Thesiger was in the chair, and Mr. Brooke of Tipton was on his right hand."
+  },
+  {
+   "id": "en0023",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "At five o’clock he rang his bell for his servant and gave him orders to pack his things for the night-express to town, and to have the brougham at the door by eight-thirty. He was determined not to sleep another night at Selby Royal. It was an ill-omened place. Death walked there in the sunlight. The grass of the forest had been spotted with blood."
+  },
+  {
+   "id": "en0024",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "It slammed again. The curtains of my study fluttered out of the open window from which I and the artilleryman had watched the dawn. No one had closed it since. The smashed bushes were just as I had left them nearly four weeks ago. I stumbled into the hall, and the house felt empty. The stair carpet was ruffled and discoloured where I had crouched, soaked to the skin from the thunderstorm the night of the catastrophe. Our muddy footsteps I saw still went up the stairs."
+  },
+  {
+   "id": "en0025",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Mary knew quite well that her father had something particular to say: his eyebrows made their pathetic angle, and there was a tender gravity in his voice: these things had been signs to her when she was Letty’s age. She put her arm within his, and they turned by the row of nut-trees."
+  },
+  {
+   "id": "en0026",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "Where he went to he hardly knew. He remembered wandering through dimly lit streets, past gaunt, black-shadowed archways and evil-looking houses. Women with hoarse voices and harsh laughter had called after him. Drunkards had reeled by, cursing and chattering to themselves like monstrous apes. He had seen grotesque children huddled upon door-steps, and heard shrieks and oaths from gloomy courts."
+  },
+  {
+   "id": "en0027",
+   "source": "Kafka, Metamorphosis (Wyllie tr.)",
+   "gutenberg_id": 5200,
+   "text": "Gregor’s sister rushed to his mother and put her hand on her forehead. Her words seemed to give Gregor’s father some more definite ideas. He sat upright, played with his uniform cap between the plates left by the three gentlemen after their meal, and occasionally looked down at Gregor as he lay there immobile."
+  },
+  {
+   "id": "en0028",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "But, in spite of the certainty in which Elizabeth affected to place this point, as well as the still more interesting one of Bingley’s being withheld from seeing Jane, she felt a solicitude on the subject which convinced her, on examination, that she did not consider it entirely hopeless. It was possible, and sometimes she thought it probable, that his affection might be re-animated, and the influence of his friends successfully combated by the more natural influence of Jane’s attractions."
+  },
+  {
+   "id": "en0029",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Catherine kissed her father, and sat down quietly to her lessons for a couple of hours, according to custom; then she accompanied him into the grounds, and the whole day passed as usual: but in the evening, when she had retired to her room, and I went to help her to undress, I found her crying, on her knees by the bedside."
+  },
+  {
+   "id": "en0030",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "It was a monstrous big river here, with the tallest and the thickest kind of timber on both banks; just a solid wall, as well as I could see by the stars. I looked away down-stream, and seen a black speck on the water. I took after it; but when I got to it it warn’t nothing but a couple of sawlogs made fast together. Then I see another speck, and chased that; then another, and this time I was right. It was the raft."
+  },
+  {
+   "id": "en0031",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Judge Thatcher hoped to see Tom a great lawyer or a great soldier some day. He said he meant to look to it that Tom should be admitted to the National Military Academy and afterward trained in the best law school in the country, in order that he might be ready for either career or both."
+  },
+  {
+   "id": "en0032",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "The thunderstorm had passed. The towers of the Oriental College and the pine trees about it had gone, and very far away, lit by a vivid red glare, the common about the sand-pits was visible. Across the light huge black shapes, grotesque and strange, moved busily to and fro."
+  },
+  {
+   "id": "en0033",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "She kisses his lips; he kisses hers; they solemnly bless each other. The spare hand does not tremble as he releases it; nothing worse than a sweet, bright constancy is in the patient face. She goes next before him--is gone; the knitting-women count Twenty-Two."
+  },
+  {
+   "id": "en0034",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "Like the wasps, before I finally went into winter quarters in November, I used to resort to the north-east side of Walden, which the sun, reflected from the pitch-pine woods and the stony shore, made the fire-side of the pond; it is so much pleasanter and wholesomer to be warmed by the sun while you can be, than by an artificial fire. I thus warmed myself by the still glowing embers which the summer, like a departed hunter, had left."
+  },
+  {
+   "id": "en0035",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "I surveyed the weapon inquisitively. A hideous notion struck me: how powerful I should be possessing such an instrument! I took it from his hand, and touched the blade. He looked astonished at the expression my face assumed during a brief second: it was not horror, it was covetousness. He snatched the pistol back, jealously; shut the knife, and returned it to its concealment."
+  },
+  {
+   "id": "en0036",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "We see we was too late—couldn’t do no good. We asked some stragglers about it, and they said everybody went to the show looking very innocent; and laid low and kept dark till the poor old king was in the middle of his cavortings on the stage; then somebody give a signal, and the house rose up and went for them."
+  },
+  {
+   "id": "en0037",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "He was a skilful chopper, and indulged in some flourishes and ornaments in his art. He cut his trees level and close to the ground, that the sprouts which came up afterward might be more vigorous and a sled might slide over the stumps; and instead of leaving a whole tree to support his corded wood, he would pare it away to a slender stake or splinter which you could break off with your hand at last."
+  },
+  {
+   "id": "en0038",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Sometimes, while meditating on these things in solitude, I’ve got up in a sudden terror, and put on my bonnet to go see how all was at the farm. I’ve persuaded my conscience that it was a duty to warn him how people talked regarding his ways; and then I’ve recollected his confirmed bad habits, and, hopeless of benefiting him, have flinched from re-entering the dismal house, doubting if I could bear to be taken at my word."
+  },
+  {
+   "id": "en0039",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Miss Bennet’s astonishment was soon lessened by the strong sisterly partiality which made any admiration of Elizabeth appear perfectly natural; and all surprise was shortly lost in other feelings. She was sorry that Mr. Darcy should have delivered his sentiments in a manner so little suited to recommend them; but still more was she grieved for the unhappiness which her sister’s refusal must have given him."
+  },
+  {
+   "id": "en0040",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "Some are dinning in our ears that we Americans, and moderns generally, are intellectual dwarfs compared with the ancients, or even the Elizabethan men. But what is that to the purpose? A living dog is better than a dead lion. Shall a man go and hang himself because he belongs to the race of pygmies, and not be the biggest pygmy that he can? Let every one mind his own business, and endeavor to be what he was made."
+  },
+  {
+   "id": "en0041",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "The one grand stage where he enacted all his various parts so manifold, was his vice-bench; a long rude ponderous table furnished with several vices, of different sizes, and both of iron and of wood. At all times except when whales were alongside, this bench was securely lashed athwartships against the rear of the Try-works."
+  },
+  {
+   "id": "en0042",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "I am not aware that any man has ever built on the spot which I occupy. Deliver me from a city built on the site of a more ancient city, whose materials are ruins, whose gardens cemeteries. The soil is blanched and accursed there, and before that becomes necessary the earth itself will be destroyed. With such reminiscences I repeopled the woods and lulled myself asleep."
+  },
+  {
+   "id": "en0043",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "A few days after this visit, Mr. Bingley called again, and alone. His friend had left him that morning for London, but was to return home in ten days’ time. He sat with them above an hour, and was in remarkably good spirits. Mrs. Bennet invited him to dine with them; but, with many expressions of concern, he confessed himself engaged elsewhere."
+  },
+  {
+   "id": "en0044",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "She rolled up her knitting when she had said those words, and presently took the rose out of the handkerchief that was wound about her head. Either Saint Antoine had an instinctive sense that the objectionable decoration was gone, or Saint Antoine was on the watch for its disappearance; howbeit, the Saint took courage to lounge in, very shortly afterwards, and the wine-shop recovered its habitual aspect."
+  },
+  {
+   "id": "en0045",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "In town the earliest risers were just beginning to look sleepily from their windows as we drove through the streets of the Surrey side. Passing down the Waterloo Bridge Road we crossed over the river, and dashing up Wellington Street wheeled sharply to the right and found ourselves in Bow Street. Sherlock Holmes was well known to the force, and the two constables at the door saluted him. One of them held the horse’s head while the other led us in."
+  },
+  {
+   "id": "en0046",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "Dim and wavering as was the wind-blown light, yet it served to show him the hideous error, as it seemed, into which he had fallen, for the face of the man he had sought to kill had all the bloom of boyhood, all the unstained purity of youth. He seemed little more than a lad of twenty summers, hardly older, if older indeed at all, than his sister had been when they had parted so many years ago. It was obvious that this was not the man who had destroyed her life."
+  },
+  {
+   "id": "en0047",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "And now that I have given the one chapter to the theme that so filled my heart, and so often made it ache and ache again, I pass on unhindered, to the event that had impended over me longer yet; the event that had begun to be prepared for, before I knew that the world held Estella, and in the days when her baby intelligence was receiving its first distortions from Miss Havisham’s wasting hands."
+  },
+  {
+   "id": "en0048",
+   "source": "Wells, The Time Machine",
+   "gutenberg_id": 35,
+   "text": "He came into the hall with us and helped the Editor on with his coat. The Medical Man looked into his face and, with a certain hesitation, told him he was suffering from overwork, at which he laughed hugely. I remember him standing in the open doorway, bawling good-night."
+  },
+  {
+   "id": "en0049",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "A charming introduction to a hermit’s life! Four weeks’ torture, tossing, and sickness! Oh, these bleak winds and bitter northern skies, and impassable roads, and dilatory country surgeons! And oh, this dearth of the human physiognomy! and, worse than all, the terrible intimation of Kenneth that I need not expect to be out of doors till spring!"
+  },
+  {
+   "id": "en0050",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "And so on. You couldn’t make out what the preacher said any more, on account of the shouting and crying. Folks got up everywheres in the crowd, and worked their way just by main strength to the mourners’ bench, with the tears running down their faces; and when all the mourners had got up there to the front benches in a crowd, they sung and shouted and flung themselves down on the straw, just crazy and wild."
+  },
+  {
+   "id": "en0051",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "She asked him why did he not write out his thoughts. For what, he asked her, with careful scorn. To compete with phrasemongers, incapable of thinking consecutively for sixty seconds? To submit himself to the criticisms of an obtuse middle class which entrusted its morality to policemen and its fine arts to impresarios?"
+  },
+  {
+   "id": "en0052",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "There was a tone in the last sentence which was equivalent to the clutch of his strong hand on Rosamond’s delicate arm. But for all that, his will was not a whit stronger than hers. She immediately walked out of the room in silence, but with an intense determination to hinder what Lydgate liked to do."
+  },
+  {
+   "id": "en0053",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "At that moment Nicholas and Countess Mary came in. Pierre with the baby on his hand stooped, kissed them, and replied to their inquiries. But in spite of much that was interesting and had to be discussed, the baby with the little cap on its unsteady head evidently absorbed all his attention."
+  },
+  {
+   "id": "en0054",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "A frightened look in Becky’s face brought Tom to his senses and he saw that he had made a blunder. Becky was not to have gone home that night! The children became silent and thoughtful. In a moment a new burst of grief from Becky showed Tom that the thing in his mind had struck hers also—that the Sabbath morning might be half spent before Mrs. Thatcher discovered that Becky was not at Mrs. Harper’s."
+  },
+  {
+   "id": "en0055",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Saturday morning was come, and all the summer world was bright and fresh, and brimming with life. There was a song in every heart; and if the heart was young the music issued at the lips. There was cheer in every face and a spring in every step. The locust-trees were in bloom and the fragrance of the blossoms filled the air. Cardiff Hill, beyond the village and above it, was green with vegetation and it lay just far enough away to seem a Delectable Land, dreamy, reposeful, and inviting."
+  },
+  {
+   "id": "en0056",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Hoho begob says I to myself says I. That explains the milk in the cocoanut and absence of hair on the animal’s chest. Blazes doing the tootle on the flute. Concert tour. Dirty Dan the dodger’s son off Island bridge that sold the same horses twice over to the government to fight the Boers. Old Whatwhat. I called about the poor and water rate, Mr Boylan. You what? The water rate, Mr Boylan. You whatwhat? That’s the bucko that’ll organise her, take my tip. ’Twixt me and you Caddareesh."
+  },
+  {
+   "id": "en0057",
+   "source": "Conrad, Heart of Darkness",
+   "gutenberg_id": 219,
+   "text": "There was a pause of profound stillness, then a match flared, and Marlow’s lean face appeared, worn, hollow, with downward folds and dropped eyelids, with an aspect of concentrated attention; and as he took vigorous draws at his pipe, it seemed to retreat and advance out of the night in the regular flicker of tiny flame. The match went out."
+  },
+  {
+   "id": "en0058",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "No one but Mrs. Bennet regretted that their stay would be so short; and she made the most of the time by visiting about with her daughter, and having very frequent parties at home. These parties were acceptable to all; to avoid a family circle was even more desirable to such as did think than such as did not."
+  },
+  {
+   "id": "en0059",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "When she got back to the Cheshire Cat, she was surprised to find quite a large crowd collected round it: there was a dispute going on between the executioner, the King, and the Queen, who were all talking at once, while all the rest were quite silent, and looked very uncomfortable."
+  },
+  {
+   "id": "en0060",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "But Mr. Gardiner, though he assured her again of his earnest endeavours in the cause, could not avoid recommending moderation to her, as well in her hopes as her fears; and after talking with her in this manner till dinner was on table, they left her to vent all her feelings on the housekeeper, who attended in the absence of her daughters."
+  },
+  {
+   "id": "en0061",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "I could see by his manner that he had stronger reasons for satisfaction than his words alone would imply. His eyes twinkled, and there was even a touch of colour upon his sallow cheeks. He hastened upstairs, and a few minutes later I heard the slam of the hall door, which told me that he was off once more upon his congenial hunt."
+  },
+  {
+   "id": "en0062",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "The four whales slain that evening had died wide apart; one, far to windward; one, less distant, to leeward; one ahead; one astern. These last three were brought alongside ere nightfall; but the windward one could not be reached till morning; and the boat that had killed it lay by its side all night; and that boat was Ahab’s."
+  },
+  {
+   "id": "en0063",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "Folds of scarlet drapery shut in my view to the right hand; to the left were the clear panes of glass, protecting, but not separating me from the drear November day. At intervals, while turning over the leaves of my book, I studied the aspect of that winter afternoon. Afar, it offered a pale blank of mist and cloud; near a scene of wet lawn and storm-beat shrub, with ceaseless rain sweeping away wildly before a long and lamentable blast."
+  },
+  {
+   "id": "en0064",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Elizabeth obeyed; and, running into her own room for her parasol, attended her noble guest downstairs. As they passed through the hall, Lady Catherine opened the doors into the dining-parlour and drawing-room, and pronouncing them, after a short survey, to be decent-looking rooms, walked on."
+  },
+  {
+   "id": "en0065",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "Hitherto I have recorded in detail the events of my insignificant existence: to the first ten years of my life I have given almost as many chapters. But this is not to be a regular autobiography: I am only bound to invoke Memory where I know her responses will possess some degree of interest; therefore I now pass a space of eight years almost in silence: a few lines only are necessary to keep up the links of connection."
+  },
+  {
+   "id": "en0066",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "I felt his hand tremble as it held mine, and he turned his face away as he lay in the bottom of the boat, and I heard that old sound in his throat,—softened now, like all the rest of him. It was a good thing that he had touched this point, for it put into my mind what I might not otherwise have thought of until too late,—that he need never know how his hopes of enriching me had perished."
+  },
+  {
+   "id": "en0067",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "I again warmly repeated that it was a bad side of human nature (in which sentiment, waiving its application, I have since seen reason to think I was right), and I walked down the little path away from Biddy, and Biddy went into the house, and I went out at the garden gate and took a dejected stroll until supper-time; again feeling it very sorrowful and strange that this, the second night of my bright fortunes, should be as lonely and unsatisfactory as the first."
+  },
+  {
+   "id": "en0068",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "We made our way downstairs as quietly as possible, and out into the bright morning sunshine. In the road stood our horse and trap, with the half-clad stable-boy waiting at the head. We both sprang in, and away we dashed down the London Road. A few country carts were stirring, bearing in vegetables to the metropolis, but the lines of villas on either side were as silent and lifeless as some city in a dream."
+  },
+  {
+   "id": "en0069",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "His hands released her as he uttered this cry, and went up to his white hair, which they tore in a frenzy. It died out, as everything but his shoemaking did die out of him, and he refolded his little packet and tried to secure it in his breast; but he still looked at her, and gloomily shook his head."
+  },
+  {
+   "id": "en0070",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "Bildad said no more, but buttoning up his coat, stalked on deck, where we followed him. There he stood, very quietly overlooking some sailmakers who were mending a top-sail in the waist. Now and then he stooped to pick up a patch, or save an end of tarred twine, which otherwise might have been wasted."
+  },
+  {
+   "id": "en0071",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Just as Pierre reached the door, the corporal who had offered him a pipe the day before came up to it with two soldiers. The corporal and soldiers were in marching kit with knapsacks and shakos that had metal straps, and these changed their familiar faces."
+  },
+  {
+   "id": "en0072",
+   "source": "Conrad, Heart of Darkness",
+   "gutenberg_id": 219,
+   "text": "The sun set; the dusk fell on the stream, and lights began to appear along the shore. The Chapman light-house, a three-legged thing erect on a mud-flat, shone strongly. Lights of ships moved in the fairway—a great stir of lights going up and going down. And farther west on the upper reaches the place of the monstrous town was still marked ominously on the sky, a brooding gloom in sunshine, a lurid glare under the stars."
+  },
+  {
+   "id": "en0073",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "The Spider, as Mr. Jaggers had called him, was used to lying in wait, however, and had the patience of his tribe. Added to that, he had a blockhead confidence in his money and in his family greatness, which sometimes did him good service,—almost taking the place of concentration and determined purpose. So, the Spider, doggedly watching Estella, outwatched many brighter insects, and would often uncoil himself and drop at the right nick of time."
+  },
+  {
+   "id": "en0074",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "He then took me into his laboratory and explained to me the uses of his various machines, instructing me as to what I ought to procure and promising me the use of his own when I should have advanced far enough in the science not to derange their mechanism. He also gave me the list of books which I had requested, and I took my leave."
+  },
+  {
+   "id": "en0075",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "This advice, although good, was totally inapplicable to my case; I should have been the first to hide my grief and console my friends if remorse had not mingled its bitterness, and terror its alarm, with my other sensations. Now I could only answer my father with a look of despair and endeavour to hide myself from his view."
+  },
+  {
+   "id": "en0076",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "I scrambled forward and looked over. It seemed shallow enough, and holding the cut hawser in both hands for a last security, I let myself drop softly overboard. The water scarcely reached my waist; the sand was firm and covered with ripple marks, and I waded ashore in great spirits, leaving the HISPANIOLA on her side, with her main-sail trailing wide upon the surface of the bay. About the same time, the sun went fairly down and the breeze whistled low in the dusk among the tossing pines."
+  },
+  {
+   "id": "en0077",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "This sound disturbed an old woman who was sleeping in a chair beside me. She was a hired nurse, the wife of one of the turnkeys, and her countenance expressed all those bad qualities which often characterise that class. The lines of her face were hard and rude, like that of persons accustomed to see without sympathising in sights of misery. Her tone expressed her entire indifference; she addressed me in English, and the voice struck me as one that I had heard during my sufferings."
+  },
+  {
+   "id": "en0078",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "They looked. Murderer’s ground. It passed darkly. Shuttered, tenantless, unweeded garden. Whole place gone to hell. Wrongfully condemned. Murder. The murderer’s image in the eye of the murdered. They love reading about it. Man’s head found in a garden. Her clothing consisted of. How she met her death. Recent outrage. The weapon used. Murderer is still at large. Clues. A shoelace. The body to be exhumed. Murder will out."
+  },
+  {
+   "id": "en0079",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Yet it was she, dressed in a new gown which he did not know, made since he had left. All the others let him go, and he ran to her. When they met, she fell on his breast, sobbing. She could not lift her face, but only pressed it to the cold braiding of his hussar’s jacket. Denísov, who had come into the room unnoticed by anyone, stood there and wiped his eyes at the sight."
+  },
+  {
+   "id": "en0080",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "What do they think when they hear music? Way to catch rattlesnakes. Night Michael Gunn gave us the box. Tuning up. Shah of Persia liked that best. Remind him of home sweet home. Wiped his nose in curtain too. Custom his country perhaps. That’s music too. Not as bad as it sounds. Tootling. Brasses braying asses through uptrunks. Doublebasses helpless, gashes in their sides. Woodwinds mooing cows. Semigrand open crocodile music hath jaws. Woodwind like Goodwin’s name."
+  },
+  {
+   "id": "en0081",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "When the last crisp slice of bacon was gone, and the last allowance of corn pone devoured, the boys stretched themselves out on the grass, filled with contentment. They could have found a cooler place, but they would not deny themselves such a romantic feature as the roasting campfire."
+  },
+  {
+   "id": "en0082",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "I wrote to Moor House and to Cambridge immediately, to say what I had done: fully explaining also why I had thus acted. Diana and Mary approved the step unreservedly. Diana announced that she would just give me time to get over the honeymoon, and then she would come and see me."
+  },
+  {
+   "id": "en0083",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "When I had last seen this part of Sheen in the daylight it had been a straggling street of comfortable white and red houses, interspersed with abundant shady trees. Now I stood on a mound of smashed brickwork, clay, and gravel, over which spread a multitude of red cactus-shaped plants, knee-high, without a solitary terrestrial growth to dispute their footing. The trees near me were dead and brown, but further a network of red thread scaled the still living stems."
+  },
+  {
+   "id": "en0084",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "It is no dream of mine, To ornament a line; I cannot come nearer to God and Heaven Than I live to Walden even. I am its stony shore, And the breeze that passes o’er; In the hollow of my hand Are its water and its sand, And its deepest resort Lies high in my thought."
+  },
+  {
+   "id": "en0085",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "The funeral was a fine thing. The Cadets paraded in a style calculated to kill the late member with envy. Tom was a free boy again, however—there was something in that. He could drink and swear, now—but found to his surprise that he did not want to. The simple fact that he could, took the desire away, and the charm of it."
+  },
+  {
+   "id": "en0086",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "But, all this was at first. Before long, the consideration that there was no disgrace in the fate he must meet, and that numbers went the same road wrongfully, and trod it firmly every day, sprang up to stimulate him. Next followed the thought that much of the future peace of mind enjoyable by the dear ones, depended on his quiet fortitude. So, by degrees he calmed into the better state, when he could raise his thoughts much higher, and draw comfort down."
+  },
+  {
+   "id": "en0087",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "The acute policy dictating these movements was sufficiently vindicated at daybreak, by the sight of a long sleek on the sea directly and lengthwise ahead, smooth as oil, and resembling in the pleated watery wrinkles bordering it, the polished metallic-like marks of some swift tide-rip, at the mouth of a deep, rapid stream."
+  },
+  {
+   "id": "en0088",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "Then it was, and then only, that he realised something of the full power and terror of these monsters. He learned that they were not merely a handful of small sluggish creatures, but that they were minds swaying vast mechanical bodies; and that they could move swiftly and smite with such power that even the mightiest guns could not stand against them."
+  },
+  {
+   "id": "en0089",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "On inquiry it might possibly be found that Fred and Mary still inhabit Stone Court—that the creeping plants still cast the foam of their blossoms over the fine stone-wall into the field where the walnut-trees stand in stately row—and that on sunny days the two lovers who were first engaged with the umbrella-ring may be seen in white-haired placidity at the open window from which Mary Garth, in the days of old Peter Featherstone, had often been ordered to look out for Mr. Lydgate."
+  },
+  {
+   "id": "en0090",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "If others pay the tax which is demanded of me, from a sympathy with the State, they do but what they have already done in their own case, or rather they abet injustice to a greater extent than the State requires. If they pay the tax from a mistaken interest in the individual taxed, to save his property or prevent his going to jail, it is because they have not considered wisely how far they let their private feelings interfere with the public good."
+  },
+  {
+   "id": "en0091",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "It was evening when I arrived, much fatigued by the journey I had so often made so easily. The Boar could not put me into my usual bedroom, which was engaged (probably by some one who had expectations), and could only assign me a very indifferent chamber among the pigeons and post-chaises up the yard. But I had as sound a sleep in that lodging as in the most superior accommodation the Boar could have given me, and the quality of my dreams was about the same as in the best bedroom."
+  },
+  {
+   "id": "en0092",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Her impatience for this second letter was as well rewarded as impatience generally is. Jane had been a week in town, without either seeing or hearing from Caroline. She accounted for it, however, by supposing that her last letter to her friend from Longbourn had by some accident been lost."
+  },
+  {
+   "id": "en0093",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Lydgate said no more, but went out on his rounds. He felt bruised and shattered, and there was a dark line under his eyes which Rosamond had not seen before. She could not bear to look at him. Tertius had a way of taking things which made them a great deal worse for her."
+  },
+  {
+   "id": "en0094",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "When he had ascended the hill and reached the little village street, he saw for the first time peasant militiamen in their white shirts and with crosses on their caps, who, talking and laughing loudly, animated and perspiring, were at work on a huge knoll overgrown with grass to the right of the road."
+  },
+  {
+   "id": "en0095",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "At length the sun’s rays have attained the right angle, and warm winds blow up mist and rain and melt the snow banks, and the sun dispersing the mist smiles on a checkered landscape of russet and white smoking with incense, through which the traveller picks his way from islet to islet, cheered by the music of a thousand tinkling rills and rivulets whose veins are filled with the blood of winter which they are bearing off."
+  },
+  {
+   "id": "en0096",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "Again the surprised expression crossed his face. He had not imagined that a woman would dare to speak so to a man. For me, I felt at home in this sort of discourse. I could never rest in communication with strong, discreet, and refined minds, whether male or female, till I had passed the outworks of conventional reserve, and crossed the threshold of confidence, and won a place by their heart’s very hearthstone."
+  },
+  {
+   "id": "en0097",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "I had never seen the squire so near at hand. He was a tall man, over six feet high, and broad in proportion, and he had a bluff, rough-and-ready face, all roughened and reddened and lined in his long travels. His eyebrows were very black, and moved readily, and this gave him a look of some temper, not bad, you would say, but quick and high."
+  },
+  {
+   "id": "en0098",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "But, Uncle Pumblechook, who was omnipotent in that kitchen, wouldn’t hear the word, wouldn’t hear of the subject, imperiously waved it all away with his hand, and asked for hot gin and water. My sister, who had begun to be alarmingly meditative, had to employ herself actively in getting the gin, the hot water, the sugar, and the lemon-peel, and mixing them. For the time being at least, I was saved. I still held on to the leg of the table, but clutched it now with the fervor of gratitude."
+  },
+  {
+   "id": "en0099",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "Well, three or four months run along, and it was well into the winter now. I had been to school most all the time and could spell and read and write just a little, and could say the multiplication table up to six times seven is thirty-five, and I don’t reckon I could ever get any further than that if I was to live forever. I don’t take no stock in mathematics, anyway."
+  },
+  {
+   "id": "en0100",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "I do not say that John or Jonathan will realize all this; but such is the character of that morrow which mere lapse of time can never make to dawn. The light which puts out our eyes is darkness to us. Only that day dawns to which we are awake. There is more day to dawn. The sun is but a morning star."
+  },
+  {
+   "id": "en0101",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "He rubbed his eyes, and came close to the picture, and examined it again. There were no signs of any change when he looked into the actual painting, and yet there was no doubt that the whole expression had altered. It was not a mere fancy of his own. The thing was horribly apparent."
+  },
+  {
+   "id": "en0102",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "It sounded an excellent plan, no doubt, and very neatly and simply arranged; the only difficulty was, that she had not the smallest idea how to set about it; and while she was peering about anxiously among the trees, a little sharp bark just over her head made her look up in a great hurry."
+  },
+  {
+   "id": "en0103",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "Yet after all my task was not an easy one; often I would rather have pleased than teased him. My future husband was becoming to me my whole world; and more than the world: almost my hope of heaven. He stood between me and every thought of religion, as an eclipse intervenes between man and the broad sun. I could not, in those days, see God for His creature: of whom I had made an idol."
+  },
+  {
+   "id": "en0104",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "So we went back and got the canoe, and paddled up abreast the cavern, and lugged all the traps up there. Then we hunted up a place close by to hide the canoe in, amongst the thick willows. We took some fish off of the lines and set them again, and begun to get ready for dinner."
+  },
+  {
+   "id": "en0105",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "At length we gave it up, and pulled under the shore towards the tavern we had lately left, where we were received with no little surprise. Here I was able to get some comforts for Magwitch,—Provis no longer,—who had received some very severe injury in the chest, and a deep cut in the head."
+  },
+  {
+   "id": "en0106",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "You may conceive my astonishment on hearing such a question addressed to me from a man on the brink of destruction and to whom I should have supposed that my vessel would have been a resource which he would not have exchanged for the most precious wealth the earth can afford. I replied, however, that we were on a voyage of discovery towards the northern pole."
+  },
+  {
+   "id": "en0107",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "The hedgehog was engaged in a fight with another hedgehog, which seemed to Alice an excellent opportunity for croqueting one of them with the other: the only difficulty was, that her flamingo was gone across to the other side of the garden, where Alice could see it trying in a helpless sort of way to fly up into a tree."
+  },
+  {
+   "id": "en0108",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "The grey warm evening of August had descended upon the city and a mild warm air, a memory of summer, circulated in the streets. The streets, shuttered for the repose of Sunday, swarmed with a gaily coloured crowd. Like illumined pearls the lamps shone from the summits of their tall poles upon the living texture below which, changing shape and hue unceasingly, sent up into the warm grey evening air an unchanging unceasing murmur."
+  },
+  {
+   "id": "en0109",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "Towards evening of that day, the Pequod was torn of her canvas, and bare-poled was left to fight a Typhoon which had struck her directly ahead. When darkness came on, sky and sea roared and split with the thunder, and blazed with the lightning, that showed the disabled masts fluttering here and there with the rags which the first fury of the tempest had left for its after sport."
+  },
+  {
+   "id": "en0110",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "I hardly hear the purlieu cry Or a Tommy talk as I pass one by Before my thoughts begin to run On F. M’Curdy Atkinson, The same that had the wooden leg And that filibustering filibeg That never dared to slake his drouth, Magee that had the chinless mouth. Being afraid to marry on earth They masturbated for all they were worth."
+  },
+  {
+   "id": "en0111",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "One or two trains came in from Richmond, Putney, and Kingston, containing people who had gone out for a day’s boating and found the locks closed and a feeling of panic in the air. A man in a blue and white blazer addressed my brother, full of strange tidings."
+  },
+  {
+   "id": "en0112",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "I began to feel pretty desperate at this, for I felt altogether helpless; and yet, by an odd train of circumstances, it was indeed through me that safety came. In the meantime, talk as we pleased, there were only seven out of the twenty-six on whom we knew we could rely; and out of these seven one was a boy, so that the grown men on our side were six to their nineteen."
+  },
+  {
+   "id": "en0113",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "Miss Mary Sinico said that of late her mother had been in the habit of going out at night to buy spirits. She, witness, had often tried to reason with her mother and had induced her to join a league. She was not at home until an hour after the accident. The jury returned a verdict in accordance with the medical evidence and exonerated Lennon from all blame."
+  },
+  {
+   "id": "en0114",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "Having parted from my friend, I determined to visit some remote spot of Scotland and finish my work in solitude. I did not doubt but that the monster followed me and would discover himself to me when I should have finished, that he might receive his companion."
+  },
+  {
+   "id": "en0115",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Dorothea was detained on the good pretext that Mr. Garth, whom she wanted to see, was expected at the hall within the hour, and she was still talking to Caleb on the gravel when Sir James, on the watch for the rector’s wife, saw her coming and met her with the needful hints."
+  },
+  {
+   "id": "en0116",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "No incidents have hitherto befallen us that would make a figure in a letter. One or two stiff gales and the springing of a leak are accidents which experienced navigators scarcely remember to record, and I shall be well content if nothing worse happen to us during our voyage."
+  },
+  {
+   "id": "en0117",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "The two boys flew on and on, toward the village, speechless with horror. They glanced backward over their shoulders from time to time, apprehensively, as if they feared they might be followed. Every stump that started up in their path seemed a man and an enemy, and made them catch their breath; and as they sped by some outlying cottages that lay near the village, the barking of the aroused watch-dogs seemed to give wings to their feet."
+  },
+  {
+   "id": "en0118",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Tom did play hookey, and he had a very good time. He got back home barely in season to help Jim, the small colored boy, saw next-day’s wood and split the kindlings before supper—at least he was there in time to tell his adventures to Jim while Jim did three-fourths of the work. Tom’s younger brother (or rather half-brother) Sid was already through with his part of the work (picking up chips), for he was a quiet boy, and had no adventurous, trouble-some ways."
+  },
+  {
+   "id": "en0119",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "On Sundays, Miss Pross dined at the Doctor’s table, but on other days persisted in taking her meals at unknown periods, either in the lower regions, or in her own room on the second floor--a blue chamber, to which no one but her Ladybird ever gained admittance. On this occasion, Miss Pross, responding to Ladybird’s pleasant face and pleasant efforts to please her, unbent exceedingly; so the dinner was very pleasant, too."
+  },
+  {
+   "id": "en0120",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "The idea of his returning no more Elizabeth treated with the utmost contempt. It appeared to her merely the suggestion of Caroline’s interested wishes; and she could not for a moment suppose that those wishes, however openly or artfully spoken, could influence a young man so totally independent of everyone."
+  },
+  {
+   "id": "en0121",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "The count spoke timidly, as he always did when talking of money matters. The countess was accustomed to this tone as a precursor of news of something detrimental to the children’s interests, such as the building of a new gallery or conservatory, the inauguration of a private theater or an orchestra. She was accustomed always to oppose anything announced in that timid tone and considered it her duty to do so."
+  },
+  {
+   "id": "en0122",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "Some three hours or so afterwards we were all in the train together, bound from Reading to the little Berkshire village. There were Sherlock Holmes, the hydraulic engineer, Inspector Bradstreet, of Scotland Yard, a plain-clothes man, and myself. Bradstreet had spread an ordnance map of the county out upon the seat and was busy with his compasses drawing a circle with Eyford for its centre."
+  },
+  {
+   "id": "en0123",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "A joyous stir was now audible in the hall: gentlemen’s deep tones and ladies’ silvery accents blent harmoniously together, and distinguishable above all, though not loud, was the sonorous voice of the master of Thornfield Hall, welcoming his fair and gallant guests under its roof. Then light steps ascended the stairs; and there was a tripping through the gallery, and soft cheerful laughs, and opening and closing doors, and, for a time, a hush."
+  },
+  {
+   "id": "en0124",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "As soon as he was alone, he lit a cigarette and began sketching upon a piece of paper, drawing first flowers and bits of architecture, and then human faces. Suddenly he remarked that every face that he drew seemed to have a fantastic likeness to Basil Hallward. He frowned, and getting up, went over to the book-case and took out a volume at hazard. He was determined that he would not think about what had happened until it became absolutely necessary that he should do so."
+  },
+  {
+   "id": "en0125",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "He told his hearers that he was there that evening for no terrifying, no extravagant purpose; but as a man of the world speaking to his fellow-men. He came to speak to business men and he would speak to them in a businesslike way. If he might use the metaphor, he said, he was their spiritual accountant; and he wished each and every one of his hearers to open his books, the books of his spiritual life, and see if they tallied accurately with conscience."
+  },
+  {
+   "id": "en0126",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "The car drove off towards Westmoreland Street. As it passed Ballast Office the clock showed half-past nine. A keen east wind hit them, blowing from the mouth of the river. Mr Kernan was huddled together with cold. His friend asked him to tell how the accident had happened."
+  },
+  {
+   "id": "en0127",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "For a long time I was reporter to a journal, of no very wide circulation, whose editor has never yet seen fit to print the bulk of my contributions, and, as is too common with writers, I got only my labor for my pains. However, in this case my pains were their own reward."
+  },
+  {
+   "id": "en0128",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "This piece of rudeness was more than Alice could bear: she got up in great disgust, and walked off; the Dormouse fell asleep instantly, and neither of the others took the least notice of her going, though she looked back once or twice, half hoping that they would call after her: the last time she saw them, they were trying to put the Dormouse into the teapot."
+  },
+  {
+   "id": "en0129",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "Thus not the tenderness of friendship, nor the beauty of earth, nor of heaven, could redeem my soul from woe; the very accents of love were ineffectual. I was encompassed by a cloud which no beneficial influence could penetrate. The wounded deer dragging its fainting limbs to some untrodden brake, there to gaze upon the arrow which had pierced it, and to die, was but a type of me."
+  },
+  {
+   "id": "en0130",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "The month of May had already commenced, and I expected the letter daily which was to fix the date of my departure, when Henry proposed a pedestrian tour in the environs of Ingolstadt, that I might bid a personal farewell to the country I had so long inhabited. I acceded with pleasure to this proposition: I was fond of exercise, and Clerval had always been my favourite companion in the ramble of this nature that I had taken among the scenes of my native country."
+  },
+  {
+   "id": "en0131",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "That night the city wore the mask of a capital. The five young men strolled along Stephen’s Green in a faint cloud of aromatic smoke. They talked loudly and gaily and their cloaks dangled from their shoulders. The people made way for them. At the corner of Grafton Street a short fat man was putting two handsome ladies on a car in charge of another fat man. The car drove off and the short fat man caught sight of the party."
+  },
+  {
+   "id": "en0132",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "Mrs. Reed soon rallied her spirits: she shook me most soundly, she boxed both my ears, and then left me without a word. Bessie supplied the hiatus by a homily of an hour’s length, in which she proved beyond a doubt that I was the most wicked and abandoned child ever reared under a roof. I half believed her; for I felt indeed only bad feelings surging in my breast."
+  },
+  {
+   "id": "en0133",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "The moon was climbing higher and higher, its light began to fall here and there in masses through the more open districts of the wood, and right in front of me a glow of a different colour appeared among the trees. It was red and hot, and now and again it was a little darkened--as it were, the embers of a bonfire smouldering."
+  },
+  {
+   "id": "en0134",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "After some time, he thrust away his plate and put his head in his hands. He felt that he had a right to know. It should have been told to him before, if it was as he suspected. Leaden with fear, his mother watched him. Words dropped mechanically from her lips. A tattered lace handkerchief twitched in her fingers. When the clock struck six, he got up and went to the door. Then he turned back and looked at her. Their eyes met. In hers he saw a wild appeal for mercy. It enraged him."
+  },
+  {
+   "id": "en0135",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "When I wrote the following pages, or rather the bulk of them, I lived alone, in the woods, a mile from any neighbor, in a house which I had built myself, on the shore of Walden Pond, in Concord, Massachusetts, and earned my living by the labor of my hands only. I lived there two years and two months. At present I am a sojourner in civilized life again."
+  },
+  {
+   "id": "en0136",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "Few coaches were abroad, for riders in coaches were liable to be suspected, and gentility hid its head in red nightcaps, and put on heavy shoes, and trudged. But, the theatres were all well filled, and the people poured cheerfully out as he passed, and went chatting home. At one of the theatre doors, there was a little girl with a mother, looking for a way across the street through the mud. He carried the child over, and before the timid arm was loosed from his neck asked her for a kiss."
+  },
+  {
+   "id": "en0137",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "Madame Defarge slightly waved her hand, to imply that she heard, and might be relied upon to arrive in good time, and so went through the mud, and round the corner of the prison wall. The Vengeance and the Juryman, looking after her as she walked away, were highly appreciative of her fine figure, and her superb moral endowments."
+  },
+  {
+   "id": "en0138",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "The first time she left her chamber was at the commencement of the following March. Mr. Linton had put on her pillow, in the morning, a handful of golden crocuses; her eye, long stranger to any gleam of pleasure, caught them in waking, and shone delighted as she gathered them eagerly together."
+  },
+  {
+   "id": "en0139",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "In a few days Mr. Bingley returned Mr. Bennet’s visit, and sat about ten minutes with him in his library. He had entertained hopes of being admitted to a sight of the young ladies, of whose beauty he had heard much; but he saw only the father. The ladies were somewhat more fortunate, for they had the advantage of ascertaining, from an upper window, that he wore a blue coat and rode a black horse."
+  },
+  {
+   "id": "en0140",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "Of a sudden, he stopped, took the cork out of his bottle, and tossed it away. Light as it was, I heard it fall like a plummet. He swallowed slowly, tilting up the bottle by little and little, and now he looked at me no more. The last few drops of liquor he poured into the palm of his hand, and licked up. Then, with a sudden hurry of violence and swearing horribly, he threw the bottle from him, and stooped; and I saw in his hand a stone-hammer with a long heavy handle."
+  },
+  {
+   "id": "en0141",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "As he spoke there was a tap at the door, and the boy in buttons entered to announce Miss Mary Sutherland, while the lady herself loomed behind his small black figure like a full-sailed merchant-man behind a tiny pilot boat. Sherlock Holmes welcomed her with the easy courtesy for which he was remarkable, and, having closed the door and bowed her into an armchair, he looked her over in the minute and yet abstracted fashion which was peculiar to him."
+  },
+  {
+   "id": "en0142",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "I waited a few moments, expecting he would go on with the subject first broached: but he seemed to have entered another train of reflection: his look denoted abstraction from me and my business. I was obliged to recall him to a theme which was of necessity one of close and anxious interest to me."
+  },
+  {
+   "id": "en0143",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "O’Nolan, clad in shining armour, low bending made obeisance to the puissant and high and mighty chief of all Erin and did him to wit of that which had befallen, how that the grave elders of the most obedient city, second of the realm, had met them in the tholsel, and there, after due prayers to the gods who dwell in ether supernal, had taken solemn counsel whereby they might, if so be it might be, bring once more into honour among mortal men the winged speech of the seadivided Gael."
+  },
+  {
+   "id": "en0144",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "It was pretty close to the shanty, and I thought I heard the old man coming all the time; but I got her hid; and then I out and looked around a bunch of willows, and there was the old man down the path a piece just drawing a bead on a bird with his gun. So he hadn’t seen anything."
+  },
+  {
+   "id": "en0145",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "For some time, now, the boys had been dully conscious of a peculiar sound in the distance, just as one sometimes is of the ticking of a clock which he takes no distinct note of. But now this mysterious sound became more pronounced, and forced a recognition. The boys started, glanced at each other, and then each assumed a listening attitude. There was a long silence, profound and unbroken; then a deep, sullen boom came floating down out of the distance."
+  },
+  {
+   "id": "en0146",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "I ran and peeped, for form’s sake, into Isabella’s room; confirming, when I returned, the servant’s statement. Mr. Linton had resumed his seat by the bed; on my re-entrance, he raised his eyes, read the meaning of my blank aspect, and dropped them without giving an order, or uttering a word."
+  },
+  {
+   "id": "en0147",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "The schoolhouse where Biddy was mistress I had never seen; but, the little roundabout lane by which I entered the village, for quietness’ sake, took me past it. I was disappointed to find that the day was a holiday; no children were there, and Biddy’s house was closed. Some hopeful notion of seeing her, busily engaged in her daily duties, before she saw me, had been in my mind and was defeated."
+  },
+  {
+   "id": "en0148",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Mourners came out through the gates: woman and a girl. Leanjawed harpy, hard woman at a bargain, her bonnet awry. Girl’s face stained with dirt and tears, holding the woman’s arm, looking up at her for a sign to cry. Fish’s face, bloodless and livid."
+  },
+  {
+   "id": "en0149",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "In man, in all the higher terrestrial animals, such a method of increase has disappeared; but even on this earth it was certainly the primitive method. Among the lower animals, up even to those first cousins of the vertebrated animals, the Tunicates, the two processes occur side by side, but finally the sexual method superseded its competitor altogether. On Mars, however, just the reverse has apparently been the case."
+  },
+  {
+   "id": "en0150",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "In that same juncture of time when the Fifty-Two awaited their fate Madame Defarge held darkly ominous council with The Vengeance and Jacques Three of the Revolutionary Jury. Not in the wine-shop did Madame Defarge confer with these ministers, but in the shed of the wood-sawyer, erst a mender of roads. The sawyer himself did not participate in the conference, but abided at a little distance, like an outer satellite who was not to speak until required, or to offer an opinion until invited."
+  },
+  {
+   "id": "en0151",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "Alice remained looking thoughtfully at the mushroom for a minute, trying to make out which were the two sides of it; and as it was perfectly round, she found this a very difficult question. However, at last she stretched her arms round it as far as they would go, and broke off a bit of the edge with each hand."
+  },
+  {
+   "id": "en0152",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Perceiving myself in a blunder, I attempted to correct it. I might have seen there was too great a disparity between the ages of the parties to make it likely that they were man and wife. One was about forty: a period of mental vigour at which men seldom cherish the delusion of being married for love by girls: that dream is reserved for the solace of our declining years. The other did not look seventeen."
+  },
+  {
+   "id": "en0153",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "I was yet enjoying the calm prospect and pleasant fresh air, yet listening with delight to the cawing of the rooks, yet surveying the wide, hoary front of the hall, and thinking what a great place it was for one lonely little dame like Mrs. Fairfax to inhabit, when that lady appeared at the door."
+  },
+  {
+   "id": "en0154",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "But no more; enough has been said to show that the old Dutch whalers of two or three centuries ago were high livers; and that the English whalers have not neglected so excellent an example. For, say they, when cruising in an empty ship, if you can get nothing better out of the world, get a good dinner out of it, at least. And this empties the decanter."
+  },
+  {
+   "id": "en0155",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "James Vane stood on the pavement in horror. He was trembling from head to foot. After a little while, a black shadow that had been creeping along the dripping wall moved out into the light and came close to him with stealthy footsteps. He felt a hand laid on his arm and looked round with a start. It was one of the women who had been drinking at the bar."
+  },
+  {
+   "id": "en0156",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "But the inspector was mistaken, for those criminals were not destined to fall into the hands of justice. As we rolled into Eyford Station we saw a gigantic column of smoke which streamed up from behind a small clump of trees in the neighbourhood and hung like an immense ostrich feather over the landscape."
+  },
+  {
+   "id": "en0157",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "I lit a pipe and had a good long smoke, and went on watching. The ferry-boat was floating with the current, and I allowed I’d have a chance to see who was aboard when she come along, because she would come in close, where the bread did. When she’d got pretty well along down towards me, I put out my pipe and went to where I fished out the bread, and laid down behind a log on the bank in a little open place. Where the log forked I could peep through."
+  },
+  {
+   "id": "en0158",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "So Bloom lets on he heard nothing and he starts talking with Joe, telling him he needn’t trouble about that little matter till the first but if he would just say a word to Mr Crawford. And so Joe swore high and holy by this and by that he’d do the devil and all."
+  },
+  {
+   "id": "en0159",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "The Cat’s head began fading away the moment he was gone, and, by the time he had come back with the Duchess, it had entirely disappeared; so the King and the executioner ran wildly up and down looking for it, while the rest of the party went back to the game."
+  },
+  {
+   "id": "en0160",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "Behind me was the sea, in front the anchorage. The sea breeze, as though it had the sooner blown itself out by its unusual violence, was already at an end; it had been succeeded by light, variable airs from the south and south-east, carrying great banks of fog; and the anchorage, under lee of Skeleton Island, lay still and leaden as when first we entered it. The HISPANIOLA, in that unbroken mirror, was exactly portrayed from the truck to the waterline, the Jolly Roger hanging from her peak."
+  },
+  {
+   "id": "en0161",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "Just at this moment Alice felt a very curious sensation, which puzzled her a good deal until she made out what it was: she was beginning to grow larger again, and she thought at first she would get up and leave the court; but on second thoughts she decided to remain where she was as long as there was room for her."
+  },
+  {
+   "id": "en0162",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "At first while they were still moving along the Kalúga road, Napoleon’s armies made their presence known, but later when they reached the Smolénsk road they ran holding the clapper of their bell tight—and often thinking they were escaping ran right into the Russians."
+  },
+  {
+   "id": "en0163",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "At the stairs where we had taken him abroad, and ever since, I had looked warily for any token of our being suspected. I had seen none. We certainly had not been, and at that time as certainly we were not either attended or followed by any boat. If we had been waited on by any boat, I should have run in to shore, and have obliged her to go on, or to make her purpose evident. But we held our own without any appearance of molestation."
+  },
+  {
+   "id": "en0164",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Miss Darcy and her brother appeared, and this formidable introduction took place. With astonishment did Elizabeth see that her new acquaintance was at least as much embarrassed as herself. Since her being at Lambton, she had heard that Miss Darcy was exceedingly proud; but the observation of a very few minutes convinced her that she was only exceedingly shy. She found it difficult to obtain even a word from her beyond a monosyllable."
+  },
+  {
+   "id": "en0165",
+   "source": "Wells, The Time Machine",
+   "gutenberg_id": 35,
+   "text": "He caught up the lamp swiftly, and carried it, flaring red, through the door into the corridor. We followed him. There in the flickering light of the lamp was the machine sure enough, squat, ugly, and askew, a thing of brass, ebony, ivory, and translucent glimmering quartz. Solid to the touch—for I put out my hand and felt the rail of it—and with brown spots and smears upon the ivory, and bits of grass and moss upon the lower parts, and one rail bent awry."
+  },
+  {
+   "id": "en0166",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "Herbert lay asleep in his bed, and our old fellow-student lay asleep on the sofa. I could not dress myself without help; but I made up the fire, which was still burning, and got some coffee ready for them. In good time they too started up strong and well, and we admitted the sharp morning air at the windows, and looked at the tide that was still flowing towards us."
+  },
+  {
+   "id": "en0167",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Elizabeth’s impatience to acquaint Jane with what had happened could no longer be overcome; and at length resolving to suppress every particular in which her sister was concerned, and preparing her to be surprised, she related to her the next morning the chief of the scene between Mr. Darcy and herself."
+  },
+  {
+   "id": "en0168",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "INQUEST ON AN ACTRESS.—An inquest was held this morning at the Bell Tavern, Hoxton Road, by Mr. Danby, the District Coroner, on the body of Sibyl Vane, a young actress recently engaged at the Royal Theatre, Holborn. A verdict of death by misadventure was returned. Considerable sympathy was expressed for the mother of the deceased, who was greatly affected during the giving of her own evidence, and that of Dr. Birrell, who had made the post-mortem examination of the deceased."
+  },
+  {
+   "id": "en0169",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "Was it all true? Had the portrait really changed? Or had it been simply his own imagination that had made him see a look of evil where there had been a look of joy? Surely a painted canvas could not alter? The thing was absurd. It would serve as a tale to tell Basil some day. It would make him smile."
+  },
+  {
+   "id": "en0170",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Her sister, however, assured her of her being perfectly well; and their conversation, which had been passing while Mr. and Mrs. Gardiner were engaged with their children, was now put an end to by the approach of the whole party. Jane ran to her uncle and aunt, and welcomed and thanked them both, with alternate smiles and tears."
+  },
+  {
+   "id": "en0171",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "He moved on as he spoke, and the Dormouse followed him: the March Hare moved into the Dormouse’s place, and Alice rather unwillingly took the place of the March Hare. The Hatter was the only one who got any advantage from the change: and Alice was a good deal worse off than before, as the March Hare had just upset the milk-jug into his plate."
+  },
+  {
+   "id": "en0172",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Whether we speak of the migration of the peoples and the incursions of the barbarians, or of the decrees of Napoleon III, or of someone’s action an hour ago in choosing one direction out of several for his walk, we are unconscious of any contradiction. The degree of freedom and inevitability governing the actions of these people is clearly defined for us."
+  },
+  {
+   "id": "en0173",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "I let down the window and looked out; Millcote was behind us; judging by the number of its lights, it seemed a place of considerable magnitude, much larger than Lowton. We were now, as far as I could see, on a sort of common; but there were houses scattered all over the district; I felt we were in a different region to Lowood, more populous, less picturesque; more stirring, less romantic."
+  },
+  {
+   "id": "en0174",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "Explanation! You may possibly say, What can Elizabeth have to explain? If you really say this, my questions are answered and all my doubts satisfied. But you are distant from me, and it is possible that you may dread and yet be pleased with this explanation; and in a probability of this being the case, I dare not any longer postpone writing what, during your absence, I have often wished to express to you but have never had the courage to begin."
+  },
+  {
+   "id": "en0175",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "She wanted to know if I was happy at Thornfield Hall, and what sort of a person the mistress was; and when I told her there was only a master, whether he was a nice gentleman, and if I liked him. I told her he was rather an ugly man, but quite a gentleman; and that he treated me kindly, and I was content. Then I went on to describe to her the gay company that had lately been staying at the house; and to these details Bessie listened with interest: they were precisely of the kind she relished."
+  },
+  {
+   "id": "en0176",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Stream of life. What was the name of that priestylooking chap was always squinting in when he passed? Weak eyes, woman. Stopped in Citron’s saint Kevin’s parade. Pen something. Pendennis? My memory is getting. Pen ...? Of course it’s years ago. Noise of the trams probably. Well, if he couldn’t remember the dayfather’s name that he sees every day."
+  },
+  {
+   "id": "en0177",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "I was away below the ferry now. I rose up, and there was Jackson’s Island, about two mile and a half down stream, heavy timbered and standing up out of the middle of the river, big and dark and solid, like a steamboat without any lights. There warn’t any signs of the bar at the head—it was all under water now."
+  },
+  {
+   "id": "en0178",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Braintipped, cheek touched with flame, they listened feeling that flow endearing flow over skin limbs human heart soul spine. Bloom signed to Pat, bald Pat is a waiter hard of hearing, to set ajar the door of the bar. The door of the bar. So. That will do. Pat, waiter, waited, waiting to hear, for he was hard of hear by the door."
+  },
+  {
+   "id": "en0179",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "It was not very long after this that there occurred the first of the mysterious events that rid us at last of the captain, though not, as you will see, of his affairs. It was a bitter cold winter, with long, hard frosts and heavy gales; and it was plain from the first that my poor father was little likely to see the spring. He sank daily, and my mother and I had all the inn upon our hands, and were kept busy enough without paying much regard to our unpleasant guest."
+  },
+  {
+   "id": "en0180",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "She was a good deal frightened by this very sudden change, but she felt that there was no time to be lost, as she was shrinking rapidly; so she set to work at once to eat some of the other bit. Her chin was pressed so closely against her foot, that there was hardly room to open her mouth; but she did it at last, and managed to swallow a morsel of the lefthand bit."
+  },
+  {
+   "id": "en0181",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "At the corner of the lane that runs to Putney Bridge station I found a man lying. He was as black as a sweep with the black dust, alive, but helplessly and speechlessly drunk. I could get nothing from him but curses and furious lunges at my head. I think I should have stayed by him but for the brutal expression of his face."
+  },
+  {
+   "id": "en0182",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "The other members of the household, viz., John and his wife, Leah the housemaid, and Sophie the French nurse, were decent people; but in no respect remarkable; with Sophie I used to talk French, and sometimes I asked her questions about her native country; but she was not of a descriptive or narrative turn, and generally gave such vapid and confused answers as were calculated rather to check than encourage inquiry."
+  },
+  {
+   "id": "en0183",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "He walked a long while on the Lowick road away from the town, glad of the starlit darkness when it came. He felt as if he had had dirt cast on him amidst shouts of scorn. There was this to confirm the fellow’s statement—that his mother never would tell him the reason why she had run away from her family."
+  },
+  {
+   "id": "en0184",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "P. Dunne, railway porter, stated that as the train was about to start he observed a woman attempting to cross the lines. He ran towards her and shouted, but, before he could reach her, she was caught by the buffer of the engine and fell to the ground."
+  },
+  {
+   "id": "en0185",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "The hamlet lay not many hundred yards away, though out of view, on the other side of the next cove; and what greatly encouraged me, it was in an opposite direction from that whence the blind man had made his appearance and whither he had presumably returned. We were not many minutes on the road, though we sometimes stopped to lay hold of each other and hearken. But there was no unusual sound--nothing but the low wash of the ripple and the croaking of the inmates of the wood."
+  },
+  {
+   "id": "en0186",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "We rest; a dream has power to poison sleep. We rise; one wand’ring thought pollutes the day. We feel, conceive, or reason; laugh or weep, Embrace fond woe, or cast our cares away; It is the same: for, be it joy or sorrow, The path of its departure still is free. Man’s yesterday may ne’er be like his morrow; Nought may endure but mutability!"
+  },
+  {
+   "id": "en0187",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "There he stopped, feeling afraid to turn round, and his eyes fixed themselves on the intricacies of the pattern before him. He heard Campbell bringing in the heavy chest, and the irons, and the other things that he had required for his dreadful work. He began to wonder if he and Basil Hallward had ever met, and, if so, what they had thought of each other."
+  },
+  {
+   "id": "en0188",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "So she was considering in her own mind (as well as she could, for the hot day made her feel very sleepy and stupid), whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her."
+  },
+  {
+   "id": "en0189",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Just at this juncture the boy felt a slow, fateful grip closing on his ear, and a steady lifting impulse. In that wise he was borne across the house and deposited in his own seat, under a peppering fire of giggles from the whole school. Then the master stood over him during a few awful moments, and finally moved away to his throne without saying a word. But although Tom’s ear tingled, his heart was jubilant."
+  },
+  {
+   "id": "en0190",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "But here, to Alice’s great surprise, the Duchess’s voice died away, even in the middle of her favourite word ‘moral,’ and the arm that was linked into hers began to tremble. Alice looked up, and there stood the Queen in front of them, with her arms folded, frowning like a thunderstorm."
+  },
+  {
+   "id": "en0191",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "The show being over, the flutter in the air became quite a little storm, and the precious little bells went ringing downstairs. There was soon but one person left of all the crowd, and he, with his hat under his arm and his snuff-box in his hand, slowly passed among the mirrors on his way out."
+  },
+  {
+   "id": "en0192",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "She was then proceeding to all the particulars of calico, muslin, and cambric, and would shortly have dictated some very plentiful orders, had not Jane, though with some difficulty, persuaded her to wait till her father was at leisure to be consulted. One day’s delay, she observed, would be of small importance; and her mother was too happy to be quite so obstinate as usual. Other schemes, too, came into her head."
+  },
+  {
+   "id": "en0193",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "On reaching the bedroom, we heard the voice of Miss Scatcherd: she was examining drawers; she had just pulled out Helen Burns’s, and when we entered Helen was greeted with a sharp reprimand, and told that to-morrow she should have half-a-dozen of untidily folded articles pinned to her shoulder."
+  },
+  {
+   "id": "en0194",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "I long ago lost a hound, a bay horse, and a turtle-dove, and am still on their trail. Many are the travellers I have spoken concerning them, describing their tracks and what calls they answered to. I have met one or two who had heard the hound, and the tramp of the horse, and even seen the dove disappear behind a cloud, and they seemed as anxious to recover them as if they had lost them themselves."
+  },
+  {
+   "id": "en0195",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "While she was threading her way back across the room Mrs Malins, without adverting to the interruption, went on to tell Gabriel what beautiful places there were in Scotland and beautiful scenery. Her son-in-law brought them every year to the lakes and they used to go fishing. Her son-in-law was a splendid fisher. One day he caught a beautiful big fish and the man in the hotel cooked it for their dinner."
+  },
+  {
+   "id": "en0196",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "The boy with the thin neck stretching out from the turn-down collar—whom everyone had forgotten—gazed at Pierre with even greater and more rapturous joy. Every word of Pierre’s burned into his heart, and with a nervous movement of his fingers he unconsciously broke the sealing wax and quill pens his hands came upon on his uncle’s table."
+  },
+  {
+   "id": "en0197",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "I lingered before her stall, though I knew my stay was useless, to make my interest in her wares seem the more real. Then I turned away slowly and walked down the middle of the bazaar. I allowed the two pennies to fall against the sixpence in my pocket. I heard a voice call from one end of the gallery that the light was out. The upper part of the hall was now completely dark."
+  },
+  {
+   "id": "en0198",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "But somehow I dropped off at last, and knew nothing more till break of day; when, looking over the bedside, there squatted Queequeg, as if he had been screwed down to the floor. But as soon as the first glimpse of sun entered the window, up he got, with stiff and grating joints, but with a cheerful look; limped towards me where I lay; pressed his forehead again against mine; and said his Ramadan was over."
+  },
+  {
+   "id": "en0199",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "Wherein differ the sea and the land, that a miracle upon one is not a miracle upon the other? Preternatural terrors rested upon the Hebrews, when under the feet of Korah and his company the live ground opened and swallowed them up for ever; yet not a modern sun ever sets, but in precisely the same manner the live sea swallows up ships and crews."
+  },
+  {
+   "id": "en0200",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Toward three o’clock the French attacks ceased. On the faces of all who came from the field of battle, and of those who stood around him, Kutúzov noticed an expression of extreme tension. He was satisfied with the day’s success—a success exceeding his expectations, but the old man’s strength was failing him. Several times his head dropped low as if it were falling and he dozed off. Dinner was brought him."
+  },
+  {
+   "id": "en0201",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "He went to his room and dressed. There was a wild recklessness of gaiety in his manner as he sat at table, but now and then a thrill of terror ran through him when he remembered that, pressed against the window of the conservatory, like a white handkerchief, he had seen the face of James Vane watching him."
+  },
+  {
+   "id": "en0202",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "As Queequeg and I are now fairly embarked in this business of whaling; and as this business of whaling has somehow come to be regarded among landsmen as a rather unpoetical and disreputable pursuit; therefore, I am all anxiety to convince ye, ye landsmen, of the injustice hereby done to us hunters of whales."
+  },
+  {
+   "id": "en0203",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Tour the south then. What about English wateringplaces? Brighton, Margate. Piers by moonlight. Her voice floating out. Those lovely seaside girls. Against John Long’s a drowsing loafer lounged in heavy thought, gnawing a crusted knuckle. Handy man wants job. Small wages. Will eat anything."
+  },
+  {
+   "id": "en0204",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "She had never perceived, while the regiment was in Hertfordshire, that Lydia had any partiality for him; but she was convinced that Lydia had wanted only encouragement to attach herself to anybody. Sometimes one officer, sometimes another, had been her favourite, as their attentions raised them in her opinion. Her affections had been continually fluctuating, but never without an object. The mischief of neglect and mistaken indulgence towards such a girl--oh! how acutely did she now feel it!"
+  },
+  {
+   "id": "en0205",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "My first quarter at Lowood seemed an age; and not the golden age either; it comprised an irksome struggle with difficulties in habituating myself to new rules and unwonted tasks. The fear of failure in these points harassed me worse than the physical hardships of my lot; though these were no trifles."
+  },
+  {
+   "id": "en0206",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "If his object in singling out Drummle were to bring him out still more, it perfectly succeeded. In a sulky triumph, Drummle showed his morose depreciation of the rest of us, in a more and more offensive degree, until he became downright intolerable. Through all his stages, Mr. Jaggers followed him with the same strange interest. He actually seemed to serve as a zest to Mr. Jaggers’s wine."
+  },
+  {
+   "id": "en0207",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "How would Rosamond take it all? Here was another weight of chain to drag, and poor Lydgate was in a bad mood for bearing her dumb mastery. He had no impulse to tell her the trouble which must soon be common to them both. He preferred waiting for the incidental disclosure which events must soon bring about."
+  },
+  {
+   "id": "en0208",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "It was Lydgate’s misfortune and Rosamond’s too, that his tenderness towards her, which was both an emotional prompting and a well-considered resolve, was inevitably interrupted by these outbursts of indignation either ironical or remonstrant. She thought them totally unwarranted, and the repulsion which this exceptional severity excited in her was in danger of making the more persistent tenderness unacceptable."
+  },
+  {
+   "id": "en0209",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "A puzzled amazement awoke in every face in the house, not even excepting Potter’s. Every eye fastened itself with wondering interest upon Tom as he rose and took his place upon the stand. The boy looked wild enough, for he was badly scared. The oath was administered."
+  },
+  {
+   "id": "en0210",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "The rain rushed down. He hurried me up the walk, through the grounds, and into the house; but we were quite wet before we could pass the threshold. He was taking off my shawl in the hall, and shaking the water out of my loosened hair, when Mrs. Fairfax emerged from her room. I did not observe her at first, nor did Mr. Rochester. The lamp was lit. The clock was on the stroke of twelve."
+  },
+  {
+   "id": "en0211",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "Drawing his arm through his own, he took him down Ludgate-hill to Fleet-street, and so, up a covered way, into a tavern. Here, they were shown into a little room, where Charles Darnay was soon recruiting his strength with a good plain dinner and good wine: while Carton sat opposite to him at the same table, with his separate bottle of port before him, and his fully half-insolent manner upon him."
+  },
+  {
+   "id": "en0212",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "He unwound the handkerchief and held out his hand. It gave even my hardened nerves a shudder to look at it. There were four protruding fingers and a horrid red, spongy surface where the thumb should have been. It had been hacked or torn right out from the roots."
+  },
+  {
+   "id": "en0213",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "Seeing in this arrangement the hope of rendering real service in that pressing emergency, Miss Pross hailed it with joy. She and Jerry had beheld the coach start, had known who it was that Solomon brought, had passed some ten minutes in tortures of suspense, and were now concluding their arrangements to follow the coach, even as Madame Defarge, taking her way through the streets, now drew nearer and nearer to the else-deserted lodging in which they held their consultation."
+  },
+  {
+   "id": "en0214",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "When we came to Pumblechook’s, my sister bounced in and left us. As it was almost noon, Joe and I held straight on to Miss Havisham’s house. Estella opened the gate as usual, and, the moment she appeared, Joe took his hat off and stood weighing it by the brim in both his hands; as if he had some urgent reason in his mind for being particular to half a quarter of an ounce."
+  },
+  {
+   "id": "en0215",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "Mr O’Connor had been engaged by Tierney’s agent to canvass one part of the ward but, as the weather was inclement and his boots let in the wet, he spent a great part of the day sitting by the fire in the Committee Room in Wicklow Street with Jack, the old caretaker. They had been sitting thus since the short day had grown dark. It was the sixth of October, dismal and cold out of doors."
+  },
+  {
+   "id": "en0216",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "You may easily imagine that I was much gratified by the offered communication, yet I could not endure that he should renew his grief by a recital of his misfortunes. I felt the greatest eagerness to hear the promised narrative, partly from curiosity and partly from a strong desire to ameliorate his fate if it were in my power. I expressed these feelings in my answer."
+  },
+  {
+   "id": "en0217",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "Mr. Jaggers shook his head,—not in negativing the question, but in altogether negativing the notion that he could anyhow be got to answer it,—and the two horrible casts of the twitched faces looked, when my eyes strayed up to them, as if they had come to a crisis in their suspended attention, and were going to sneeze."
+  },
+  {
+   "id": "en0218",
+   "source": "Conrad, Heart of Darkness",
+   "gutenberg_id": 219,
+   "text": "It had become so pitch dark that we listeners could hardly see one another. For a long time already he, sitting apart, had been no more to us than a voice. There was not a word from anybody. The others might have been asleep, but I was awake. I listened, I listened on the watch for the sentence, for the word, that would give me the clue to the faint uneasiness inspired by this narrative that seemed to shape itself without human lips in the heavy night-air of the river."
+  },
+  {
+   "id": "en0219",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "I had no keener pleasure than in following Holmes in his professional investigations, and in admiring the rapid deductions, as swift as intuitions, and yet always founded on a logical basis with which he unravelled the problems which were submitted to him. I rapidly threw on my clothes and was ready in a few minutes to accompany my friend down to the sitting-room. A lady dressed in black and heavily veiled, who had been sitting in the window, rose as we entered."
+  },
+  {
+   "id": "en0220",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "The question is, what and where is the skin of the whale? Already you know what his blubber is. That blubber is something of the consistence of firm, close-grained beef, but tougher, more elastic and compact, and ranges from eight or ten to twelve and fifteen inches in thickness."
+  },
+  {
+   "id": "en0221",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Evidently Miss Brooke was not Mr. Lydgate’s style of woman any more than Mr. Chichely’s. Considered, indeed, in relation to the latter, whose mind was matured, she was altogether a mistake, and calculated to shock his trust in final causes, including the adaptation of fine young women to purplefaced bachelors. But Lydgate was less ripe, and might possibly have experience before him which would modify his opinion as to the most excellent things in woman."
+  },
+  {
+   "id": "en0222",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Adjacent to the men’s public urinal they perceived an icecream car round which a group of presumably Italians in heated altercation were getting rid of voluble expressions in their vivacious language in a particularly animated way, there being some little differences between the parties."
+  },
+  {
+   "id": "en0223",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "Alice thought she might as well go back, and see how the game was going on, as she heard the Queen’s voice in the distance, screaming with passion. She had already heard her sentence three of the players to be executed for having missed their turns, and she did not like the look of things at all, as the game was in such confusion that she never knew whether it was her turn or not. So she went in search of her hedgehog."
+  },
+  {
+   "id": "en0224",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "I had called upon my friend, Mr. Sherlock Holmes, one day in the autumn of last year and found him in deep conversation with a very stout, florid-faced, elderly gentleman with fiery red hair. With an apology for my intrusion, I was about to withdraw when Holmes pulled me abruptly into the room and closed the door behind me."
+  },
+  {
+   "id": "en0225",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "Beyond the pit stood the little wedge of people with the white flag at its apex, arrested by these phenomena, a little knot of small vertical black shapes upon the black ground. As the green smoke arose, their faces flashed out pallid green, and faded again as it vanished. Then slowly the hissing passed into a humming, into a long, loud, droning noise. Slowly a humped shape rose out of the pit, and the ghost of a beam of light seemed to flicker out from it."
+  },
+  {
+   "id": "en0226",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "All these queer proceedings increased my uncomfortableness, and seeing him now exhibiting strong symptoms of concluding his business operations, and jumping into bed with me, I thought it was high time, now or never, before the light was put out, to break the spell in which I had so long been bound."
+  },
+  {
+   "id": "en0227",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "It was high time to go, for the pool was getting quite crowded with the birds and animals that had fallen into it: there were a Duck and a Dodo, a Lory and an Eaglet, and several other curious creatures. Alice led the way, and the whole party swam to the shore."
+  },
+  {
+   "id": "en0228",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "While I was still doubtful, it rapped smartly against the cellar door and closed it. I heard it go into the pantry, and the biscuit-tins rattled and a bottle smashed, and then came a heavy bump against the cellar door. Then silence that passed into an infinity of suspense."
+  },
+  {
+   "id": "en0229",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Elizabeth told her the motives of her secrecy. She had been unwilling to mention Bingley; and the unsettled state of her own feelings had made her equally avoid the name of his friend: but now she would no longer conceal from her his share in Lydia’s marriage. All was acknowledged, and half the night spent in conversation."
+  },
+  {
+   "id": "en0230",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "I wonder, thought I, if this can possibly be a part of his Ramadan; do they fast on their hams that way in his native island. It must be so; yes, it’s part of his creed, I suppose; well, then, let him rest; he’ll get up sooner or later, no doubt. It can’t last for ever, thank God, and his Ramadan only comes once a year; and I don’t believe it’s very punctual then."
+  },
+  {
+   "id": "en0231",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "Everything went on smoothly. Mrs Kearney bought some lovely blush-pink charmeuse in Brown Thomas’s to let into the front of Kathleen’s dress. It cost a pretty penny; but there are occasions when a little expense is justifiable. She took a dozen of two-shilling tickets for the final concert and sent them to those friends who could not be trusted to come otherwise. She forgot nothing and, thanks to her, everything that was to be done was done."
+  },
+  {
+   "id": "en0232",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "Must I then lose this admirable being? I have longed for a friend; I have sought one who would sympathise with and love me. Behold, on these desert seas I have found such a one, but I fear I have gained him only to know his value and lose him. I would reconcile him to life, but he repulses the idea."
+  },
+  {
+   "id": "en0233",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Like him was I, these sloping shoulders, this gracelessness. My childhood bends beside me. Too far for me to lay a hand there once or lightly. Mine is far and his secret as our eyes. Secrets, silent, stony sit in the dark palaces of both our hearts: secrets weary of their tyranny: tyrants, willing to be dethroned."
+  },
+  {
+   "id": "en0234",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "The light flashed on his features as I spoke. Oh, Mr. Lockwood, I cannot express what a terrible start I got by the momentary view! Those deep black eyes! That smile, and ghastly paleness! It appeared to me, not Mr. Heathcliff, but a goblin; and, in my terror, I let the candle bend towards the wall, and it left me in darkness."
+  },
+  {
+   "id": "en0235",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "She had preceded him into the pantry to help him off with his overcoat. Gabriel smiled at the three syllables she had given his surname and glanced at her. She was a slim, growing girl, pale in complexion and with hay-coloured hair. The gas in the pantry made her look still paler. Gabriel had known her when she was a child and used to sit on the lowest step nursing a rag doll."
+  },
+  {
+   "id": "en0236",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "The struggle between the old views and the new was long and stubbornly fought out in physical philosophy. Theology stood on guard for the old views and accused the new of violating revelation. But when truth conquered, theology established itself just as firmly on the new foundation."
+  },
+  {
+   "id": "en0237",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "Not seldom in this life, when, on the right side, fortune’s favourites sail close by us, we, though all adroop before, catch somewhat of the rushing breeze, and joyfully feel our bagging sails fill out. So seemed it with the Pequod. For next day after encountering the gay Bachelor, whales were seen and four were slain; and one of them by Ahab."
+  },
+  {
+   "id": "en0238",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "Most of the adventures recorded in this book really occurred; one or two were experiences of my own, the rest those of boys who were schoolmates of mine. Huck Finn is drawn from life; Tom Sawyer also, but not from an individual—he is a combination of the characteristics of three boys whom I knew, and therefore belongs to the composite order of architecture."
+  },
+  {
+   "id": "en0239",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "The clocks are on the stroke of three, and the furrow ploughed among the populace is turning round, to come on into the place of execution, and end. The ridges thrown to this side and to that, now crumble in and close behind the last plough as it passes on, for all are following to the Guillotine. In front of it, seated in chairs, as in a garden of public diversion, are a number of women, busily knitting. On one of the fore-most chairs, stands The Vengeance, looking about for her friend."
+  },
+  {
+   "id": "en0240",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "From their tongues they did dismiss it; and Catherine, probably, from her thoughts. The other, I felt certain, recalled it often in the course of the evening. I saw him smile to himself—grin rather—and lapse into ominous musing whenever Mrs. Linton had occasion to be absent from the apartment."
+  },
+  {
+   "id": "en0241",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "While Sherlock Holmes had been detailing this singular series of events, we had been whirling through the outskirts of the great town until the last straggling houses had been left behind, and we rattled along with a country hedge upon either side of us. Just as he finished, however, we drove through two scattered villages, where a few lights still glimmered in the windows."
+  },
+  {
+   "id": "en0242",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "The son confirmed his father’s account, but when Daniel Nugent was called he swore positively that just before the fall of his companion, he saw a boat, with a single man in it, at a short distance from the shore; and as far as he could judge by the light of a few stars, it was the same boat in which I had just landed."
+  },
+  {
+   "id": "en0243",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "Everything was all right now. The girls wouldn’t say nothing because they wanted to go to England; and the king and the duke would ruther Mary Jane was off working for the auction than around in reach of Doctor Robinson. I felt very good; I judged I had done it pretty neat—I reckoned Tom Sawyer couldn’t a done it no neater himself. Of course he would a throwed more style into it, but I can’t do that very handy, not being brung up to it."
+  },
+  {
+   "id": "en0244",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "He did not know how long he had been walking uneasily backwards and forwards, but Rosamond felt that it was long, and wished that he would sit down. She too had begun to think this an opportunity for urging on Tertius what he ought to do. Whatever might be the truth about all this misery, there was one dread which asserted itself."
+  },
+  {
+   "id": "en0245",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "He bared slightly his left forearm. Scrape: nearly gone. Not today anyhow. Must go back for that lotion. For her birthday perhaps. Junejulyaugseptember eighth. Nearly three months off. Then she mightn’t like it. Women won’t pick up pins. Say it cuts lo."
+  },
+  {
+   "id": "en0246",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "Miss Pross, submitting herself to his judgment, the scheme was worked out with care. Having abundance of time for his usual methodical toilette, Mr. Lorry presented himself at the breakfast-hour in his usual white linen, and with his usual neat leg. The Doctor was summoned in the usual way, and came to breakfast."
+  },
+  {
+   "id": "en0247",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "For a moment, he held the fair face from him to look at the well-remembered expression on the forehead, and then laid the bright golden hair against his little brown wig, with a genuine tenderness and delicacy which, if such things be old-fashioned, were as old as Adam."
+  },
+  {
+   "id": "en0248",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "I was now, it seemed, cut off upon both sides; behind me the murderers, before me this lurking nondescript. And immediately I began to prefer the dangers that I knew to those I knew not. Silver himself appeared less terrible in contrast with this creature of the woods, and I turned on my heel, and looking sharply behind me over my shoulder, began to retrace my steps in the direction of the boats."
+  },
+  {
+   "id": "en0249",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "My walk home was lengthened by a diversion in the direction of the kirk. When beneath its walls, I perceived decay had made progress, even in seven months: many a window showed black gaps deprived of glass; and slates jutted off, here and there, beyond the right line of the roof, to be gradually worked off in coming autumn storms."
+  },
+  {
+   "id": "en0250",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "At this moment Derick was in the act of pitching his lamp-feeder at the advancing boats, and also his oil-can; perhaps with the double view of retarding his rivals’ way, and at the same time economically accelerating his own by the momentary impetus of the backward toss."
+  },
+  {
+   "id": "en0251",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "We are still surrounded by mountains of ice, still in imminent danger of being crushed in their conflict. The cold is excessive, and many of my unfortunate comrades have already found a grave amidst this scene of desolation. Frankenstein has daily declined in health; a feverish fire still glimmers in his eyes, but he is exhausted, and when suddenly roused to any exertion, he speedily sinks again into apparent lifelessness."
+  },
+  {
+   "id": "en0252",
+   "source": "Kafka, Metamorphosis (Wyllie tr.)",
+   "gutenberg_id": 5200,
+   "text": "No-one dared to remove the apple lodged in Gregor’s flesh, so it remained there as a visible reminder of his injury. He had suffered it there for more than a month, and his condition seemed serious enough to remind even his father that Gregor, despite his current sad and revolting form, was a family member who could not be treated as an enemy. On the contrary, as a family there was a duty to swallow any revulsion for him and to be patient, just to be patient."
+  },
+  {
+   "id": "en0253",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "They took their seats amidst a crowd of watchers. The tulip-beds across the road flamed like throbbing rings of fire. A white dust—tremulous cloud of orris-root it seemed—hung in the panting air. The brightly coloured parasols danced and dipped like monstrous butterflies."
+  },
+  {
+   "id": "en0254",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "I shook my head: it required a degree of courage, excited as he was becoming, even to risk that mute sign of dissent. He had been walking fast about the room, and he stopped, as if suddenly rooted to one spot. He looked at me long and hard: I turned my eyes from him, fixed them on the fire, and tried to assume and maintain a quiet, collected aspect."
+  },
+  {
+   "id": "en0255",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "Slowly I thrust myself out through the red weed, and stood upon the mound of rubble. I could see in any direction save behind me, to the north, and neither Martians nor sign of Martians were to be seen. The pit dropped sheerly from my feet, but a little way along the rubbish afforded a practicable slope to the summit of the ruins. My chance of escape had come. I began to tremble."
+  },
+  {
+   "id": "en0256",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Elizabeth said as little to either as civility would allow, and sat down again to her work, with an eagerness which it did not often command. She had ventured only one glance at Darcy. He looked serious as usual; and, she thought, more as he had been used to look in Hertfordshire, than as she had seen him at Pemberley. But, perhaps, he could not in her mother’s presence be what he was before her uncle and aunt. It was a painful, but not an improbable, conjecture."
+  },
+  {
+   "id": "en0257",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "For some minutes I lay there in the rain and darkness watching, by the intermittent light, these monstrous beings of metal moving about in the distance over the hedge tops. A thin hail was now beginning, and as it came and went their figures grew misty and then flashed into clearness again. Now and then came a gap in the lightning, and the night swallowed them up."
+  },
+  {
+   "id": "en0258",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Between Elizabeth and Charlotte there was a restraint which kept them mutually silent on the subject; and Elizabeth felt persuaded that no real confidence could ever subsist between them again. Her disappointment in Charlotte made her turn with fonder regard to her sister, of whose rectitude and delicacy she was sure her opinion could never be shaken, and for whose happiness she grew daily more anxious, as Bingley had now been gone a week, and nothing was heard of his return."
+  },
+  {
+   "id": "en0259",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Dorothea’s inferences may seem large; but really life could never have gone on at any period but for this liberal allowance of conclusions, which has facilitated marriage under the difficulties of civilization. Has any one ever pinched into its pilulous smallness the cobweb of pre-matrimonial acquaintanceship?"
+  },
+  {
+   "id": "en0260",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "In the meantime, we could never make out where he got the drink. That was the ship’s mystery. Watch him as we pleased, we could do nothing to solve it; and when we asked him to his face, he would only laugh if he were drunk, and if he were sober deny solemnly that he ever tasted anything but water."
+  },
+  {
+   "id": "en0261",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "It was a wet and windy afternoon: Georgiana had fallen asleep on the sofa over the perusal of a novel; Eliza was gone to attend a saint’s-day service at the new church—for in matters of religion she was a rigid formalist: no weather ever prevented the punctual discharge of what she considered her devotional duties; fair or foul, she went to church thrice every Sunday, and as often on week-days as there were prayers."
+  },
+  {
+   "id": "en0262",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "I had shut the door to. Then I turned around and there he was. I used to be scared of him all the time, he tanned me so much. I reckoned I was scared now, too; but in a minute I see I was mistaken—that is, after the first jolt, as you may say, when my breath sort of hitched, he being so unexpected; but right away after I see I warn’t scared of him worth bothring about."
+  },
+  {
+   "id": "en0263",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "Finally, as for salt, that grossest of groceries, to obtain this might be a fit occasion for a visit to the seashore, or, if I did without it altogether, I should probably drink the less water. I do not learn that the Indians ever troubled themselves to go after it."
+  },
+  {
+   "id": "en0264",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "If I should attempt to tell how I have desired to spend my life in years past, it would probably surprise those of my readers who are somewhat acquainted with its actual history; it would certainly astonish those who know nothing about it. I will only hint at some of the enterprises which I have cherished."
+  },
+  {
+   "id": "en0265",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "This was strange and unexpected intelligence; what could it mean? Had my eyes deceived me? And was I really as mad as the whole world would believe me to be if I disclosed the object of my suspicions? I hastened to return home, and Elizabeth eagerly demanded the result."
+  },
+  {
+   "id": "en0266",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "James McCarthy was acquitted at the Assizes on the strength of a number of objections which had been drawn out by Holmes and submitted to the defending counsel. Old Turner lived for seven months after our interview, but he is now dead; and there is every prospect that the son and daughter may come to live happily together in ignorance of the black cloud which rests upon their past."
+  },
+  {
+   "id": "en0267",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "But the incidents of his adventure grew sensibly sharper and clearer under the attrition of thinking them over, and so he presently found himself leaning to the impression that the thing might not have been a dream, after all. This uncertainty must be swept away. He would snatch a hurried breakfast and go and find Huck."
+  },
+  {
+   "id": "en0268",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "Meantime, Fedallah was calmly eyeing the right whale’s head, and ever and anon glancing from the deep wrinkles there to the lines in his own hand. And Ahab chanced so to stand, that the Parsee occupied his shadow; while, if the Parsee’s shadow was there at all it seemed only to blend with, and lengthen Ahab’s. As the crew toiled on, Laplandish speculations were bandied among them, concerning all these passing things."
+  },
+  {
+   "id": "en0269",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "The present was my next experiment of this kind, which I purpose to describe more at length; for convenience, putting the experience of two years into one. As I have said, I do not propose to write an ode to dejection, but to brag as lustily as chanticleer in the morning, standing on his roost, if only to wake my neighbors up."
+  },
+  {
+   "id": "en0270",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Perceiving it vain to argue against her insanity, I was planning how I could reach something to wrap about her, without quitting my hold of herself (for I could not trust her alone by the gaping lattice), when, to my consternation, I heard the rattle of the door-handle, and Mr. Linton entered. He had only then come from the library; and, in passing through the lobby, had noticed our talking and been attracted by curiosity, or fear, to examine what it signified, at that late hour."
+  },
+  {
+   "id": "en0271",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "Now, one of the peculiar characteristics of the savage in his domestic hours, is his wonderful patience of industry. An ancient Hawaiian war-club or spear-paddle, in its full multiplicity and elaboration of carving, is as great a trophy of human perseverance as a Latin lexicon. For, with but a bit of broken sea-shell or a shark’s tooth, that miraculous intricacy of wooden net-work has been achieved; and it has cost steady years of steady application."
+  },
+  {
+   "id": "en0272",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "We shook hands for the hundredth time at least, and he ordered a young carter out of my way with the greatest indignation. Then, he blessed me and stood waving his hand to me until I had passed the crook in the road; and then I turned into a field and had a long nap under a hedge before I pursued my way home."
+  },
+  {
+   "id": "en0273",
+   "source": "Conrad, Heart of Darkness",
+   "gutenberg_id": 219,
+   "text": "And at last, in its curved and imperceptible fall, the sun sank low, and from glowing white changed to a dull red without rays and without heat, as if about to go out suddenly, stricken to death by the touch of that gloom brooding over a crowd of men."
+  },
+  {
+   "id": "en0274",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Bloom looked, unblessed to go. Got up to kill: on eighteen bob a week. Fellows shell out the dibs. Want to keep your weathereye open. Those girls, those lovely. By the sad sea waves. Chorusgirl’s romance. Letters read out for breach of promise. From Chickabiddy’s owny Mumpsypum. Laughter in court. Henry. I never signed it. The lovely name you."
+  },
+  {
+   "id": "en0275",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "How slowly the time passes here, encompassed as I am by frost and snow! Yet a second step is taken towards my enterprise. I have hired a vessel and am occupied in collecting my sailors; those whom I have already engaged appear to be men on whom I can depend and are certainly possessed of dauntless courage."
+  },
+  {
+   "id": "en0276",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "But, there were other echoes, from a distance, that rumbled menacingly in the corner all through this space of time. And it was now, about little Lucie’s sixth birthday, that they began to have an awful sound, as of a great storm in France with a dreadful sea rising."
+  },
+  {
+   "id": "en0277",
+   "source": "Kafka, Metamorphosis (Wyllie tr.)",
+   "gutenberg_id": 5200,
+   "text": "One morning, when Gregor Samsa woke from troubled dreams, he found himself transformed in his bed into a horrible vermin. He lay on his armour-like back, and if he lifted his head a little he could see his brown belly, slightly domed and divided by arches into stiff sections. The bedding was hardly able to cover it and seemed ready to slide off any moment. His many legs, pitifully thin compared with the size of the rest of him, waved about helplessly as he looked."
+  },
+  {
+   "id": "en0278",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "As soon as the jury had a little recovered from the shock of being upset, and their slates and pencils had been found and handed back to them, they set to work very diligently to write out a history of the accident, all except the Lizard, who seemed too much overcome to do anything but sit with its mouth open, gazing up into the roof of the court."
+  },
+  {
+   "id": "en0279",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "Already we are boldly launched upon the deep; but soon we shall be lost in its unshored, harbourless immensities. Ere that come to pass; ere the Pequod’s weedy hull rolls side by side with the barnacled hulls of the leviathan; at the outset it is but well to attend to a matter almost indispensable to a thorough appreciative understanding of the more special leviathanic revelations and allusions of all sorts which are to follow."
+  },
+  {
+   "id": "en0280",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "On the evening of the day on which I had seen Miss Scatcherd flog her pupil, Burns, I wandered as usual among the forms and tables and laughing groups without a companion, yet not feeling lonely: when I passed the windows, I now and then lifted a blind, and looked out; it snowed fast, a drift was already forming against the lower panes; putting my ear close to the window, I could distinguish from the gleeful tumult within, the disconsolate moan of the wind outside."
+  },
+  {
+   "id": "en0281",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "After the ceremony was performed a large party assembled at my father’s, but it was agreed that Elizabeth and I should commence our journey by water, sleeping that night at Evian and continuing our voyage on the following day. The day was fair, the wind favourable; all smiled on our nuptial embarkation."
+  },
+  {
+   "id": "en0282",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "I forgot to tell you that Silver is a man of substance; I know of my own knowledge that he has a banker’s account, which has never been overdrawn. He leaves his wife to manage the inn; and as she is a woman of colour, a pair of old bachelors like you and I may be excused for guessing that it is the wife, quite as much as the health, that sends him back to roving. J. T."
+  },
+  {
+   "id": "en0283",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "In listening, I sobbed convulsively; for I could repress what I endured no longer; I was obliged to yield, and I was shaken from head to foot with acute distress. When I did speak, it was only to express an impetuous wish that I had never been born, or never come to Thornfield."
+  },
+  {
+   "id": "en0284",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "So thinking, and in famous spirits, I began to set my face homeward for the block house and my companions. I remembered that the most easterly of the rivers which drain into Captain Kidd’s anchorage ran from the two-peaked hill upon my left, and I bent my course in that direction that I might pass the stream while it was small. The wood was pretty open, and keeping along the lower spurs, I had soon turned the corner of that hill, and not long after waded to the mid-calf across the watercourse."
+  },
+  {
+   "id": "en0285",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "He felt strong enough to clear out the whole office singlehanded. His body ached to do something, to rush out and revel in violence. All the indignities of his life enraged him.... Could he ask the cashier privately for an advance? No, the cashier was no good, no damn good: he wouldn’t give an advance.... He knew where he would meet the boys: Leonard and O’Halloran and Nosey Flynn. The barometer of his emotional nature was set for a spell of riot."
+  },
+  {
+   "id": "en0286",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Perhaps Celia had never turned so pale before. The paper man she was making would have had his leg injured, but for her habitual care of whatever she held in her hands. She laid the fragile figure down at once, and sat perfectly still for a few moments. When she spoke there was a tear gathering."
+  },
+  {
+   "id": "en0287",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "What impeded Bloom from giving Stephen counsels of hygiene and prophylactic to which should be added suggestions concerning a preliminary wetting of the head and contraction of the muscles with rapid splashing of the face and neck and thoracic and epigastric region in case of sea or river bathing, the parts of the human anatomy most sensitive to cold being the nape, stomach and thenar or sole of foot?"
+  },
+  {
+   "id": "en0288",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "We were so short of men that everyone on board had to bear a hand--only the captain lying on a mattress in the stern and giving his orders, for though greatly recovered he was still in want of quiet. We laid her head for the nearest port in Spanish America, for we could not risk the voyage home without fresh hands; and as it was, what with baffling winds and a couple of fresh gales, we were all worn out before we reached it."
+  },
+  {
+   "id": "en0289",
+   "source": "Conrad, Heart of Darkness",
+   "gutenberg_id": 219,
+   "text": "The Director of Companies was our captain and our host. We four affectionately watched his back as he stood in the bows looking to seaward. On the whole river there was nothing that looked half so nautical. He resembled a pilot, which to a seaman is trustworthiness personified. It was difficult to realize his work was not out there in the luminous estuary, but behind him, within the brooding gloom."
+  },
+  {
+   "id": "en0290",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "I had neither the good sense nor the good feeling to know that this was all my fault, and that if I had been easier with Joe, Joe would have been easier with me. I felt impatient of him and out of temper with him; in which condition he heaped coals of fire on my head."
+  },
+  {
+   "id": "en0291",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "You see, Mr. Lockwood, it was easy enough to win Mrs. Heathcliff’s heart. But now, I’m glad you did not try. The crown of all my wishes will be the union of those two. I shall envy no one on their wedding day: there won’t be a happier woman than myself in England!"
+  },
+  {
+   "id": "en0292",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "For a time we did not see how this change affected our position, save that we were relieved of our fear of the Black Smoke. But later I perceived that we were no longer hemmed in, that now we might get away. So soon as I realised that the way of escape was open, my dream of action returned. But the curate was lethargic, unreasonable."
+  },
+  {
+   "id": "en0293",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "How we longed for the light and heat of a blazing fire when we got back! But, to the little ones at least, this was denied: each hearth in the schoolroom was immediately surrounded by a double row of great girls, and behind them the younger children crouched in groups, wrapping their starved arms in their pinafores."
+  },
+  {
+   "id": "en0294",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "By this time everything was ready and the boys entered the hole, Tom in the lead. They toiled their way to the farther end of the tunnel, then made their spliced kite-strings fast and moved on. A few steps brought them to the spring, and Tom felt a shudder quiver all through him. He showed Huck the fragment of candle-wick perched on a lump of clay against the wall, and described how he and Becky had watched the flame struggle and expire."
+  },
+  {
+   "id": "en0295",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "After that Mrs Donnelly played Miss McCloud’s Reel for the children and Joe made Maria take a glass of wine. Soon they were all quite merry again and Mrs Donnelly said Maria would enter a convent before the year was out because she had got the prayer-book. Maria had never seen Joe so nice to her as he was that night, so full of pleasant talk and reminiscences. She said they were all very good to her."
+  },
+  {
+   "id": "en0296",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Prince Hippolyte, who had been gazing at the vicomte for some time through his lorgnette, suddenly turned completely round toward the little princess, and having asked for a needle began tracing the Condé coat of arms on the table. He explained this to her with as much gravity as if she had asked him to do it."
+  },
+  {
+   "id": "en0297",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "Even as I beheld this a lurid green glare lit the road about me and showed the distant woods towards Addlestone. I felt a tug at the reins. I saw that the driving clouds had been pierced as it were by a thread of green fire, suddenly lighting their confusion and falling into the field to my left. It was the third falling star!"
+  },
+  {
+   "id": "en0298",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "The boys dressed themselves, hid their accoutrements, and went off grieving that there were no outlaws any more, and wondering what modern civilization could claim to have done to compensate for their loss. They said they would rather be outlaws a year in Sherwood Forest than President of the United States forever."
+  },
+  {
+   "id": "en0299",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "My affection for my guest increases every day. He excites at once my admiration and my pity to an astonishing degree. How can I see so noble a creature destroyed by misery without feeling the most poignant grief? He is so gentle, yet so wise; his mind is so cultivated, and when he speaks, although his words are culled with the choicest art, yet they flow with rapidity and unparalleled eloquence."
+  },
+  {
+   "id": "en0300",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "I sat, a model of patience, trying to attract his absorbed attention from its engrossing speculation; till he grew irritable, and got up, asking why I would not allow him to have his own time in taking his meals? and saying that on the next occasion I needn’t wait: I might set the things down and go. Having uttered these words he left the house, slowly sauntered down the garden path, and disappeared through the gate."
+  },
+  {
+   "id": "en0301",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "The knock was Fred’s; and when Letty said that her father was not in yet, but that her mother was in the kitchen, Fred had no alternative. He could not depart from his usual practice of going to see Mrs. Garth in the kitchen if she happened to be at work there. He put his arm round Letty’s neck silently, and led her into the kitchen without his usual jokes and caresses."
+  },
+  {
+   "id": "en0302",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "A twisted flash of pain shot across the painter’s face. He paused for a moment, and a wild feeling of pity came over him. After all, what right had he to pry into the life of Dorian Gray? If he had done a tithe of what was rumoured about him, how much he must have suffered! Then he straightened himself up, and walked over to the fire-place, and stood there, looking at the burning logs with their frostlike ashes and their throbbing cores of flame."
+  },
+  {
+   "id": "en0303",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "From outside came the occasional cry of a night-bird, and once at our very window a long drawn catlike whine, which told us that the cheetah was indeed at liberty. Far away we could hear the deep tones of the parish clock, which boomed out every quarter of an hour. How long they seemed, those quarters! Twelve struck, and one and two and three, and still we sat waiting silently for whatever might befall."
+  },
+  {
+   "id": "en0304",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "As the painter looked at the gracious and comely form he had so skilfully mirrored in his art, a smile of pleasure passed across his face, and seemed about to linger there. But he suddenly started up, and closing his eyes, placed his fingers upon the lids, as though he sought to imprison within his brain some curious dream from which he feared he might awake."
+  },
+  {
+   "id": "en0305",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "As we looked full at one another, I felt my breath come quicker in my strong desire to get something out of him. And as I felt that it came quicker, and as I felt that he saw that it came quicker, I felt that I had less chance than ever of getting anything out of him."
+  },
+  {
+   "id": "en0306",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "The portly client puffed out his chest with an appearance of some little pride and pulled a dirty and wrinkled newspaper from the inside pocket of his greatcoat. As he glanced down the advertisement column, with his head thrust forward and the paper flattened out upon his knee, I took a good look at the man and endeavoured, after the fashion of my companion, to read the indications which might be presented by his dress or appearance."
+  },
+  {
+   "id": "en0307",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "The fellow approached and gave the chair on which Linton rested a push. He’d better have kept his distance: my master quickly sprang erect, and struck him full on the throat a blow that would have levelled a slighter man. It took his breath for a minute; and while he choked, Mr. Linton walked out by the back door into the yard, and from thence to the front entrance."
+  },
+  {
+   "id": "en0308",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Mr. Bennet’s emotions were much more tranquil on the occasion, and such as he did experience he pronounced to be of a most agreeable sort; for it gratified him, he said, to discover that Charlotte Lucas, whom he had been used to think tolerably sensible, was as foolish as his wife, and more foolish than his daughter!"
+  },
+  {
+   "id": "en0309",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "When Tom reached the little isolated frame school-house, he strode in briskly, with the manner of one who had come with all honest speed. He hung his hat on a peg and flung himself into his seat with business-like alacrity. The master, throned on high in his great splint-bottom arm-chair, was dozing, lulled by the drowsy hum of study. The interruption roused him."
+  },
+  {
+   "id": "en0310",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "When the first streak of day began to show we tied up to a tow-head in a big bend on the Illinois side, and hacked off cottonwood branches with the hatchet, and covered up the raft with them so she looked like there had been a cave-in in the bank there. A tow-head is a sandbar that has cottonwoods on it as thick as harrow-teeth."
+  },
+  {
+   "id": "en0311",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "I was now alone upon the ship; the tide had just turned. The sun was within so few degrees of setting that already the shadow of the pines upon the western shore began to reach right across the anchorage and fall in patterns on the deck. The evening breeze had sprung up, and though it was well warded off by the hill with the two peaks upon the east, the cordage had begun to sing a little softly to itself and the idle sails to rattle to and fro."
+  },
+  {
+   "id": "en0312",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "On the two short sides of the house, east and west, there were only two loopholes; on the south side where the porch was, two again; and on the north side, five. There was a round score of muskets for the seven of us; the firewood had been built into four piles--tables, you might say--one about the middle of each side, and on each of these tables some ammunition and four loaded muskets were laid ready to the hand of the defenders. In the middle, the cutlasses lay ranged."
+  },
+  {
+   "id": "en0313",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Dorothea was altogether captivated by the wide embrace of this conception. Here was something beyond the shallows of ladies’ school literature: here was a living Bossuet, whose work would reconcile complete knowledge with devoted piety; here was a modern Augustine who united the glories of doctor and saint."
+  },
+  {
+   "id": "en0314",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "He took two bottles from the table and, carrying them to the fire, put them on the hob. Then he sat down again by the fire and took another drink from his bottle. Mr Lyons sat on the edge of the table, pushed his hat towards the nape of his neck and began to swing his legs."
+  },
+  {
+   "id": "en0315",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "Our visitor staggered to his feet and clutched the mantelpiece with his right hand. Holmes unlocked his strong-box and held up the blue carbuncle, which shone out like a star, with a cold, brilliant, many-pointed radiance. Ryder stood glaring with a drawn face, uncertain whether to claim or to disown it."
+  },
+  {
+   "id": "en0316",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "The whooping went on, and in about a minute I come a-booming down on a cut bank with smoky ghosts of big trees on it, and the current throwed me off to the left and shot by, amongst a lot of snags that fairly roared, the current was tearing by them so swift."
+  },
+  {
+   "id": "en0317",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "We must both have cried out aloud when our eyes met, but while mine was the shrill cry of terror, his was a roar of fury like a charging bully’s. At the same instant, he threw himself forward and I leapt sideways towards the bows. As I did so, I let go of the tiller, which sprang sharp to leeward, and I think this saved my life, for it struck Hands across the chest and stopped him, for the moment, dead."
+  },
+  {
+   "id": "en0318",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "As soon as it was over, Dorian Gray rushed behind the scenes into the greenroom. The girl was standing there alone, with a look of triumph on her face. Her eyes were lit with an exquisite fire. There was a radiance about her. Her parted lips were smiling over some secret of their own."
+  },
+  {
+   "id": "en0319",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "As the two boys walked sorrowing along, they made a new compact to stand by each other and be brothers and never separate till death relieved them of their troubles. Then they began to lay their plans. Joe was for being a hermit, and living on crusts in a remote cave, and dying, some time, of cold and want and grief; but after listening to Tom, he conceded that there were some conspicuous advantages about a life of crime, and so he consented to be a pirate."
+  },
+  {
+   "id": "en0320",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "The Echoes rarely answered to the actual tread of Sydney Carton. Some half-dozen times a year, at most, he claimed his privilege of coming in uninvited, and would sit among them through the evening, as he had once done often. He never came there heated with wine. And one other thing regarding him was whispered in the echoes, which has been whispered by all true echoes for ages and ages."
+  },
+  {
+   "id": "en0321",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "About nine o’clock the light among the trees was extinguished, and all was dark in the direction of the Manor House. Two hours passed slowly away, and then, suddenly, just at the stroke of eleven, a single bright light shone out right in front of us."
+  },
+  {
+   "id": "en0322",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "I planted about two acres and a half of upland; and as it was only about fifteen years since the land was cleared, and I myself had got out two or three cords of stumps, I did not give it any manure; but in the course of the summer it appeared by the arrowheads which I turned up in hoeing, that an extinct nation had anciently dwelt here and planted corn and beans ere white men came to clear the land, and so, to some extent, had exhausted the soil for this very crop."
+  },
+  {
+   "id": "en0323",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "On reaching home Pierre gave orders to Evstáfey—his head coachman who knew everything, could do anything, and was known to all Moscow—that he would leave that night for the army at Mozháysk, and that his saddle horses should be sent there. This could not all be arranged that day, so on Evstáfey’s representation Pierre had to put off his departure till next day to allow time for the relay horses to be sent on in advance."
+  },
+  {
+   "id": "en0324",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "After grasping the Doctor’s hand, as he stood victorious and proud before him; after grasping the hand of Mr. Lorry, who came panting in breathless from his struggle against the waterspout of the Carmagnole; after kissing little Lucie, who was lifted up to clasp her arms round his neck; and after embracing the ever zealous and faithful Pross who lifted her; he took his wife in his arms, and carried her up to their rooms."
+  },
+  {
+   "id": "en0325",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "There was only one thing wanting to make Mr. Walters’ ecstasy complete, and that was a chance to deliver a Bible-prize and exhibit a prodigy. Several pupils had a few yellow tickets, but none had enough—he had been around among the star pupils inquiring. He would have given worlds, now, to have that German lad back again with a sound mind."
+  },
+  {
+   "id": "en0326",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "When we got back to the raft and he come to count up he found he had collected eighty-seven dollars and seventy-five cents. And then he had fetched away a three-gallon jug of whisky, too, that he found under a wagon when he was starting home through the woods. The king said, take it all around, it laid over any day he’d ever put in in the missionarying line. He said it warn’t no use talking, heathens don’t amount to shucks alongside of pirates to work a camp-meeting with."
+  },
+  {
+   "id": "en0327",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "Why do precisely these objects which we behold make a world? Why has man just these species of animals for his neighbors; as if nothing but a mouse could have filled this crevice? I suspect that Pilpay & Co. have put animals to their best use, for they are all beasts of burden, in a sense, made to carry some portion of our thoughts."
+  },
+  {
+   "id": "en0328",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Hearing that Bezúkhov was in Orël, Willarski, though they had never been intimate, came to him with the professions of friendship and intimacy that people who meet in a desert generally express for one another. Willarski felt dull in Orël and was pleased to meet a man of his own circle and, as he supposed, of similar interests."
+  },
+  {
+   "id": "en0329",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "I remember I felt an extraordinary persuasion that I was being played with, that presently, when I was upon the very verge of safety, this mysterious death—as swift as the passage of light—would leap after me from the pit about the cylinder, and strike me down."
+  },
+  {
+   "id": "en0330",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "I also heard the whooping of the ice in the pond, my great bed-fellow in that part of Concord, as if it were restless in its bed and would fain turn over, were troubled with flatulency and had dreams; or I was waked by the cracking of the ground by the frost, as if some one had driven a team against my door, and in the morning would find a crack in the earth a quarter of a mile long and a third of an inch wide."
+  },
+  {
+   "id": "en0331",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "Some hours later, when he was at home, Caleb said to his wife, incidentally, that he had had some little differences with Bulstrode, and that in consequence, he had given up all notion of taking Stone Court, and indeed had resigned doing further business for him."
+  },
+  {
+   "id": "en0332",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "The footsteps were incessant, and the hurry of them became more and more rapid. The corner echoed and re-echoed with the tread of feet; some, as it seemed, under the windows; some, as it seemed, in the room; some coming, some going, some breaking off, some stopping altogether; all in the distant streets, and not one within sight."
+  },
+  {
+   "id": "en0333",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Bloom (three times), by the reverend Mr Gilmer Johnston M. A., alone, in the protestant church of Saint Nicholas Without, Coombe, by James O’Connor, Philip Gilligan and James Fitzpatrick, together, under a pump in the village of Swords, and by the reverend Charles Malone C. C., in the church of the Three Patrons, Rathgar. Stephen (once) by the reverend Charles Malone C. C., alone, in the church of the Three Patrons, Rathgar."
+  },
+  {
+   "id": "en0334",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Ere this speech ended I became sensible of Heathcliff’s presence. Having noticed a slight movement, I turned my head, and saw him rise from the bench, and steal out noiselessly. He had listened till he heard Catherine say it would degrade her to marry him, and then he stayed to hear no further. My companion, sitting on the ground, was prevented by the back of the settle from remarking his presence or departure; but I started, and bade her hush!"
+  },
+  {
+   "id": "en0335",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "The shadow of a large high-roofed house, and of many over-hanging trees, was upon Monsieur the Marquis by that time; and the shadow was exchanged for the light of a flambeau, as his carriage stopped, and the great door of his chateau was opened to him."
+  },
+  {
+   "id": "en0336",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "However, only one or two of my guests were ever bold enough to stay and eat a hasty-pudding with me; but when they saw that crisis approaching they beat a hasty retreat rather, as if it would shake the house to its foundations. Nevertheless, it stood through a great many hasty-puddings."
+  },
+  {
+   "id": "en0337",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "She stretched herself up on tiptoe, and peeped over the edge of the mushroom, and her eyes immediately met those of a large blue caterpillar, that was sitting on the top with its arms folded, quietly smoking a long hookah, and taking not the smallest notice of her or of anything else."
+  },
+  {
+   "id": "en0338",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "Ere long, not only on these banks, but on every hill and plain and in every hollow, the frost comes out of the ground like a dormant quadruped from its burrow, and seeks the sea with music, or migrates to other climes in clouds. Thaw with his gentle persuasion is more powerful than Thor with his hammer. The one melts, the other but breaks in pieces."
+  },
+  {
+   "id": "en0339",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "His collar was unfastened and his necktie undone. He opened his eyes for an instant, sighed and closed them again. One of gentlemen who had carried him upstairs held a dinged silk hat in his hand. The manager asked repeatedly did no one know who the injured man was or where had his friends gone. The door of the bar opened and an immense constable entered. A crowd which had followed him down the laneway collected outside the door, struggling to look in through the glass panels."
+  },
+  {
+   "id": "en0340",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "He went into the pantry hastily and put on his overcoat. The others, taken aback by his rude speech, could find nothing to say. Aunt Kate wrinkled her brows and made signs to the others to drop the subject. Mr D’Arcy stood swathing his neck carefully and frowning."
+  },
+  {
+   "id": "en0341",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "I was now gaining rapidly on the schooner; I could see the brass glisten on the tiller as it banged about, and still no soul appeared upon her decks. I could not choose but suppose she was deserted. If not, the men were lying drunk below, where I might batten them down, perhaps, and do what I chose with the ship."
+  },
+  {
+   "id": "en0342",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "There came a knock at the door, and the butler entered with a laden tea-tray and set it down upon a small Japanese table. There was a rattle of cups and saucers and the hissing of a fluted Georgian urn. Two globe-shaped china dishes were brought in by a page. Dorian Gray went over and poured out the tea. The two men sauntered languidly to the table and examined what was under the covers."
+  },
+  {
+   "id": "en0343",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "Catherine amused herself with dancing to and fro before the door, while I tried all the large keys in succession. I had applied the last, and found that none would do; so, repeating my desire that she would remain there, I was about to hurry home as fast as I could, when an approaching sound arrested me. It was the trot of a horse; Cathy’s dance stopped also."
+  },
+  {
+   "id": "en0344",
+   "source": "Shelley, Frankenstein",
+   "gutenberg_id": 84,
+   "text": "The first part of this deposition did not in the least interest me, but when the mark of the fingers was mentioned I remembered the murder of my brother and felt myself extremely agitated; my limbs trembled, and a mist came over my eyes, which obliged me to lean on a chair for support. The magistrate observed me with a keen eye and of course drew an unfavourable augury from my manner."
+  },
+  {
+   "id": "en0345",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "He got home pretty late that night, and when he climbed cautiously in at the window, he uncovered an ambuscade, in the person of his aunt; and when she saw the state his clothes were in her resolution to turn his Saturday holiday into captivity at hard labor became adamantine in its firmness."
+  },
+  {
+   "id": "en0346",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "That we should have risked a second boat load seems more daring than it really was. They had the advantage of numbers, of course, but we had the advantage of arms. Not one of the men ashore had a musket, and before they could get within range for pistol shooting, we flattered ourselves we should be able to give a good account of a half-dozen at least."
+  },
+  {
+   "id": "en0347",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "He stood at Miss Temple’s side; he was speaking low in her ear: I did not doubt he was making disclosures of my villainy; and I watched her eye with painful anxiety, expecting every moment to see its dark orb turn on me a glance of repugnance and contempt. I listened too; and as I happened to be seated quite at the top of the room, I caught most of what he said: its import relieved me from immediate apprehension."
+  },
+  {
+   "id": "en0348",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "There was a little one-horse town about three mile down the bend, and after dinner the duke said he had ciphered out his idea about how to run in daylight without it being dangersome for Jim; so he allowed he would go down to the town and fix that thing. The king allowed he would go, too, and see if he couldn’t strike something. We was out of coffee, so Jim said I better go along with them in the canoe and get some."
+  },
+  {
+   "id": "en0349",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "When his servant entered, he looked at him steadfastly and wondered if he had thought of peering behind the screen. The man was quite impassive and waited for his orders. Dorian lit a cigarette and walked over to the glass and glanced into it. He could see the reflection of Victor’s face perfectly. It was like a placid mask of servility. There was nothing to be afraid of, there. Yet he thought it best to be on his guard."
+  },
+  {
+   "id": "en0350",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "I had the road all to myself, and I fairly flew—leastways, I had it all to myself except the solid dark, and the now-and-then glares, and the buzzing of the rain, and the thrashing of the wind, and the splitting of the thunder; and sure as you are born I did clip it along!"
+  },
+  {
+   "id": "en0351",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "And thus, though surrounded by circle upon circle of consternations and affrights, did these inscrutable creatures at the centre freely and fearlessly indulge in all peaceful concernments; yea, serenely revelled in dalliance and delight. But even so, amid the tornadoed Atlantic of my being, do I myself still for ever centrally disport in mute calm; and while ponderous planets of unwaning woe revolve round me, deep down and deep inland there I still bathe me in eternal mildness of joy."
+  },
+  {
+   "id": "en0352",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "She entered the room with an air more than usually ungracious, made no other reply to Elizabeth’s salutation than a slight inclination of the head, and sat down without saying a word. Elizabeth had mentioned her name to her mother on her Ladyship’s entrance, though no request of introduction had been made."
+  },
+  {
+   "id": "en0353",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "The old man seemed livelier than usual. Princess Mary was the same as always, but beneath her sympathy for her brother, Pierre noticed her satisfaction that the engagement had been broken off. Looking at them Pierre realized what contempt and animosity they all felt for the Rostóvs, and that it was impossible in their presence even to mention the name of her who could give up Prince Andrew for anyone else."
+  },
+  {
+   "id": "en0354",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "The telegram which we eventually received came late one night just as I was thinking of turning in and Holmes was settling down to one of those all-night chemical researches which he frequently indulged in, when I would leave him stooping over a retort and a test-tube at night and find him in the same position when I came down to breakfast in the morning. He opened the yellow envelope, and then, glancing at the message, threw it across to me."
+  },
+  {
+   "id": "en0355",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "Natásha did not understand what he was saying any more than he did himself, but she felt that his incomprehensible words had an improper intention. She did not know what to say and turned away as if she had not heard his remark. But as soon as she had turned away she felt that he was there, behind, so close behind her."
+  },
+  {
+   "id": "en0356",
+   "source": "Thoreau, Walden",
+   "gutenberg_id": 205,
+   "text": "Farther down the hill, on the left, on the old road in the woods, are marks of some homestead of the Stratton family; whose orchard once covered all the slope of Brister’s Hill, but was long since killed out by pitch pines, excepting a few stumps, whose old roots furnish still the wild stocks of many a thrifty village tree."
+  },
+  {
+   "id": "en0357",
+   "source": "Wilde, The Picture of Dorian Gray",
+   "gutenberg_id": 174,
+   "text": "He sighed and touched the bell. The portrait must be hidden away at all costs. He could not run such a risk of discovery again. It had been mad of him to have allowed the thing to remain, even for an hour, in a room to which any of his friends had access."
+  },
+  {
+   "id": "en0358",
+   "source": "Bronte, Wuthering Heights",
+   "gutenberg_id": 768,
+   "text": "He took his knife and fork, and was going to commence eating, when the inclination appeared to become suddenly extinct. He laid them on the table, looked eagerly towards the window, then rose and went out. We saw him walking to and fro in the garden while we concluded our meal, and Earnshaw said he’d go and ask why he would not dine: he thought we had grieved him some way."
+  },
+  {
+   "id": "en0359",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "The carts and carriages crowded close upon one another, making little way for those swifter and more impatient vehicles that darted forward every now and then when an opportunity showed itself of doing so, sending the people scattering against the fences and gates of the villas."
+  },
+  {
+   "id": "en0360",
+   "source": "Joyce, Dubliners",
+   "gutenberg_id": 2814,
+   "text": "A powerful-looking figure, the upper part of which was draped with a white surplice, was observed to be struggling up into the pulpit. Simultaneously the congregation unsettled, produced handkerchiefs and knelt upon them with care. Mr Kernan followed the general example. The priest’s figure now stood upright in the pulpit, two-thirds of its bulk, crowned by a massive red face, appearing above the balustrade."
+  },
+  {
+   "id": "en0361",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "He said he would like to see the widow get me. He said he would watch out, and if they tried to come any such game on him he knowed of a place six or seven mile off to stow me in, where they might hunt till they dropped and they couldn’t find me. That made me pretty uneasy again, but only for a minute; I reckoned I wouldn’t stay on hand till he got that chance."
+  },
+  {
+   "id": "en0362",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "The communication excited many professions of concern; and enough was said of wishing them to stay at least till the following day to work on Jane; and till the morrow their going was deferred. Miss Bingley was then sorry that she had proposed the delay; for her jealousy and dislike of one sister much exceeded her affection for the other."
+  },
+  {
+   "id": "en0363",
+   "source": "Wells, The Time Machine",
+   "gutenberg_id": 35,
+   "text": "At that I understood. At the risk of disappointing Richardson I stayed on, waiting for the Time Traveller; waiting for the second, perhaps still stranger story, and the specimens and photographs he would bring with him. But I am beginning now to fear that I must wait a lifetime. The Time Traveller vanished three years ago. And, as everybody knows now, he has never returned."
+  },
+  {
+   "id": "en0364",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "In the second place, the ebb was now making--a strong rippling current running westward through the basin, and then south’ard and seaward down the straits by which we had entered in the morning. Even the ripples were a danger to our overloaded craft, but the worst of it was that we were swept out of our true course and away from our proper landing-place behind the point. If we let the current have its way we should come ashore beside the gigs, where the pirates might appear at any moment."
+  },
+  {
+   "id": "en0365",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "Sure enough there was no hurry. In a more open part of the plateau, we could see the three survivors still running in the same direction as they had started, right for Mizzenmast Hill. We were already between them and the boats; and so we four sat down to breathe, while Long John, mopping his face, came slowly up with us."
+  },
+  {
+   "id": "en0366",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "By Byfleet station we emerged from the pine trees, and found the country calm and peaceful under the morning sunlight. We were far beyond the range of the Heat-Ray there, and had it not been for the silent desertion of some of the houses, the stirring movement of packing in others, and the knot of soldiers standing on the bridge over the railway and staring down the line towards Woking, the day would have seemed very like any other Sunday."
+  },
+  {
+   "id": "en0367",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "The chanting of the service ceased, and the voice of the priest was heard respectfully congratulating the dying man on having received the sacrament. The dying man lay as lifeless and immovable as before. Around him everyone began to stir: steps were audible and whispers, among which Anna Mikháylovna’s was the most distinct."
+  },
+  {
+   "id": "en0368",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "Just then she heard something splashing about in the pool a little way off, and she swam nearer to make out what it was: at first she thought it must be a walrus or hippopotamus, but then she remembered how small she was now, and she soon made out that it was only a mouse that had slipped in like herself."
+  },
+  {
+   "id": "en0369",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "At last they got out the coffin and begun to unscrew the lid, and then such another crowding and shouldering and shoving as there was, to scrouge in and get a sight, you never see; and in the dark, that way, it was awful. Hines he hurt my wrist dreadful pulling and tugging so, and I reckon he clean forgot I was in the world, he was so excited and panting."
+  },
+  {
+   "id": "en0370",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "Elizabeth had been a good deal disappointed in not finding a letter from Jane on their first arrival at Lambton; and this disappointment had been renewed on each of the mornings that had now been spent there; but on the third her repining was over, and her sister justified, by the receipt of two letters from her at once, on one of which was marked that it had been mis-sent elsewhere. Elizabeth was not surprised at it, as Jane had written the direction remarkably ill."
+  },
+  {
+   "id": "en0371",
+   "source": "Stevenson, Treasure Island",
+   "gutenberg_id": 120,
+   "text": "Even at that exciting moment it carried me back to the old Admiral Benbow in a second, and I seemed to hear the voice of the captain piping in the chorus. But soon the anchor was short up; soon it was hanging dripping at the bows; soon the sails began to draw, and the land and shipping to flit by on either side; and before I could lie down to snatch an hour of slumber the HISPANIOLA had begun her voyage to the Isle of Treasure."
+  },
+  {
+   "id": "en0372",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "There were three operating tables in the tent. Two were occupied, and on the third they placed Prince Andrew. For a little while he was left alone and involuntarily witnessed what was taking place on the other two tables. On the nearest one sat a Tartar, probably a Cossack, judging by the uniform thrown down beside him. Four soldiers were holding him, and a spectacled doctor was cutting into his muscular brown back."
+  },
+  {
+   "id": "en0373",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "What nervous folly made me start, and awfully connect it with the footstep of my dead sister, matters not. It was past in a moment, and I listened again, and heard the footstep stumble in coming on. Remembering then, that the staircase-lights were blown out, I took up my reading-lamp and went out to the stair-head. Whoever was below had stopped on seeing my lamp, for all was quiet."
+  },
+  {
+   "id": "en0374",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "From that, in answer to my questions, he came round to his grandiose plans again. He grew enthusiastic. He talked so eloquently of the possibility of capturing a fighting-machine that I more than half believed in him again. But now that I was beginning to understand something of his quality, I could divine the stress he laid on doing nothing precipitately. And I noted that now there was no question that he personally was to capture and fight the great machine."
+  },
+  {
+   "id": "en0375",
+   "source": "Dickens, Great Expectations",
+   "gutenberg_id": 1400,
+   "text": "Joe had got his coat and waistcoat and cravat off, and his leather apron on, and passed into the forge. One of the soldiers opened its wooden windows, another lighted the fire, another turned to at the bellows, the rest stood round the blaze, which was soon roaring. Then Joe began to hammer and clink, hammer and clink, and we all looked on."
+  },
+  {
+   "id": "en0376",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "And Holmes’ fears came to be realised, for from that day to this no word has ever been heard either of the beautiful woman, the sinister German, or the morose Englishman. Early that morning a peasant had met a cart containing several people and some very bulky boxes driving rapidly in the direction of Reading, but there all traces of the fugitives disappeared, and even Holmes’ ingenuity failed ever to discover the least clue as to their whereabouts."
+  },
+  {
+   "id": "en0377",
+   "source": "Bronte, Jane Eyre",
+   "gutenberg_id": 1260,
+   "text": "I turned, and Miss Ingram darted forwards from her sofa: the others, too, looked up from their several occupations; for at the same time a crunching of wheels and a splashing tramp of horse-hoofs became audible on the wet gravel. A post-chaise was approaching."
+  },
+  {
+   "id": "en0378",
+   "source": "Dickens, A Tale of Two Cities",
+   "gutenberg_id": 98,
+   "text": "A beautiful landscape, with the corn bright in it, but not abundant. Patches of poor rye where corn should have been, patches of poor peas and beans, patches of most coarse vegetable substitutes for wheat. On inanimate nature, as on the men and women who cultivated it, a prevalent tendency towards an appearance of vegetating unwillingly--a dejected disposition to give up, and wither away."
+  },
+  {
+   "id": "en0379",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "My experience of camp life in Afghanistan had at least had the effect of making me a prompt and ready traveller. My wants were few and simple, so that in less than the time stated I was in a cab with my valise, rattling away to Paddington Station. Sherlock Holmes was pacing up and down the platform, his tall, gaunt figure made even gaunter and taller by his long grey travelling-cloak and close-fitting cloth cap."
+  },
+  {
+   "id": "en0380",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "I had never seen my friend’s face so grim or his brow so dark as it was when we turned from the scene of this investigation. We had walked several times up and down the lawn, neither Miss Stoner nor myself liking to break in upon his thoughts before he roused himself from his reverie."
+  },
+  {
+   "id": "en0381",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "Once, even, it touched the heel of my boot. I was on the verge of screaming; I bit my hand. For a time the tentacle was silent. I could have fancied it had been withdrawn. Presently, with an abrupt click, it gripped something—I thought it had me!—and seemed to go out of the cellar again. For a minute I was not sure. Apparently it had taken a lump of coal to examine."
+  },
+  {
+   "id": "en0382",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "This was not what Mr. Bulstrode said to any man for the sake of deceiving him: it was what he said to himself—it was as genuinely his mode of explaining events as any theory of yours may be, if you happen to disagree with him. For the egoism which enters into our theories does not affect their sincerity; rather, the more our egoism is satisfied, the more robust is our belief."
+  },
+  {
+   "id": "en0383",
+   "source": "Twain, The Adventures of Tom Sawyer",
+   "gutenberg_id": 74,
+   "text": "But it transpired that this was a request which Joe had just been going to make of Tom, and had come to hunt him up for that purpose. His mother had whipped him for drinking some cream which he had never tasted and knew nothing about; it was plain that she was tired of him and wished him to go; if she felt that way, there was nothing for him to do but succumb; he hoped she would be happy, and never regret having driven her poor boy out into the unfeeling world to suffer and die."
+  },
+  {
+   "id": "en0384",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "At Stephen’s suggestion, at Bloom’s instigation both, first Stephen, then Bloom, in penumbra urinated, their sides contiguous, their organs of micturition reciprocally rendered invisible by manual circumposition, their gazes, first Bloom’s, then Stephen’s, elevated to the projected luminous and semiluminous shadow."
+  },
+  {
+   "id": "en0385",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "Sherlock Holmes looked deeply chagrined. He drew a sovereign from his pocket and threw it down upon the slab, turning away with the air of a man whose disgust is too deep for words. A few yards off he stopped under a lamp-post and laughed in the hearty, noiseless fashion which was peculiar to him."
+  },
+  {
+   "id": "en0386",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "At this the whole pack rose up into the air, and came flying down upon her: she gave a little scream, half of fright and half of anger, and tried to beat them off, and found herself lying on the bank, with her head in the lap of her sister, who was gently brushing away some dead leaves that had fluttered down from the trees upon her face."
+  },
+  {
+   "id": "en0387",
+   "source": "Melville, Moby Dick",
+   "gutenberg_id": 2701,
+   "text": "But on the occasion in question, those dents looked deeper, even as his nervous step that morning left a deeper mark. And, so full of his thought was Ahab, that at every uniform turn that he made, now at the main-mast and now at the binnacle, you could almost see that thought turn in him as he turned, and pace in him as he paced; so completely possessing him, indeed, that it all but seemed the inward mould of every outer movement."
+  },
+  {
+   "id": "en0388",
+   "source": "Kafka, Metamorphosis (Wyllie tr.)",
+   "gutenberg_id": 5200,
+   "text": "He spent the whole night there. Some of the time he passed in a light sleep, although he frequently woke from it in alarm because of his hunger, and some of the time was spent in worries and vague hopes which, however, always led to the same conclusion: for the time being he must remain calm, he must show patience and the greatest consideration so that his family could bear the unpleasantness that he, in his present condition, was forced to impose on them."
+  },
+  {
+   "id": "en0389",
+   "source": "Austen, Pride and Prejudice",
+   "gutenberg_id": 1342,
+   "text": "How Wickham and Lydia were to be supported in tolerable independence she could not imagine. But how little of permanent happiness could belong to a couple who were only brought together because their passions were stronger than their virtue, she could easily conjecture."
+  },
+  {
+   "id": "en0390",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "They began to meet more people. For the most part these were staring before them, murmuring indistinct questions, jaded, haggard, unclean. One man in evening dress passed them on foot, his eyes on the ground. They heard his voice, and, looking back at him, saw one hand clutched in his hair and the other beating invisible things. His paroxysm of rage over, he went on his way without once looking back."
+  },
+  {
+   "id": "en0391",
+   "source": "Twain, Huckleberry Finn",
+   "gutenberg_id": 76,
+   "text": "The person coming was Mary Jane. She went to the coffin, very soft, and kneeled down and looked in; then she put up her handkerchief, and I see she begun to cry, though I couldn’t hear her, and her back was to me. I slid out, and as I passed the dining-room I thought I’d make sure them watchers hadn’t seen me; so I looked through the crack, and everything was all right. They hadn’t stirred."
+  },
+  {
+   "id": "en0392",
+   "source": "Wells, The Time Machine",
+   "gutenberg_id": 35,
+   "text": "I consented, hardly comprehending then the full import of his words, and he nodded and went on down the corridor. I heard the door of the laboratory slam, seated myself in a chair, and took up a daily paper. What was he going to do before lunch-time? Then suddenly I was reminded by an advertisement that I had promised to meet Richardson, the publisher, at two. I looked at my watch, and saw that I could barely save that engagement. I got up and went down the passage to tell the Time Traveller."
+  },
+  {
+   "id": "en0393",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "The door led right into a large kitchen, which was full of smoke from one end to the other: the Duchess was sitting on a three-legged stool in the middle, nursing a baby; the cook was leaning over the fire, stirring a large cauldron which seemed to be full of soup."
+  },
+  {
+   "id": "en0394",
+   "source": "Doyle, The Adventures of Sherlock Holmes",
+   "gutenberg_id": 1661,
+   "text": "It was an old rickety door and gave at once before our united strength. Together we rushed into the room. It was empty. There was no furniture save a little pallet bed, a small table, and a basketful of linen. The skylight above was open, and the prisoner gone."
+  },
+  {
+   "id": "en0395",
+   "source": "Tolstoy, War and Peace (Maude tr.)",
+   "gutenberg_id": 2600,
+   "text": "On moving to the drawing room he handed the letter to Princess Mary and, spreading out before him the plan of the new building and fixing his eyes upon it, told her to read the letter aloud. When she had done so Princess Mary looked inquiringly at her father. He was examining the plan, evidently engrossed in his own ideas."
+  },
+  {
+   "id": "en0396",
+   "source": "Carroll, Alice's Adventures in Wonderland",
+   "gutenberg_id": 11,
+   "text": "The great question certainly was, what? Alice looked all round her at the flowers and the blades of grass, but she did not see anything that looked like the right thing to eat or drink under the circumstances. There was a large mushroom growing near her, about the same height as herself; and when she had looked under it, and on both sides of it, and behind it, it occurred to her that she might as well look and see what was on the top of it."
+  },
+  {
+   "id": "en0397",
+   "source": "Wells, The War of the Worlds",
+   "gutenberg_id": 36,
+   "text": "For some time I stood tottering on the mound regardless of my safety. Within that noisome den from which I had emerged I had thought with a narrow intensity only of our immediate security. I had not realised what had been happening to the world, had not anticipated this startling vision of unfamiliar things. I had expected to see Sheen in ruins—I found about me the landscape, weird and lurid, of another planet."
+  },
+  {
+   "id": "en0398",
+   "source": "Eliot, Middlemarch",
+   "gutenberg_id": 145,
+   "text": "The medical aversion to Lydgate was hardly disguised now. Neither Dr. Sprague nor Dr. Minchin said that he disliked Lydgate’s knowledge, or his disposition to improve treatment: what they disliked was his arrogance, which nobody felt to be altogether deniable. They implied that he was insolent, pretentious, and given to that reckless innovation for the sake of noise and show which was the essence of the charlatan."
+  },
+  {
+   "id": "en0399",
+   "source": "Joyce, Ulysses",
+   "gutenberg_id": 4300,
+   "text": "Bald Pat who is bothered mitred the napkins. Pat is a waiter hard of his hearing. Pat is a waiter who waits while you wait. Hee hee hee hee. He waits while you wait. Hee hee. A waiter is he. Hee hee hee hee. He waits while you wait. While you wait if you wait he will wait while you wait. Hee hee hee hee. Hoh. Wait while you wait."
+  }
+ ],
+ "sha256": "5c0ac46f03be76388e0841ed07b555b8caace7112a022f2e1e408e7092d5ecc8"
+}

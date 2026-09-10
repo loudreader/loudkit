@@ -9,7 +9,7 @@ import OSLog
 enum Log {
     private static let logger = Logger(subsystem: "dev.loudkit.text", category: "respell")
 
-    static func error(_ message: String, category: String = "respell") {
-        logger.error("[\(category, privacy: .public)] \(message, privacy: .public)")
+    static func error(_ message: String) {
+        logger.error("\(message, privacy: .public)")
     }
 }

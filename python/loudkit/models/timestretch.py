@@ -1,40 +1,6 @@
-"""Playing faster without talking higher — WSOLA, from first principles.
+"""Playing faster without talking higher, WSOLA, from first principles.
 
-"Speed" in a reading app means what it means on a video player: 1.5x is the same
-voice, sooner. Resampling gives you a chipmunk; what is wanted is *time*
-stretched while *pitch* is left alone.
-
-**Why WSOLA and not a phase vocoder.** The phase vocoder is the other standard
-answer and is better on sustained, harmonic material — held notes, chords. Speech
-is the opposite kind of signal: it is mostly transients (plosives, the attack of
-every syllable) sitting on a pitch that moves continuously. A phase vocoder
-resynthesises from magnitudes and unwrapped phases, and its characteristic
-failure on that material is transient smearing — a /t/ arriving as a soft thud,
-"phasiness" on voiced segments — which is precisely the part of speech
-intelligibility rests on. WSOLA never leaves the time domain: it copies real
-waveform segments and only chooses *where* to copy them from, so a plosive is
-either included whole or not at all. It cannot smear what it never transforms.
-
-**The algorithm.** Cut the input into overlapping ~25 ms frames. Write them back
-out at a hop that is fixed by the output rate (50 % overlap), and read them in at
-a hop scaled by ``speed``. The read position is not used as computed: it is moved
-by up to ±10 ms to whichever offset best matches what the previously written
-frame *would* naturally have been followed by. That search is the "waveform
-similarity" in the name, and it is the whole trick — it keeps successive frames
-in phase with each other, so the overlap-add reinforces rather than cancels. A
-plain OLA without the search is the same code with the search window set to zero,
-and it sounds like it: periodic warble at the frame rate.
-
-Everything here is deterministic — no RNG, no adaptivity, no libraries. The
-constants are derived from the sample rate rather than written as sample counts,
-so the same code is correct at 16 kHz or 48 kHz, and the five implementations
-derive them the same way.
-
-**What it costs.** At 1.25x this is hard to tell from a native reading. At 2x, or
-at 0.5x, it is audibly processed: the alignment search cannot always find a
-match, and the artefact is a faint roughness or a doubled consonant. That is the
-honest range, and the bounds below are set where the result stops being worth
-offering rather than where the arithmetic stops working.
+See ``docs/design/models-notes.md``.
 """
 
 from __future__ import annotations
@@ -52,8 +18,8 @@ MIN_SPEED = 0.5
 MAX_SPEED = 2.0
 """The range worth offering, not the range that runs.
 
-Outside it the alignment search stops finding matches often enough — the
-required shift exceeds the ±10 ms it may look over — and the output is
+Outside it the alignment search stops finding matches often enough, the
+required shift exceeds the ±10 ms it may look over, and the output is
 recognisably processed rather than merely faster. Refused rather than clamped: a
 caller who asked for 3x and silently got 2x has a bug that only a stopwatch
 finds.
@@ -64,13 +30,13 @@ _FRAME_MS = 25.0
 pitch this is used on (~80 Hz), short enough that a frame is inside one phone."""
 
 _SEARCH_MS = 10.0
-"""How far the read position may move to find a better join — a bit under one
+"""How far the read position may move to find a better join, a bit under one
 pitch period at the low end of the voiced range, which is what the search is
 looking for."""
 
 _HANN_COLA_HOP = 2
 """Frames overlap by half. A periodic Hann window at hop = frame/2 sums to
-exactly one, so the overlap-add needs no normalisation of its own — the
+exactly one, so the overlap-add needs no normalisation of its own, the
 denominator below only ever corrects the ends and the places the alignment
 search moved a frame off the grid."""
 
@@ -78,9 +44,13 @@ search moved a frame off the grid."""
 def validate_speed(speed: float) -> float:
     """``speed`` if it is usable, or a ``ValueError`` that says the range.
 
-    Kept here rather than in the engine so that every entry point — three engine
-    methods, the HTTP server, the CLI, MCP — refuses the same values with the
-    same words, and a new entry point cannot forget to.
+    Kept beside the stretch rather than in the engine because
+    :func:`time_stretch` has to refuse the same values whoever calls it, and
+    the engine's two synthesis doors go through it. The transports refuse
+    earlier, at their own door, so a bad speed comes back as that transport's
+    own bad-request rather than as a ``ValueError`` raised inside the engine;
+    they read ``MIN_SPEED`` and ``MAX_SPEED`` from here so the range is
+    written once.
     """
     if not math.isfinite(speed):
         raise ValueError(f"speed must be a finite number, not {speed!r}")
@@ -107,17 +77,14 @@ def stretched_length(n_samples: int, speed: float) -> int:
 def time_stretch(audio: Waveform, *, sample_rate: int, speed: float) -> Waveform:
     """``audio`` played at ``speed``, same pitch.
 
-    Args:
-        audio: mono samples.
-        sample_rate: theirs. The frame, hop and search window are derived from
-            it, so this is not decorative.
-        speed: >1 shortens, <1 lengthens. ``1.0`` returns the input unchanged —
-            the *same array*, not a copy that happens to be equal, because the
-            engine's default must be a bypass and "bit-identical" is easier to
-            trust when there is no arithmetic to be identical about.
+    At speed 1.0 the argument itself comes back, where every other path returns
+    a new array. That asymmetry is the contract, not an oversight: the default
+    render must not depend on this DSP path being lossless, so it must not
+    enter it at all, and identity is what proves it did not. Pinned by
+    ``tests/test_timestretch.py``. Callers who intend to edit the result in
+    place copy it.
 
-    Returns:
-        ``floor(len(audio) / speed + 0.5)`` samples.
+    See ``docs/design/models-notes.md``.
     """
     validate_speed(speed)
     if speed == 1.0:
@@ -128,16 +95,8 @@ def time_stretch(audio: Waveform, *, sample_rate: int, speed: float) -> Waveform
     frame = int(math.floor(sample_rate * _FRAME_MS / 1000.0 + 0.5))
     hop = frame // _HANN_COLA_HOP
     if n <= frame or out_len <= 0 or hop <= 0:
-        # Nothing to overlap-add: a fragment shorter than one frame has no
-        # second frame to align against. Cut or zero-padded to the right length
-        # instead, which is wrong in the way silence is wrong rather than in the
-        # way a pitch shift is. At 24 kHz a frame is 600 samples — a fortieth of
-        # a second, below anything the engine renders.
-        #
-        # A zero hop joins that branch rather than looping forever. It takes a
-        # sample rate under 60 Hz to reach, so it is not a behaviour difference
-        # in any case a caller can hit — it turns a hang, which no traceback
-        # explains, into the short-fragment path.
+        # Nothing to overlap-add: a fragment shorter than one frame has no second frame
+        # to align against.
         out = np.zeros(max(out_len, 0), dtype=np.float32)
         out[: min(out_len, n)] = audio[: min(out_len, n)]
         return out
@@ -146,7 +105,7 @@ def time_stretch(audio: Waveform, *, sample_rate: int, speed: float) -> Waveform
     # Periodic Hann, i.e. 2*pi*i/frame and not /(frame-1). The periodic form is
     # the one that sums to exactly one at 50 % overlap; the symmetric form is off
     # by a hair at every frame boundary, which reads as a low-level buzz at the
-    # frame rate — 40 Hz here, right in the range a listener notices.
+    # frame rate, 40 Hz here, right in the range a listener notices.
     window = 0.5 - 0.5 * np.cos(2.0 * math.pi * np.arange(frame, dtype=np.float64) / frame)
 
     x = audio.astype(np.float64, copy=False)
@@ -193,17 +152,9 @@ def _best_match(
     search: int,
     frame: int,
 ) -> int:
-    """The offset within ±``search`` of ``ideal`` whose frame best continues
-    ``target``.
+    """The offset within ±``search`` of ``ideal`` whose frame best continues ``target``.
 
-    Scored by cross-correlation normalised by the *candidate's* energy only —
-    the target's is the same for every candidate and cancels out of the ranking.
-    Without that normalisation the search prefers whichever candidate is loudest
-    rather than whichever fits, which at a syllable onset is exactly the wrong
-    one.
-
-    Ties go to the lower offset, so the choice does not depend on iteration
-    order and the five ports agree.
+    See ``docs/design/models-notes.md``.
     """
     n = int(x.shape[0])
     lo = max(0, ideal - search)

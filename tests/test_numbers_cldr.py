@@ -74,6 +74,18 @@ def test_every_mapped_case_agrees(fx: dict[str, Any]) -> None:
     )
 
 
+def test_no_language_lost_its_corpus(fx: dict[str, Any]) -> None:
+    """The global floor cannot see one language leaving.
+
+    `checked > 900` has 300+ rows of headroom, so emptying `cases.fr` and
+    `cases.sv` — 90 rows — left it green here and in all four ports, whose
+    floors are the same global shape. A regeneration that drops a language, or
+    a hand edit, silently stops checking that grammar everywhere.
+    """
+    empty = sorted(lang for lang, rows in fx["cases"].items() if not rows)
+    assert not empty, f"languages present in the corpus with no rows: {empty}"
+
+
 def test_pending_languages_are_actually_pending(fx: dict[str, Any]) -> None:
     # The day a Nordic grammar lands, this fails, and the fix is to move the
     # language out of PENDING_LANGUAGES — activating its 242 waiting cases.

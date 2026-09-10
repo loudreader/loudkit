@@ -1,19 +1,19 @@
-//! The algorithm fingerprint — one string that says whether two engines agree.
+//! The algorithm fingerprint: one string that says whether two engines agree.
 //!
 //! Every other cross-language check in this project compares a behaviour
 //! somebody thought to compare: the funnel because there are 30 fixture cases
-//! for it, the splitter because there are 18. The fingerprint compares the
+//! for it, the splitter because there are 48. The fingerprint compares the
 //! *whole* algorithm configuration in one comparison, so a field nobody wrote a
 //! test for still cannot drift silently.
 //!
 //! The failure mode is concrete: an `euler_grid` parsed by one port and
 //! ignored by another; a `silence_token_ids` that accepts a string and
 //! iterates its characters; a `chunking.prefix_tokens` read from the manifest
-//! by some ports and guessed by others — each invisible to behaviour
+//! by some ports and guessed by others, each invisible to behaviour
 //! comparison alone. A fingerprint check finds all of them at once, and finds the next one
 //! for free.
 //!
-//! The canonical form is specified rather than incidental — see
+//! The canonical form is specified rather than incidental: see
 //! `AlgorithmConfig.canonical_form` in `loudkit/config.py`. Three rules make it
 //! portable across languages:
 //!
@@ -38,8 +38,15 @@ pub const FINGERPRINT_SCHEMA: u32 = 1;
 /// on anything integral.
 ///
 /// Rust's `{}` for `f64` already prints the shortest round-tripping form, but
-/// renders `25.0` as `25` — and Python renders it `25.0`. That one character is
+/// renders `25.0` as `25` where Python renders it `25.0`. That one character is
 /// the difference between a matching fingerprint and a mysterious one.
+///
+/// Two ranges are not Python's yet: `{}` never uses exponent form, so a
+/// magnitude below 1e-4 prints as `0.00005` where `repr` gives `5e-05`, and one
+/// at or above 1e16 prints in full where `repr` gives `1e+16`. Both are out of
+/// reach of every value any shipped manifest carries; the canonical form moves
+/// for them, so closing it is one commit across all five ports rather than a
+/// change here.
 pub(crate) fn repr_float(value: f64) -> String {
     if value.is_finite() && value == value.trunc() && value.abs() < 1e16 {
         format!("{value:.1}")
@@ -49,6 +56,12 @@ pub(crate) fn repr_float(value: f64) -> String {
 }
 
 /// A JSON string literal, escaped the way `json.dumps` escapes.
+///
+/// One case is not Python's yet, for the same reason as the two ranges on
+/// [`repr_float`]: backspace and form feed go out as `\u0008` and `\u000c`
+/// where `json.dumps` writes the short `\b` and `\f`. No hashed string carries
+/// either character, so the canonical form is unaffected today; closing it
+/// moves that form and is one commit across all five ports.
 fn json_str(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
@@ -59,8 +72,24 @@ fn json_str(s: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\t' => out.push_str("\\t"),
             '\r' => out.push_str("\\r"),
-            c if (c as u32) < 0x20 => {
-                let _ = write!(out, "\\u{:04x}", c as u32);
+            // Python's `json.dumps` defaults to `ensure_ascii=True`, so every
+            // non-ASCII character in the canonical form is a \uXXXX escape and
+            // an astral one is a surrogate pair. A raw UTF-8 spelling of the
+            // same string hashes to something other than the reference's
+            // digest.
+            c if (c as u32) < 0x20 || (c as u32) >= 0x7f => {
+                let v = c as u32;
+                if v > 0xffff {
+                    let v = v - 0x10000;
+                    let _ = write!(
+                        out,
+                        "\\u{:04x}\\u{:04x}",
+                        0xd800 + (v >> 10),
+                        0xdc00 + (v & 0x3ff)
+                    );
+                } else {
+                    let _ = write!(out, "\\u{v:04x}");
+                }
             }
             c => out.push(c),
         }
@@ -90,10 +119,24 @@ fn json_list<T: ToString>(items: &[T]) -> String {
 #[must_use]
 pub fn canonical_form(cfg: &EngineConfig) -> String {
     let split_on: Vec<String> = cfg.chunking.split_on.iter().map(|s| json_str(s)).collect();
+    // Keys sorted, as everywhere in this form: "abbreviations" before
+    // "cap_resplit" before "enabled", and "mid_sentence_period" between
+    // "max_tokens" and "prefix_tokens". Five canonical forms are hand-written and a new field's
+    // position in that order is part of the contract.
+    let abbreviations: Vec<String> = cfg
+        .chunking
+        .abbreviations
+        .iter()
+        .map(|s| json_str(s))
+        .collect();
     let chunking = format!(
-        "{{\"enabled\":{},\"max_tokens\":{},\"prefix_tokens\":{},\"split_on\":[{}]}}",
+        "{{\"abbreviations\":[{}],\"cap_resplit\":{},\"enabled\":{},\"max_tokens\":{},\
+         \"mid_sentence_period\":{},\"prefix_tokens\":{},\"split_on\":[{}]}}",
+        abbreviations.join(","),
+        json_str(&cfg.chunking.cap_resplit),
         cfg.chunking.enabled,
         cfg.chunking.max_tokens,
+        json_str(&cfg.chunking.mid_sentence_period),
         cfg.chunking.prefix_tokens,
         split_on.join(",")
     );
@@ -121,12 +164,13 @@ pub fn canonical_form(cfg: &EngineConfig) -> String {
     );
 
     // Keys sorted, as everywhere in this form. The detectors remove tokens, so
-    // a port using a different threshold produces different audio — exactly the
+    // a port using a different threshold produces different audio: exactly the
     // silent drift a whole-config hash exists to catch.
     let pp = &cfg.postprocess;
     let postprocess = format!(
         "{{\"ceiling_slack_tokens\":{},\"ceiling_speech_per_text_token\":{},\
          \"desperation_band_floor\":{},\"desperation_band_ratio\":{},\
+         \"desperation_min_keep_per_text_token\":{},\
          \"desperation_min_text_tokens\":{},\"desperation_speech_per_text_token\":{},\
          \"dropout_min_tokens\":{},\
          \"echo_strong_eos_probability\":{},\"echo_strong_max_tail\":{},\
@@ -135,15 +179,19 @@ pub fn canonical_form(cfg: &EngineConfig) -> String {
          \"ended_tail_blip_max\":{},\"ended_tail_keep\":{},\
          \"ended_tail_silence_run\":{},\"ended_tail_word_max\":{},\
          \"filler_max_speech_after_run\":{},\"filler_min_eos_probability\":{},\
-         \"mode\":{},\"pacing_tolerance\":{},\
+         \"mode\":{},\"pacing_tolerance\":{},\"quiet_render_ids\":{},\
          \"repetition_max_period\":{},\"repetition_min_cycles\":{},\
-         \"repetition_min_span\":{},\"retry_max_attempts\":{},\
+         \"repetition_min_span\":{},\"repetition_resume\":{},\
+         \"repetition_silence\":{},\
+         \"retry_max_attempts\":{},\
+         \"silence_render_ids\":{},\"stall_run_tokens\":{},\
          \"trailing_filler_threshold\":{},\
          \"trailing_silence_run_tokens\":{}}}",
         pp.ceiling_slack_tokens,
         json_num_str(pp.ceiling_speech_per_text_token),
         pp.desperation_band_floor,
         json_num_str(pp.desperation_band_ratio),
+        json_num_str(pp.desperation_min_keep_per_text_token),
         pp.desperation_min_text_tokens,
         json_num_str(pp.desperation_speech_per_text_token),
         pp.dropout_min_tokens,
@@ -161,10 +209,15 @@ pub fn canonical_form(cfg: &EngineConfig) -> String {
         json_num_str(pp.filler_min_eos_probability),
         json_str(pp.mode.as_str()),
         json_num_str(pp.pacing_tolerance),
+        json_list(&pp.quiet_render_ids),
         pp.repetition_max_period,
         pp.repetition_min_cycles,
         pp.repetition_min_span,
+        json_str(pp.repetition_resume.as_str()),
+        json_str(pp.repetition_silence.as_str()),
         pp.retry_max_attempts,
+        json_list(&pp.silence_render_ids),
+        pp.stall_run_tokens,
         json_num_str(pp.trailing_filler_threshold),
         pp.trailing_silence_run_tokens,
     );
@@ -180,7 +233,7 @@ pub fn canonical_form(cfg: &EngineConfig) -> String {
     // The funnel's identity travels in the fingerprint: its code version, and the
     // digest of the grammar file this port reads. Each implementation hashes its own
     // copy, so a port whose data has drifted computes a different fingerprint and the
-    // engine refuses to start — which is how drift is caught, rather than by someone
+    // engine refuses to start, which is how drift is caught, rather than by someone
     // eventually hearing it.
     let text = format!(
         "{{\"grammar\":{},\"recipe\":{}}}",
@@ -188,8 +241,21 @@ pub fn canonical_form(cfg: &EngineConfig) -> String {
         json_str(&cfg.text.recipe)
     );
 
+    let decode = if cfg.decode_mode == "single" {
+        String::new()
+    } else {
+        format!("\"decode_mode\":{},", json_str(&cfg.decode_mode))
+    };
+    let fade = if cfg.edge_fade_seconds == 0.005 {
+        String::new()
+    } else {
+        format!(
+            "\"edge_fade_seconds\":{},",
+            json_num_str(cfg.edge_fade_seconds)
+        )
+    };
     let body = format!(
-        "{{\"chunking\":{chunking},\"euler_grid\":{euler_grid},\"euler_steps\":{},\
+        "{{\"chunking\":{chunking},{decode}{fade}\"euler_grid\":{euler_grid},\"euler_steps\":{},\
          \"guidance\":{},\"guidance_rate\":{},\"postprocess\":{postprocess},\
          \"recipe_version\":{},\"sample_rate\":{},\
          \"sampling\":{sampling},\"speech_vocab_size\":{},\"start_speech_token\":{},\
@@ -211,15 +277,11 @@ pub fn canonical_form(cfg: &EngineConfig) -> String {
 /// First 16 hex characters of SHA-256 over [`canonical_form`].
 ///
 /// Two engines whose fingerprints differ are computing different things,
-/// whatever their outputs happen to sound like — which is the whole point: the
+/// whatever their outputs happen to sound like, which is the whole point: the
 /// guidance defect this project was built around produced plausible audio on
 /// both sides of the mismatch.
 #[must_use]
 pub fn fingerprint(cfg: &EngineConfig) -> String {
     let digest = Sha256::digest(canonical_form(cfg).as_bytes());
-    digest.iter().fold(String::new(), |mut acc, byte| {
-        let _ = write!(acc, "{byte:02x}");
-        acc
-    })[..16]
-        .to_string()
+    crate::hex(&digest)[..16].to_string()
 }

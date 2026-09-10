@@ -1,50 +1,17 @@
-"""Dates, said out loud — the pass that has to run before times and numbers.
+"""Dates, said out loud, the pass that has to run before times and numbers.
 
-A written date is the one construction where every language in this kit
-disagrees with every other about something load-bearing. The day is an ordinal
-in English, German, Danish, Polish, Finnish, Norwegian and Swedish, and a
-cardinal in Dutch, Spanish and Portuguese; French and Italian use a cardinal for
-every day *except* the first. The month is nominative in most, genitive in
-Polish (``marca``, never ``marzec``) and partitive in Finnish (``maaliskuuta``).
-Spanish and Portuguese speak a preposition between every part. The year splits
-into halves in English and Norwegian, groups in hundreds in German, Dutch and
-Swedish, and is one plain cardinal in the six others.
-
-None of that is derivable, so none of it is derived: the day words are written
-out in ``numbers.json`` per language, sourced from the national authority — the
-five English irregulars, German's ``siebte``/``achte``, Danish ``ellevte`` (the
-``elvte`` form was added to Retskrivningsordbogen and then withdrawn, and the
-crowd-sourced lists still carry it), Italian ``ventotto`` (never *ventiotto*),
-Finnish's ordinal suffix repeating inside every part of a compound. ``docs``
-records which authority said what.
-
-**Why this runs first.** ``12.03.2026`` is the ordinary written date of German,
-Polish, Danish, Finnish and Norwegian, and both later passes want a piece of it:
-the clock pattern matches ``12.03`` and the digit-run pattern matches the whole
-thing. Without this pass running first, the clock pattern reads ``12.03`` as twelve
-o'clock three with the year trailing behind, or the digit-run pattern reads the
-whole thing as a single eight-digit number. Recognising dates before either
-pass runs is the only ordering that leaves nothing to argue over.
-
-**What it refuses.** A version number, an address and a score all look like a
-date to a permissive matcher, and reading one aloud as a date is worse than
-leaving it alone: ``1.2.3`` must never become *the first of February, three*.
-Every candidate is bounds-checked — the day against the month's real length, the
-month against twelve, and a four-digit year against a plausible range — and an
-all-numeric ``dd/mm`` in English is left untouched entirely, because ``3/12`` is
-March twelfth to half the English-speaking world and the third of December to
-the other half, and a confident wrong reading is unrecoverable where a literal
-one is not.
+See ``docs/design/text-funnel.md``.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from functools import cache
 from typing import Any, NamedTuple
 
 from .numbers import NumberGrammarError, cardinal
-from .numbers import _grammars as _number_grammars
+from .textconfig import grammar_languages
 
 __all__ = [
     "expand_dates",
@@ -76,6 +43,13 @@ past it."""
 _MIN_YEAR = 1000
 """A three-digit year exists but a three-digit *anything* is far more often a
 quantity, and there is no signal in the string to tell them apart."""
+
+_YEAR = "[12][0-9]{3}"
+"""What a year looks like, for the five patterns that match one.
+
+The same range as :data:`_MIN_YEAR` to :data:`_MAX_YEAR`, written as a class
+because that is what a regex can use. Restating it at each pattern is how the
+bound and the patterns come to disagree; the two are pinned equal by a test."""
 
 _DAYS_IN_MONTH = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 """February is 29 rather than 28 on purpose: this is a plausibility bound, not a
@@ -110,64 +84,44 @@ class _Dates(NamedTuple):
     ordinal_joiner: str
 
 
+@cache
 def _rules() -> dict[str, _Dates]:
-    if not _CACHE:
-        out: dict[str, _Dates] = {}
-        for lang, grammar in _number_grammars().items():
-            block = getattr(grammar, "dates", None) or _RAW.get(lang)
-            if not block:
-                continue
-            out[lang] = _Dates(
-                day_form=block.get("day_form", "cardinal"),
-                day_words={int(k): v for k, v in block.get("day_words", {}).items()},
-                day_words_oblique={
-                    int(k): v for k, v in block.get("day_words_oblique", {}).items()
-                },
-                oblique_triggers=tuple(block.get("oblique_triggers", ())),
-                day_one_word=block.get("day_one_word", ""),
-                months=tuple(block.get("months", ())),
-                day_month_infix=block.get("day_month_infix", ""),
-                month_year_infix=block.get("month_year_infix", ""),
-                day_first_prefix=block.get("day_first_prefix", ""),
-                day_first_infix=block.get("day_first_infix", ""),
-                year_rule=block.get("year_rule", "cardinal"),
-                year_units={int(k): v for k, v in block.get("year_units", {}).items()},
-                year_teens={int(k): v for k, v in block.get("year_teens", {}).items()},
-                year_tens={int(k): v for k, v in block.get("year_tens", {}).items()},
-                year_two_thousand=block.get("year_two_thousand", ""),
-                dotted_is_ambiguous=bool(block.get("dotted_is_ambiguous", False)),
-                no_dotted_dates=bool(block.get("no_dotted_dates", False)),
-                **_ordinals(_RAW_ORDINALS.get(lang, {})),
-            )
-        _CACHE.update(out)
-    return _CACHE
+    """The `dates` and `ordinals` blocks of the shared grammar file.
 
-
-_CACHE: dict[str, _Dates] = {}
-_RAW: dict[str, dict[str, Any]] = {}
-_RAW_ORDINALS: dict[str, dict[str, Any]] = {}
-
-
-def _load_raw() -> None:
-    """Read the `dates` blocks straight from the shared grammar file.
-
-    Separate from the number grammars' own loader because that one builds a
-    dataclass with a fixed field list, and adding dates to it would put a text
-    concern inside the numeral interpreter every port mirrors field for field.
+    Built here rather than folded into the number grammars because that loader
+    makes a dataclass with a fixed field list, and adding dates to it would put
+    a text concern inside the numeral interpreter every port mirrors field for
+    field. It is the same parse either way: `grammar_languages` reads the file
+    once for all three passes.
     """
-    import json
-    from pathlib import Path
-
-    path = Path(__file__).parent.parent / "models" / "data" / "numbers.json"
-    doc = json.loads(path.read_text(encoding="utf-8"))
-    for lang, entry in doc.get("languages", {}).items():
-        if "dates" in entry:
-            _RAW[lang] = entry["dates"]
-        if "ordinals" in entry:
-            _RAW_ORDINALS[lang] = entry["ordinals"]
-
-
-_load_raw()
+    out: dict[str, _Dates] = {}
+    for lang, entry in grammar_languages().items():
+        block = entry.get("dates")
+        if not block:
+            continue
+        out[lang] = _Dates(
+            day_form=block.get("day_form", "cardinal"),
+            day_words={int(k): v for k, v in block.get("day_words", {}).items()},
+            day_words_oblique={
+                int(k): v for k, v in block.get("day_words_oblique", {}).items()
+            },
+            oblique_triggers=tuple(block.get("oblique_triggers", ())),
+            day_one_word=block.get("day_one_word", ""),
+            months=tuple(block.get("months", ())),
+            day_month_infix=block.get("day_month_infix", ""),
+            month_year_infix=block.get("month_year_infix", ""),
+            day_first_prefix=block.get("day_first_prefix", ""),
+            day_first_infix=block.get("day_first_infix", ""),
+            year_rule=block.get("year_rule", "cardinal"),
+            year_units={int(k): v for k, v in block.get("year_units", {}).items()},
+            year_teens={int(k): v for k, v in block.get("year_teens", {}).items()},
+            year_tens={int(k): v for k, v in block.get("year_tens", {}).items()},
+            year_two_thousand=block.get("year_two_thousand", ""),
+            dotted_is_ambiguous=bool(block.get("dotted_is_ambiguous", False)),
+            no_dotted_dates=bool(block.get("no_dotted_dates", False)),
+            **_ordinals(entry.get("ordinals", {})),
+        )
+    return out
 
 
 def supported_languages() -> tuple[str, ...]:
@@ -193,12 +147,7 @@ def month_name(month: int, language: str) -> str:
 def ordinal_day(day: int, language: str, *, oblique: bool = False) -> str:
     """The day-of-month word, in whatever form this language's dates take.
 
-    Args:
-        day: 1–31.
-        language: one of :func:`supported_languages`.
-        oblique: German only — the ``-en`` ending that ``am``/``den`` select.
-            Ignored everywhere else, because no other language here inflects the
-            day by its frame.
+    See ``docs/design/text-funnel.md``.
     """
     rules = _rules().get(language)
     if rules is None:
@@ -220,7 +169,9 @@ def say_year(year: int, language: str) -> str:
     """A year, read the way this language reads years.
 
     English and Norwegian split it; German, Dutch and Swedish group it in
-    hundreds; the rest say one plain cardinal. Spanish is the explicit case —
+    hundreds; Danish takes the long form, hundreds joined with *og*; Polish
+    declines the last two digits. The other five say one plain cardinal.
+    Spanish is the explicit case:
     the RAE writes that a year is read as its cardinal *"y no por bloques de dos
     cifras, como sucede en inglés"*, so ``2021`` is *dos mil veintiuno* and never
     *veinte veintiuno*.
@@ -228,11 +179,13 @@ def say_year(year: int, language: str) -> str:
     rules = _rules().get(language)
     if rules is None:
         raise NumberGrammarError(f"no date grammar for {language!r}")
+    if rules.year_rule == "pl_ordinal_genitive":
+        # Dispatched here rather than from the table: it is the one reader that
+        # needs the rules object, and the table holds plain int readers.
+        return _year_pl(year, rules)
     reader = _YEAR_READERS.get(rules.year_rule)
     if reader is None:
         return cardinal(year, language)
-    if rules.year_rule == "pl_ordinal_genitive":
-        return _year_pl(year, rules)
     return reader(year)
 
 
@@ -242,7 +195,7 @@ def _year_pl(year: int, rules: _Dates) -> str:
     PWN's worked example is *tysiąc dziewięćset dziewięćdziesiątego drugiego*:
     the thousands and hundreds keep their cardinal form and the ordinal genitive
     lands on the last two digits. Where those are zero the declension moves left,
-    which is why 2000 has its own word — and why PWN rejects *dwutysięczny
+    which is why 2000 has its own word, and why PWN rejects *dwutysięczny
     pierwszy* for 2001, which takes the ordinary shape instead.
     """
     if year == 2000 and rules.year_two_thousand:
@@ -270,7 +223,7 @@ def _year_en(year: int) -> str:
         if rest == 0:
             return f"{cardinal(century, 'en')} hundred"
         if rest < 10:
-            # "nineteen oh five" — never "nineteen five", which no speaker says.
+            # "nineteen oh five", never "nineteen five", which no speaker says.
             return f"{cardinal(century, 'en')} oh {cardinal(rest, 'en')}"
         return f"{cardinal(century, 'en')} {cardinal(rest, 'en')}"
     if 2010 <= year <= 2099:
@@ -280,7 +233,7 @@ def _year_en(year: int) -> str:
 
 def _year_de(year: int) -> str:
     # 1100–1999 group in hundreds; from 2000 the thousands form is used, and
-    # the GfdS explicitly rejects `zwanzighundert…` — German did not follow the
+    # the GfdS explicitly rejects `zwanzighundert…`, German did not follow the
     # English "twenty-sixteen" shift.
     if 1100 <= year <= 1999:
         century, rest = divmod(year, 100)
@@ -338,8 +291,6 @@ _YEAR_READERS: dict[str, Callable[[int], str]] = {
     "sv_hundreds": _year_sv,
     "no_split": _year_no,
     "da_long": _year_da,
-    # Polish needs the rules object too and is dispatched beside this table.
-    "pl_ordinal_genitive": _year_en,
 }
 
 
@@ -364,22 +315,52 @@ def _spoken(day: int, month: int, year: int | None, language: str, *, oblique: b
     return " ".join(parts)
 
 
-# `12.03.2026`, `12.3.2026`, and the yearless `12.3.` that German, Danish,
-# Finnish and Norwegian write with a closing period.
-# `12.03.2026` — with the year, which is what makes it a date rather than a
-# guess. The yearless `12.3.` that German, Danish, Finnish and Norwegian also
-# write is deliberately NOT matched: its closing period is indistinguishable
-# from a sentence's, so `Die Zahl ist 3.5.` would read as *dritte Mai* — a number
-# turned into a different thing entirely, in ten of the twelve languages. There
-# is no evidence in the string to separate the two readings, and this module's
-# rule when evidence runs out is to leave the text alone. A yearless date
-# written with a month *name* still reads, because the name is the evidence.
-_DOTTED = re.compile(r"(?<![\d.,:/-])([0-3]?[0-9])\.([01]?[0-9])\.([12][0-9]{3})\b")
+# A written date is bounded by a word boundary, and not by digits alone: a run
+# that continues into a letter is an identifier, and `25/03/2026x` is no more a
+# date than `x25/03/2026` is. `\w` and not `[A-Za-z0-9]`, so the boundary is the
+# one `\b` already asserts at the end of the dotted form, in every script.
+_BOUND_BEFORE = r"(?<![\w.,:/-])"
+
+# `12.03.2026`, `12.3.2026`, and the yearless `12.3.` that German, Danish, Finnish and
+# Norwegian write with a closing period.
+_DOTTED = re.compile(rf"{_BOUND_BEFORE}([0-3]?[0-9])\.([01]?[0-9])\.({_YEAR})\b")
 # `12/03/2026`. Day-first in every language here; English is handled separately
 # because it is the one language where the field order is genuinely ambiguous.
-_SLASHED = re.compile(r"(?<![\d.,:/-])([0-3]?[0-9])/([01]?[0-9])/([12][0-9]{3})(?![\d/])")
-# ISO. Unambiguous by definition, and the Swedish norm.
-_ISO = re.compile(r"(?<![\d.,:/-])([12][0-9]{3})-([01][0-9])-([0-3][0-9])(?![\d-])")
+_SLASHED = re.compile(rf"{_BOUND_BEFORE}([0-3]?[0-9])/([01]?[0-9])/({_YEAR})(?![\w/])")
+# ISO. Unambiguous by definition, and the Swedish norm. The `T` before a clock
+# time is taken with the date: it is a field separator and not a letter, and left
+# behind it glues to the last word of the date.
+_ISO = re.compile(
+    rf"{_BOUND_BEFORE}({_YEAR})-([01][0-9])-([0-3][0-9])"
+    r"(?:(T)(?=[0-2][0-9]:[0-5][0-9])|(?![\w-]))"
+)
+
+
+def _word_before(m: re.Match[str], word: str) -> bool:
+    """Whether ``word`` is what stands immediately before the match.
+
+    Reads the string the pass is substituting over, so the neighbour is the
+    previous pass's output rather than the original text, and compares folded
+    case because a sentence may open with the article.
+    """
+    before = m.string[: m.start()].rstrip()
+    if not before:
+        return False
+    return before.rsplit(None, 1)[-1].lower().strip(",;:") == word.lower()
+
+
+def _is_oblique(oblique_words: set[str], m: re.Match[str]) -> bool:
+    """German only: `am`/`den`/`vom` before the day select the -en ending.
+
+    Reads the word before the match out of ``m.string``, which is the string
+    the pass is substituting over, so the context is the previous pass's
+    output and not the original text.
+    """
+    if not oblique_words:
+        return False
+    before = m.string[: m.start()].rstrip()
+    tail = before.rsplit(None, 1)[-1].lower().strip(",;:") if before else ""
+    return tail in oblique_words
 
 
 def expand_dates(text: str, language: str) -> str:
@@ -394,24 +375,15 @@ def expand_dates(text: str, language: str) -> str:
 
     oblique_words = {w.lower() for w in rules.oblique_triggers}
 
-    def is_oblique(at: int, whole: str) -> bool:
-        """German only: `am`/`den`/`vom` before the day select the -en ending."""
-        if not oblique_words:
-            return False
-        before = whole[:at].rstrip()
-        tail = before.rsplit(None, 1)[-1].lower().strip(",;:") if before else ""
-        return tail in oblique_words
-
-    # Each substitution pass reads the string the previous pass produced;
-    # `source` tracks that current string so oblique detection examines the
-    # right context at the right offsets.
-    source = {"s": text}
-
     def iso(m: re.Match[str]) -> str:
         year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if not _valid(day, month, year):
             return m.group(0)
-        return _spoken(day, month, year, language, oblique=is_oblique(m.start(), source["s"]))
+        said = _spoken(day, month, year, language, oblique=_is_oblique(oblique_words, m))
+        # The separator becomes the space that keeps the date and the time two
+        # spoken units. A word for it would be a per-language fact this grammar
+        # does not carry, and a plainer reading is not a wrong one.
+        return f"{said} " if m.group(4) else said
 
     def dotted(m: re.Match[str]) -> str:
         if rules.no_dotted_dates or rules.dotted_is_ambiguous:
@@ -423,7 +395,7 @@ def expand_dates(text: str, language: str) -> str:
         day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if not _valid(day, month, year):
             return m.group(0)
-        return _spoken(day, month, year, language, oblique=is_oblique(m.start(), source["s"]))
+        return _spoken(day, month, year, language, oblique=_is_oblique(oblique_words, m))
 
     def slashed(m: re.Match[str]) -> str:
         day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -431,29 +403,24 @@ def expand_dates(text: str, language: str) -> str:
             # `3/12/2026` is March twelfth to half the English-speaking world and
             # the third of December to the other half, and nothing in the string
             # says which. A listener recovers from hearing the digits; they
-            # cannot recover from a confident wrong month.
+            # cannot recover from a confident wrong month. Past this branch the
+            # day is over 12, so the order is forced whatever the dialect.
             return m.group(0)
-        if language == "en":
-            # day > 12, so the order is forced whatever the dialect.
-            pass
         if not _valid(day, month, year):
             return m.group(0)
-        return _spoken(day, month, year, language, oblique=is_oblique(m.start(), source["s"]))
+        return _spoken(day, month, year, language, oblique=_is_oblique(oblique_words, m))
 
-    # Each pass reads the string the previous pass produced: oblique detection
-    # matches offsets against the text being substituted, so a stale source
-    # would examine the wrong preceding word.
-    out = _ISO.sub(iso, source["s"])
-    source["s"] = out
-    out = _DOTTED.sub(dotted, source["s"])
-    source["s"] = out
-    out = _SLASHED.sub(slashed, source["s"])
-    source["s"] = out
+    # Each pass reads the string the previous pass produced, which is the
+    # string its own matches carry as `m.string`, so oblique detection reads
+    # the right preceding word at the right offset.
+    out = text
+    for pattern, handler in ((_ISO, iso), (_DOTTED, dotted), (_SLASHED, slashed)):
+        out = pattern.sub(handler, out)
     return _textual(out, language)
 
 
 def _textual(text: str, language: str) -> str:
-    """`12 marca 2026`, `12. März 2026`, `March 12, 2026` — a written month name
+    """`12 marca 2026`, `12. März 2026`, `March 12, 2026`, a written month name
     beside a bare day.
 
     The month name is the disambiguator: with one present there is no field
@@ -463,13 +430,6 @@ def _textual(text: str, language: str) -> str:
     names = "|".join(re.escape(n) for n in rules.months)
     oblique_words = {w.lower() for w in rules.oblique_triggers}
 
-    def is_oblique(at: int, whole: str) -> bool:
-        if not oblique_words:
-            return False
-        before = whole[:at].rstrip()
-        tail = before.rsplit(None, 1)[-1].lower().strip(",;:") if before else ""
-        return tail in oblique_words
-
     # Spanish and Portuguese speak a preposition between every part, so the
     # written form carries it too: "12 de marzo de 2026". Optional in the
     # pattern rather than in a second pattern, because a language either has the
@@ -477,7 +437,7 @@ def _textual(text: str, language: str) -> str:
     infix = rf"(?:\s+{re.escape(rules.day_month_infix)})?" if rules.day_month_infix else ""
     yinfix = rf"(?:\s+{re.escape(rules.month_year_infix)})?" if rules.month_year_infix else ""
     day_first = re.compile(
-        rf"(?<![\w])([0-3]?[0-9])\.?{infix}\s+({names})(?:{yinfix}\s+([12][0-9]{{3}}))?(?!\w)",
+        rf"(?<![\w])([0-3]?[0-9])\.?{infix}\s+({names})(?:{yinfix}\s+({_YEAR}))?(?!\w)",
         re.IGNORECASE,
     )
 
@@ -487,7 +447,7 @@ def _textual(text: str, language: str) -> str:
         year = int(m.group(3)) if m.group(3) else None
         if month is None or not _valid(day, month, year):
             return m.group(0)
-        spoken = _spoken(day, month, year, language, oblique=is_oblique(m.start(), text))
+        spoken = _spoken(day, month, year, language, oblique=_is_oblique(oblique_words, m))
         if rules.day_first_prefix or rules.day_first_infix:
             # English written day-first reads "the twelfth of March": both
             # dialects say it that way when the day comes first, so no locale
@@ -497,7 +457,12 @@ def _textual(text: str, language: str) -> str:
             if year is not None:
                 rest.append(say_year(year, language))
             joined = " ".join(rest)
-            prefix = f"{rules.day_first_prefix} " if rules.day_first_prefix else ""
+            prefix = ""
+            if rules.day_first_prefix and not _word_before(m, rules.day_first_prefix):
+                # The sentence may already carry the article: "the 3 April
+                # minutes" is a noun phrase whose determiner is written, and a
+                # second one is a stammer.
+                prefix = f"{rules.day_first_prefix} "
             infix = f" {rules.day_first_infix} " if rules.day_first_infix else " "
             return f"{prefix}{head}{infix}{joined}"
         return spoken
@@ -505,7 +470,7 @@ def _textual(text: str, language: str) -> str:
     out = day_first.sub(say_day_first, text)
 
     month_first = re.compile(
-        rf"(?<![\w])({names})\s+([0-3]?[0-9])(?:(?:st|nd|rd|th)\b)?,?(?:\s+([12][0-9]{{3}}))?(?!\w)",
+        rf"(?<![\w])({names})\s+([0-3]?[0-9])(?:(?:st|nd|rd|th)\b)?,?(?:\s+({_YEAR}))?(?!\w)",
         re.IGNORECASE,
     )
 
@@ -536,14 +501,10 @@ def _month_index(name: str, rules: _Dates) -> int | None:
 
 
 def ordinal(value: int, language: str) -> str | None:
-    """``value`` as a written-out ordinal, or ``None`` if this language has no
-    table for it.
+    """``value`` as a written-out ordinal, or ``None`` if this language has no table for
+    it.
 
-    Composed rather than enumerated past ninety-nine: the hundreds and above
-    stay cardinal and only the last two digits become an ordinal, so *101st* is
-    "one hundred and first". The irregulars a suffix rule gets wrong — fifth,
-    eighth, ninth, twelfth, twentieth — are all inside the two-digit tables and
-    are written out there.
+    See ``docs/design/text-funnel.md``.
     """
     rules = _rules().get(language)
     if rules is None or not rules.ordinal_units:
@@ -578,14 +539,7 @@ def _two_digit_ordinal(value: int, rules: _Dates) -> str | None:
 def expand_ordinals(text: str, language: str) -> str:
     """``1st`` and ``22nd`` as words.
 
-    English is the only one of the twelve that writes an ordinal as digits plus
-    a letter suffix, so for every other language this is a no-op — the suffix
-    list is empty and nothing matches. It runs before the number pass, which
-    would otherwise expand the digits and leave the suffix stuck to them:
-    *onest*, *fiveth place*, *twenty-twond*.
-
-    A value the tables cannot say is left exactly as written, suffix included,
-    rather than half-said.
+    See ``docs/design/text-funnel.md``.
     """
     rules = _rules().get(language)
     if rules is None or not rules.ordinal_suffixes:

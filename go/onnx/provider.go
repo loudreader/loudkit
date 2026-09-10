@@ -132,9 +132,8 @@ func Available() ([]string, error) {
 // and returns the concrete provider the graphs will run on.
 //
 // An explicit provider that is missing is an error. It is never quietly
-// downgraded to CPU: a run that was asked for CUDA and silently delivered CPU
-// publishes the wrong number under the right name, which is the whole defect
-// this change exists to close.
+// downgraded to CPU: a run asked for CUDA and silently delivered CPU publishes
+// the wrong number under the right name.
 func Resolve(requested string) (string, error) {
 	cfg := config.ExecutionConfig{ONNXProvider: requested}
 	if err := cfg.Validate(); err != nil {
@@ -180,8 +179,8 @@ func Resolve(requested string) (string, error) {
 // remedy names the way to get a provider this build does not have.
 //
 // In Go the answer is always the shared library. Nothing about the provider
-// set is compiled into this module — no build tag, no cgo flag, no second
-// package — so `go get` cannot change it and only the library the binding
+// set is compiled into this module, no build tag, no cgo flag, no second
+// package, so `go get` cannot change it and only the library the binding
 // loads can.
 func remedy(provider string) string {
 	switch provider {
@@ -293,8 +292,8 @@ func applyProvider(opts *onnxruntime_go.SessionOptions, provider, graph string) 
 		// directory at all.
 		//
 		// MLProgram is not a tuning knob. At the default (NeuralNetwork) the
-		// renderer shatters into hundreds of partitions -- flow_estimator 342,
-		// flow_encoder 47, vocoder 51 against 2, 1 and 25 -- and it changes the
+		// renderer shatters into hundreds of partitions (flow_estimator 342,
+		// flow_encoder 47, vocoder 51 against 2, 1 and 25) and it changes the
 		// numbers: a NeuralNetwork vocoder sums 217.70 where CPU sums 211.15,
 		// while MLProgram sums 211.149. The fast setting is the faithful one.
 		return opts.AppendExecutionProviderCoreMLV2(map[string]string{

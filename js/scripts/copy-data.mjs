@@ -1,12 +1,19 @@
 /**
  * Copy the shared data files from the Python source tree into data/.
  *
- * data/ is gitignored — the single source of truth for both files is
+ * data/ is gitignored: the single source of truth for every file here is
  * python/loudkit/models/data/ at the repository root, and this binding takes a
- * copy at build time so `npm pack` can ship it. Both copies are required:
+ * copy at build time so `npm pack` can ship it. All three are required:
  * numbers.ts imports data/numbers.json at compile time, so without this step
- * `tsc` fails on a fresh clone; pl_en_respell.json is loaded lazily and its
- * absence would silently degrade Polish respelling instead.
+ * `tsc` fails on a fresh clone; numerals.json is read on the first fold and its
+ * absence is an `ENOENT` on any text carrying a non-ASCII numeral;
+ * pl_en_respell.json is loaded lazily and its absence would silently degrade
+ * Polish respelling instead.
+ *
+ * The list is not a place to be economical. data/ is gitignored, so a file
+ * added to the funnel and not to this array goes on working from the copy an
+ * earlier build left on a developer's machine, and fails only on a fresh
+ * checkout. `check-pack.mjs` names each file for the same reason.
  *
  * Outside the monorepo (an unpacked tarball, a vendored copy) the source
  * tree does not exist; then existing files are left alone and missing ones
@@ -17,29 +24,27 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-// `js/` sits one level under the repo root, and the Python tree has lived at
-// `python/loudkit/` since the repository went one-directory-per-language. This
-// used to read `"..", "..", "src", …`, which pointed two levels up — outside
-// the repository entirely — at a `src/` layout that no longer exists. The
-// source was therefore never reachable, so every fresh clone fell into the
-// out-of-monorepo branch below and `npm test` died in `pretest`.
+// `js/` sits one level under the repo root and the Python tree at
+// `python/loudkit/`, so exactly one `..` separates them. A path that climbs one
+// level too far leaves the repository, which is not an error here: the source is
+// then unreachable, every fresh clone falls into the out-of-monorepo branch
+// below, and `npm test` dies in `pretest`.
 const sourceDir = join(root, "..", "python", "loudkit", "models", "data");
-const files = ["numbers.json", "pl_en_respell.json"];
+const files = ["numbers.json", "numerals.json", "pl_en_respell.json"];
 
 mkdirSync(join(root, "data"), { recursive: true });
 for (const name of files) {
   const target = join(root, "data", name);
   const source = join(sourceDir, name);
-  // Copy whenever the source is reachable, rather than only when the target is
-  // missing. Skipping an existing target meant a stale copy was never
-  // refreshed: `numbers.json` here sat two features behind the Python source
-  // for a whole day, and nothing noticed, because the file existed.
+  // Copy whenever the source is reachable, rather than only when the target
+  // is missing. Skipping an existing target leaves a stale copy in place
+  // indefinitely, and nothing notices, because the file exists.
   if (!existsSync(source)) {
     // Outside the monorepo an existing copy is all there is, and it is correct
-    // — the tarball ships it. Only a missing copy with no source is fatal.
+    // because the tarball ships it. Only a missing copy with no source is fatal.
     if (existsSync(target)) continue;
     console.error(
-      `data/${name} is missing and ${source} does not exist to copy from — ` +
+      `data/${name} is missing and ${source} does not exist to copy from. ` +
         `run this from the loudkit monorepo, or restore data/ from the npm tarball.`,
     );
     process.exit(1);

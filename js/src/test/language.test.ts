@@ -3,7 +3,7 @@
  *
  * Without the voice link, `engine.synthesize("Cześć", polishVoice, 7)` runs
  * Polish text through the English frontend: `language` defaults to `"en"` and a
- * profile's own `language` — recorded at enrollment — is never consulted. The
+ * profile's own `language`, recorded at enrollment, is never consulted. The
  * chain is argument, then voice, then `"en"`, and these are its links.
  *
  * Tested against the resolver rather than through `synthesize` because this
@@ -26,7 +26,7 @@ test("an explicit language overrides the profile", () => {
 
 test("a profile without a language falls back to English", () => {
   // A hand-built profile can carry an empty language, and an empty language id
-  // is not a language — it would tag the text `[]`. A header that simply omits
+  // is not a language: it would tag the text `[]`. A header that simply omits
   // the key loads as "en" instead, so it never reaches this branch.
   assert.strictEqual(resolveLanguage(undefined, { language: "" }), "en");
 });

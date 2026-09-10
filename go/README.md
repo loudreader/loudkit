@@ -1,110 +1,137 @@
-# loudkit Go binding
+# loudkit for Go
 
-The loudkit engine over `github.com/yalue/onnxruntime_go`. The rng, sampler,
-tokenizer, windowing, engine and the Polish respelling lexicon are ported to
-Go, with **no torch** at runtime.
+Text to speech in Go, on onnxruntime. No Python, no torch.
 
-## Status: supported
+## Hello
 
-Passes the shared conformance fixture: weight-free vectors exact, free-run
-tokens and render band against the checkpoint. The full walkthrough is
-`docs/guides/08-go.md` in the repo root.
-
-## Requirements
-
-- Go 1.25.13 or newer. The patch floor includes the current standard-library
-  security fixes; `golang.org/x/text` v0.40 sets the Go 1.25 language floor.
-- a `libonnxruntime` shared library (load-dynamic; point
-  `LOUDKIT_ONNXRUNTIME_LIB` at it)
-- the exported ONNX graphs, the packed checkpoint, a voice profile, and
-  `tokenizer.json`
-
-## Synthesise
+Go 1.25 or newer, and one shared library that cannot be vendored: `brew
+install onnxruntime` on macOS, `apt install libonnxruntime-dev` on Linux, the
+[onnxruntime-win-x64 archive](https://github.com/microsoft/onnxruntime/releases)
+on Windows. It is found automatically; set `LOUDKIT_ONNXRUNTIME_LIB` if yours is
+somewhere unusual.
 
 ```bash
-go get github.com/loudreader/loudkit/go
+mkdir hello && cd hello
+go mod init hello
+go get github.com/loudreader/loudkit/go@v0.1.1
 ```
 
-```bash
-pip install "loudkit[hub]"
-loudkit download loudreader/loudr-1 --for onnx --local-dir loudr-1
-```
-
-Everything lands inside `loudr-1/`, which is what the paths below are relative
-to. `--with-cloning` adds the three enrollment graphs.
+`main.go`:
 
 ```go
+// Command hello fetches loudr-1, speaks one line and writes hello.wav.
 package main
 
 import (
-	"fmt"
 	"log"
 
-	"github.com/loudreader/loudkit/go/engine"
-	"github.com/loudreader/loudkit/go/onnx"
-	"github.com/loudreader/loudkit/go/voice"
+	loudkit "github.com/loudreader/loudkit/go"
 )
 
 func main() {
-	onnx.SetSharedLibraryPath("/path/to/libonnxruntime.dylib")
-	if err := onnx.InitializeEnvironment(); err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
-	defer onnx.DestroyEnvironment()
+}
 
-	eng, err := engine.Load(
-		"loudr-1/loudr-1.safetensors", // packed checkpoint
-		"loudr-1/onnx",                // exported graphs
-		"loudr-1/tokenizer.json",      // text tokenizer
-	)
+// run holds the body so the deferred Close runs on the way out: log.Fatal
+// ends the process through os.Exit, which runs no deferred function.
+func run() error {
+	eng, err := loudkit.Load("loudreader/loudr-1")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer eng.Close()
 
-	v, err := voice.Load("loudr-1/voices/joe.safetensors")
+	v, err := eng.Voice("joe")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	// Use SynthesizeLong. Synthesize renders one window and errors on
-	// anything longer instead of clipping it. The empty language means the voice's own; 1.0 is
-	// normal speed; the nils are previousTokens and shouldCancel.
-	audio, tokens, _, _, sr, _, err := eng.SynthesizeLong(
-		"Hello from loudkit.", v, 7, "", 1.0, nil, nil)
+	out, err := eng.Synthesize("Hello from loudkit.", v, loudkit.Options{Seed: 7})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	fmt.Printf("%d tokens, %.2fs\n", len(tokens), float64(len(audio))/float64(sr))
-	// audio is []float32 at sr. Hand it to your own WAV writer or audio
-	// device. This module writes no files.
+	if err := out.SaveWav("hello.wav"); err != nil {
+		return err
+	}
+	log.Printf("hello.wav: %.2fs", out.Duration().Seconds())
+	return nil
 }
 ```
+
+```bash
+go run .
+```
+
+The first run downloads the model files into
+`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS and
+`~/.cache/loudkit/loudreader--loudr-1` on Linux (`$LOUDKIT_CACHE` moves it),
+the directory the Rust, JS and Swift ports share, and checks every file
+against the release's own `SHA256SUMS`; later runs read what is there.
+`eng.Voices()` names the 28 voices. `Close` hands back the runtime's
+memory; it matters when you build a second engine.
+
+The snippets on this page need loudkit 0.1.1. From a checkout, `go run
+./examples/hello` in `go/` runs `examples/hello/main.go`, which is this file.
+
+Both `loudr-1` and `loudr-1-turbo` use this API in 0.1.1. Change the model
+name to switch; keep the same voice profile. A local release directory works
+as well as a published model name.
+
+
+## The rest of the front door
+
+```go
+loudkit.Download(repo, dir)                            // a directory of your own
+loudkit.DownloadWith(repo, dir, loudkit.Fetch{Revision: "v0.1.1", Cloning: true})
+loudkit.Load(dirOrRepoID)                              // a directory or a repo id
+eng.Voices()                                           // the names in the release
+eng.Voice("joe")                                       // one of them
+eng.Synthesize(text, v, loudkit.Options{Seed, Language, Speed, PreviousTokens})
+eng.Stream(text, v, loudkit.Options{}, func(c loudkit.Chunk) bool { play(c.Audio); return true })
+mine, err := eng.Enroll("me.wav", "mine", "en")           // clone; fetches the enrollment graphs once
+if err != nil { log.Fatal(err) }
+if err := mine.Save("mine.safetensors"); err != nil { log.Fatal(err) }
+voice.Load("mine.safetensors")
+out.SaveWav(path); out.WriteWav(w)                     // 16-bit PCM
+```
+
+`Synthesize` takes text of any length: it splits at sentence boundaries and
+joins the audio. The zero `Options` is seed 0, the voice's own language and
+normal speed. `Stream` hands out chunks as they are made; return false to
+stop, or set `Options.ShouldCancel` to stop within one decode step. `Enroll`
+on an engine loaded by repo id fetches the enrollment graphs once; a directory
+of your own needs `Fetch{Cloning: true}`.
+`loudkit.LoadPaths(checkpoint, onnxDir, tokenizer)` opens a layout of your
+own.
+
+A release is hundreds of megabytes and this package sets no deadline on the
+link, so every call that can fetch one has a sibling taking a
+`context.Context`: `DownloadContext`, `LoadContext`, `EnrollContext` and
+`EnrollPCMContext`. Reach for those in a server. Cancelling stops the
+transfer, and the next call resumes the part-file it left. A cancelled call
+returns the context's error rather than falling back to the cached release,
+which a call that could not reach the hub still does.
 
 Streaming, timestamps, speed and barge-in: `docs/guides/08-go.md`.
 
 ## Execution provider
 
-`engine.Load` and `enroll.LoadEnroller` pick the best provider the shared
-library offers. `engine.LoadWith` and `enroll.LoadEnrollerWith` take an
-`ExecutionConfig` and name one instead:
+`Load` takes the best provider the shared library offers. To name one, build
+the engine yourself:
 
 ```go
 eng, err := engine.LoadWith(ckpt, onnxDir, tokPath, config.ExecutionConfig{
 	ONNXProvider: config.ProviderCUDA, // auto, cpu, cuda, coreml, directml
 })
-fmt.Println(eng.Describe()) // ... | exec[onnx provider=cuda]
+fmt.Println(eng.Describe())
 ```
 
-`auto` is the default. It takes cuda where the shared library offers it and cpu
-otherwise; it reaches neither coreml nor directml.
-`Engine.Provider` and `Describe` report the one it took. A named provider the
-library does not carry is an error, never a quiet fall back to cpu, so a timing
-taken under one provider cannot be a timing from another.
-
-Which providers exist is decided by the shared library alone. Nothing here is
-compiled in, so `go get` cannot add one and only the library
-`LOUDKIT_ONNXRUNTIME_LIB` points at can:
+`auto` takes cuda where the shared library offers it and cpu otherwise; it
+reaches neither coreml nor directml. A named provider the library does not
+carry is an error, never a quiet fall back to cpu. Which providers exist is
+decided by the shared library alone:
 
 | provider | shared library |
 | --- | --- |
@@ -113,30 +140,12 @@ compiled in, so `go get` cannot add one and only the library
 | `coreml` | a macOS build |
 | `directml` | the `onnxruntime-directml` build, on Windows |
 
-Point the binding through `onnx.SetSharedLibraryPath` rather than the binding's
-own setter. Both load the library, but only the first records which file it
-was, and the refusal above is worth reading only if it names the build that
-decided the answer.
-
-A GPU provider can change the token stream and waveform. CoreML is available by
-name on a compatible macOS build, but `auto` does not select it because its
-first compile is expensive. The conformance fixture pins CPU. See
-[`docs/benchmarks.md`](../docs/benchmarks.md#onnx-execution-providers).
-
-CUDA has been measured on an RTX 3090. DirectML is unit-tested for resolution
-and refusal text but has not been measured on Windows.
-
-The CLI carries the same knob as `-provider`.
+A GPU provider can change the token stream and waveform; conformance runs pin
+CPU. See [`docs/benchmarks.md`](../docs/benchmarks.md#onnx-execution-providers).
 
 ## Build and test
 
 ```bash
 gofmt -l . && go vet ./...
-go test ./conformance/        # weight-free conformance vectors
-go test ./...                 # + engine conformance (needs LOUDKIT_* assets)
+go test ./...                 # weight-free; the engine conformance needs LOUDKIT_* assets
 ```
-
-## Runtime libraries and assets
-
-The ONNX Runtime shared library and the checkpoint/graphs are **not** bundled.
-The package loads them from the paths you provide.

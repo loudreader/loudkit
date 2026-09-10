@@ -1,32 +1,6 @@
 """Enrollment: reference audio to a :class:`~loudkit.voice.VoiceProfile`.
 
-Deliberately separate from synthesis. It is slow, it needs ~40% of the
-checkpoint that rendering never touches, and its output is a small file that
-can be produced once on a fast machine and shipped. Four models cooperate:
-
-- the **S3 speech tokenizer** (whisper-style FSMN encoder + FSQ quantiser,
-  checkpoint namespace ``s3gen.tokenizer``): reference audio to the 25 Hz
-  speech tokens that become the mel decoder's prompt and, truncated to 150,
-  the token generator's conditioning prompt;
-- the **CAM++ x-vector encoder** (``s3gen.speaker_encoder``): the 192-d
-  speaker vector the flow conditions on;
-- a **mel extractor** (matcha recipe: 24 kHz, n_fft 1920, hop 480, Slaney
-  mels, log-compressed): the prompt mel;
-- the **utterance voice encoder** (a 3-layer LSTM over 40-mel partials): the
-  256-d vector the token generator was trained against. Its weights are *not*
-  in the packed checkpoint — they were never part of the s3gen/T3 artifacts —
-  so it is an optional constructor argument and enrollment without it fails
-  with an error that says exactly what to pass.
-
-The architecture ports here are adapted from CosyVoice, S3Tokenizer and
-3D-Speaker (Apache-2.0), FunASR and Real-Time-Voice-Cloning (MIT), stripped to
-the inference path; module names mirror the checkpoint so weights load strict.
-Those are five separate projects under two licences, not one name — see NOTICE,
-which carries each with its own holder.
-
-Determinism note: enrollment is deterministic (no sampling anywhere), so the
-same clip always yields the same profile — which is why profiles can be
-compared across machines at all.
+See ``docs/design/models-notes.md``.
 """
 
 from __future__ import annotations
@@ -42,89 +16,30 @@ from torch import Tensor, nn
 
 # Typing note: torch types nn.Module.__call__ as Any, so submodule calls in a
 # forward pass propagate Any. Where the callee's forward provably returns a
-# Tensor, the return is wrapped in cast(Tensor, ...) — an assertion about
-# torch's contract, not a guess. See docs/reference/typing.md.
+# Tensor, the return is wrapped in cast(Tensor, ...), an assertion about
+# torch's contract, not a guess. See docs/design/typing.md.
 from ..checkpoint import Checkpoint
+from ..contracts import TOKEN_MEL_RATIO
 from ..voice import VoiceProfile
+from .enrollment_audio import validate_reference_audio
 from .resample import resample
+from .windowing import UPSAMPLE_PER_FRAME
 
 __all__ = ["TorchVoiceEnroller", "validate_reference_audio"]
 
 _S3_SR = 16_000
 _MEL_SR = 24_000
-_TOKEN_RATE = 25
 _COND_PROMPT_TOKENS = 150  # the token generator's speech_cond_prompt_len
 _MAX_REF_SECONDS = 10.0
 
-_MIN_ENROLL_SECONDS = 1.0
-"""Below this there is not enough signal to estimate a speaker: the utterance
-encoder's first partial alone covers 1.6 s and is zero-padded under it, so a
-sub-second clip enrolls mostly padding."""
+_MEL_WINDOW = 1920
+"""STFT window and transform size for the conditioning mel: 80 ms at 24 kHz."""
 
-_MAX_ENROLL_SECONDS = 30.0
-"""Above this the input contract stops being honest. The prompt uses the first
-10 s and the speaker embedding reads the whole clip, so a five-minute recording
-produces a voice mostly shaped by audio the docs say is ignored. Refused rather
-than truncated: the user picked that recording for a reason, and silently using
-a different slice of it is worse than asking them to choose."""
+_FSQ_TANH_SCALE = 0.9990000128746033
+"""float32(0.999), the trained quantiser's constant.
 
-_SILENCE_PEAK = 1e-4
-"""A clip whose loudest sample is under this is silence at any playback level;
-there is no voice in it to enroll."""
-
-_GOOD_INPUT = (
-    "A good input is 5 to 10 seconds of one person speaking, clean, "
-    "without music or a second voice."
-)
-
-
-def validate_reference_audio(wav: NDArray[np.float32], sample_rate: int) -> None:
-    """Refuse a recording the enrollment contract cannot honour.
-
-    The contract, stated once and enforced here for every caller — the CLI's
-    ``clone``, :func:`loudkit.enroll`, and a port checking its own input the
-    same way: mono, finite samples, between :data:`_MIN_ENROLL_SECONDS` and
-    :data:`_MAX_ENROLL_SECONDS`, and not silence. Recommended input is 5 to
-    10 seconds; the prompt is built from the first 10 and the speaker
-    embedding reads the whole clip, which is why a long recording is refused
-    instead of quietly enrolling something the docs do not describe.
-
-    Raises:
-        ValueError: with a message that says what a good input looks like.
-    """
-    # The two shape checks keep their historical one-word messages ("positive",
-    # "mono") — they are matched by callers and tests.
-    if sample_rate <= 0:
-        raise ValueError(f"sample rate must be positive, got {sample_rate}")
-    if wav.ndim != 1:
-        raise ValueError(f"audio must be mono 1-D, got shape {wav.shape}")
-    # Finiteness before anything arithmetic: one NaN poisons every statistic
-    # below and every tensor downstream.
-    if not bool(np.isfinite(wav).all()):
-        raise ValueError(
-            "the recording contains NaN or Inf samples, so no voice can be "
-            "derived from it. Re-export the file. " + _GOOD_INPUT
-        )
-    seconds = wav.size / sample_rate
-    if seconds < _MIN_ENROLL_SECONDS:
-        raise ValueError(
-            f"the recording is {seconds:.2f} s — too short to enroll a speaker "
-            f"from (minimum {_MIN_ENROLL_SECONDS:g} s). " + _GOOD_INPUT
-        )
-    if seconds > _MAX_ENROLL_SECONDS:
-        raise ValueError(
-            f"the recording is {seconds:.1f} s. Only the first 10 s become the "
-            "voice prompt, and the whole clip shapes the speaker embedding, so "
-            "a long recording enrolls something the prompt does not carry. Trim "
-            f"it to the best 5 to 10 seconds (at most {_MAX_ENROLL_SECONDS:g} s). "
-            + _GOOD_INPUT
-        )
-    peak = float(np.abs(wav).max())
-    if peak < _SILENCE_PEAK:
-        raise ValueError(
-            f"the recording is silent (peak {peak:.1e}); there is no voice in "
-            "it to enroll. " + _GOOD_INPUT
-        )
+Written to all its digits rather than as ``0.999`` because the graph was traced
+with the float32 value and a float64 0.999 rounds elsewhere."""
 
 
 # ------------------------------------------------------------- mel extractor
@@ -136,16 +51,26 @@ _mel_basis_cache: dict[tuple[int, int, int, int, int], Tensor] = {}
 def _slaney_mels(sr: int, n_fft: int, n_mels: int, fmin: int, fmax: int) -> Tensor:
     key = (sr, n_fft, n_mels, fmin, fmax)
     if key not in _mel_basis_cache:
-        import librosa
+        # The submodule, not the package. `import librosa` does not bind
+        # `librosa.filters` by contract, it works only because something else
+        # imported it first, and librosa 1.0 says so in its own type
+        # information.
+        import librosa.filters
 
-        basis = librosa.filters.mel(sr=sr, n_fft=n_fft, n_mels=n_mels, fmin=fmin, fmax=fmax)
+        # `type: ignore` because librosa's stubs are skipped wholesale (see the
+        # librosa override in pyproject.toml): mypy therefore knows the package
+        # but not that it re-exports its submodules. The import above is what
+        # makes the attribute exist at runtime.
+        basis = librosa.filters.mel(  # type: ignore[attr-defined]
+            sr=sr, n_fft=n_fft, n_mels=n_mels, fmin=fmin, fmax=fmax
+        )
         _mel_basis_cache[key] = torch.from_numpy(basis).float()
     return _mel_basis_cache[key]
 
 
 def _matcha_mel(wav: Tensor) -> Tensor:
-    """(80, frames) log-mel at 24 kHz — the flow's conditioning features."""
-    n_fft, hop, win = 1920, 480, 1920
+    """(80, frames) log-mel at 24 kHz, the flow's conditioning features."""
+    n_fft, hop, win = _MEL_WINDOW, UPSAMPLE_PER_FRAME, _MEL_WINDOW
     pad = (n_fft - hop) // 2
     y = F.pad(wav[None, None], (pad, pad), mode="reflect")[0]
     spec = torch.stft(
@@ -250,7 +175,7 @@ class _TokenizerEncoder(nn.Module):
 
 class _FSQCodebook(nn.Module):
     """Finite scalar quantisation: project to 8 dims, tanh, round to {0,1,2},
-    read the result as a base-3 number — 3^8 = 6561 codes."""
+    read the result as a base-3 number, 3^8 = 6561 codes."""
 
     def __init__(self, dim: int = 1280, level: int = 3) -> None:
         super().__init__()
@@ -258,7 +183,7 @@ class _FSQCodebook(nn.Module):
         self.level = level
 
     def encode(self, x: Tensor) -> Tensor:
-        h = self.project_down(x).float().tanh() * 0.9990000128746033
+        h = self.project_down(x).float().tanh() * _FSQ_TANH_SCALE
         h = h.round() + 1
         powers = torch.pow(
             torch.tensor(float(self.level)), torch.arange(8, dtype=h.dtype, device=h.device)
@@ -470,7 +395,7 @@ class _CAMPPlus(nn.Module):
         xv["tdnn"] = _TDNN(channels, init_channels, 5, stride=2)
         channels = init_channels
         for i, (n_layers, kernel, dilation) in enumerate(
-            zip((12, 24, 16), (3, 3, 3), (1, 2, 2), strict=False)
+            zip((12, 24, 16), (3, 3, 3), (1, 2, 2), strict=True)
         ):
             xv[f"block{i + 1}"] = _CAMDenseBlock(
                 n_layers, channels, growth, 4 * growth, kernel, dilation
@@ -502,7 +427,7 @@ class _VoiceEncoder(nn.Module):
 
     A 3-layer LSTM over 160-frame partials of a 40-mel power spectrogram,
     partials strided at ``rate`` windows per second, mean-pooled and
-    L2-normalised — the Real-Time-Voice-Cloning recipe the model was trained
+    L2-normalised, the Real-Time-Voice-Cloning recipe the model was trained
     with. Weights come from ``ve.safetensors``, which the packed checkpoint
     does not carry.
     """
@@ -536,9 +461,9 @@ class _VoiceEncoder(nn.Module):
     def embed(
         self, wav16: NDArray[np.float32], *, rate: float = 1.3, min_coverage: float = 0.8
     ) -> Tensor:
-        import librosa
+        import librosa.effects
 
-        trimmed, _ = librosa.effects.trim(wav16, top_db=20)
+        trimmed, _ = librosa.effects.trim(wav16, top_db=20)  # type: ignore[attr-defined]
         mel = self._mel(trimmed)
         step = int(np.round((_S3_SR / rate) / self.PARTIAL_FRAMES))
         n_wins, remainder = divmod(max(len(mel) - self.PARTIAL_FRAMES + step, 0), step)
@@ -554,7 +479,7 @@ class _VoiceEncoder(nn.Module):
             )
         # On the module's own device, not the CPU. `build_torch_enroller`
         # accepts any device and moves the encoder there, but this tensor was
-        # built from numpy — always CPU — and fed straight to the LSTM, so
+        # built from numpy, always CPU, and fed straight to the LSTM, so
         # `enroll()` on CUDA or MPS died with a device mismatch. The fixture is
         # CPU-only, which is why the tests never saw it.
         device = next(self.parameters()).device
@@ -622,40 +547,17 @@ class TorchVoiceEnroller:
     ) -> VoiceProfile:
         """Derive a voice from a short reference recording.
 
-        The input contract is :func:`validate_reference_audio`'s: 5 to 10
-        seconds is right, 30 seconds is the refusal line. The clip is used at
-        two rates: 24 kHz for the prompt mel, 16 kHz for tokenisation and both
-        speaker encoders. Input past ten seconds is truncated for the prompt —
-        the static prompt window holds ~9.5 s, and everything past it would be
-        enrolled and then cut on every render — while the speaker embedding
-        reads the whole clip.
-
-        The 24->16 kHz downsample uses **one** resampler (see
-        :mod:`loudkit.models.resample`), not two: the reference pipeline once
-        split this between torchaudio and librosa's ``soxr_hq``, but the latter
-        is a C library no port can reproduce bit for bit, so enrollment is
-        unified on a single, portable Hann-windowed-sinc law. That means the
-        tokens differ from the historical two-resampler enrollment, and the
-        reference voices are re-enrolled against this law — there is nothing to
-        be faithful to that five languages could not all reach.
-
-        Raises:
-            ValueError: for input outside the contract — non-positive rate,
-                non-mono shape, NaN or Inf samples, silence, too short or over
-                30 seconds. The message says what a good input looks like.
+        See ``docs/design/models-notes.md``.
         """
-        # The whole preflight before any model runs, including the sample-rate
-        # check: a non-positive rate reaches the resampler as a division by
-        # zero, and the four implementations answered it four different ways —
-        # Go refused it, this raised `ZeroDivisionError` from inside a kernel
-        # calculation, and Swift and Rust *killed the process*. Refused at the
-        # entry point in all four now, with Go's sentence.
+        # The whole preflight before any model runs, including the sample-rate check: a
+        # non-positive rate reaches the resampler as a division by zero, and the four
+        # implementations refuse it at the entry point with one sentence.
         wav = np.asarray(audio, dtype=np.float32)
         validate_reference_audio(wav, sample_rate)
         if self._voice_encoder is None:
             raise RuntimeError(
                 "enrollment needs the 256-d utterance voice encoder, whose "
-                "weights are not part of the packed checkpoint — pass "
+                "weights are not part of the packed checkpoint: pass "
                 "voice_encoder_weights=... (ve.safetensors) when building the "
                 "enroller"
             )
@@ -667,7 +569,7 @@ class TorchVoiceEnroller:
             wav = np.array(wav, dtype=np.float32, order="C", copy=True)
         wav24_full = wav if sample_rate == _MEL_SR else resample(wav, sample_rate, _MEL_SR)
         # the prompt is capped at ten seconds (the static window holds ~9.5 s);
-        # the utterance speaker embedding reads the WHOLE clip — that is how
+        # the utterance speaker embedding reads the WHOLE clip, that is how
         # the shipped voices were enrolled, and it is the better estimate
         wav24 = wav24_full[: int(_MAX_REF_SECONDS * _MEL_SR)]
         t24 = torch.from_numpy(wav24)
@@ -680,10 +582,10 @@ class TorchVoiceEnroller:
             .cpu()
             .numpy()
         )
-        # keep mel and tokens aligned at exactly 2 frames per token
-        n_tok = min(len(prompt_tokens), prompt_mel.shape[1] // 2)
+        # keep mel and tokens aligned at exactly TOKEN_MEL_RATIO frames per token
+        n_tok = min(len(prompt_tokens), prompt_mel.shape[1] // TOKEN_MEL_RATIO)
         prompt_tokens = prompt_tokens[:n_tok]
-        prompt_mel = prompt_mel[:, : 2 * n_tok]
+        prompt_mel = prompt_mel[:, : TOKEN_MEL_RATIO * n_tok]
 
         cond_tokens = (
             self._tokenizer.tokenize(

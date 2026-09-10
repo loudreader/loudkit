@@ -68,19 +68,31 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+
+from loudkit.checkpoint import decode_mode, file_sha256
+from loudkit.checkpoint import payload_sha256 as file_payload_sha256
+from loudkit.release import (
+    CHECKPOINT_NAME,
+    ENROLLMENT_NAME,
+    ENROLLMENT_ROLE,
+    SYNTHESIS_ROLE,
+    TURBO_CHECKPOINT_NAME,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - annotations only
     import torch
 
-# The two names the release ships, and the role each carries in its manifest.
-# `build_release` and `hub` name the same two constants; a file under any other
-# name is a different artefact wearing the same directory.
-SYNTHESIS_NAME = "loudr-1.safetensors"
-ENROLLMENT_NAME = "loudr-1-enrollment.safetensors"
-SYNTHESIS_ROLE = "synthesis"
-ENROLLMENT_ROLE = "enrollment"
+# The names the release ships and the role each carries in its manifest come
+# from `loudkit.release`, which is what every port and every downloader reads.
+# A file under any other name is a different artefact wearing the same
+# directory, and a second spelling of the name here would be a second place for
+# that to be decided.
+SYNTHESIS_NAME = CHECKPOINT_NAME
 
 # Routing, by tensor group. A group is matched exactly or as a dotted prefix,
 # so `t3` catches `t3.tfmr.*` and would catch a bare `t3` tensor, and nothing
@@ -112,13 +124,59 @@ def matches(name: str, group: str) -> bool:
     return name == group or name.startswith(group + ".")
 
 
+def synthesis_filename(manifest: dict) -> str:
+    """The name the synthesis half ships under, from the decode mode it declares.
+
+    Asked of the manifest and not of the input file's name. `--out` on the
+    packer writes whatever it was told, so a turbo checkpoint arrives under any
+    name its operator chose; naming the half after the file would write
+    `loudr-1.safetensors`, record a `split.roles.synthesis` saying so, and the
+    release would then refuse the turbo bundle built from it, because
+    `check_bundle` asks for `loudr-1-turbo.safetensors`.
+    """
+    return TURBO_CHECKPOINT_NAME if decode_mode(manifest) == "fusion_mtp2" else SYNTHESIS_NAME
+
+
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 """A sha256, lowercase hex. What a recorded digest has to look like."""
 
 
+def payload_refusal(manifest: dict, digest: str) -> str | None:
+    """Why this file is not the checkpoint its manifest describes, or None.
+
+    Absent, wrong type or wrong shape is a refusal, not a pass. A plain
+    `if recorded` lets a checkpoint with no recorded digest through, which is
+    the one case where nothing at all is being checked, and the tool then acts
+    on bytes nobody vouched for.
+
+    Returned rather than raised: every tool that rewrites a packed checkpoint
+    owes the same check before it writes, and each says in its own words what
+    it is declining to do.
+    """
+    recorded = manifest.get("tensor_payload_sha256")
+    if not isinstance(recorded, str) or not _HEX64.fullmatch(recorded):
+        return (
+            f"the manifest records tensor_payload_sha256={recorded!r}, which is not "
+            "a sha256. Nothing here can vouch for these bytes"
+        )
+    if digest != recorded:
+        return (
+            f"payload hash mismatch ({digest[:12]}… != {recorded[:12]}…). This file "
+            "is not the checkpoint its manifest describes"
+        )
+    return None
+
+
 def payload_sha256(tensors: dict[str, torch.Tensor]) -> str:
-    """Identical recipe to tools/pack_checkpoint.py in the research repo:
-    sha256 over (name, dtype, shape, raw bytes) in sorted key order."""
+    """The recipe the research packer uses: sha256 over (name, dtype, shape,
+    raw bytes) in sorted key order.
+
+    The in-memory form, so a writer can put the digest in the manifest of the
+    file it is about to write rather than writing the file twice to read it
+    back. `pack_turbo.py` and this module's own `_write_side` both do that, and
+    both check the result against `file_payload_sha256` on the bytes that
+    landed.
+    """
     h = hashlib.sha256()
     for name in sorted(tensors):
         t = tensors[name].contiguous()
@@ -268,7 +326,7 @@ def _write_side(
             f"{target.name}: {len(wrong)} tensor(s) changed across the copy:\n    "
             + "\n    ".join(wrong[:20])
         )
-    if payload_sha256(check) != payload:
+    if file_payload_sha256(tmp) != payload:
         tmp.unlink()
         raise SystemExit(f"{target.name}: payload digest changed across the copy")
     tmp.replace(target)
@@ -313,16 +371,18 @@ def main() -> None:
             "original and its manifest.json stay as they are. Write the split "
             "somewhere new"
         )
-    outputs = {role: out_dir / name for role, name in ROLE_FILENAMES.items()}
-    existing = sorted(p.name for p in outputs.values() if p.exists())
-    if existing and not args.force:
-        raise SystemExit(f"already there: {', '.join(existing)}. Pass --force to overwrite")
-
     with safe_open(str(path), framework="pt") as f:
         meta = f.metadata()
     if not meta or "manifest" not in meta:
         raise SystemExit(f"{path} carries no embedded manifest; not splitting it")
     source_manifest = json.loads(meta["manifest"])
+
+    filenames = {**ROLE_FILENAMES, SYNTHESIS_ROLE: synthesis_filename(source_manifest)}
+    outputs = {role: out_dir / name for role, name in filenames.items()}
+    existing = sorted(p.name for p in outputs.values() if p.exists())
+    if existing and not args.force:
+        raise SystemExit(f"already there: {', '.join(existing)}. Pass --force to overwrite")
+
     if source_manifest.get("artifact_role") is not None:
         raise SystemExit(
             f"{path.name} already carries artifact_role="
@@ -336,25 +396,12 @@ def main() -> None:
 
     # Refuse before writing anything if this file is not what its manifest
     # describes: splitting a checkpoint whose payload already disagrees would
-    # produce two halves that faithfully carry the wrong bytes.
-    source_payload = payload_sha256(tensors)
-    recorded = source_manifest.get("tensor_payload_sha256")
-    # Absent, wrong type or wrong shape is a refusal, not a pass. `if recorded`
-    # let a checkpoint with no recorded digest through, which is the one case
-    # where nothing at all was being checked -- the tool would then stamp both
-    # halves with a source digest it had never verified.
-    if not isinstance(recorded, str) or not _HEX64.fullmatch(recorded):
-        raise SystemExit(
-            f"the manifest records tensor_payload_sha256={recorded!r}, which is not "
-            "a sha256. Nothing here can vouch for these bytes, and both halves would "
-            "carry a source digest nobody checked; not splitting it"
-        )
-    if source_payload != recorded:
-        raise SystemExit(
-            f"payload hash mismatch BEFORE the split ({source_payload[:12]}… != "
-            f"{recorded[:12]}…). This file is not the checkpoint its manifest "
-            "describes; not splitting it"
-        )
+    # produce two halves that faithfully carry the wrong bytes, each stamped
+    # with a source digest nobody checked.
+    source_payload = file_payload_sha256(path)
+    problem = payload_refusal(source_manifest, source_payload)
+    if problem is not None:
+        raise SystemExit(f"{problem}; not splitting it")
 
     by_role = route(source_names)
     covered = sorted(n for names in by_role.values() for n in names)
@@ -368,7 +415,7 @@ def main() -> None:
         "source_payload_sha256": source_payload,
         "source_tensor_names_sha256": names_sha256(source_names),
         "source_tensor_count": len(source_names),
-        "roles": dict(ROLE_FILENAMES),
+        "roles": filenames,
     }
 
     digests = {name: tensor_sha256(name, tensors[name]) for name in source_names}
@@ -394,9 +441,12 @@ def main() -> None:
     # the sibling would refuse a correct release. The enrollment manifest is
     # not written here: it travels inside its own file, which is where a
     # consumer of that file already is.
+    # `newline="\n"`: a bundle member, and the bundle's digests are pinned.
     sibling = out_dir / "manifest.json"
     sibling.write_text(
-        json.dumps(written[SYNTHESIS_ROLE], sort_keys=True, indent=1) + "\n", encoding="utf-8"
+        json.dumps(written[SYNTHESIS_ROLE], sort_keys=True, indent=1) + "\n",
+        encoding="utf-8",
+        newline="\n",
     )
     print(f"\nmanifest {sibling} (the synthesis half's own)")
 
@@ -405,15 +455,6 @@ def main() -> None:
     print("disjoint and complete: every tensor landed in exactly one output")
     print(f"written to {out_dir}")
     print(f"the packed original is untouched at {path}")
-
-
-def file_sha256(path: Path) -> str:
-    """Hex SHA-256 of a file, read in chunks: the digest SHA256SUMS carries."""
-    h = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
 
 
 if __name__ == "__main__":

@@ -1,42 +1,14 @@
 """The mel decoder: speech tokens to mel, by conditional flow matching.
 
-Architecture (checkpoint namespace ``s3gen.flow``, names mirrored so weights
-load strict): a token embedding, an upsampling conformer encoder (6 blocks at
-25 Hz, nearest-neighbour x2 upsample, 4 more blocks at 50 Hz) that produces
-the mean field ``mu``, and a 1-D U-Net estimator (1 down / 12 mid / 1 up
-stages of causal resnet + transformer blocks) that predicts the flow velocity.
-Two Euler steps integrate noise into a mel — the estimator was step-distilled
-from a six-step teacher, and its guidance was distilled *into* the weights,
-which is why ``single_path`` is the shipping mode and ``cfg_dual_path`` exists
-only to drive an undistilled teacher.
-
-Everything algorithm-shaped is read from :class:`AlgorithmConfig` and nowhere
-else. Three of those decisions deserve names:
-
-* **Guidance mode comes from the config** (EXP-016: the upstream class carried
-  ``inference_cfg_rate = 0.7`` as a buried default and every torch bench ran
-  guidance-on-guidance for a whole campaign — a 0.979 mel-correlation defect
-  that no output check caught).
-* **The time grid is cosine**, ``t_i = 1 − cos(i/K · π/2)`` — the schedule the
-  students were distilled against and the one the shipped engine runs. The
-  upstream ``meanflow`` branch integrates a *linear* grid, which is one more
-  way the torch path deviated from what ships.
-* **The window recipe is the shipped static one** when ``WindowConfig`` says
-  so: query padded to 255 and prompt framed to exactly 238 tokens with the
-  silence unit, mel condition zero-padded to 986 frames, no masks. The recipe
-  is the entire measured ANE-vs-torch mel deviation (corr 0.975–0.993), so it
-  is configuration, not backend folklore.
-
-The flow prior is Philox-addressed data (:mod:`.noise`), not device RNG state:
-the same seed draws the same prior on every device and backend. Unseeded, two
-renders of identical tokens correlate at 0.109.
+See ``docs/design/models-notes.md``.
 """
 
 from __future__ import annotations
 
 import math
 import threading
-from typing import cast
+from collections.abc import Sequence
+from typing import NamedTuple, cast
 
 import numpy as np
 import torch
@@ -45,12 +17,12 @@ from torch import Tensor, nn
 
 # Typing note: torch types nn.Module.__call__ as Any, so submodule calls in a
 # forward pass propagate Any. Where the callee's forward provably returns a
-# Tensor, the return is wrapped in cast(Tensor, ...) — an assertion about
-# torch's contract, not a guess. See docs/reference/typing.md.
+# Tensor, the return is wrapped in cast(Tensor, ...), an assertion about
+# torch's contract, not a guess. See docs/design/typing.md.
 from ..config import AlgorithmConfig
-from ..contracts import Mel, SpeechTokens
+from ..contracts import MEL_BINS, TOKEN_MEL_RATIO, Mel, SpeechTokens
 from ..voice import VoiceProfile
-from .noise import gaussian_field
+from .noise import gaussian_field, gaussian_field_torch
 from .windowing import FLOW_NOISE_STREAM, frame_windows, pad_token_id, time_grid
 
 __all__ = [
@@ -62,8 +34,16 @@ __all__ = [
 ]
 
 _ENCODER_DIM = 512
-_MEL_BINS = 80
-_TOKEN_MEL_RATIO = 2  # 25 Hz tokens -> 50 Hz mel frames
+
+
+class _DeviceWindow(NamedTuple):
+    """:class:`~loudkit.models.windowing.FramedWindow` with its two arrays
+    already on the decoder's device."""
+
+    row: Tensor
+    cond: Tensor
+    prompt_frames: int
+    n: int
 
 
 # ----------------------------------------------------------------- encoder
@@ -72,8 +52,8 @@ _TOKEN_MEL_RATIO = 2  # 25 Hz tokens -> 50 Hz mel frames
 class _EspnetRelPositionalEncoding(nn.Module):
     """Relative positional table, symmetric around the current frame.
 
-    Returns ``pe[center-T+1 : center+T]`` — ``2T−1`` vectors covering every
-    possible key−query offset — and scales the input by ``sqrt(d)``. No
+    Returns ``pe[center-T+1 : center+T]``, ``2T−1`` vectors covering every
+    possible key−query offset, and scales the input by ``sqrt(d)``. No
     parameters; regenerated on demand rather than stored in the checkpoint.
     """
 
@@ -89,28 +69,11 @@ class _EspnetRelPositionalEncoding(nn.Module):
     def _extend(self, length: int, device: torch.device, dtype: torch.dtype) -> Tensor:
         """Grow the cached encoding table if this call needs more of it.
 
-        Mutates ``self._pe`` during inference, which is a latent data race: two
-        threads calling ``synthesize`` on one engine can both find the buffer
-        short and both rebuild it, and the reader of the smaller one indexes a
-        tensor that has been replaced underneath it.
-
-        Serialised rather than precomputed: the table is
-        ``(1, 2·length - 1, d_model)`` and ``length`` is a passage's token
-        count, so sizing it for the worst case would allocate for a passage
-        no caller asked for. The lock is uncontended on the single-flight path the
-        server and the CLI both use — it costs an atomic per call there and
-        makes the public API safe for the caller who does not serialise.
+        See ``docs/design/models-notes.md``.
         """
         with self._pe_lock:
             self._extend_locked(length, device, dtype)
             # Returned from inside the lock, not read from `self._pe` after it.
-            # The lock made the *rebuild* safe and left the read racing: a
-            # second thread could replace the buffer between the release and
-            # the caller's slice, so the caller indexed a tensor it had not
-            # sized for and got positional encodings for a different length —
-            # silently, since the slice is in range for both. Holding the
-            # reference is what makes it safe; a later reassignment cannot
-            # reach an object someone already has.
             return self._pe
 
     def _extend_locked(self, length: int, device: torch.device, dtype: torch.dtype) -> None:
@@ -209,7 +172,7 @@ class _RelPosAttention(nn.Module):
 
 
 class _FeedForward(nn.Module):
-    """Position-wise feed-forward with Swish — the encoder was built with
+    """Position-wise feed-forward with Swish, the encoder was built with
     ``activation_type="swish"``, and ReLU here costs a full mel point."""
 
     def __init__(self, dim: int, hidden: int) -> None:
@@ -222,7 +185,7 @@ class _FeedForward(nn.Module):
 
 
 class _ConformerLayer(nn.Module):
-    """Pre-norm attention + feed-forward (no macaron, no conv module — this
+    """Pre-norm attention + feed-forward (no macaron, no conv module, this
     encoder was built plain and its checkpoint has no such weights)."""
 
     def __init__(self, dim: int, n_heads: int, ff_hidden: int) -> None:
@@ -440,20 +403,13 @@ def _transformer_stack(
 class _Estimator(nn.Module):
     """The velocity field v(x, t | mu, spks, cond): channels 320 -> 80.
 
-    Stages are stored as nested ``ModuleList``s — ``[resnet, transformers,
-    tail-conv]`` — exactly the containers the original used, so parameter
-    names match the checkpoint without any remapping.
-
-    Geometry note: with a single 256-channel level the "down" tail conv is
-    stride-1, so nothing is actually downsampled; the skip connection
-    concatenates same-length features. The names stay, the shapes never
-    change, and the causality of every conv is real.
+    See ``docs/design/models-notes.md``.
     """
 
     def __init__(
         self,
         in_ch: int = 320,
-        out_ch: int = _MEL_BINS,
+        out_ch: int = MEL_BINS,
         dim: int = 256,
         n_blocks: int = 4,
         n_mid: int = 12,
@@ -549,13 +505,7 @@ class _DecoderShell(nn.Module):
 class TorchMelDecoder(nn.Module):
     """``MelDecoder`` implementation on torch (cpu / cuda / mps).
 
-    Args:
-        config: the algorithm — guidance mode, Euler grid, window recipe.
-        estimator_dtype: compute dtype for the estimator only (fp16 is
-            measured safe there: mel corr 0.999999). The encoder half of this
-            module refuses fp16 outright — measured mel corr 0.619 with
-            +22 dB of high-frequency energy — so precision is per-module here,
-            exactly as ``ExecutionConfig.precision`` declares it.
+    See ``docs/design/models-notes.md``.
     """
 
     def __init__(
@@ -571,9 +521,9 @@ class TorchMelDecoder(nn.Module):
         self.config = config
         self.estimator_dtype = estimator_dtype
         self.input_embedding = nn.Embedding(vocab_size, _ENCODER_DIM)
-        self.spk_embed_affine_layer = nn.Linear(flow_embedding_dim, _MEL_BINS)
+        self.spk_embed_affine_layer = nn.Linear(flow_embedding_dim, MEL_BINS)
         self.encoder = _UpsampleConformerEncoder()
-        self.encoder_proj = nn.Linear(_ENCODER_DIM, _MEL_BINS)
+        self.encoder_proj = nn.Linear(_ENCODER_DIM, MEL_BINS)
         self.decoder = _DecoderShell(_Estimator(attention=attention))
 
     @property
@@ -582,12 +532,10 @@ class TorchMelDecoder(nn.Module):
 
     # -- windowing -----------------------------------------------------------
 
-    def _frame(
-        self, tokens: SpeechTokens, voice: VoiceProfile
-    ) -> tuple[Tensor, Tensor, int, int]:
+    def _frame(self, tokens: SpeechTokens, voice: VoiceProfile) -> _DeviceWindow:
         """The shared window recipe (:func:`frame_windows`), as device tensors."""
         row, cond, prompt_frames, n = frame_windows(self.config, tokens, voice)
-        return (
+        return _DeviceWindow(
             torch.from_numpy(row).to(self._device),
             torch.from_numpy(cond).to(self._device),
             prompt_frames,
@@ -602,11 +550,15 @@ class TorchMelDecoder(nn.Module):
         if self.config.guidance == "single_path":
             return cast(Tensor, est(x, mu, t_row, spks, cond))
         # cfg_dual_path: conditional and unconditional velocities, combined
-        # (1+w)·v_cond − w·v_uncond. Teacher mode only — running it on a
-        # guidance-distilled student applies guidance twice (EXP-016).
+        # (1+w)·v_cond − w·v_uncond. Teacher mode only: running it on a
+        # guidance-distilled student applies guidance twice, a 0.979
+        # mel-correlation defect no output check caught. See
+        # docs/design/models-notes.md.
         rate = self.config.guidance_rate
         x2 = torch.cat([x, x], dim=0)
-        t2 = torch.cat([t_row, t_row], dim=0)
+        # One t per row of x2, so a batch of utterances lines up with its
+        # doubled prior. At one utterance this is the pair it always was.
+        t2 = t_row.repeat(2 * x.shape[0])
         mu2 = torch.cat([mu, torch.zeros_like(mu)], dim=0)
         spks2 = torch.cat([spks, torch.zeros_like(spks)], dim=0)
         cond2 = torch.cat([cond, torch.zeros_like(cond)], dim=0)
@@ -614,35 +566,108 @@ class TorchMelDecoder(nn.Module):
         v_cond, v_uncond = v.chunk(2, dim=0)
         return cast(Tensor, (1.0 + rate) * v_cond - rate * v_uncond)
 
+    def _prior(self, seed: int, t_mel: int) -> Tensor:
+        """The CFM prior for one utterance, ``(80, t_mel)`` on the device.
+
+        Same stream either way, see `gaussian_field_torch`. Far smaller than
+        the vocoder's excitation (80 x frames against 9 x samples), so the
+        device draw is for consistency rather than for the milliseconds.
+        """
+        if self._device.type == "cuda":
+            return gaussian_field_torch(seed, FLOW_NOISE_STREAM, MEL_BINS, t_mel, self._device)
+        z = gaussian_field(seed, FLOW_NOISE_STREAM, MEL_BINS, t_mel)
+        return torch.from_numpy(z).to(self._device)
+
+    def _integrate(self, row: Tensor, cond: Tensor, spks: Tensor, x: Tensor) -> Tensor:
+        """Encode the row and walk the Euler grid from ``x`` to the mel.
+
+        The whole of the flow that does not depend on how many utterances are
+        in flight, so :meth:`decode` and :meth:`decode_batch` share it rather
+        than each keeping a copy of the encoder call, the dtype cast and the
+        loop. What differs between them is the prior, which the caller builds
+        and passes in, and the cutting afterwards.
+        """
+        h = self.encoder(self.input_embedding(row))
+        mu = self.encoder_proj(h).transpose(1, 2).contiguous()
+
+        dt_ = self.estimator_dtype
+        x, mu, spks, cond = (a.to(dt_) for a in (x, mu, spks, cond))
+        grid = time_grid(self.config)
+        for t0, t1 in zip(grid[:-1], grid[1:], strict=True):
+            x = x + (t1 - t0) * self._velocity(x, mu, t0, spks, cond)
+        return x.float()
+
     # -- contract ------------------------------------------------------------
 
     @torch.inference_mode()
     def decode(self, tokens: SpeechTokens, voice: VoiceProfile, *, seed: int) -> Mel:
         """Integrate the flow to a mel for ``tokens`` in ``voice``.
 
-        The returned mel covers only the real speech region — the prompt
+        The returned mel covers only the real speech region, the prompt
         reconstruction (a coarse, audibly "underwater" render of the reference)
         and any static padding are cut here, not left for the vocoder to
         stumble over.
         """
         row, cond, prompt_frames, n = self._frame(tokens, voice)
-        t_mel = _TOKEN_MEL_RATIO * row.shape[1]
+        t_mel = TOKEN_MEL_RATIO * row.shape[1]
 
         emb = torch.from_numpy(np.asarray(voice.flow_embedding, dtype=np.float32))
         emb = F.normalize(emb[None], dim=1).to(self._device)
         spks = self.spk_embed_affine_layer(emb)
 
-        h = self.encoder(self.input_embedding(row))
-        mu = self.encoder_proj(h).transpose(1, 2).contiguous()
-
-        z = gaussian_field(seed, FLOW_NOISE_STREAM, _MEL_BINS, t_mel)
-        x = torch.from_numpy(z)[None].to(self._device)
-
-        dt_ = self.estimator_dtype
-        x, mu, spks, cond = (a.to(dt_) for a in (x, mu, spks, cond))
-        grid = time_grid(self.config)
-        for t0, t1 in zip(grid[:-1], grid[1:], strict=False):
-            x = x + (t1 - t0) * self._velocity(x, mu, t0, spks, cond)
-
-        mel = x.float()[0, :, prompt_frames : prompt_frames + _TOKEN_MEL_RATIO * n]
+        x = self._integrate(row, cond, spks, self._prior(seed, t_mel)[None])
+        mel = x[0, :, prompt_frames : prompt_frames + TOKEN_MEL_RATIO * n]
         return mel.cpu().numpy().astype(np.float32)
+
+    @torch.inference_mode()
+    def decode_batch(
+        self,
+        tokens: Sequence[SpeechTokens],
+        voices: Sequence[VoiceProfile],
+        *,
+        seeds: Sequence[int],
+    ) -> list[Mel]:
+        """:meth:`decode` for several utterances at once, one row each.
+
+        A prototype beside the contract, not on it. Nothing in the engine calls
+        it: measured, batching this stage buys at most 9% on the GPU for eight
+        times the latency, and 15% to 22% on CPU, where the renderer is
+        latency-bound anyway. See ``docs/design/models-notes.md``, and
+        ``research/bench_render.py`` to re-measure on another device.
+
+        Every utterance must frame to the same window length. The conformer
+        attends over the whole row with no mask, so a row padded out to a
+        longer neighbour would change that neighbour's mel.
+        """
+        rows = len(tokens)
+        if rows == 0 or len(voices) != rows or len(seeds) != rows:
+            raise ValueError(
+                f"decode_batch needs one voice and one seed per utterance: "
+                f"{rows} token sequences, {len(voices)} voices, {len(seeds)} seeds"
+            )
+        framed = [self._frame(t, v) for t, v in zip(tokens, voices, strict=True)]
+        widths = sorted({f.row.shape[1] for f in framed})
+        if len(widths) != 1:
+            raise ValueError(
+                f"decode_batch needs one window length for the whole batch, got "
+                f"{widths}; group the utterances by length, or use a static window"
+            )
+        row = torch.cat([f.row for f in framed])
+        cond = torch.cat([f.cond for f in framed])
+        t_mel = TOKEN_MEL_RATIO * row.shape[1]
+
+        emb = torch.from_numpy(
+            np.stack([np.asarray(v.flow_embedding, dtype=np.float32) for v in voices])
+        )
+        emb = F.normalize(emb, dim=1).to(self._device)
+        spks = self.spk_embed_affine_layer(emb)
+
+        prior = torch.stack([self._prior(seed, t_mel) for seed in seeds])
+        out = self._integrate(row, cond, spks, prior)
+        return [
+            out[i, :, f.prompt_frames : f.prompt_frames + TOKEN_MEL_RATIO * f.n]
+            .cpu()
+            .numpy()
+            .astype(np.float32)
+            for i, f in enumerate(framed)
+        ]

@@ -19,7 +19,7 @@ import sys
 import pytest
 
 from .assets import requires_modules
-from .test_server import _engine
+from .conftest import fake_engine
 
 # ------------------------------------------------------------- pattern table
 
@@ -28,10 +28,10 @@ class TestReleasePatterns:
     def test_every_backend_carries_the_core_set(self) -> None:
         """All three backends read tensors from the packed checkpoint, and the
         tokenizer, the voices and the release manifest travel with it."""
-        from loudkit.cli import _release_patterns
+        from loudkit.hub import release_patterns
 
         for backend in ("torch", "onnx", "coreml"):
-            allow, _ = _release_patterns(backend)
+            allow, _ = release_patterns(backend)
             for pattern in (
                 "*.safetensors",
                 "manifest.json",
@@ -47,9 +47,9 @@ class TestReleasePatterns:
         encoder, and the enrollment artefact the packed checkpoint was split
         into. `*.safetensors` in the core set matches both, so the saving the
         split exists for is made here or not at all."""
-        from loudkit.cli import _release_patterns
+        from loudkit.hub import release_patterns
 
-        _, ignore = _release_patterns("torch")
+        _, ignore = release_patterns("torch")
         assert ignore == ("ve.safetensors", "loudr-1-enrollment.safetensors")
 
     def test_cloning_is_what_fetches_the_enrollment_artefact(self) -> None:
@@ -59,13 +59,13 @@ class TestReleasePatterns:
         enroller reads them; the graph ports get their enrollment graphs
         instead, which the next test covers.
         """
-        from loudkit.cli import _release_patterns
+        from loudkit.hub import release_patterns
 
         for backend in ("torch", "onnx", "coreml"):
-            _, synthesis = _release_patterns(backend)
+            _, synthesis = release_patterns(backend)
             assert "loudr-1-enrollment.safetensors" in synthesis, backend
 
-        _, torch_cloning = _release_patterns("torch", cloning=True)
+        _, torch_cloning = release_patterns("torch", cloning=True)
         assert torch_cloning == ()
 
     def test_an_unknown_backend_is_refused(self) -> None:
@@ -78,13 +78,13 @@ class TestReleasePatterns:
             hub_mod.release_patterns("tourch")
 
     def test_no_backend_fetches_another_backends_graphs(self) -> None:
-        from loudkit.cli import _release_patterns
+        from loudkit.hub import release_patterns
 
-        torch_allow, _ = _release_patterns("torch", cloning=True)
+        torch_allow, _ = release_patterns("torch", cloning=True)
         assert not any(p.startswith(("onnx/", "coreml/")) for p in torch_allow)
-        onnx_allow, _ = _release_patterns("onnx", cloning=True)
+        onnx_allow, _ = release_patterns("onnx", cloning=True)
         assert not any(p.startswith("coreml/") for p in onnx_allow)
-        coreml_allow, _ = _release_patterns("coreml", cloning=True)
+        coreml_allow, _ = release_patterns("coreml", cloning=True)
         assert not any(p.startswith("onnx/") for p in coreml_allow)
 
     def test_cloning_uncovers_the_torch_weights_for_torch_only(self) -> None:
@@ -95,18 +95,17 @@ class TestReleasePatterns:
         clone through the enrollment graphs, so sending them 528 MB of torch
         weights is the overfetch the split exists to remove.
         """
-        from loudkit.cli import _release_patterns
-        from loudkit.hub import ENROLLMENT_NAME, VOICE_ENCODER_NAME
+        from loudkit.hub import ENROLLMENT_NAME, VOICE_ENCODER_NAME, release_patterns
 
-        _, torch_ignore = _release_patterns("torch", cloning=True)
+        _, torch_ignore = release_patterns("torch", cloning=True)
         assert torch_ignore == ()
 
         for backend in ("onnx", "coreml"):
-            _, ignore = _release_patterns(backend, cloning=True)
+            _, ignore = release_patterns(backend, cloning=True)
             assert ignore == (VOICE_ENCODER_NAME, ENROLLMENT_NAME), backend
 
     def test_the_enrollment_graphs_ride_only_with_cloning(self) -> None:
-        from loudkit.cli import _release_patterns
+        from loudkit.hub import release_patterns
 
         for backend, graphs in (
             ("onnx", ("onnx/s3_tokenizer.onnx", "onnx/camp.onnx", "onnx/voice_encoder.onnx")),
@@ -119,49 +118,33 @@ class TestReleasePatterns:
                 ),
             ),
         ):
-            synth, _ = _release_patterns(backend)
-            with_cloning, _ = _release_patterns(backend, cloning=True)
+            synth, _ = release_patterns(backend)
+            with_cloning, _ = release_patterns(backend, cloning=True)
             for graph in graphs:
                 assert graph not in synth, (backend, graph)
                 assert graph in with_cloning, (backend, graph)
 
-    def test_the_hub_table_wins_when_it_exists(self, monkeypatch) -> None:
-        """The canonical table belongs in ``loudkit.hub`` beside the resolver
-        ``load()`` uses; the CLI's copy is the fallback until it lands, and
-        must step aside the moment it does, so the two cannot drift."""
-        import loudkit.hub as hub_mod
-        from loudkit.cli import _release_patterns
 
-        sentinel = (("everything",), ())
+def _pack(
+    path, *, role: str | None = None, assets: tuple[str, ...] = (), turbo: bool = False
+) -> None:
+    """A file that reads as a loudkit checkpoint. ``role=None`` is pre-split.
 
-        def canonical(backend, *, cloning=False):
-            del backend, cloning
-            return sentinel
-
-        monkeypatch.setattr(hub_mod, "release_patterns", canonical, raising=False)
-        assert _release_patterns("torch") == sentinel
-
-    def test_the_table_lives_in_hub(self) -> None:
-        """The canonical table exists in ``loudkit.hub`` and the CLI answers
-        with it verbatim — the moment `_release_patterns` was written for."""
-        import loudkit.hub as hub_mod
-        from loudkit.cli import _release_patterns
-
-        for backend in ("torch", "onnx", "coreml"):
-            for cloning in (False, True):
-                assert _release_patterns(backend, cloning=cloning) == hub_mod.release_patterns(
-                    backend, cloning=cloning
-                ), (backend, cloning)
-
-
-def _pack(path, *, role: str | None = None, assets: tuple[str, ...] = ()) -> None:
-    """A file that reads as a loudkit checkpoint. ``role=None`` is pre-split."""
+    ``turbo=True`` writes what ``tools/pack_turbo.py`` writes: format_version
+    2 and a ``decode`` block naming the two-token loop. The version has to
+    move with the block or ``read_manifest`` refuses the file, which is the
+    coupling ``DECODE_FORMAT_VERSION`` exists to hold.
+    """
     import json
 
     import numpy as np
     from safetensors.numpy import save_file
 
     manifest: dict = {"format": "loudkit-checkpoint", "format_version": 1}
+    if turbo:
+        manifest["format_version"] = 2
+        manifest["name"] = "loudkit-v0.1-turbo"
+        manifest["decode"] = {"mode": "fusion_mtp2"}
     if role is not None:
         manifest["artifact_role"] = role
     tensors = {"t3.dummy": np.zeros(2, np.float32)}
@@ -283,6 +266,78 @@ class TestTheInventoryChecksTheBasics:
             hub_mod.verify_release_inventory(self._torch_root(tmp_path), "tourch")
 
 
+class TestTheTurboReleaseIsTheSameShapeMinusTheGraphs:
+    """`loudreader/loudr-1-turbo` is a second repo with the same layout.
+
+    One pre-split checkpoint carrying every tensor, the tokenizer, the voice
+    encoder and the twenty voices, and no `onnx/` or `coreml/`, because turbo
+    runs on torch only in this version. So the torch plan must accept it
+    unchanged, cloning included, and the two graph backends must say why they
+    cannot rather than list the graphs the release was never going to carry.
+    """
+
+    def _turbo_root(self, tmp_path):
+        import loudkit.hub as hub_mod
+
+        root = tmp_path / "snap"
+        (root / "voices").mkdir(parents=True)
+        (root / "voices" / "joe.safetensors").write_bytes(b"v")
+        _pack(root / hub_mod.TURBO_CHECKPOINT_NAME, turbo=True)
+        for name in ("manifest.json", "tokenizer.json"):
+            (root / name).write_text("{}", encoding="utf-8")
+        (root / "ve.safetensors").write_bytes(b"ve")
+        return root
+
+    def test_the_torch_plan_accepts_it(self, tmp_path) -> None:
+        import loudkit.hub as hub_mod
+
+        root = self._turbo_root(tmp_path)
+        hub_mod.verify_release_inventory(root, "torch", require_voices=True)
+
+    def test_cloning_needs_no_second_artefact(self, tmp_path) -> None:
+        """The turbo checkpoint is pre-split: it carries the enrollment towers,
+        so `--with-cloning` asks for nothing that is not already there."""
+        import loudkit.hub as hub_mod
+
+        root = self._turbo_root(tmp_path)
+        hub_mod.verify_release_inventory(root, "torch", cloning=True, require_voices=True)
+
+    @pytest.mark.parametrize("backend", ["onnx", "coreml"])
+    def test_graph_backend_requires_its_graphs(self, tmp_path, backend) -> None:
+        import loudkit.hub as hub_mod
+
+        root = self._turbo_root(tmp_path)
+        with pytest.raises(FileNotFoundError, match="missing"):
+            hub_mod.verify_release_inventory(root, backend)
+
+    def test_shared_sibling_wins_over_embedded_enrollment(self, tmp_path) -> None:
+        import loudkit.hub as hub_mod
+
+        root = self._turbo_root(tmp_path)
+        canonical = root / hub_mod.ENROLLMENT_NAME
+        _pack(canonical, role="enrollment")
+        assert hub_mod.resolve_enrollment_checkpoint(str(root)) == canonical
+        assert (
+            hub_mod.resolve_enrollment_checkpoint(str(root / hub_mod.TURBO_CHECKPOINT_NAME))
+            == canonical
+        )
+
+    def test_the_resolver_finds_the_turbo_checkpoint_by_name(self, tmp_path) -> None:
+        import loudkit.hub as hub_mod
+
+        root = self._turbo_root(tmp_path)
+        assert hub_mod._only_checkpoint_in(root).name == hub_mod.TURBO_CHECKPOINT_NAME
+
+    def test_two_models_in_one_directory_is_named_not_guessed(self, tmp_path) -> None:
+        """They decode by different loops, so there is no right one to pick."""
+        import loudkit.hub as hub_mod
+
+        root = self._turbo_root(tmp_path)
+        _pack(root / hub_mod.CHECKPOINT_NAME)
+        with pytest.raises(FileNotFoundError, match="2 models here"):
+            hub_mod._only_checkpoint_in(root)
+
+
 class _StopResolveError(Exception):
     """Raised by a fake resolver so `load()` never builds an engine."""
 
@@ -346,8 +401,15 @@ class TestResolverFetchesAUsableSet:
 
         class _Client:
             def snapshot_download(self, **kwargs):
+                if kwargs.get("local_files_only"):
+                    raise FileNotFoundError("not cached")
                 calls.update(kwargs)
                 return str(root)
+
+            def list_repo_files(self, **kwargs):
+                # The listing carries the graphs, so the pre-fetch check
+                # passes and what is under test is the plan and the receipt.
+                return ["loudr-1.safetensors", "onnx/t3_step.onnx"]
 
         client = _Client()
         monkeypatch.setattr(hub_mod, "_hub", lambda: client)
@@ -413,7 +475,7 @@ class TestHTTPServeResolvesARepoId:
 
         monkeypatch.setattr(hub_mod, "resolve_checkpoint", fake_resolve)
         monkeypatch.setattr(
-            loudkit, "load", lambda *a, **_k: seen.update(loaded=a) or _engine()
+            loudkit, "load", lambda *a, **_k: seen.update(loaded=a) or fake_engine()
         )
         monkeypatch.setitem(sys.modules, "uvicorn", _FakeUvicorn)
 
@@ -435,7 +497,7 @@ class TestHTTPServeResolvesARepoId:
         mine = tmp_path / "mine"
         mine.mkdir()
         monkeypatch.setattr(hub_mod, "resolve_checkpoint", lambda *_a, **_k: ckpt)
-        monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: _engine())
+        monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: fake_engine())
         monkeypatch.setitem(sys.modules, "uvicorn", _FakeUvicorn)
 
         server_mod.serve("loudreader/loudr-1", voices=mine)
@@ -471,7 +533,7 @@ class TestGRPCServeResolvesARepoId:
             lambda ref, **_kw: seen.update(ref=ref) or ckpt,
         )
         monkeypatch.setattr(
-            loudkit, "load", lambda *a, **_k: seen.update(loaded=a) or _engine()
+            loudkit, "load", lambda *a, **_k: seen.update(loaded=a) or fake_engine()
         )
         monkeypatch.setattr(grpc_mod, "build_server", lambda *_a, **_k: _FakeGRPCServer())
 
@@ -505,3 +567,45 @@ class TestGRPCServeResolvesARepoId:
         )
         with pytest.raises(FileNotFoundError, match="unused.safetensors"):
             grpc_mod.serve("unused.safetensors")
+
+
+@pytest.mark.parametrize("backend", ["onnx", "coreml"])
+def test_turbo_fetch_includes_and_requires_native_generator(tmp_path, backend) -> None:
+    import fnmatch
+
+    from loudkit.release import release_patterns, verify_release_inventory
+
+    _pack(tmp_path / "loudr-1-turbo.safetensors", turbo=True)
+    for name in ("manifest.json", "tokenizer.json"):
+        (tmp_path / name).write_text("{}")
+    stages = (
+        "t3_cond",
+        "t3_prefill",
+        "t3_pair_step",
+        "t3_head2",
+        "flow_encoder",
+        "flow_estimator",
+        "vocoder",
+    )
+    allow, ignore = release_patterns(backend)
+    for stage in stages:
+        if backend == "onnx":
+            path = tmp_path / "onnx" / (stage + ".onnx")
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(b"graph")
+        else:
+            _mlpackage(tmp_path, stage)
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            rel = path.relative_to(tmp_path).as_posix()
+            assert any(fnmatch.fnmatch(rel, pattern) for pattern in allow), rel
+            assert not any(fnmatch.fnmatch(rel, pattern) for pattern in ignore), rel
+    verify_release_inventory(tmp_path, backend)
+    missing = (
+        tmp_path / "onnx/t3_head2.onnx"
+        if backend == "onnx"
+        else tmp_path / "coreml/t3_head2.mlpackage/Manifest.json"
+    )
+    missing.unlink()
+    with pytest.raises(FileNotFoundError, match="t3_head2"):
+        verify_release_inventory(tmp_path, backend)

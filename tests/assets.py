@@ -33,13 +33,11 @@ REQUIRE_ASSETS = os.environ.get("LOUDKIT_REQUIRE_ASSETS", "").lower() in {"1", "
 _DEFAULT_ROOT = Path(__file__).resolve().parents[1] / "assets"
 """Where the large release assets are: the repository's own ``assets/``.
 
-The default used to be a sibling ``chatterbox-apple`` checkout, which is gone;
-its artefacts were copied into ``assets/`` here (gitignored, about 4 GB). The
-layout is the release bundle's, flat at the root: the synthesis checkpoint,
-``tokenizer.json`` and ``ve.safetensors`` beside ``onnx/`` and ``coreml/``.
-Enrollment audio is the checked-in ``tests/data/enrollment/ref_audio.f32``
-fixture, so a clean checkout does not depend on an untracked source WAV.
-Anywhere else, set ``LOUDKIT_ASSET_ROOT``.
+Gitignored, and laid out as the release bundle is, flat at the root: the
+synthesis checkpoint, ``tokenizer.json`` and ``ve.safetensors`` beside
+``onnx/`` and ``coreml/``. Enrollment audio is the checked-in
+``tests/data/enrollment/ref_audio.f32`` fixture, so a clean checkout does not
+depend on an untracked source WAV. Anywhere else, set ``LOUDKIT_ASSET_ROOT``.
 """
 _ROOT = Path(os.environ.get("LOUDKIT_ASSET_ROOT", str(_DEFAULT_ROOT)))
 
@@ -48,6 +46,16 @@ _ASSETS: dict[str, tuple[str, Path]] = {
     "tokenizer": ("LOUDKIT_TOKENIZER", _ROOT / "tokenizer.json"),
     "voice_encoder": ("LOUDKIT_VOICE_ENCODER", _ROOT / "ve.safetensors"),
 }
+
+_ASSETS["turbo_checkpoint"] = (
+    "LOUDKIT_TURBO_CHECKPOINT",
+    (
+        _ROOT
+        if "LOUDKIT_ASSET_ROOT" in os.environ
+        else Path(__file__).resolve().parents[1] / "dist/loudr-1-turbo"
+    )
+    / "loudr-1-turbo.safetensors",
+)
 
 
 # With the switch on, a missing named asset is a broken runner even when a
@@ -146,10 +154,10 @@ def needs_module(name: str) -> ModuleType:
     """``importorskip`` that honours ``LOUDKIT_REQUIRE_ASSETS``.
 
     A runner meant to exercise a backend and missing that backend's runtime is
-    a broken runner. Before this, ``tests/test_onnx.py`` said in its own
-    docstring that the switch turned its skips into failures; it did not, and
-    no CI job installed onnxruntime, so the hand-written numpy mirror of the
-    torch decode loop in ``onnx_backend.py`` ran nowhere at all.
+    a broken runner. Without this, a module such as ``tests/test_onnx.py``
+    skips itself on a runner that was supposed to have onnxruntime, and the
+    hand-written numpy mirror of the torch decode loop in ``onnx_backend.py``
+    goes unexercised while the job reports success.
     """
     try:
         return importlib.import_module(name)

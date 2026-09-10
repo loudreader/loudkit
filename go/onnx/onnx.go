@@ -16,7 +16,7 @@ type Session struct {
 	outNames []string
 }
 
-// Load opens a graph on one concrete execution provider — a name from
+// Load opens a graph on one concrete execution provider: a name from
 // config.ONNXProviders that Resolve has already answered, never "auto".
 //
 // The provider is a parameter and not a default because nil session options

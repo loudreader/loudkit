@@ -1,6 +1,6 @@
 {
   "name": "loudkit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "LoudReader",
   "repository": {
     "type": "git",
@@ -32,6 +32,7 @@
     "dist/",
     "!dist/test/",
     "data/",
+    "examples/",
     "README.md",
     "DISCLOSURE",
     "LICENSE",
@@ -41,7 +42,7 @@
     "prebuild": "node scripts/copy-data.mjs",
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "pretest": "node scripts/copy-data.mjs",
-    "test": "tsc && node --test dist/test/*.test.js",
+    "test": "tsc && node scripts/run-tests.mjs",
     "test:all": "npm run test && npm run test:fixture",
     "test:fixture": "node dist/test/run_conformance.js",
     "prepack": "npm run build && node scripts/check-pack.mjs",

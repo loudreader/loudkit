@@ -1,10 +1,8 @@
-# Nobody watched the dependencies.
+# Dependency and GitHub Actions updates, checked weekly.
 #
 # CI pins its actions by SHA, which is the right call and also a standing cost:
 # a pinned action never updates itself, so a security release sits unnoticed
-# until somebody looks. Four rounds of review checked the dependency tree by
-# hand and found it clean, which is evidence about those four afternoons and
-# not about next month.
+# until somebody looks. This is what looks.
 #
 # Weekly rather than daily: this is a small project and a pull request a day is
 # a pull request nobody reads.
@@ -23,10 +21,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: deps
-    # `ruff` is pinned exactly on purpose — two versions that both "pass" still
-    # disagree about bytes, and a formatter that updates itself turns a
-    # first-time contributor's green PR red for reasons that are not theirs.
-    # Raise it deliberately, in its own commit, with the reformat it causes.
+    # `ruff` is pinned exactly on purpose: two versions that both "pass" still
+    # disagree about bytes, so a formatter that updates itself makes CI's
+    # verdict depend on the morning it ran. Raise the pin deliberately, in its
+    # own commit, with the reformat it causes.
     ignore:
       - dependency-name: ruff
 
@@ -46,6 +44,16 @@ updates:
 
   - package-ecosystem: gomod
     directory: /go
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+
+  # The documentation site is npm too, and it builds and publishes a public
+  # page, so a vulnerable transitive dependency there is as reachable as one in
+  # the library.
+  - package-ecosystem: npm
+    directory: /site
     schedule:
       interval: weekly
     commit-message:

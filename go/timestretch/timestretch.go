@@ -1,17 +1,17 @@
 // Package timestretch mirrors loudkit.models.timestretch: playing faster
-// without talking higher — WSOLA, from first principles.
+// without talking higher. WSOLA, from first principles.
 //
 // "Speed" in a reading app means what it means on a video player: 1.5x is the
 // same voice, sooner. Resampling gives you a chipmunk; what is wanted is time
 // stretched while pitch is left alone.
 //
 // Why WSOLA and not a phase vocoder. The phase vocoder is the other standard
-// answer and is better on sustained, harmonic material — held notes, chords.
+// answer and is better on sustained, harmonic material: held notes, chords.
 // Speech is the opposite kind of signal: it is mostly transients (plosives, the
 // attack of every syllable) sitting on a pitch that moves continuously. A phase
 // vocoder resynthesises from magnitudes and unwrapped phases, and its
-// characteristic failure on that material is transient smearing — a /t/
-// arriving as a soft thud, "phasiness" on voiced segments — which is precisely
+// characteristic failure on that material is transient smearing: a /t/
+// arriving as a soft thud, "phasiness" on voiced segments, which is precisely
 // the part of speech intelligibility rests on. WSOLA never leaves the time
 // domain: it copies real waveform segments and only chooses where to copy them
 // from, so a plosive is either included whole or not at all. It cannot smear
@@ -28,7 +28,7 @@
 // search window set to zero, and it sounds like it: periodic warble at the
 // frame rate.
 //
-// Everything here is deterministic — no RNG, no adaptivity, no dependencies.
+// Everything here is deterministic: no RNG, no adaptivity, no dependencies.
 // The constants are derived from the sample rate rather than written as sample
 // counts, so the same code is correct at 16 kHz or 48 kHz, and the five
 // implementations derive them the same way.
@@ -47,8 +47,8 @@ import (
 
 // MinSpeed and MaxSpeed are the range worth offering, not the range that runs.
 //
-// Outside it the alignment search stops finding matches often enough — the
-// required shift exceeds the ±10 ms it may look over — and the output is
+// Outside it the alignment search stops finding matches often enough: the
+// required shift exceeds the ±10 ms it may look over, and the output is
 // recognisably processed rather than merely faster. Refused rather than
 // clamped: a caller who asked for 3x and silently got 2x has a bug that only a
 // stopwatch finds.
@@ -62,21 +62,21 @@ const (
 // inside one phone.
 const frameMS = 25.0
 
-// searchMS is how far the read position may move to find a better join — a bit
+// searchMS is how far the read position may move to find a better join: a bit
 // under one pitch period at the low end of the voiced range, which is what the
 // search is looking for.
 const searchMS = 10.0
 
 // hannCOLAHop: frames overlap by half. A periodic Hann window at hop =
 // frame/2 sums to exactly one, so the overlap-add needs no normalisation of its
-// own — the denominator in TimeStretch only ever corrects the ends and the
+// own: the denominator in TimeStretch only ever corrects the ends and the
 // places the alignment search moved a frame off the grid.
 const hannCOLAHop = 2
 
 // ValidateSpeed returns nil if speed is usable, or an error that says the range.
 //
-// Kept here rather than in the engine so that every entry point — Synthesize,
-// SynthesizeLong, Stream, and whatever a caller wraps around them — refuses the
+// Kept here rather than in the engine so that every entry point (Synthesize,
+// SynthesizeWindow, Stream, and whatever a caller wraps around them) refuses the
 // same values with the same words, and a new entry point cannot forget to.
 func ValidateSpeed(speed float64) error {
 	if math.IsNaN(speed) || math.IsInf(speed, 0) {
@@ -103,7 +103,7 @@ func StretchedLength(n int, speed float64) int {
 
 // TimeStretch returns audio played at speed, same pitch.
 //
-// speed > 1 shortens, < 1 lengthens, and 1.0 returns the input slice itself —
+// speed > 1 shortens, < 1 lengthens, and 1.0 returns the input slice itself,
 // not a copy that happens to be equal, because the engine's default must be a
 // bypass and "bit-identical" is easier to trust when there is no arithmetic to
 // be identical about. Go has no default arguments, so every caller names the
@@ -115,8 +115,8 @@ func StretchedLength(n int, speed float64) int {
 // The result is StretchedLength(len(audio), speed) samples long.
 //
 // An out-of-range speed is an error, not a quiet bypass. The three engine entry
-// points already refuse one before they generate a single token — where the
-// refusal is worth six seconds — so this is the last line rather than the first,
+// points already refuse one before they generate a single token: where the
+// refusal is worth six seconds, so this is the last line rather than the first,
 // and reaching it means a caller skipped ValidateSpeed. Returning the input
 // instead would be the exact failure MinSpeed refuses by name: asked for 3x,
 // silently got 1x, and only a stopwatch finds it. Python raises here, Rust
@@ -136,12 +136,12 @@ func TimeStretch(audio []float32, sampleRate int, speed float64) ([]float32, err
 	// Nothing to overlap-add: a fragment shorter than one frame has no second
 	// frame to align against. Cut or zero-padded to the right length instead,
 	// which is wrong in the way silence is wrong rather than in the way a pitch
-	// shift is. At 24 kHz a frame is 600 samples — a fortieth of a second, below
+	// shift is. At 24 kHz a frame is 600 samples: a fortieth of a second, below
 	// anything the engine renders.
 	//
 	// hop <= 0 joins that branch rather than looping forever. It needs a sample
 	// rate under 60 Hz to happen, so it is not a behaviour difference from the
-	// reference in any case a caller can reach — it turns a hang, which no stack
+	// reference in any case a caller can reach: it turns a hang, which no stack
 	// trace explains, into the short-fragment path.
 	if n <= frame || outLen <= 0 || hop <= 0 {
 		out := make([]float32, max(outLen, 0))
@@ -153,7 +153,7 @@ func TimeStretch(audio []float32, sampleRate int, speed float64) ([]float32, err
 	// Periodic Hann, i.e. 2*pi*i/frame and not /(frame-1). The periodic form is
 	// the one that sums to exactly one at 50 % overlap; the symmetric form is off
 	// by a hair at every frame boundary, which reads as a low-level buzz at the
-	// frame rate — 40 Hz here, right in the range a listener notices.
+	// frame rate: 40 Hz here, right in the range a listener notices.
 	window := make([]float64, frame)
 	for i := range window {
 		window[i] = 0.5 - 0.5*math.Cos(2.0*math.Pi*float64(i)/float64(frame))
@@ -163,6 +163,13 @@ func TimeStretch(audio []float32, sampleRate int, speed float64) ([]float32, err
 	// but the accumulator sums up to two windowed frames per sample and the
 	// correlation sums a whole frame of products; doing either in float32 loses
 	// bits the other four ports keep.
+	//
+	// The compiler fuses the multiply into the add in both of those sums, which
+	// puts this port half a float32 ulp from the other four. What decides
+	// whether that matters is bestMatch, whose output is an integer: across 600
+	// waveform and speed pairs the chosen offset never moved, and no sample
+	// crossed floor(x*32768), so every WAV came out byte-identical. Recorded
+	// rather than chased; the sums stay as written.
 	x := make([]float64, n)
 	for i, s := range audio {
 		x[i] = float64(s)
@@ -212,7 +219,7 @@ func TimeStretch(audio []float32, sampleRate int, speed float64) ([]float32, err
 // bestMatch is the offset within ±search of ideal whose frame best continues
 // target.
 //
-// Scored by cross-correlation normalised by the candidate's energy only — the
+// Scored by cross-correlation normalised by the candidate's energy only: the
 // target's is the same for every candidate and cancels out of the ranking.
 // Without that normalisation the search prefers whichever candidate is loudest
 // rather than whichever fits, which at a syllable onset is exactly the wrong
@@ -261,3 +268,33 @@ func slice(x []float64, lo, hi int) []float64 {
 }
 
 func clamp(v, lo, hi int) int { return min(max(v, lo), hi) }
+
+// EdgeFadeSeconds is the raised-cosine ramp FadeEdges puts on both ends of a
+// rendered window.
+const EdgeFadeSeconds = 0.02
+
+// FadeEdges tapers both waveform edges; see docs/design/postprocess.md.
+func FadeEdges(audio []float32, sampleRate int, seconds float64) []float32 {
+	n := int(seconds * float64(sampleRate))
+	if n <= 0 || len(audio) < 2*n {
+		return audio
+	}
+	out := make([]float32, len(audio))
+	copy(out, audio)
+	// A length no table covers is computed in double and narrowed. That ramp
+	// tracks the float32 reference to within two units in the last place, under
+	// 1.2e-07 at full scale, about -138 dBFS: the identity contract's
+	// equivalent class, not its bit-exact one.
+	table := edgeFadeTable(n)
+	for i := 0; i < n; i++ {
+		var w float32
+		if table != nil {
+			w = math.Float32frombits(table[i])
+		} else {
+			w = float32(0.5 - 0.5*math.Cos(math.Pi*float64(i)/float64(n-1)))
+		}
+		out[i] *= w
+		out[len(out)-1-i] *= w
+	}
+	return out
+}

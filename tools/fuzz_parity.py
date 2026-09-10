@@ -1,9 +1,9 @@
 """Random text through five funnels, compared byte for byte.
 
-Every parity break found in four rounds of review was found *outside* the shared
-fixture: the Swift combining-mark divergence, the Go/Rust glued-group
-divergence, the half-expansion family. The fixture holds exactly the cases
-somebody thought of, and passed 105 of them while two of those breaks were live.
+A hand-written fixture holds exactly the cases somebody thought of, and stays
+green while a divergence nobody thought of is live: the combining-mark, the
+glued-group and the half-expansion families were each found this way rather
+than by the fixture.
 
 This is the part that finds what nobody thought of. It generates text from the
 shapes that have actually broken -- digits against letters, grouping spaces,
@@ -34,7 +34,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "python"))
 
-LANGUAGES = ("en", "pl", "de", "es", "fr", "it", "pt", "nl", "da", "fi", "no", "sv")
+# Derived, not written out, for the reason `tests/test_funnel_properties.py`
+# gives: this is the one differential gate in CI, and a language missing from a
+# hand-kept list gets no fuzz coverage under a green build.
+from loudkit.frontend.numbers import supported_languages  # noqa: E402
+
+LANGUAGES = supported_languages()
 
 # Fragments, weighted towards what has broken. A uniform character soup mostly
 # generates text with no numbers in it, which exercises the one pass that has
@@ -85,11 +90,85 @@ ATOMS = (
     "(",
     ")",
     "[12]",
+    # ...and the marks that used to carry their meaning no further than the
+    # funnel. Each of these is a rule whose guard is the whole difficulty: an
+    # operator against markup, a magnitude against a unit, a fraction against a
+    # date, a numeral against an initialism. The generator's joiners glue them
+    # to each other, which is where a guard that reads one character too few
+    # shows itself.
+    ">",
+    "<",
+    "<=",
+    ">=",
+    "!=",
+    "==",
+    "<p>",
+    "</p>",
+    '<div class="x">',
+    "<!-- note -->",
+    "IV",
+    "II",
+    "XIV",
+    "CD",
+    "XL",
+    "MIX",
+    "10:30:45",
+    "10:00:45",
+    "3:45:00pm",
+    "2026-03-04T10:00",
+    "2026-03-04",
+    "$2.5M",
+    "$5bn",
+    "$20k",
+    "$5 million",
+    "$5kg",
+    "24/7",
+    "1/2",
+    "¾",
+    "3 April",
+    "12 marzo",
+    # The day-first date and the telephone number, whose bounds are the same
+    # rule the ISO form's are: the joiners glue a letter to either end.
+    "25/03/2026",
+    "+12345678",
+    "+48 123 456 789",
     # scripts and combining characters
     "٣٫١٤",
     "١٢٣",
     "a̬",
     "é",
+    # numerals this layer has no reading for: `No` and `Nl`. They are here
+    # because they were not, and the family they hid, a superscript against a
+    # digit leaving a bare digit in the output, was found by hand rather than
+    # by this file. Every one of them glues to a digit through a "" joiner,
+    # which is the shape that broke.
+    "²",
+    "½",
+    "③",
+    "Ⅳ",
+    # ...and ideographic numerals, which are `Lo`. The guard on the fix above:
+    # a pass keyed on numeric type rather than on the general category would
+    # delete these, and deleting a language's numerals is the failure being
+    # fixed rather than a way to fix it.
+    "一二三",
+    "十",
+    # Letter classes the five ports answered differently: a circled letter is
+    # `So` and an Other_Alphabetic mark is `Mn`, and Rust and Swift read both as
+    # letters where the other three did not. Astral, because Foundation's
+    # `CharacterSet` is wrong above the BMP and nothing here reached that far.
+    "ⓐ",
+    "aͅ",
+    "𗀀",
+    # Whitespace the five disagreed about: NEL is not `\s` in ECMAScript, and VT
+    # was missing from Go's hand-expanded class.
+    "",
+    "",
+    # Digits of other scripts, which used to pass the whole funnel untouched.
+    "৩",
+    "１",
+    "๓",
+    # A date glued to a letter, where three boundary spellings disagreed.
+    "12.03.2026",
     # ordinary words, so the funnel sees text and not only symbols
     "the",
     "and",
@@ -108,7 +187,7 @@ def _sentence(rng: random.Random) -> str:
 
 
 def _generate(count: int, seed: int) -> list[dict[str, str]]:
-    from loudkit.frontend.polish import speech_text
+    from loudkit.frontend.speechtext import speech_text
 
     rng = random.Random(seed)
     cases = []
@@ -146,63 +225,55 @@ PORTS = {
 CWDS = {"go": REPO / "go", "rust": REPO / "rust", "js": REPO / "js", "swift": REPO}
 
 
-# How many divergences each port's own harness reports, and whether it stops at
-# the first one.
-#
-# Written down because guessing it produced two confident wrong numbers. The
-# tool used to print the tail of each port's output and nothing else, so
-# "how many" was whatever a grep over four different formats happened to match:
-# Go lists every case, and JS raises one assertion carrying a count. Reporting
-# "0" for a port whose format the grep did not recognise is the worst of the
-# four outcomes.
-#
-# Rust and Swift were recorded here as aborting on the first mismatch, and both
-# had stopped doing so: `rust/tests/speechtext.rs` and
-# `tests/LoudKitTextTests/SpeechFunnelTests.swift` each collect every mismatch
-# into a list and assert once at the end, with their own count in the message —
-# "the funnel disagrees with the shared fixture in 3/105 cases". A floor
-# reported as a total is a wrong number; a total reported as a floor sends the
-# reader to the full output for a count that was already correct. Both now read
-# the harness's own count, the way the JS entry does.
-#
-# `(pattern, complete)` — `complete` is False where the harness stops early, so
-# the count is a floor rather than a total. No port stops early today; the field
-# stays because a harness that does is one edit away.
-COUNTERS: dict[str, tuple[str, bool]] = {
-    "go": (r"speechtext_test\.go:\d+:", True),
-    "js": (r"actual: (\d+)", True),
-    "rust": (r"shared fixture in (\d+)/", True),
-    "swift": (r"shared fixture in (\d+)/", True),
+# Go reports one line per mismatch; the other harnesses print their total.
+COUNTERS = {
+    "go": r"speechtext_test\.go:\d+:",
+    "js": r"actual: (\d+)",
+    "rust": r"shared fixture in (\d+)/",
+    "swift": r"shared fixture in (\d+)/",
 }
 
 
-def divergence_count(port: str, output: str) -> tuple[int, bool]:
-    """How many failure markers this port's harness printed.
+def _port_list(value: str) -> list[str]:
+    """``--ports`` as names this tool can run, refused by argparse if not.
 
-    Deliberately *not* "how many cases diverged". Go prints one line per case;
-    JS, Rust and Swift each raise a single assertion carrying their own count. A
-    number that means something different in every port is worth printing only
-    when it is labelled as what it is, and the full output is written beside it
-    so the real count can be read rather than inferred.
-
-    Returns `(markers, complete)`, where `complete` is False for a harness that
-    stops early. None does today — see :data:`COUNTERS`.
+    An unknown name reached the loop and came out as a ``KeyError`` traceback
+    on ``PORTS[port]``, after the cases had been generated and the fixture
+    copied. A typed argument refuses it on the command line instead.
     """
-    pattern, complete = COUNTERS[port]
-    hits = re.findall(pattern, output, re.MULTILINE)
+    names = [part.strip() for part in value.split(",") if part.strip()]
+    if not names:
+        raise argparse.ArgumentTypeError("name at least one port")
+    unknown = sorted(set(names) - set(PORTS))
+    if unknown:
+        raise argparse.ArgumentTypeError(
+            f"unknown port(s) {', '.join(unknown)}; choose from {', '.join(sorted(PORTS))}"
+        )
+    return names
+
+
+def divergence_count(port: str, output: str) -> int | None:
+    """The harness's mismatch count, or None when it reported no such count.
+
+    A failed build or missing runtime is not evidence of a text divergence.
+    Print the full harness output so failures outside the comparison can be diagnosed.
+    """
+    hits = re.findall(COUNTERS[port], output, re.MULTILINE)
     if not hits:
-        return 0, complete
-    # A pattern with a group captures the harness's own count.
-    if hits and hits[0].isdigit():
-        return int(hits[0]), complete
-    return len(hits), complete
+        return None
+    return int(hits[0]) if hits[0].isdigit() else len(hits)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=int, default=300)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--ports", default="go,rust,js,swift")
+    parser.add_argument(
+        "--ports",
+        default="go,rust,js,swift",
+        type=_port_list,
+        help="comma-separated subset of " + ",".join(sorted(PORTS)),
+    )
     args = parser.parse_args()
 
     print(f"seed {args.seed}, {args.cases} cases")
@@ -212,7 +283,7 @@ def main() -> int:
         out = Path(tmp)
         source = REPO / "tests" / "data" / "conformance"
         # The whole directory, unchanged, and then one file replaced. The
-        # harnesses read more than the funnel fixture — a partial copy makes
+        # harnesses read more than the funnel fixture, a partial copy makes
         # them fail on a missing file, which reads exactly like a divergence and
         # is not one.
         for item in source.iterdir():
@@ -243,7 +314,7 @@ def main() -> int:
             "LOUDKIT_FIXTURE_DIR": str(out),
         }
         failed = []
-        for port in args.ports.split(","):
+        for port in args.ports:
             result = subprocess.run(
                 PORTS[port],
                 cwd=CWDS[port],
@@ -256,30 +327,23 @@ def main() -> int:
             if ok:
                 print(f"  {port:6} ok")
             else:
-                n, complete = divergence_count(port, result.stdout + result.stderr)
-                # "markers", not "cases": this counts what the harness printed,
-                # and only Go prints one line per case. Naming it after what is
-                # actually counted is the point — calling these case counts is
-                # how this tool reported two confident wrong numbers back when
-                # it counted nothing at all.
-                how = f"{n} marker{'s' if n != 1 else ''}"
-                if not complete:
-                    how += ", stops at the first mismatch"
-                print(f"  {port:6} DIVERGED  ({how})")
+                n = divergence_count(port, result.stdout + result.stderr)
+                if n is None:
+                    print(f"  {port:6} FAILED  (no comparison count; see log)")
+                else:
+                    print(f"  {port:6} DIVERGED  ({n} mismatch{'es' if n != 1 else ''})")
                 failed.append(port)
             if not ok:
                 combined = (result.stdout + result.stderr).strip()
-                log = out / f"{port}.log"
-                log.write_text(combined, encoding="utf-8")
-                for line in combined.splitlines()[-12:]:
-                    print(f"      {line}")
-                print(f"      (full output: {log})")
+                # `out` is temporary and disappears on return. Print the full
+                # output instead of pointing at a log that will no longer exist.
+                print(combined)
 
     if failed:
         print(
-            f"\n{', '.join(failed)} disagreed with Python. Reproduce with "
-            f"--seed {args.seed} --cases {args.cases}, then add the case to "
-            "tools/make_speechtext_fixture.py so it is checked forever."
+            f"\n{', '.join(failed)} failed. Reproduce with "
+            f"--seed {args.seed} --cases {args.cases}. For a text mismatch, add the case "
+            "to tools/make_speechtext_fixture.py so it is checked forever."
         )
         return 1
     print("\nall ports agree with Python on every generated case")
@@ -288,28 +352,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-# What this file has found, and what closed.
-#
-# The first run found a Go panic on `"1 234 567 12."` — ordinary text — and an
-# unported half of the forward-glue rule in Go and Rust. The long-open class
-# after that was the mixed-script one: strings where a number touches a
-# non-ASCII letter or a foreign digit across a dot, like `"Preis٣٫١٤ iOS."` and
-# `"0.é2024"`. Python was the wrong one there as often as the ports — it read
-# `Preis3,vierzehn`, half a token, which is the thing the guards exist to stop.
-#
-# That class is closed. One decision about what a token is when scripts mix,
-# applied five times, and the answer is the refusal rule in
-# `docs/reference/preprocess.md`: `Preis٣٫١٤` now reads `Preis3,14` in all five,
-# left written rather than half spoken. Closing it took four word-class fixes,
-# each a port reading Unicode through an ASCII-shaped class its engine gave it
-# for free — ICU's `\w` counting a combining mark as a word character in Swift,
-# the regex crate's `[:alpha:]` being ASCII in Rust, JS's `\w` likewise, and
-# Swift walking `Character` where Python walks code points. The fifth was a
-# rule Python had deleted and four ports had kept, which is the shape this
-# tool exists to find: `spell_acronyms` owns the initialism decision, and the
-# Polish respeller in Go, Rust, JS and Swift was still spelling acronyms a
-# second time with no view of the surrounding capitals.
-#
-# The CI job that runs this gates on it now. If it goes red, it has found
-# something.

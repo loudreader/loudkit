@@ -7,7 +7,7 @@ import XCTest
 ///
 /// Nothing here pins a waveform. A time-stretch has no golden output that
 /// survives a change of compiler, and the five ports sum the same doubles in
-/// their own order — so what is asserted is what a listener would notice if it
+/// their own order, so what is asserted is what a listener would notice if it
 /// broke: the length, the pitch, the loudness, and the fact that `speed = 1.0`
 /// is not a stretch at all but a bypass.
 ///
@@ -18,7 +18,7 @@ import XCTest
 /// sample after it, and the fixture would fail for a reason that is not a
 /// defect. Property tests fail only when the behaviour is actually wrong.
 ///
-/// No weights are involved — this is arithmetic over a synthetic signal, so it
+/// No weights are involved, this is arithmetic over a synthetic signal, so it
 /// runs in every checkout.
 final class TimeStretchTests: XCTestCase {
     private static let sampleRate = 24_000
@@ -26,7 +26,7 @@ final class TimeStretchTests: XCTestCase {
 
     /// A voiced-ish test signal: a low fundamental, a harmonic, and a sweep.
     ///
-    /// Deterministic by construction — no RNG anywhere in this file, because
+    /// Deterministic by construction, no RNG anywhere in this file, because
     /// the stretcher has none either and a flaky DSP test is worse than no DSP
     /// test.
     private func signal(seconds: Double = 1.0, f0: Double = 220.0) -> [Float] {
@@ -74,7 +74,7 @@ final class TimeStretchTests: XCTestCase {
     // MARK: unity is a bypass
 
     func testUnitySpeedReturnsTheInputBitForBit() throws {
-        // The engine's default must not depend on a DSP path being lossless —
+        // The engine's default must not depend on a DSP path being lossless,
         // it must not enter the DSP path at all.
         let x = signal(seconds: 0.3)
         let got = try TimeStretch.timeStretch(x, sampleRate: Self.sampleRate, speed: 1.0)
@@ -100,7 +100,7 @@ final class TimeStretchTests: XCTestCase {
     func testTheLengthFormulaIsHalfUpNotHalfEven() {
         // Python rounds halves to even; Go, Rust, Swift and JavaScript do not.
         // A one-sample disagreement on an exact half is found six months later,
-        // in a conformance run, by somebody else — so all five write the
+        // in a conformance run, by somebody else, so all five write the
         // formula out as floor(n / speed + 0.5).
         XCTAssertEqual(TimeStretch.stretchedLength(5, speed: 2.0), 3)  // 2.5 -> 3, not 2
         XCTAssertEqual(TimeStretch.stretchedLength(3, speed: 2.0), 2)  // 1.5 -> 2
@@ -108,7 +108,7 @@ final class TimeStretchTests: XCTestCase {
 
     func testAFragmentShorterThanAFrameIsStillTheRightLength() throws {
         // No overlap to align, so it is cut or padded. At 24 kHz this is under
-        // 25 ms — below anything the engine renders, and the alternative is a
+        // 25 ms, below anything the engine renders, and the alternative is a
         // crash on the degenerate case.
         let tiny = [Float](repeating: 1, count: 64)
         XCTAssertEqual(
@@ -176,7 +176,7 @@ final class TimeStretchTests: XCTestCase {
 
     func testTheConstantsAreDerivedFromTheSampleRate() throws {
         // The frame is 25 ms and the search 10 ms at whatever rate is passed,
-        // never a hardcoded sample count — otherwise a 16 kHz caller gets a
+        // never a hardcoded sample count, otherwise a 16 kHz caller gets a
         // 37 ms frame and a different reading from every other port. Visible
         // from outside as the frame threshold moving: 500 samples is under one
         // frame at 24 kHz (600) and over it at 16 kHz (400), so the same input
@@ -232,8 +232,8 @@ final class TimeStretchTests: XCTestCase {
             try TimeStretch.timeStretch(x, sampleRate: Self.sampleRate, speed: 4.0))
     }
 
-    /// The guard that no implementation tested, which is how two of the five —
-    /// this one included — shipped without it.
+    /// The guard that no implementation tested, which is how two of the five,
+    /// this one included, shipped without it.
     ///
     /// Below ~60 Hz the derived frame is one sample, so the hop (`frame /
     /// hannCOLAHop`) is zero and `writeAt += hop` never advances. This port
@@ -252,5 +252,76 @@ final class TimeStretchTests: XCTestCase {
             "the overlap-add loop did not terminate")
         XCTAssertEqual(got?.count, TimeStretch.stretchedLength(64, speed: 1.5))
         XCTAssertEqual(got?.count, 43)
+    }
+}
+
+
+final class FadeEdgesTests: XCTestCase {
+    func testStartsAndEndsAtZeroAndLeavesTheMiddle() {
+        let audio = [Float](repeating: 0.25, count: 24_000)
+        let out = TimeStretch.fadeEdges(audio, sampleRate: 24_000)
+        XCTAssertEqual(out[0], 0)
+        XCTAssertEqual(out[out.count - 1], 0)
+        let n = Int(TimeStretch.edgeFadeSeconds * 24_000)
+        XCTAssertEqual(Array(out[n..<(out.count - n)]), Array(audio[n..<(audio.count - n)]))
+        for i in 1..<n {
+            XCTAssertGreaterThanOrEqual(out[i], out[i - 1], "ramp not monotonic at \(i)")
+            XCTAssertEqual(out[i], out[out.count - 1 - i], accuracy: 1e-7, "ramp not symmetric at \(i)")
+        }
+        XCTAssertEqual(audio[0], 0.25, "input was modified")
+    }
+
+    func testLeavesAShortWindowAlone() {
+        let audio = [Float](repeating: 1, count: 10)
+        XCTAssertEqual(TimeStretch.fadeEdges(audio, sampleRate: 24_000), audio)
+    }
+}
+
+final class FadeReferenceTests: XCTestCase {
+    /// Every ramp the fixture pins, the historical 5 ms and the shipped 20 ms, has
+    /// to come out of `fadeEdges` bit for bit. A cosine computed here cannot: numpy
+    /// takes it in float32, and the ramp a release applies is the 20 ms one.
+    func testRampBitsMatchPython() throws {
+        let fixture = try Fixture.shared("edge_fade.json")
+        let rate = (fixture["sample_rate"] as! NSNumber).intValue
+        let ramps = fixture["ramps"] as! [[String: Any]]
+        XCTAssertGreaterThanOrEqual(ramps.count, 2, "the 5 ms and 20 ms ramps are both pinned")
+        for ramp in ramps {
+            let seconds = (ramp["seconds"] as! NSNumber).doubleValue
+            let expected = (ramp["bits"] as! [NSNumber]).map { $0.uint32Value }
+            XCTAssertEqual(expected.count, (ramp["samples"] as! NSNumber).intValue)
+            let audio = [Float](repeating: 1, count: expected.count * 4)
+            let faded = TimeStretch.fadeEdges(audio, sampleRate: rate, seconds: seconds)
+            XCTAssertEqual(Array(faded.prefix(expected.count)).map(\.bitPattern), expected,
+                           "\(seconds)s head")
+            XCTAssertEqual(Array(faded.suffix(expected.count).reversed()).map(\.bitPattern),
+                           expected, "\(seconds)s tail")
+        }
+    }
+
+    /// The ramp the engine applies, which no fixture pins.
+    ///
+    /// `edgeFadeSeconds` is 20 ms, so the table above does not cover it and the
+    /// Double formula runs. Held to the reference's shape to within one float32
+    /// ulp: the reference computes the same cosine on a float32 `linspace`, and
+    /// 244 of the 480 samples differ in the last bit, which no fixture records.
+    /// The endpoints and the monotonicity are exact, and those are what a wrong
+    /// length or an off-by-one in `n - 1` would break.
+    func testTheShippedRampHasTheReferenceShape() {
+        let n = Int(TimeStretch.edgeFadeSeconds * 24_000)
+        XCTAssertEqual(n, 480)
+        let audio = [Float](repeating: 1, count: n * 3)
+        let faded = TimeStretch.fadeEdges(audio, sampleRate: 24_000)
+        XCTAssertEqual(faded[0], 0)
+        XCTAssertEqual(faded[faded.count - 1], 0)
+        XCTAssertEqual(faded[n - 1], 1)
+        for i in 0..<n {
+            let want = Float(0.5 - 0.5 * Foundation.cos(Double.pi * Double(i) / Double(n - 1)))
+            XCTAssertEqual(faded[i], want, accuracy: 1e-7, "sample \(i)")
+            XCTAssertEqual(faded[faded.count - 1 - i], want, accuracy: 1e-7, "mirror \(i)")
+            if i > 0 { XCTAssertGreaterThan(faded[i], faded[i - 1], "ramp must rise") }
+        }
+        // The interior is untouched: only the two edges are ramped.
+        for i in n..<(faded.count - n) { XCTAssertEqual(faded[i], 1, "sample \(i)") }
     }
 }

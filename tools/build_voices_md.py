@@ -4,7 +4,7 @@ The voice table is the first thing most people will look at, and it is exactly
 the kind of page that goes stale: a voice gets added, a sample gets
 regenerated, an attribution changes, and the hand-written table quietly stops
 matching the files. So it is generated from
-`docs/voices/roster/provenance.json` — the same record that ships beside the
+`docs/voices/roster/provenance.json`, the same record that ships beside the
 profiles on Hugging Face and carries donor, source, licence, consent basis and
 hashes for every profile, reference and sample.
 
@@ -17,6 +17,7 @@ cleared for shipment, source by source.
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -82,15 +83,19 @@ def rows(voices: list[dict]) -> list[dict]:
 
 def render(voices: list[dict]) -> str:
     ordered = rows(voices)
-    order = {lang: i for i, lang in enumerate(LANGUAGE_ORDER)}
-    languages = sorted(
-        {v["language"] for v in voices}, key=lambda lang: order.get(lang, len(order))
-    )
+    # Counted by `language_id`, not by the display label. Two Portuguese
+    # voices carry two labels, European and Brazilian, and one `pt`, because
+    # there is one Portuguese grammar and one language tag the frontend reads.
+    # Counting labels made this line say eleven while README, SUPPORTED,
+    # CHANGELOG and the model card all said ten, and ten is the number that
+    # matches what the library can be asked to read.
+    language_count = len({v["language_id"] for v in voices})
+    english_count = sum(1 for v in voices if v["language_id"] == "en")
 
     out = [
         "# Voices",
         "",
-        f"**{len(voices)} voices, {len(languages)} languages.** Every profile "
+        f"**{len(voices)} voices, {language_count} languages.** Every profile "
         "is enrolled by this project's own pipeline from a recording made or "
         "released for speech-technology use: personal donations recorded for "
         "TTS, and CC0 / CC-BY corpora whose terms allow it. The donor or "
@@ -100,7 +105,7 @@ def render(voices: list[dict]) -> str:
         "consent basis, reference construction, SHA-256 of profile, reference "
         "and sample, and seed.",
         "",
-        "[Listen to all twenty voices](https://loudreader.github.io/loudkit/demo/) "
+        "[Open the voice gallery](https://loudreader.github.io/loudkit/demo/) "
         "and compare each generated sample with its enrollment reference.",
         "",
         "Profiles ship on the Hugging Face repository under `voices/`, "
@@ -127,6 +132,18 @@ def render(voices: list[dict]) -> str:
 
     out += [
         "",
+        f"All {len(voices)} voices are included in both loudr-1 and "
+        "loudr-1-turbo and load by name:",
+        "",
+        "```python",
+        'voice = engine.voice("henry")',
+        "```",
+        "",
+        f"The gallery compares the {english_count} English voices on the same "
+        "story, with seed 7 and matched loudness.",
+    ]
+    out += [
+        "",
         "",
         "## Enrol your own",
         "",
@@ -147,9 +164,17 @@ def render(voices: list[dict]) -> str:
 
 def main() -> None:
     voices = json.loads(PROVENANCE.read_text(encoding="utf-8"))
-    OUT.write_text(render(voices), encoding="utf-8")
+    # `newline="\n"`: VOICES.md is tracked, and a regeneration under a
+    # translating text mode would show every line as changed.
+    OUT.write_text(render(voices), encoding="utf-8", newline="\n")
     print(f"wrote {OUT} ({len(voices)} voices)")
 
 
 if __name__ == "__main__":
+    # In the entry point, not in `main`, which the suite calls as a function.
+    # Source and destination are both fixed, so any argument is a misreading;
+    # parsing is what makes `--help` print help instead of rewriting VOICES.md.
+    argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    ).parse_args()
     main()

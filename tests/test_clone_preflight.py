@@ -109,3 +109,68 @@ class TestTheEnrollerRunsThePreflight:
             enroller.enroll(_speech_like(31.0), _SR)
         with pytest.raises(ValueError, match="silent"):
             enroller.enroll(np.zeros(5 * _SR, np.float32), _SR)
+
+
+@pytest.mark.parametrize("case", ["short", "long", "nonfinite_tail", "stereo", "rate"])
+def test_prompt_preparation_cannot_hide_invalid_input(case: str, monkeypatch) -> None:
+    import loudkit
+    import loudkit.hub
+
+    clip = _speech_like(12.0)
+    rate = _SR
+    if case == "short":
+        clip = _speech_like(0.7)
+    elif case == "long":
+        clip = _speech_like(31.0)
+    elif case == "nonfinite_tail":
+        clip[-1] = np.nan
+    elif case == "stereo":
+        clip = np.stack([clip, clip], axis=1)
+    else:
+        rate = 0
+
+    def no_download(*args, **kwargs):
+        pytest.fail("invalid audio must be refused before downloading weights")
+
+    monkeypatch.setattr(loudkit.hub, "resolve_enrollment_checkpoint", no_download)
+    with pytest.raises(ValueError):
+        loudkit.enroll(clip, "unused", sample_rate=rate, end_in_silence=True)
+
+
+@pytest.mark.parametrize("end_in_silence", [False, True])
+def test_enroll_stamps_the_strategy_it_used(end_in_silence: bool, monkeypatch) -> None:
+    """The label exists so a build that cuts prompts differently refuses the profile.
+    A pause-cut prompt under the first-window label would defeat that check."""
+    import loudkit
+    import loudkit.hub
+    from loudkit.backends import torch_backend
+    from loudkit.voice import ENROLMENT_FIRST_WINDOW, ENROLMENT_PAUSE_CUT, VoiceProfile
+
+    rng = np.random.default_rng(0)
+
+    class _Enroller:
+        def enroll(self, samples, sample_rate, *, name=""):
+            return VoiceProfile(
+                name=name,
+                speaker_embedding=rng.normal(size=256).astype(np.float32),
+                flow_embedding=rng.normal(size=192).astype(np.float32),
+                prompt_tokens=rng.integers(0, 6561, size=250).astype(np.int64),
+                prompt_mel=rng.normal(size=(80, 500)).astype(np.float32),
+                cond_prompt_tokens=rng.integers(0, 6561, size=150).astype(np.int64),
+            )
+
+    def _resolved(*_args, **_kwargs):
+        return "resolved"
+
+    def _enroller(*_args, **_kwargs):
+        return _Enroller()
+
+    monkeypatch.setattr(loudkit.hub, "resolve_enrollment_checkpoint", _resolved)
+    monkeypatch.setattr(loudkit.hub, "resolve_voice_encoder", _resolved)
+    monkeypatch.setattr(torch_backend, "build_torch_enroller", _enroller)
+    profile = loudkit.enroll(
+        _speech_like(6.0), "unused", sample_rate=_SR, name="mine", end_in_silence=end_in_silence
+    )
+    assert profile.enrolment == (
+        ENROLMENT_PAUSE_CUT if end_in_silence else ENROLMENT_FIRST_WINDOW
+    )

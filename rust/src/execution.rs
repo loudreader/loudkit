@@ -11,14 +11,14 @@
 //! reasons, so the error names which one closed:
 //!
 //! * the **cargo feature**, because `ort` puts each provider's registration
-//!   code behind its own feature — a feature left off is not a slower path, it
+//!   code behind its own feature: a feature left off is not a slower path, it
 //!   is code that does not exist;
 //! * the **libonnxruntime at `ORT_DYLIB_PATH`**, because `load-dynamic` means
 //!   the provider set is a property of the library the user supplies at
 //!   runtime, not of this crate.
 //!
 //! A GPU provider may change the numbers. It is not bit-parity with MLAS and
-//! is not claimed to be — the conformance fixture is a CPU measurement, and a
+//! is not claimed to be, the conformance fixture is a CPU measurement, and a
 //! provider that moves tokens is a measurement to record, not a tolerance to
 //! widen.
 
@@ -34,9 +34,9 @@ use ort::session::Session;
 
 /// The three graphs CoreML is allowed to run.
 ///
-/// An allowlist, not a denylist: a graph this crate opens later — the
+/// An allowlist, not a denylist, because a graph this crate opens later, the
 /// enrollment graphs go through the same builder, and the voice encoder
-/// decides what a cloned voice sounds like — stays on CPU until somebody
+/// decides what a cloned voice sounds like, stays on CPU until somebody
 /// measures it on CoreML.
 const RENDERER_GRAPHS: [&str; 3] = ["flow_encoder.onnx", "flow_estimator.onnx", "vocoder.onnx"];
 
@@ -87,15 +87,20 @@ pub enum OnnxProvider {
 ///
 /// CPU is last and always reachable, which is why `auto` cannot fail.
 ///
-/// auto prefers a provider only where a measurement says it is faster. CoreML
-/// is faster — the split placement in [`session_builder`] measures RTF
-/// 1.35-1.70 on an M3 Pro against 0.85-1.02 for all-CPU — and is still not a
-/// default, for a reason that is not speed: compiling the renderer graphs
-/// costs about 146 s the first time on a machine and leaves 1.6 GB of cache
-/// behind. A default may not spend either without being asked. DirectML has
-/// never been run by this project. Both stay selectable by name; neither is a
-/// default. CUDA leads until it is measured, and drops out the same way if it
-/// loses.
+/// auto prefers a provider only where a measurement says it is faster.
+///
+/// The CoreML decision is stated here and nowhere else, so the crate cannot
+/// hold two verdicts on it. The split placement in [`session_builder`]
+/// measures RTF 1.35-1.70 on an M3 Pro against 0.85-1.02 for all-CPU, and
+/// CoreML is still not a default, for a reason that is not speed: compiling
+/// the renderer graphs costs about 146 s the first time on a machine and
+/// leaves 1.6 GB of cache behind. A default may not spend either without being
+/// asked. What it does not cost is the token stream: `placement` keeps the
+/// generator on CPU, so the tokens are a CPU run's index for index.
+///
+/// DirectML has never been run by this project. Both stay selectable by name;
+/// neither is a default. CUDA leads until it is measured, and drops out the
+/// same way if it loses.
 const AUTO_ORDER: [OnnxProvider; 2] = [OnnxProvider::Cuda, OnnxProvider::Cpu];
 
 impl OnnxProvider {
@@ -258,7 +263,7 @@ fn list(providers: &[OnnxProvider]) -> String {
 /// The refusal for an explicit provider this build cannot run.
 ///
 /// Takes `compiled` rather than reading `want.is_compiled()`, so both halves of
-/// the message are reachable from a test on a default build — the branch that
+/// the message are reachable from a test on a default build: the branch that
 /// only fires when a GPU feature *is* on would otherwise never be exercised by
 /// the CI this crate actually runs.
 fn unavailable(want: OnnxProvider, compiled: bool, available: &[OnnxProvider]) -> String {
@@ -289,14 +294,14 @@ fn unavailable(want: OnnxProvider, compiled: bool, available: &[OnnxProvider]) -
 ///
 /// A default build answers from `cfg!` alone and touches no shared library. A
 /// build with a provider feature calls `GetAvailableProviders`, which loads the
-/// library at `ORT_DYLIB_PATH` — and `ort` panics rather than erroring when
+/// library at `ORT_DYLIB_PATH`, and `ort` panics rather than erroring when
 /// that path names nothing loadable, the same panic the first
 /// `Session::builder()` would raise anyway.
 ///
 /// # Errors
 ///
 /// Returns an error when ONNX Runtime's provider query fails. It does not fail
-/// for a provider that is merely absent — that is the answer, not an error.
+/// for a provider that is merely absent, that is the answer, not an error.
 pub fn available_providers() -> Result<Vec<OnnxProvider>, String> {
     disable_ort_telemetry();
     // CPU is unconditional, the same way `ort::ep::CPU::is_available` is: MLAS
@@ -348,6 +353,91 @@ pub(crate) fn session_builder(
 }
 
 const ORT_DISABLE_TELEMETRY: &str = "ORT_DISABLE_TELEMETRY";
+
+/// The override every port reads for the onnxruntime shared library.
+pub const LIBRARY_ENV: &str = "LOUDKIT_ONNXRUNTIME_LIB";
+
+/// Where an onnxruntime install puts its shared library, in the order a
+/// machine is likely to have them. The same list Go's `runtime.go` searches.
+fn library_candidates() -> &'static [&'static str] {
+    if cfg!(target_os = "macos") {
+        &[
+            "/opt/homebrew/lib/libonnxruntime.dylib",
+            "/usr/local/lib/libonnxruntime.dylib",
+        ]
+    } else if cfg!(target_os = "windows") {
+        &[
+            "C:\\Program Files\\onnxruntime\\lib\\onnxruntime.dll",
+            "onnxruntime.dll",
+        ]
+    } else {
+        &[
+            "/usr/local/lib/libonnxruntime.so",
+            "/usr/lib/libonnxruntime.so",
+            "/usr/lib/x86_64-linux-gnu/libonnxruntime.so",
+            "/usr/lib/aarch64-linux-gnu/libonnxruntime.so",
+        ]
+    }
+}
+
+fn install_hint() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Install it with `brew install onnxruntime`."
+    } else if cfg!(target_os = "windows") {
+        "Download onnxruntime-win-x64 from https://github.com/microsoft/onnxruntime/releases and unpack it."
+    } else {
+        "Unpack onnxruntime-linux-x64 from https://github.com/microsoft/onnxruntime/releases into /usr/local."
+    }
+}
+
+/// Point `ort` at an onnxruntime shared library before it loads one.
+///
+/// `ORT_DYLIB_PATH` is taken first, then `LOUDKIT_ONNXRUNTIME_LIB`, then the
+/// usual install paths, and the winner is set as `ORT_DYLIB_PATH` for `ort`'s
+/// `load-dynamic` to read on the first session. Either variable has to name a
+/// file: both are read the same way, so a typo in one is refused here the way
+/// a typo in the other is, rather than travelling on to a panic.
+///
+/// # Errors
+///
+/// When either variable names something that is not a file, naming it. When no
+/// library can be found, with the one command that installs it.
+pub fn locate_runtime() -> Result<(), String> {
+    if let Some(named) = std::env::var_os("ORT_DYLIB_PATH").filter(|v| !v.is_empty()) {
+        // Checked like `LIBRARY_ENV` below, and for the reason stated on
+        // `available_providers`: `ort` panics rather than erroring when the
+        // path names nothing loadable, so accepting it unread traded a
+        // sentence naming the variable for a panic several calls later.
+        if !std::path::Path::new(&named).is_file() {
+            return Err(format!(
+                "ORT_DYLIB_PATH points at {}, which is not a file",
+                named.to_string_lossy()
+            ));
+        }
+        return Ok(());
+    }
+    if let Some(named) = std::env::var_os(LIBRARY_ENV).filter(|v| !v.is_empty()) {
+        if !std::path::Path::new(&named).is_file() {
+            return Err(format!(
+                "{LIBRARY_ENV} points at {}, which is not a file",
+                named.to_string_lossy()
+            ));
+        }
+        std::env::set_var("ORT_DYLIB_PATH", named);
+        return Ok(());
+    }
+    if let Some(found) = library_candidates()
+        .iter()
+        .find(|c| std::path::Path::new(c).is_file())
+    {
+        std::env::set_var("ORT_DYLIB_PATH", found);
+        return Ok(());
+    }
+    Err(format!(
+        "no onnxruntime shared library. {} Or set {LIBRARY_ENV} to one you already have.",
+        install_hint()
+    ))
+}
 
 /// Suppress the process-lifetime telemetry enabled in official ONNX Runtime
 /// builds before any `ort` call can initialize its global environment.
@@ -413,10 +503,10 @@ fn not_compiled(provider: OnnxProvider) -> String {
     unavailable(provider, false, &[OnnxProvider::Cpu])
 }
 
-/// ort errors don't convert to String via `?`; this is the single conversion
-/// point. Generic over the recovery type because `with_execution_providers`
-/// hands back the builder it failed on.
-fn ort_err<R>(e: ort::Error<R>) -> String {
+/// ort errors do not convert to String via `?`, so the crate converts them
+/// here, once. Generic over the recovery type because a builder call hands
+/// back the builder it failed on rather than a bare error.
+pub(crate) fn ort_err<R>(e: ort::Error<R>) -> String {
     format!("{e}")
 }
 
@@ -429,6 +519,37 @@ mod tests {
         std::env::set_var(ORT_DISABLE_TELEMETRY, "0");
         disable_ort_telemetry();
         assert_eq!(std::env::var(ORT_DISABLE_TELEMETRY).as_deref(), Ok("1"));
+    }
+
+    /// Both library variables are read the same way.
+    ///
+    /// `ORT_DYLIB_PATH` was returned unread while its sibling got a sentence,
+    /// so a path naming nothing loadable reached `ort`, which panics rather
+    /// than erroring.
+    ///
+    /// One test for both, and beside the other environment test rather than in
+    /// its own file, because the process environment is shared and tests that
+    /// write to it have to run where they can be reasoned about together.
+    #[test]
+    fn a_library_variable_naming_no_file_is_refused() {
+        let missing = std::env::temp_dir().join("loudkit-no-such-onnxruntime.dylib");
+        let before = std::env::var_os("ORT_DYLIB_PATH");
+
+        std::env::set_var("ORT_DYLIB_PATH", &missing);
+        let err = locate_runtime().expect_err("a path that is not a file must be refused");
+        assert!(err.contains("ORT_DYLIB_PATH"), "{err}");
+        assert!(err.contains("not a file"), "{err}");
+
+        std::env::remove_var("ORT_DYLIB_PATH");
+        std::env::set_var(LIBRARY_ENV, &missing);
+        let err = locate_runtime().expect_err("the sibling refuses the same shape");
+        assert!(err.contains(LIBRARY_ENV), "{err}");
+        std::env::remove_var(LIBRARY_ENV);
+
+        match before {
+            Some(v) => std::env::set_var("ORT_DYLIB_PATH", v),
+            None => std::env::remove_var("ORT_DYLIB_PATH"),
+        }
     }
 
     #[test]
@@ -491,8 +612,8 @@ mod tests {
             // to win. The measurement that decides it runs on the GPU box.
             (&all[..], OnnxProvider::Cuda),
             // CoreML and DirectML are available here and auto still refuses
-            // them: CoreML measured slower than CPU and moved the tokens, and
-            // DirectML has never been run. Asking for either by name works.
+            // them, for the reasons `AUTO_ORDER` states. Asking for either by
+            // name works.
             (
                 &[
                     OnnxProvider::Cpu,

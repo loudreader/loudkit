@@ -1,29 +1,6 @@
 """The packed checkpoint: one file, one manifest, no re-guessing.
 
-A loudkit checkpoint is a single ``safetensors`` file whose tensors live in two
-namespaces — ``t3.*`` for the token generator and ``s3gen.*`` for everything
-downstream — with a JSON manifest embedded in the file's metadata and mirrored
-in a ``manifest.json`` beside it.
-
-The manifest is not documentation, it is authority. Values that are properties
-of the weights — silence-token ids, Euler step count, vocabulary bounds, the
-per-module dtype map — are read from it and nowhere else, because the worst
-The divergence class this format exists to prevent is defaults re-guessed by a second
-implementation (see ``AlgorithmConfig``'s module docstring).
-
-Two facts about the tensor payload that loading code must know:
-
-* precision is **mixed per module** and recorded in ``manifest["dtype_map"]``
-  by longest-prefix match. The packed dtype is the *storage* dtype; a backend
-  may upcast (fp16 -> fp32 is exact) but must consult its own
-  ``ExecutionConfig.precision`` for the compute dtype.
-* the vocoder's weight-norm reparametrisation is already folded — the packed
-  weights are plain ``weight`` tensors, bit-exactly equal to what the
-  parametrised forward would have computed.
-
-This module is deliberately torch-free: it reads numpy arrays, so a future
-runtime-only backend (ONNX, CoreML) can load the same file without dragging
-torch in.
+See ``docs/design/runtime-notes.md``.
 """
 
 from __future__ import annotations
@@ -36,7 +13,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -44,10 +21,22 @@ from numpy.typing import NDArray
 __all__ = [
     "ASSET_PREFIX",
     "Checkpoint",
+    "TOKENIZER_FILENAME",
+    "decode_mode",
     "file_sha256",
+    "read_header",
     "read_manifest",
+    "require_decode_support",
     "resolve_dtype",
 ]
+
+TOKENIZER_FILENAME = "tokenizer.json"
+"""The text tokenizer's name, beside the checkpoint or packed inside it.
+
+A release-layout fact, so it lives in the leaf every backend and the release
+reader already import rather than being spelled again in each of them. The
+manifest records its digest under ``tokenizer_sha256``.
+"""
 
 _SAFETENSORS_TORCH_DTYPES: dict[str, tuple[str, int]] = {
     "BOOL": ("torch.bool", 1),
@@ -68,14 +57,19 @@ _SAFETENSORS_TORCH_DTYPES: dict[str, tuple[str, int]] = {
 }
 
 
-def _tensor_payload_sha256(path: str | Path) -> str:
-    """Hash a safetensors payload by the checkpoint manifest's recipe.
+def read_header(path: str | Path) -> tuple[dict[str, Any], int]:
+    """A safetensors file's raw header and where its payload begins.
 
-    The recipe predates the runtime split and records PyTorch dtype spellings,
-    but verifying it does not require PyTorch. Safetensors already stores the
-    dtype, shape and byte offsets in its header; reading the payload directly
-    makes verification available to the base package and keeps memory bounded
-    to one 1 MiB block instead of materialising the whole checkpoint.
+    Eight bytes of little-endian length, then that many bytes of JSON. Nothing
+    here loads a tensor, so asking a checkpoint what it contains is two short
+    reads whatever the file weighs.
+
+    The header comes back as safetensors wrote it, ``__metadata__`` included:
+    callers that want the embedded manifest read it from there, and callers
+    that want the tensors skip that one key.
+
+    Raises:
+        ValueError: not a safetensors container, or an unreadable header.
     """
     source = Path(path)
     with source.open("rb") as stream:
@@ -89,10 +83,23 @@ def _tensor_payload_sha256(path: str | Path) -> str:
             header = json.loads(stream.read(header_length))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValueError(f"unreadable safetensors header: {exc}") from exc
-        if not isinstance(header, dict):
-            raise ValueError("the safetensors header is not an object")
+    if not isinstance(header, dict):
+        raise ValueError("the safetensors header is not an object")
+    return cast("dict[str, Any]", header), 8 + header_length
 
-        payload_start = 8 + header_length
+
+def payload_sha256(path: str | Path) -> str:
+    """Hash a safetensors payload by the checkpoint manifest's recipe.
+
+    The recipe predates the runtime split and records PyTorch dtype spellings,
+    but verifying it does not require PyTorch. Safetensors already stores the
+    dtype, shape and byte offsets in its header; reading the payload directly
+    makes verification available to the base package and keeps memory bounded
+    to one 1 MiB block instead of materialising the whole checkpoint.
+    """
+    source = Path(path)
+    header, payload_start = read_header(source)
+    with source.open("rb") as stream:
         payload_size = source.stat().st_size - payload_start
         digest = hashlib.sha256()
         for name in sorted(k for k in header if k != "__metadata__"):
@@ -101,7 +108,7 @@ def _tensor_payload_sha256(path: str | Path) -> str:
                 raise ValueError(f"tensor {name!r} has no metadata object")
             dtype = entry.get("dtype")
             if not isinstance(dtype, str):
-                raise ValueError(f"tensor {name!r} has unsupported dtype {dtype!r}")
+                raise ValueError(f"tensor {name!r} has no string dtype, got {dtype!r}")
             try:
                 torch_dtype, width = _SAFETENSORS_TORCH_DTYPES[dtype]
             except KeyError:
@@ -140,34 +147,80 @@ def _tensor_payload_sha256(path: str | Path) -> str:
 ASSET_PREFIX = "assets."
 """Tensor-name prefix for text artefacts carried inside the checkpoint.
 
-See :meth:`Checkpoint.asset`. Chosen so `tensors("t3.")` and `tensors("s3gen.")`
-— which take everything under a prefix — cannot pick these up as weights.
+See :meth:`Checkpoint.asset`. Chosen so `tensors("t3.")` and `tensors("s3gen.")`,
+which take everything under a prefix, cannot pick these up as weights.
 """
 
 CHECKPOINT_FORMAT = "loudkit-checkpoint"
 """Value of ``manifest["format"]`` this loader understands."""
 
-SUPPORTED_FORMAT_VERSIONS = (1,)
+SUPPORTED_FORMAT_VERSIONS = (1, 2)
+"""Layouts this build reads.
+
+Version 2 adds the two-token decode of ``decode_mode="fusion_mtp2"``: a second
+speech head and a fusion MLP under ``t3.``, and a ``decode`` block in the
+manifest that says so. It is a version rather than an optional field because a
+version-1 reader finds weights it knows, runs the loop it knows, and emits
+fluent nonsense, the failure this format exists to make loud.
+"""
+
+DECODE_FORMAT_VERSION = {"fusion_mtp2": 2}
+"""The lowest ``format_version`` each decode mode may be declared under.
+
+See ``docs/design/runtime-notes.md``.
+"""
+
+
+def decode_mode(manifest: Mapping[str, object]) -> str:
+    """The decode loop ``manifest`` declares. ``"single"`` when it declares none.
+
+    Absent means single-token, the way :func:`_check_decode_version` reads it.
+    Unlike ``AlgorithmConfig``, this does not validate the name: the caller is
+    deciding whether a backend can run the file, and an unknown mode is one
+    nothing here can run either.
+    """
+    block = manifest.get("decode")
+    if not isinstance(block, Mapping):
+        return "single"
+    return str(block.get("mode", "single"))
+
+
+_KNOWN_DECODE_MODES = ("single", "fusion_mtp2")
+"""The decode loops this build runs.
+
+Spelled here rather than imported from ``config.DecodeMode`` because this
+module is a leaf every backend reads before any config exists. A test pins the
+two lists equal, in both directions.
+"""
+
+
+def require_decode_support(mode: str, target: str, *, name: str = "") -> None:
+    """Refuse, in one sentence, a decode loop this build does not run.
+
+    Every backend runs both known modes, so ``target`` names the door the
+    caller came through rather than narrowing what is refused; an unknown mode
+    is one nothing here runs.
+
+    See ``docs/design/runtime-notes.md``.
+    """
+    if mode not in _KNOWN_DECODE_MODES:
+        raise ValueError(
+            f"the {target} backend cannot run {name or 'this checkpoint'}: "
+            f"unsupported decode mode {mode!r}"
+        )
 
 
 def read_manifest(path: str | Path) -> dict[str, object]:
     """Read the manifest embedded in a packed checkpoint.
 
-    The embedded copy is authoritative — the sibling ``manifest.json`` is a
-    convenience for humans and can drift if someone edits it, so it is never
-    read here.
-
-    Raises:
-        ValueError: if the file carries no manifest or declares a format this
-            build does not read. Failing loudly beats loading a checkpoint
-            under wrong assumptions about what its numbers mean.
+    See ``docs/design/runtime-notes.md``.
     """
     from safetensors import safe_open
 
     with safe_open(str(path), framework="numpy") as f:
         meta: Mapping[str, str] | None = f.metadata()
     if not meta or "manifest" not in meta:
-        raise ValueError(f"{path}: no embedded manifest — not a loudkit checkpoint")
+        raise ValueError(f"{path}: no embedded manifest: not a loudkit checkpoint")
     manifest = json.loads(meta["manifest"])
     # Raised, not asserted, and checked before the first `.get`: the manifest
     # is external data, `python -O` strips asserts, and a JSON list here would
@@ -177,20 +230,57 @@ def read_manifest(path: str | Path) -> dict[str, object]:
             f"{path}: manifest is a {type(manifest).__name__}, expected a JSON object"
         )
     fmt = manifest.get("format")
-    version = int(manifest.get("format_version", -1))
+    # `int()` over a manifest value, which is external data. `null` and a list
+    # raise `TypeError`, so a caller catching the `ValueError` this module
+    # documents got an unhandled crash instead of a refusal. Only the type of
+    # the refusal changes here: every value `int()` accepts still loads, so
+    # which checkpoints open is exactly what it was.
+    declared = manifest.get("format_version", -1)
+    try:
+        version = int(declared)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"{path}: manifest['format_version'] is {declared!r}, expected a version number"
+        ) from None
     if fmt != CHECKPOINT_FORMAT or version not in SUPPORTED_FORMAT_VERSIONS:
         raise ValueError(
             f"{path}: format {fmt!r} version {version}, "
             f"this build reads {CHECKPOINT_FORMAT!r} versions {SUPPORTED_FORMAT_VERSIONS}"
         )
+    _check_decode_version(path, manifest, version)
     return manifest
+
+
+def _check_decode_version(
+    path: str | Path, manifest: Mapping[str, object], version: int
+) -> None:
+    """Refuse a file whose declared version does not cover its decode mode.
+
+    See ``docs/design/runtime-notes.md``.
+    """
+    block = manifest.get("decode")
+    if block is None:
+        return
+    if not isinstance(block, Mapping):
+        raise ValueError(f"{path}: manifest['decode'] must be an object")
+    mode = str(block.get("mode", "single"))
+    needs = DECODE_FORMAT_VERSION.get(mode)
+    if needs is not None and version < needs:
+        raise ValueError(
+            f"{path}: manifest declares decode.mode {mode!r} under format_version "
+            f"{version}, which needs {needs}. Version {version} is the one-token "
+            f"loop, and the Rust, Go, TypeScript and Swift engines gate on that "
+            f"number alone: under it they would run the loop they know over "
+            f"these weights and produce fluent nonsense. Repack with "
+            f"format_version {needs}."
+        )
 
 
 def resolve_dtype(name: str, dtype_map: Mapping[str, str]) -> str | None:
     """Longest-prefix match of a tensor name into the manifest's dtype map.
 
     Longest-prefix so that ``s3gen.flow.decoder.estimator`` (fp16) can override
-    ``s3gen.flow`` (fp32) — the estimator
+    ``s3gen.flow`` (fp32), the estimator
     tolerates half precision at mel corr 0.999999 while the encoder under the
     same treatment collapses to 0.619.
     """
@@ -206,15 +296,7 @@ def resolve_dtype(name: str, dtype_map: Mapping[str, str]) -> str | None:
 class Checkpoint:
     """A packed checkpoint, opened lazily.
 
-    Tensors are pulled on demand rather than loaded wholesale because the two
-    stages of the engine may live in different processes or devices, and
-    enrollment (~40% of the payload) is not needed for synthesis at all.
-
-    Example:
-        >>> ckpt = Checkpoint.open("loudr-1.safetensors")
-        >>> t3 = ckpt.tensors("t3.")            # generator weights, prefix stripped
-        >>> ckpt.manifest["n_cfm_timesteps"]
-        2
+    See ``docs/design/runtime-notes.md``.
     """
 
     path: Path
@@ -229,12 +311,7 @@ class Checkpoint:
     def file_digest(self) -> str:
         """SHA-256 of the checkpoint file exactly as it sits on disk.
 
-        This is the value a release's ``SHA256SUMS`` lists and the value
-        provenance manifests carry as ``checkpoint_sha256`` — the digest that
-        names *which artefact* rendered a waveform. It is not
-        ``tensor_payload_sha256``, which lives inside the file and can only
-        say the payload survived the download. Computed on first use and
-        cached: one chunked read of the file, once per opened checkpoint.
+        See ``docs/design/runtime-notes.md``.
         """
         return file_sha256(self.path)
 
@@ -258,14 +335,7 @@ class Checkpoint:
     def shapes(self, prefix: str = "") -> dict[str, tuple[int, ...]]:
         """Tensor shapes under ``prefix``, read from the header only.
 
-        No tensor data is touched, so this is cheap on a 747 MB file and — the
-        reason it exists — it is available *before* anything is allocated. A
-        manifest declares the architecture and the architecture decides how much
-        memory the model constructor asks the allocator for, so a manifest that
-        nothing checks is a 20 kB file that can demand gigabytes. These shapes
-        are the other half of the same checkpoint and cannot be inflated without
-        inflating the file, which makes them the thing to check the manifest
-        against.
+        See ``docs/design/runtime-notes.md``.
         """
         from safetensors import safe_open
 
@@ -308,21 +378,7 @@ class Checkpoint:
     def verified_sibling(self, filename: str, *, manifest_key: str) -> Path:
         """A sibling artefact, checked against the digest the manifest records.
 
-        A checkpoint is not self-contained: the tokenizer, and on the graph
-        backends the exported ONNX or CoreML packages, are separate files
-        resolved by name from the checkpoint's directory. Nothing tied them to
-        the weights. Swapping ``tokenizer.json`` for another valid one changes
-        the text ids, the speech, and potentially where EOS lands — and
-        ``AlgorithmConfig.fingerprint()`` does not move, because the tokenizer
-        is not part of the algorithm config and ``TextFrontend`` carries no
-        config for ``Engine._assert_one_algorithm`` to compare. The result is
-        two different readings reporting the same identity, which is the one
-        thing this library promises cannot happen.
-
-        Enforced when the manifest records the digest and skipped when it does
-        not, because packs predating the field are still loadable — a checkpoint
-        that cannot state what it expects cannot have its expectation checked.
-        `tools/build_release.py` records the digests it ships.
+        See ``docs/design/runtime-notes.md``.
         """
         path = self.sibling(filename)
         expected = self.manifest.get(manifest_key)
@@ -355,22 +411,7 @@ class Checkpoint:
     def asset(self, name: str) -> bytes | None:
         """A text artefact carried *inside* the checkpoint, or ``None``.
 
-        The tokenizer and the Polish respelling lexicon are not weights, but
-        they decide what the weights are asked to say: a different
-        ``tokenizer.json`` reads the same text as different ids, and a different
-        lexicon reads embedded English a different way. Shipped beside the file
-        they are two more things to keep in step, and this project has now spent
-        five copies of the
-        lexicon, a sibling bound only by a digest the shipping manifest does not
-        carry, and three ports that disagreed about the funnel.
-
-        Carried as a ``uint8`` tensor under ``assets.`` rather than in a new
-        container format, because **every port already has a safetensors
-        reader**. Nothing new to write in five languages, and the bytes are
-        covered by the same file the weights live in.
-
-        Returns ``None`` when the checkpoint predates the convention, which is
-        what :meth:`resolve_asset` falls back on.
+        See ``docs/design/runtime-notes.md``.
         """
         from safetensors import safe_open
 
@@ -399,9 +440,7 @@ class Checkpoint:
 
 
 def file_sha256(path: str | Path) -> str:
-    """Hex SHA-256 of a file, read in chunks (the graphs are hundreds of MB)."""
-    import hashlib
-
+    """Hex SHA-256 of a file, read in 1 MiB blocks."""
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):

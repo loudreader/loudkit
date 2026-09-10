@@ -1,7 +1,7 @@
 //! Cross-call prosody context: the chunk prefix, exposed across calls.
 //!
-//! `previous_tokens` on `synthesize`, `stream` and `synthesize_long` does one
-//! thing — it seeds the same carry variable the streaming loop already passes
+//! `previous_tokens` on `synthesize_window`, `stream` and `synthesize` does one
+//! thing: it seeds the same carry variable the streaming loop already passes
 //! between two chunks. A request boundary and a chunk boundary are the same
 //! join, so there is deliberately no second conditioning mechanism, and the
 //! whole of the new behaviour is the slice asserted here.
@@ -18,7 +18,7 @@
 //! stopped being handed to the generator's prefix, every assertion here would
 //! still pass. That half is pinned in Python, by
 //! tests/test_engine.py::TestCrossRequestContext, against a fake generator
-//! that records the context it was given — building an equivalent seam in four
+//! that records the context it was given, building an equivalent seam in four
 //! more languages would cost four engine refactors to re-assert one fact.
 
 use loudkit::engine::carry_from;
@@ -54,18 +54,17 @@ fn a_short_history_is_taken_whole() {
         .is_empty());
 }
 
-/// The default is byte-for-byte the behaviour from before the parameter
-/// existed: an empty carry is what the streaming loop has always started with.
+/// No carry is an empty carry, which is what the streaming loop starts with.
 #[test]
-fn absent_is_todays_behaviour() {
+fn absent_is_an_empty_carry() {
     assert!(carry_from(None, PREFIX_TOKENS, START_SPEECH)
         .unwrap()
         .is_empty());
 }
 
 /// Python's `tokens[-0:]` is the whole list. At the setting that means "chunks
-/// are independent" that would condition on the entire previous utterance — the
-/// exact opposite — and every port has to refuse the same way even where the
+/// are independent" that would condition on the entire previous utterance: the
+/// exact opposite, and every port has to refuse the same way even where the
 /// slicing bug cannot be spelled.
 #[test]
 fn zero_prefix_tokens_means_no_context_not_all_of_it() {
@@ -93,4 +92,18 @@ fn the_head_is_validated_even_though_only_the_tail_is_used() {
     let err = carry_from(Some(&[9_999, 1, 2, 3]), 2, START_SPEECH)
         .expect_err("an out-of-range id anywhere in the history is a refusal");
     assert!(err.contains("9999"), "{err}");
+}
+
+#[test]
+fn fused_carry_starts_and_ends_on_pairs() {
+    use loudkit::engine::carry_pair_aligned;
+    let tokens: Vec<usize> = (0..9).collect();
+    assert_eq!(carry_pair_aligned(&tokens, 3, true), vec![4, 5, 6, 7]);
+    assert_eq!(carry_pair_aligned(&tokens, 4, true), vec![4, 5, 6, 7]);
+    assert_eq!(
+        carry_pair_aligned(&tokens, 20, true),
+        vec![0, 1, 2, 3, 4, 5, 6, 7]
+    );
+    assert_eq!(carry_pair_aligned(&tokens, 0, true), Vec::<usize>::new());
+    assert_eq!(carry_pair_aligned(&tokens, 3, false), vec![6, 7, 8]);
 }

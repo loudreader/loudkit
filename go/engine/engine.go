@@ -1,7 +1,8 @@
 // Package engine is the full synthesis pipeline over the exported ONNX
-// graphs, fp32, no torch — a bit-parity port of loudkit.backends.onnx_backend
-// and the JS engine. Same text, voice and seed give the same tokens and the
-// same render band as the Python engine.
+// graphs, fp32, no torch: a bit-parity port of loudkit.engine, over the
+// stages loudkit.backends.onnx_backend runs, and of the JS engine. Same
+// text, voice and seed give the same tokens and the same render band as the
+// Python engine.
 package engine
 
 import (
@@ -37,13 +38,13 @@ const (
 	hiddenDim        = 1024
 )
 
-// Engine is a loaded engine: six ONNX graphs plus the checkpoint's embedding
+// Engine is a loaded engine: the manifest-selected ONNX graphs plus the checkpoint's embedding
 // tables and the text frontend.
 type Engine struct {
 	config config.AlgorithmConfig
-	// provider is the concrete execution provider all six sessions were opened
-	// on — the answer to the ExecutionConfig's question, resolved once so the
-	// six cannot land on two different devices.
+	// provider is the concrete execution provider every session was opened on,
+	// the fusion head included: the answer to the ExecutionConfig's question,
+	// resolved once so they cannot land on two different devices.
 	provider  string
 	frontend  *frontend.Frontend
 	textEmb   []float32
@@ -55,9 +56,36 @@ type Engine struct {
 	cond      *onnx.Session
 	prefill   *onnx.Session
 	step      *onnx.Session
+	head2     *onnx.Session
+	fusion    map[string][]float32
 	encoder   *onnx.Session
 	estimator *onnx.Session
 	vocoder   *onnx.Session
+}
+
+// The exported graphs, under the release's own names. One list, read by the
+// loader and by the export record it checks itself against, so the two cannot
+// name different sets.
+const (
+	condGraph      = "t3_cond.onnx"
+	prefillGraph   = "t3_prefill.onnx"
+	stepGraph      = "t3_step.onnx"
+	pairStepGraph  = "t3_pair_step.onnx"
+	head2Graph     = "t3_head2.onnx"
+	encoderGraph   = "flow_encoder.onnx"
+	estimatorGraph = "flow_estimator.onnx"
+	hiftGraph      = "vocoder.onnx"
+)
+
+// graphNames is the set a decode mode loads, in the order it opens them.
+func graphNames(fused bool) []string {
+	if fused {
+		return []string{
+			condGraph, prefillGraph, pairStepGraph, head2Graph,
+			encoderGraph, estimatorGraph, hiftGraph,
+		}
+	}
+	return []string{condGraph, prefillGraph, stepGraph, encoderGraph, estimatorGraph, hiftGraph}
 }
 
 // embeddingFits refuses an embedding table a live id can index past the end of.
@@ -111,10 +139,10 @@ func LoadWith(ckptPath, onnxDir, tokenizerPath string, execution config.Executio
 	if err != nil {
 		return nil, err
 	}
-	// Checked once, at the door, rather than per utterance — and before the
+	// Checked once, at the door, rather than per utterance, and before the
 	// graphs load. A chunking recipe with no character budget makes SplitText
-	// cut nothing and loop forever; Python has refused it since d8742aa and
-	// this port reads the same manifest key.
+	// cut nothing and loop forever; Python refuses it too, and this port reads
+	// the same manifest key.
 	algorithm, err := ckpt.Algorithm()
 	if err != nil {
 		return nil, err
@@ -123,7 +151,7 @@ func LoadWith(ckptPath, onnxDir, tokenizerPath string, execution config.Executio
 		return nil, err
 	}
 	// The tokenizer and the checkpoint are separate files a caller can pair by
-	// hand — LOUDKIT_TOKENIZER exists precisely so they can. A vocabulary wider
+	// hand: LOUDKIT_TOKENIZER exists precisely so they can. A vocabulary wider
 	// than the checkpoint's table makes textRow read past the end of it, which
 	// is an out-of-range panic several seconds into a synthesis rather than a
 	// refusal naming the file that is wrong. The same reasoning as
@@ -146,51 +174,81 @@ func LoadWith(ckptPath, onnxDir, tokenizerPath string, execution config.Executio
 		return nil, err
 	}
 
-	cond, err := onnx.Load(filepath.Join(onnxDir, "t3_cond.onnx"),
-		[]string{"speaker_emb", "prompt_tokens", "emotion"}, []string{"t3_cond_out"}, provider)
+	layers := nLayers
+	if llama, ok := ckpt.Manifest["llama_config"].(map[string]interface{}); ok {
+		if count, ok := llama["num_hidden_layers"].(float64); ok {
+			if count < 1 || count != math.Trunc(count) {
+				return nil, fmt.Errorf("invalid transformer layer count %v", count)
+			}
+			layers = int(count)
+		}
+	}
+	fused := algorithm.DecodeMode == config.DecodeFusionMTP2
+	var fusion map[string][]float32
+	if fused {
+		fusion, err = ckpt.FusionWeights()
+		if err != nil {
+			return nil, err
+		}
+	}
+	// The graphs are one export of one checkpoint or they are not a set, and a
+	// mixed set speaks this checkpoint's tokens through another one's renderer.
+	// Checked before any graph is opened, so a refusal costs no session.
+	if err := ckpt.VerifyExport(onnxDir, algorithm, graphNames(fused)); err != nil {
+		return nil, err
+	}
+	var opened []*onnx.Session
+	complete := false
+	defer func() {
+		if !complete {
+			for _, session := range opened {
+				session.Close()
+			}
+		}
+	}()
+	load := func(name string, inputs, outputs []string) (*onnx.Session, error) {
+		session, err := onnx.Load(filepath.Join(onnxDir, name), inputs, outputs, provider)
+		if err == nil {
+			opened = append(opened, session)
+		}
+		return session, err
+	}
+	cond, err := load(condGraph, []string{"speaker_emb", "prompt_tokens", "emotion"}, []string{"t3_cond_out"})
 	if err != nil {
 		return nil, err
 	}
-	prefill, err := onnx.Load(filepath.Join(onnxDir, "t3_prefill.onnx"),
-		[]string{"embeds", "positions"}, prefillOutputs(), provider)
+	prefill, err := load(prefillGraph, []string{"embeds", "positions"}, prefillOutputs(fused, layers))
 	if err != nil {
-		cond.Close()
 		return nil, err
 	}
-	step, err := onnx.Load(filepath.Join(onnxDir, "t3_step.onnx"),
-		stepInputs(), stepOutputs(), provider)
+	stepName := stepGraph
+	if fused {
+		stepName = pairStepGraph
+	}
+	step, err := load(stepName, stepInputs(fused, layers), stepOutputs(fused, layers))
 	if err != nil {
-		cond.Close()
-		prefill.Close()
 		return nil, err
 	}
-	encoder, err := onnx.Load(filepath.Join(onnxDir, "flow_encoder.onnx"),
-		[]string{"prompt_token", "speech_tokens"}, []string{"flow_encoder_out"}, provider)
+	var head2 *onnx.Session
+	if fused {
+		head2, err = load(head2Graph, []string{"hidden", "first_id"}, []string{"logits"})
+		if err != nil {
+			return nil, err
+		}
+	}
+	encoder, err := load(encoderGraph, []string{"prompt_token", "speech_tokens"}, []string{"flow_encoder_out"})
 	if err != nil {
-		cond.Close()
-		prefill.Close()
-		step.Close()
 		return nil, err
 	}
-	estimator, err := onnx.Load(filepath.Join(onnxDir, "flow_estimator.onnx"),
-		[]string{"x", "mu", "t", "spks", "cond"}, []string{"flow_estimator_out"}, provider)
+	estimator, err := load(estimatorGraph, []string{"x", "mu", "t", "spks", "cond"}, []string{"flow_estimator_out"})
 	if err != nil {
-		cond.Close()
-		prefill.Close()
-		step.Close()
-		encoder.Close()
 		return nil, err
 	}
-	vocoder, err := onnx.Load(filepath.Join(onnxDir, "vocoder.onnx"),
-		[]string{"mel", "phase", "noise"}, []string{"vocoder_out"}, provider)
+	vocoder, err := load(hiftGraph, []string{"mel", "phase", "noise"}, []string{"vocoder_out"})
 	if err != nil {
-		cond.Close()
-		prefill.Close()
-		step.Close()
-		encoder.Close()
-		estimator.Close()
 		return nil, err
 	}
+	complete = true
 
 	return &Engine{
 		config:    algorithm,
@@ -205,6 +263,8 @@ func LoadWith(ckptPath, onnxDir, tokenizerPath string, execution config.Executio
 		cond:      cond,
 		prefill:   prefill,
 		step:      step,
+		head2:     head2,
+		fusion:    fusion,
 		encoder:   encoder,
 		estimator: estimator,
 		vocoder:   vocoder,
@@ -213,20 +273,22 @@ func LoadWith(ckptPath, onnxDir, tokenizerPath string, execution config.Executio
 
 // Close releases all sessions.
 func (e *Engine) Close() {
-	for _, s := range []*onnx.Session{e.cond, e.prefill, e.step, e.encoder, e.estimator, e.vocoder} {
-		s.Close()
+	for _, s := range []*onnx.Session{e.cond, e.prefill, e.step, e.head2, e.encoder, e.estimator, e.vocoder} {
+		if s != nil {
+			s.Close()
+		}
 	}
 }
 
 // Config exposes the resolved algorithm.
 func (e *Engine) Config() config.AlgorithmConfig { return e.config }
 
-// Provider is the execution provider the six graphs are running on: one of
+// Provider is the execution provider the graphs are running on: one of
 // cpu, cuda, coreml, directml, never "auto". A caller who asked for auto reads
 // the answer here.
 func (e *Engine) Provider() string { return e.provider }
 
-// Describe is the one-line run summary — what this engine computes, and what
+// Describe is the one-line run summary: what this engine computes, and what
 // it is computing it on. Print it beside a benchmark number and paste it into
 // a bug report: without the provider, a row of timings does not say what
 // hardware produced them, and two rows that differ by 8x look like a defect.
@@ -256,15 +318,15 @@ func (e *Engine) Encode(text, language string) ([]int, error) {
 // Reached less often than it looks: voice.Load defaults a *missing* header key
 // to "en", and Python writes the key, so an empty Language only
 // arrives from a Profile built in memory or a header hand-edited to "". A
-// profile file with no language field inherits nothing — it loads as "en".
+// profile file with no language field inherits nothing: it loads as "en".
 const fallbackLanguage = "en"
 
 // resolveLanguage is the language chain: the argument, then the voice's
 // recorded language, then English.
 //
 // Without the voice link, Synthesize("Cześć", polishVoice, seed, "", nil) runs
-// Polish text through the English frontend — English number words, English
-// abbreviation expansion, no Polish respelling — and says so nowhere. A profile
+// Polish text through the English frontend (English number words, English
+// abbreviation expansion, no Polish respelling) and says so nowhere. A profile
 // records the language of the audio it was enrolled from, so the voice is the
 // better answer than a constant.
 //
@@ -272,15 +334,14 @@ const fallbackLanguage = "en"
 // English voice reading Polish text is language "pl", and the argument always
 // wins over the profile.
 //
-// The empty string is this port's "absent", as it already was here and as
-// nil-slice and nil-func are elsewhere in the package. Python distinguishes an
-// explicit "" from an omitted argument and Go cannot; an explicit "" therefore
-// reaches the voice's language rather than tagging the text "[]", which is the
-// better of the two behaviours available.
+// The empty string is this port's "absent", as nil-slice and nil-func are
+// elsewhere in the package. Python distinguishes an explicit "" from an
+// omitted argument and Go cannot; an explicit "" therefore reaches the voice's
+// language rather than tagging the text "[]", which is the better of the two
+// behaviours available.
 //
-// Exported as ResolveLanguage below for the CLI, which has no -language flag
-// and would otherwise keep its own copy of the chain — the Rust port made the
-// same call for the same reason.
+// Exported as ResolveLanguage below, which is the same chain for a caller
+// outside this package.
 func resolveLanguage(language string, v *voice.Profile) string {
 	if language != "" {
 		return language
@@ -291,25 +352,19 @@ func resolveLanguage(language string, v *voice.Profile) string {
 	return fallbackLanguage
 }
 
-// ResolveLanguage is resolveLanguage for callers outside this package.
+// ResolveLanguage is resolveLanguage for a caller outside this package: the
+// argument, then the voice, then English.
 //
-// Encode takes no voice and so cannot run the chain itself, which left the CLI
-// passing v.Language raw: a profile whose header language is blank made Go emit
-// a "[]" tag no other port emits, because every other port routes that same
-// case through the fallback.
+// It exists because frontend.Encode takes no voice and cannot run the chain
+// itself, so a caller who tokenises before it synthesises would otherwise pass
+// v.Language raw. A profile whose header language is blank then tags the text
+// "[]", which no other port emits, because every other port routes that case
+// through the fallback.
 func ResolveLanguage(language string, v *voice.Profile) string {
 	return resolveLanguage(language, v)
 }
 
 // ------------------------------------------------------------ generator
-
-// f32 is a shortcut for onnx.DataF32 that returns the data or propagates err.
-func (e *Engine) f32(v onnxruntime_go.Value, err error) ([]float32, error) {
-	if err != nil {
-		return nil, err
-	}
-	return onnx.DataF32(v)
-}
 
 func (e *Engine) condRow(v *voice.Profile) ([]float32, error) {
 	speaker := make([]float32, len(v.SpeakerEmbedding))
@@ -339,11 +394,12 @@ func (e *Engine) condRow(v *voice.Profile) ([]float32, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The wrapper hands ownership of a Run's outputs to the caller. Only
-	// decodeStep destroyed them, so every other path leaked native memory on
-	// each render — invisible in a CLI that exits, unbounded in a server.
+	// The wrapper hands ownership of a Run's outputs to the caller, so every
+	// path that takes them has to release them. A path that does not leaks
+	// native memory per render: invisible in a CLI that exits, unbounded in a
+	// server.
 	defer destroyAll(outs)
-	return e.f32(outs[0], nil)
+	return onnx.DataF32(outs[0])
 }
 
 // prefillEmbeds builds the [cond | text | bos | prefix] embedding row.
@@ -356,17 +412,24 @@ func (e *Engine) prefillEmbeds(textTokens []int, v *voice.Profile, prefix []int)
 	bos := e.speechRow(e.config.StartSpeech, 0)
 
 	rows := [][]float32{cond, text, bos}
-	prefixLen := 0
 	if len(prefix) > 0 {
-		prefixLen = len(prefix)
-		pe := make([]float32, prefixLen*hiddenDim)
-		for i, tok := range prefix {
-			sbase := tok * hiddenDim
-			pbase := (i + 1) * hiddenDim
-			for j := 0; j < hiddenDim; j++ {
-				pe[i*hiddenDim+j] = e.speechEmb[sbase+j] + e.speechPos[pbase+j]
+		var pe []float32
+		if e.config.DecodeMode == config.DecodeFusionMTP2 {
+			prefix = prefix[:len(prefix)-len(prefix)%2]
+			for i := 0; i < len(prefix); i += 2 {
+				pe = append(pe, e.pairRow(prefix[i], prefix[i+1], i/2+1)...)
+			}
+		} else {
+			pe = make([]float32, len(prefix)*hiddenDim)
+			for i, tok := range prefix {
+				sbase := tok * hiddenDim
+				pbase := (i + 1) * hiddenDim
+				for j := 0; j < hiddenDim; j++ {
+					pe[i*hiddenDim+j] = e.speechEmb[sbase+j] + e.speechPos[pbase+j]
+				}
 			}
 		}
+
 		rows = append(rows, pe)
 	}
 	total := 0
@@ -427,11 +490,20 @@ type kvCache struct {
 // prefix holds speech tokens from the preceding chunk: fed in as context and
 // NOT returned. prefillEmbeds accepts it, and a caller that passes
 // nil restarts its pitch contour at every
-// chunk boundary — the audible stutter the prefix exists to remove (~74 Hz at
+// chunk boundary: the audible stutter the prefix exists to remove (~74 Hz at
 // the join against ~7 Hz with a 6-token prefix, measured on the reference
 // voice). They also seed the repetition-penalty state, since a token repeated
 // across a join is as repeated as one within a chunk.
+//
+// Both token rows are validated first: this is a public door, and an id
+// outside either table was indexed straight into it and killed the process.
 func (e *Engine) Generate(textTokens []int, v *voice.Profile, s *sampler.Sampler, maxNewTokens *int, shouldCancel func() bool, prefix []int) ([]int, error) {
+	if err := e.checkTextRow(textTokens); err != nil {
+		return nil, err
+	}
+	if err := e.checkSpeechTokens(prefix); err != nil {
+		return nil, err
+	}
 	cap_ := e.config.Sampling.MaxNewTokens
 	if maxNewTokens != nil {
 		cap_ = *maxNewTokens
@@ -439,6 +511,10 @@ func (e *Engine) Generate(textTokens []int, v *voice.Profile, s *sampler.Sampler
 	floor := config.EosFloor(len(textTokens), e.config)
 	stop := e.config.StopSpeech
 
+	fused := e.config.DecodeMode == config.DecodeFusionMTP2
+	if fused {
+		prefix = prefix[:len(prefix)-len(prefix)%2]
+	}
 	embeds, prefillLen, err := e.prefillEmbeds(textTokens, v, prefix)
 	if err != nil {
 		return nil, err
@@ -469,7 +545,17 @@ func (e *Engine) Generate(textTokens []int, v *voice.Profile, s *sampler.Sampler
 		return nil, err
 	}
 	logitsLast := append([]float32(nil), logitsData[(prefillLen-1)*e.config.SpeechVocabSize:]...)
-	kv, err := collectKV(prefillOuts[1:])
+	offset := 1
+	var hidden []float32
+	if fused {
+		hidden, err = onnx.DataF32(prefillOuts[1])
+		if err != nil {
+			return nil, err
+		}
+		hidden = append([]float32(nil), hidden...)
+		offset = 2
+	}
+	kv, err := collectKV(prefillOuts[offset:])
 	if err != nil {
 		return nil, err
 	}
@@ -480,10 +566,14 @@ func (e *Engine) Generate(textTokens []int, v *voice.Profile, s *sampler.Sampler
 	for _, t := range prefix {
 		seen[t] = true
 	}
+	if fused {
+		return e.generatePairs(logitsLast, hidden, kv, seen, cap_, floor, stop, len(prefix), prefillLen, s, shouldCancel)
+	}
 	out := []int{}
 	for step := 0; step < cap_; step++ {
 		if shouldCancel != nil && shouldCancel() {
-			break // token-level barge-in, mirroring the Python engine
+			// Token-level barge-in: the partial row is discarded, not returned.
+			return nil, fmt.Errorf("at decode step %d: %w", step, ErrCancelled)
 		}
 		row := append([]float32(nil), logitsLast...)
 		if len(out) < floor {
@@ -511,7 +601,7 @@ func (e *Engine) Generate(textTokens []int, v *voice.Profile, s *sampler.Sampler
 // Its own function rather than the body of Generate's loop because every
 // tensor here needs destroying per step. Inside the loop, `defer` would queue
 // 16 layers x up to 255 steps of closures that only fire when Generate
-// returns — every KV tensor for every step alive at once, memory growing
+// returns: every KV tensor for every step alive at once, memory growing
 // quadratically with the token count.
 func (e *Engine) decodeStep(token, step, prefixLen, prefillLen int, kv kvCache) ([]float32, kvCache, error) {
 	emb := e.speechRow(token, speechPosition(prefixLen, step))
@@ -534,7 +624,7 @@ func (e *Engine) decodeStep(token, step, prefixLen, prefillLen int, kv kvCache) 
 			t.Destroy()
 		}
 	}()
-	for i := 0; i < nLayers; i++ {
+	for i := 0; i < len(kv.k); i++ {
 		kt, err := onnx.NewFloat32(onnxruntime_go.Shape{1, kvHeads, int64(len(kv.k[i]) / (kvHeads * headDim)), headDim}, kv.k[i])
 		if err != nil {
 			return nil, kv, err
@@ -577,25 +667,34 @@ func destroyAll(vs []onnxruntime_go.Value) {
 	}
 }
 
-func prefillOutputs() []string {
+func prefillOutputs(fused bool, layers int) []string {
 	outs := []string{"logits"}
-	for i := 0; i < nLayers; i++ {
+	if fused {
+		outs = append(outs, "hidden")
+	}
+	for i := 0; i < layers; i++ {
 		outs = append(outs, fmt.Sprintf("kv_k_%d", i), fmt.Sprintf("kv_v_%d", i))
 	}
 	return outs
 }
 
-func stepInputs() []string {
+func stepInputs(fused bool, layers int) []string {
 	ins := []string{"embeds", "position"}
-	for i := 0; i < nLayers; i++ {
+	if fused {
+		ins = []string{"pair_ids", "speech_position", "position"}
+	}
+	for i := 0; i < layers; i++ {
 		ins = append(ins, fmt.Sprintf("past_k_%d", i), fmt.Sprintf("past_v_%d", i))
 	}
 	return ins
 }
 
-func stepOutputs() []string {
+func stepOutputs(fused bool, layers int) []string {
 	outs := []string{"logits"}
-	for i := 0; i < nLayers; i++ {
+	if fused {
+		outs = append(outs, "hidden")
+	}
+	for i := 0; i < layers; i++ {
 		outs = append(outs, fmt.Sprintf("present_k_%d", i), fmt.Sprintf("present_v_%d", i))
 	}
 	return outs
@@ -603,7 +702,10 @@ func stepOutputs() []string {
 
 func collectKV(outs []onnxruntime_go.Value) (kvCache, error) {
 	var kv kvCache
-	for i := 0; i < nLayers; i++ {
+	if len(outs)%2 != 0 {
+		return kv, fmt.Errorf("odd KV output count %d", len(outs))
+	}
+	for i := 0; i < len(outs)/2; i++ {
 		k, err := onnx.DataF32(outs[i*2])
 		if err != nil {
 			return kv, err
@@ -626,7 +728,11 @@ func (e *Engine) DecodeMel(tokens []int, v *voice.Profile, seed uint64) ([]float
 	if err != nil {
 		return nil, err
 	}
-	pLen := *e.config.Window.StaticPromptTokens
+	// From the framing result, not from Window.StaticPromptTokens. The
+	// config field is a nil pointer on the ragged window, which is Python's
+	// documented default, so reading it here killed the process on a
+	// configuration FrameWindows frames without complaint.
+	pLen := framed.PromptTokens
 	prompt := framed.Row[:pLen]
 	query := framed.Row[pLen:]
 	tMel := 2 * len(framed.Row)
@@ -653,6 +759,11 @@ func (e *Engine) DecodeMel(tokens []int, v *voice.Profile, seed uint64) ([]float
 	}
 
 	emb := v.FlowEmbedding
+	// Both operands are one float32 widened, so the product needs at most 48
+	// significand bits and float64 has 53: it is exact, and a fused rounding and
+	// a separate one give the same bits. The compiler contracts this and it
+	// changes nothing. Widening the input to float64 would end that, which is
+	// what TestWidenedSquareIsContractionProof stands over.
 	var norm float64
 	for _, x := range emb {
 		norm += float64(x) * float64(x)
@@ -717,12 +828,16 @@ func (e *Engine) DecodeMel(tokens []int, v *voice.Profile, seed uint64) ([]float
 			destroyAll(vOut)
 			return nil, err
 		}
+		// One Euler step, and the explicit conversion holds it to one multiply
+		// and one add. Fused, the step keeps a rounding the other ports drop,
+		// and nothing downstream absorbs it: the mel goes to the vocoder at full
+		// amplitude, and the difference reaches the written WAV.
 		next := make([]float32, len(x))
 		for j := range x {
-			next[j] = x[j] + float32(dt)*v[j]
+			next[j] = x[j] + float32(float32(dt)*v[j])
 		}
 		// Explicit, not deferred: this runs once per Euler step, and `defer`
-		// inside a loop queues every output until the function returns — which
+		// inside a loop queues every output until the function returns, which
 		// is the whole leak, one step later.
 		destroyAll(vOut)
 		x = next
@@ -795,12 +910,12 @@ func (e *Engine) Vocode(mel []float32, seed uint64) ([]float32, error) {
 //
 // isTerminal says whether this chunk ends the passage. A continuation chunk has
 // no sentence end, so its stop peak means nothing and its trailing pause is the
-// sentence's rhythm rather than dead air — the detectors that cut a tail are
+// sentence's rhythm rather than dead air: the detectors that cut a tail are
 // told so and hold off.
 func (e *Engine) generateInspected(
 	textIds []int, v *voice.Profile, seed uint64, prefix []int, isTerminal bool,
 	shouldCancel func() bool,
-) ([]int, postprocess.Inspection, bool, error) {
+) ([]int, postprocess.Inspection, bool, bool, error) {
 	pp := e.config.Postprocess
 	floor := config.EosFloor(len(textIds), e.config)
 	cap := e.config.Sampling.MaxNewTokens
@@ -813,19 +928,40 @@ func (e *Engine) generateInspected(
 		}
 	}
 
-	// Selective re-roll: a window whose verdict is unfixable — dropout
-	// (content missing) or suspect (certainly wrong, nowhere to cut) — is
+	// Selective re-roll: a window whose verdict is unfixable, dropout
+	// (content missing) or suspect (certainly wrong, nowhere to cut), is
 	// regenerated from a derived seed, up to RetryMaxAttempts times. Only
 	// condemned windows pay; the ladder is a pure function of the caller's
 	// seed, so the same seed still gives the same audio, retries included.
 	var gen []int
 	var verdict postprocess.Inspection
 	// True when the row stopped at the ceiling rather than at a stop token:
-	// the utterance is cut off mid-sentence. Computed here — where `ended`
-	// and the effective cap are both in hand — and carried out, because a
+	// the utterance is cut off mid-sentence. Computed here, where `ended`
+	// and the effective cap are both in hand, and carried out, because a
 	// caller cannot recompute it after the specials are stripped and the cap
 	// is forgotten.
 	hitCap := false
+	hitWindow := false
+	// When the ladder exhausts with every attempt condemned, the attempt that
+	// ships is the *best* seen, not the last: fewest tokens in the
+	// true-silence set, integer and portable, like the detectors. Measured:
+	// on the worst voices 30% of condemned fires exhaust the ladder, and
+	// keeping the last attempt shipped rows worse than the first. The render
+	// census gates the count where the checkpoint carries one; the configured
+	// silence list is the fallback.
+	deadAirIds := pp.SilenceRenderIds
+	if len(deadAirIds) == 0 {
+		deadAirIds = e.config.Sampling.SilenceTokenIds
+	}
+	deadAir := make(map[int]struct{}, len(deadAirIds))
+	for _, id := range deadAirIds {
+		deadAir[id] = struct{}{}
+	}
+	bestCount := -1
+	var bestGen []int
+	var bestVerdict postprocess.Inspection
+	bestHitCap := false
+	bestHitWindow := false
 	for attempt := 0; ; attempt++ {
 		attemptSeed := seed
 		if attempt > 0 {
@@ -844,13 +980,13 @@ func (e *Engine) generateInspected(
 
 		raw, err := e.Generate(textIds, v, s, &cap, shouldCancel, prefix)
 		if err != nil {
-			return nil, postprocess.Inspection{}, false, err
+			return nil, postprocess.Inspection{}, false, false, err
 		}
 
 		// `gen` is what the shipped engine calls a row: every token the model
 		// committed to, with the stop marker itself excluded. Indices into it
 		// are decode-step indices, which is what makes the observed peak
-		// comparable against it — so the detectors run here, before the
+		// comparable against it, so the detectors run here, before the
 		// specials are stripped and free to renumber anything.
 		gen = append([]int(nil), raw...)
 		ended := len(gen) > 0 && gen[len(gen)-1] == e.config.StopSpeech
@@ -859,6 +995,12 @@ func (e *Engine) generateInspected(
 		}
 		peakAt, peakProb := s.EOSPeak()
 		hitCap = !ended && len(gen) >= cap
+		// The window, asked separately and asked here, where gen is still what
+		// the model produced. cap is min(MaxNewTokens, ceilingFor(...)), so
+		// hitCap cannot tell a filled window from a runaway short text; and
+		// the trim below can cut a filled window down to a few tokens, which
+		// is how a caller measuring the returned slice saw room to spare.
+		hitWindow = !ended && len(gen) >= e.config.Window.MaxSpeechTokens
 		verdict = postprocess.Inspect(gen, postprocess.Request{
 			TextTokenCount: len(textIds),
 			MinTokens:      floor,
@@ -869,7 +1011,24 @@ func (e *Engine) generateInspected(
 			HitCeiling:     hitCap,
 		}, e.config.Sampling.SilenceTokenIds, pp)
 		condemned := verdict.Reason == postprocess.ReasonDropout || verdict.Suspect
-		if !condemned || pp.Mode == postprocess.ModeOff || attempt >= pp.RetryMaxAttempts {
+		if !condemned || pp.Mode == postprocess.ModeOff {
+			break
+		}
+		silenceCount := 0
+		for _, t := range gen {
+			if _, ok := deadAir[t]; ok {
+				silenceCount++
+			}
+		}
+		if bestCount < 0 || silenceCount < bestCount {
+			// Strict `<`: on a tie the earlier attempt stands, so the ladder
+			// stays a pure function of the caller's seed with no dependence
+			// on iteration order.
+			bestCount, bestGen, bestVerdict, bestHitCap, bestHitWindow =
+				silenceCount, gen, verdict, hitCap, hitWindow
+		}
+		if attempt >= pp.RetryMaxAttempts {
+			gen, verdict, hitCap, hitWindow = bestGen, bestVerdict, bestHitCap, bestHitWindow
 			break
 		}
 	}
@@ -883,106 +1042,93 @@ func (e *Engine) generateInspected(
 			tokens = append(tokens, t)
 		}
 	}
-	return tokens, verdict, hitCap, nil
+	return tokens, verdict, hitCap, hitWindow, nil
 }
 
-// Synthesize runs the whole pipeline: text -> tokens -> mel -> audio.
-// shouldCancel is polled at every decode step, same as Generate; pass nil for
-// no cancellation.
-//
-// An empty language means the voice's own — see resolveLanguage.
-//
-// speed is playback speed in [timestretch.MinSpeed, timestretch.MaxSpeed]:
-// greater than one is faster, and the pitch does not move. 1.0 is an exact
-// bypass — the waveform is the vocoder's own slice, untouched — and Go has no
-// default arguments, so it is written out at every call site rather than
-// omitted the way Python omits it. Outside the range the call is refused here,
-// before the seconds of generation an error would otherwise be discovered
-// after. Not part of the algorithm config and not in the fingerprint: it is an
-// execution input like the seed and the text.
-//
-// previousTokens are the speech tokens this utterance continues from — the
-// tokens returned by the call before it. The single window is then conditioned
-// on their tail exactly as an interior chunk is conditioned on its predecessor,
-// which is what stops a second request from restarting the pitch contour like a
-// fresh sentence. Pass the whole previous result; only the last
-// chunking.PrefixTokens are used and the slice happens here. nil is
-// byte-for-byte the behaviour this method had before the parameter existed.
-//
-// Seven return values is more than a signature should carry, and they are all
-// here anyway: this port hands back the intermediates rather than a Result
-// type, so every stage a caller might want to compare against another backend
-// is reachable without a struct that would have to be kept in step with
-// Python's field by field. hitTokenCap is the one that is not an intermediate:
-// true when generation stopped at the token cap rather than at a stop token,
-// meaning the reading is probably truncated. Truncation is not an error — the
-// audio is real, it is just incomplete — so it travels as a value rather than
-// a non-nil err, and a caller must be able to report it.
-func (e *Engine) Synthesize(text string, v *voice.Profile, seed uint64, language string, speed float64, previousTokens []int, shouldCancel func() bool) (audio []float32, tokens []int, mel []float32, chunks []timing.ChunkTiming, sampleRate int, hitTokenCap bool, err error) {
+// SynthesizeWindow renders text that fits one model window, and refuses text
+// that does not. Synthesize is the call for any length; this one is for the
+// conformance harness and for a caller who wants the refusal.
+func (e *Engine) SynthesizeWindow(text string, v *voice.Profile, o Options) (*Result, error) {
+	speed := o.speed()
 	if err := timestretch.ValidateSpeed(speed); err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
-	prefix, err := e.carryFrom(previousTokens)
+	prefix, err := e.carryFrom(o.PreviousTokens)
 	if err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
-	language = resolveLanguage(language, v)
-	// The funnel is run here rather than inside Encode because its output is
-	// what was tokenised, and therefore what the timing below describes: a
-	// caller highlighting "three" needs the text the engine spoke, not the "3"
-	// they passed in.
+	language := resolveLanguage(o.Language, v)
+	// The funnel runs here rather than inside Encode: its output is what was
+	// tokenised, and therefore what the timing describes.
 	prepared := speechtext.Prepared(text, language)
 	textIds, err := e.frontend.Encode(prepared, language)
 	if err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
 	// A single window is the whole passage, so it is terminal.
-	tokens, _, hitTokenCap, err = e.generateInspected(textIds, v, seed, prefix, true, shouldCancel)
+	tokens, _, hitTokenCap, hitWindowCap, err := e.generateInspected(
+		textIds, v, o.Seed, prefix, true, o.ShouldCancel)
 	if err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
-	mel, err = e.DecodeMel(tokens, v, deriveSeed(seed, 1))
+	// Refused rather than truncated: one window's audio with the rest of the
+	// text unspoken is silent data loss. Read from the generation, not the
+	// trimmed tokens, because postprocess can cut a filled window short.
+	if hitWindowCap {
+		return nil, fmt.Errorf(
+			"the text did not fit one %d-token window and its tail was not spoken. "+
+				"Use Synthesize, which splits at sentence boundaries and joins the audio",
+			e.config.Window.MaxSpeechTokens)
+	}
+	// Discarded, not rendered: every port polls here, between the token
+	// phase and the render.
+	if o.ShouldCancel != nil && o.ShouldCancel() {
+		return nil, ErrCancelled
+	}
+	mel, err := e.DecodeMel(tokens, v, deriveSeed(o.Seed, 1))
 	if err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
-	audio, err = e.Vocode(mel, deriveSeed(seed, 2))
+	if o.ShouldCancel != nil && o.ShouldCancel() {
+		return nil, ErrCancelled
+	}
+	audio, err := e.Vocode(mel, deriveSeed(o.Seed, 2))
 	if err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
-	// Last, and after generateInspected rather than before it: the detectors
-	// judge pacing by duration per token, and stretching first would move every
-	// number they compare against.
+	// Stretched last: the detectors judged pacing on the vocoder's own
+	// samples, and the timeline is measured on what the caller receives.
 	audio, err = timestretch.TimeStretch(audio, e.config.SampleRate, speed)
 	if err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
-	// One window is one chunk, and it starts at zero. Measured on the stretched
-	// audio, so a caller applies no 1/speed correction anywhere.
-	chunks = timing.Timeline(
+	audio = timestretch.FadeEdges(audio, e.config.SampleRate, e.config.EdgeFade())
+	if o.ShouldCancel != nil && o.ShouldCancel() {
+		return nil, ErrCancelled
+	}
+	chunks := timing.Timeline(
 		[]timing.Span{{Text: prepared, Samples: len(audio), Tokens: len(tokens)}},
 		e.config.SampleRate)
-	return audio, tokens, mel, chunks, e.config.SampleRate, hitTokenCap, nil
+	return &Result{
+		Audio: audio, SampleRate: e.config.SampleRate, Tokens: tokens, Mel: mel,
+		Chunks: chunks, HitTokenCap: hitTokenCap,
+	}, nil
 }
 
-// chunkStreamBase mirrors _STREAM_CHUNK in loudkit.engine: chunk seeds start
-// here, clear of the per-stage streams (1 = flow, 2 = vocoder).
 // Retry attempts draw derive(seed, 8+attempt): clear of the stage streams
 // (1, 2) and below the chunk streams at 16.
 const retryStreamBase = 8
 
+// chunkStreamBase mirrors _STREAM_CHUNK in loudkit.window: chunks after the
+// first draw derive(seed, 16+index). Chunk 0 draws the caller's seed itself, so
+// a text that fits one window renders the same through SynthesizeWindow and
+// through Synthesize, in every implementation.
 const chunkStreamBase = 16
 
-// SynthesizeLong speaks text of any length, splitting it across windows.
-//
-// This port had no long-form path: Synthesize renders one window and refuses
-// anything longer, while the documentation called the binding supported. Two
-// things make the joins match Python's rather than merely existing:
-//
-//   - Per-chunk seeds. Each chunk draws from derive(seed, 16+index), so a
-//     chunk's audio does not depend on how many came before it and stopping
-//     early cannot change what was already produced.
-//   - Prefix carry. The last chunking.PrefixTokens speech tokens of a chunk
-//     are fed into the next as context and dropped from its output.
+// resplitStream mirrors _STREAM_RESPLIT in loudkit.window: the second half of
+// a re-split chunk draws from its own stream off the chunk's seed, clear of
+// the flow at 1, the vocoder at 2 and the retry ladder from 8 up.
+const resplitStream = 4096
 
 // Chunk is one rendered piece, handed to a Stream callback as soon as it
 // exists.
@@ -993,128 +1139,137 @@ type Chunk struct {
 	Audio  []float32
 	Tokens []int
 	Mel    []float32
-	// Text is this chunk's text after the speech funnel — what was tokenised,
-	// which is not always what the caller passed in. It is the string a
-	// highlight should be matched against; the caller's own text will drift from
-	// it the moment a digit or an abbreviation appears.
+	// Text is this chunk's text after the speech funnel: what was tokenised,
+	// and what a highlight should be matched against.
 	Text string
 	// Inspection is what the artifact detectors concluded about this chunk.
-	// Carried per chunk rather than aggregated because chunks fail
-	// independently: one hallucinated tail among six clean ones is the case
-	// worth seeing.
 	Inspection postprocess.Inspection
-	// HitTokenCap is true when generation stopped at the token cap rather than
-	// at a stop token, so the chunk is cut off mid-sentence. Per chunk, for the
-	// same reason the inspection is: chunks truncate independently. SynthesizeLong
-	// ORs the flag across chunks; a caller streaming must decide itself whether
-	// one truncated chunk is worth reporting.
+	// HitTokenCap is true when generation stopped at the token cap rather
+	// than at a stop token, so the chunk is cut off mid-sentence.
 	HitTokenCap bool
-	// Timing is where this chunk lands in its own audio, and where its words
-	// probably do. Start is zero: a streamed chunk is its own result and cannot
-	// know what preceded it, so a caller stitching the stream adds the offsets
-	// (timing.ChunkTiming.Shifted does the arithmetic). SynthesizeLong, which
-	// has the whole passage in hand, adds them in samples instead.
+	// Timing is where this chunk lands in its own audio, starting at zero. A
+	// caller stitching the stream adds the offsets (ChunkTiming.Shifted).
 	Timing timing.ChunkTiming
 }
 
 // Stream speaks text chunk by chunk, calling onChunk as each becomes ready.
 //
-// The difference from SynthesizeLong is delivery, not synthesis: time to first
-// audio is set by the first chunk rather than by the whole passage, which is
-// what lets a reading app start playing a sentence while the rest is still
-// being made.
+// The same synthesis as Synthesize, delivered as it is made: time to first
+// audio is set by the first chunk. Return false from onChunk to stop;
+// o.ShouldCancel stops within one decode step, and the stream then ends with
+// no error: the chunks already delivered are the partial, the one in flight
+// is discarded.
 //
-// A callback rather than a channel: a channel would need a goroutine, and a
-// caller who stops reading early would leak it — a streaming API whose failure
-// mode is a leaked goroutine is worse than one that hands you the chunk. Return
-// false from onChunk to stop; the effect is the same as shouldCancel.
-//
-// shouldCancel is polled on every decode step, so an interrupt is honoured
-// within one forward pass rather than at the next chunk boundary. The partial
-// chunk is discarded without being rendered.
-//
-// An empty language means the voice's own — see resolveLanguage. Resolved once
-// here, before splitting, so every chunk of a passage is read the same way.
-//
-// speed stretches each chunk independently, which is the same independence the
-// seeds and the prefix already have: a chunk's audio must not depend on how many
-// came before it, or a listener who stops early would have heard something
-// different from one who did not. See Synthesize for the range and the bypass.
-//
-// previousTokens seeds the carry, so the first chunk of this call is conditioned
-// on the tail of a previous one. It is the same conditioning the joins inside a
-// passage already use — the carry variable below simply starts non-empty — which
-// is why a request boundary stops being audible without a second mechanism
-// existing to maintain.
-func (e *Engine) Stream(text string, v *voice.Profile, seed uint64, language string, speed float64, previousTokens []int, shouldCancel func() bool, onChunk func(Chunk) bool) error {
+// Chunk 0 draws the caller's seed and every later chunk derive(seed,
+// 16+index), so a chunk's audio does not depend on how many came before it.
+// The last chunking.PrefixTokens tokens of each chunk condition the next, and
+// o.PreviousTokens seed that carry for the first.
+func (e *Engine) Stream(text string, v *voice.Profile, o Options, onChunk func(Chunk) bool) error {
+	err := e.stream(text, v, o, onChunk)
+	if errors.Is(err, ErrCancelled) {
+		return nil
+	}
+	return err
+}
+
+// stream is Stream, returning ErrCancelled where the caller's flag stopped it.
+func (e *Engine) stream(text string, v *voice.Profile, o Options, onChunk func(Chunk) bool) error {
+	speed := o.speed()
 	if err := timestretch.ValidateSpeed(speed); err != nil {
 		return err
 	}
-	carry, err := e.carryFrom(previousTokens)
+	carry, err := e.carryFrom(o.PreviousTokens)
 	if err != nil {
 		return err
 	}
-	language = resolveLanguage(language, v)
-	// The funnel runs on the whole text BEFORE splitting: Polish respelling
-	// changes the length ("download" -> "dałnloud"), so a budget computed
-	// first would be a budget for text the engine never speaks.
+	shouldCancel := o.ShouldCancel
+	language := resolveLanguage(o.Language, v)
+	// The funnel runs on the whole text before splitting: Polish respelling
+	// changes the length, so a budget computed first would be a budget for
+	// text the engine never speaks.
 	prepared := speechtext.Prepared(text, language)
 	chunks := chunking.SplitText(prepared, e.config.Chunking)
 	if len(chunks) == 0 {
 		return errors.New("nothing to speak")
 	}
 
-	for index, chunk := range chunks {
+	// A work queue rather than a range: a chunk the window could not hold is
+	// replaced, in place, by its two halves. Both halves keep the original
+	// index, so a repair cannot move the seed of any later chunk.
+	type part struct {
+		text     string
+		index    int
+		seed     uint64
+		terminal bool
+		// False on a half, so a half that still overruns ships as it is.
+		splittable bool
+	}
+	queue := make([]part, 0, len(chunks))
+	for i, c := range chunks {
+		queue = append(queue, part{
+			text: c, index: i, seed: chunkSeed(o.Seed, i),
+			terminal: i == len(chunks)-1, splittable: true,
+		})
+	}
+
+	for qi := 0; qi < len(queue); qi++ {
+		p := queue[qi]
+		index, chunk, chunkSeed := p.index, p.text, p.seed
 		if shouldCancel != nil && shouldCancel() {
-			break
+			return ErrCancelled
 		}
-		chunkSeed := deriveSeed(seed, uint64(chunkStreamBase+index))
 		ids, err := e.frontend.Encode(chunk, language)
 		if err != nil {
 			return err
 		}
 		// Only the last chunk ends the passage.
-		chunkTokens, verdict, chunkCapped, err := e.generateInspected(
-			ids, v, chunkSeed, carry, index == len(chunks)-1, shouldCancel)
+		chunkTokens, verdict, chunkCapped, chunkFilledWindow, err := e.generateInspected(
+			ids, v, chunkSeed, carry, p.terminal, shouldCancel)
 		if err != nil {
 			return err
 		}
-		// Discarded, not rendered. The partial tokens belong to speech the
-		// listener has already interrupted, and the mel decode plus vocode is
-		// the larger half of the barge-in latency on an edge device — so
-		// running them adds exactly the wait the cancellation exists to
-		// remove, and then plays audio nobody asked for. Python does this at
-		// engine.py:298; JS at engine.ts:473.
+		// The window has to be what stopped it, not the length ceiling that
+		// stops a short text running away: halving a runaway gives two.
+		if chunkFilledWindow && p.splittable &&
+			e.config.Chunking.CapResplit == chunking.WordCapResplit {
+			if first, second, ok := chunking.SplitInHalf(chunk); ok {
+				queue = append(queue[:qi], append([]part{
+					{text: first, index: index, seed: chunkSeed, terminal: false, splittable: false},
+					{text: second, index: index, seed: deriveSeed(chunkSeed, resplitStream),
+						terminal: p.terminal, splittable: false},
+				}, queue[qi+1:]...)...)
+				qi--
+				continue
+			}
+		}
+		// Discarded, not rendered: the decode and vocode are the larger half
+		// of barge-in latency, and the audio is speech nobody asked for.
 		if shouldCancel != nil && shouldCancel() {
-			break
+			return ErrCancelled
 		}
 		chunkMel, err := e.DecodeMel(chunkTokens, v, deriveSeed(chunkSeed, 1))
 		if err != nil {
 			return err
 		}
+		if shouldCancel != nil && shouldCancel() {
+			return ErrCancelled
+		}
 		chunkAudio, err := e.Vocode(chunkMel, deriveSeed(chunkSeed, 2))
 		if err != nil {
 			return err
 		}
-		// The last stage, per chunk, for the reason Synthesize gives: the
-		// detectors have already measured this render's pacing, and they measured
-		// it on the vocoder's own samples.
 		chunkAudio, err = timestretch.TimeStretch(chunkAudio, e.config.SampleRate, speed)
 		if err != nil {
 			return err
 		}
-		if n := e.config.Chunking.PrefixTokens; n > 0 && len(chunkTokens) > 0 {
-			if n > len(chunkTokens) {
-				n = len(chunkTokens)
-			}
-			carry = append([]int(nil), chunkTokens[len(chunkTokens)-n:]...)
-		} else {
-			carry = nil
+		chunkAudio = timestretch.FadeEdges(chunkAudio, e.config.SampleRate, e.config.EdgeFade())
+		if shouldCancel != nil && shouldCancel() {
+			return ErrCancelled
 		}
+		carry = e.carryAligned(chunkTokens)
 
-		// Through Timeline rather than by filling in a ChunkTiming here, so a
-		// streamed chunk's own timing and the stitched one SynthesizeLong builds
-		// come out of the same arithmetic and cannot drift apart.
+		// Through Timeline, so a streamed chunk's own timing and the stitched
+		// one Synthesize builds come out of the same arithmetic.
 		span := timing.Span{Text: chunk, Samples: len(chunkAudio), Tokens: len(chunkTokens)}
 		if !onChunk(Chunk{
 			Index: index, Audio: chunkAudio, Tokens: chunkTokens, Mel: chunkMel,
@@ -1129,48 +1284,37 @@ func (e *Engine) Stream(text string, v *voice.Profile, seed uint64, language str
 	return nil
 }
 
-// SynthesizeLong speaks text of any length as one waveform.
+// Synthesize speaks text of any length as one Result.
 //
-// Exactly Stream with the chunks concatenated — one loop, so the streaming and
-// whole-passage paths cannot drift apart. Use Stream when you want to start
-// playing before the passage is finished.
-//
-// speed and previousTokens mean what they mean on Stream: the stretch is applied
-// per chunk, so the two paths still produce the same waveform, and
-// previousTokens conditions the first chunk while every chunk after it is
-// conditioned on the one before, as always.
-//
-// The returned chunks tile the audio in order: the first Start is zero, chunk
-// k's End is the same float as chunk k+1's Start, and the last End is the
-// duration. Seven return values is more than a signature should carry — see
-// Synthesize for why they are handed back rather than boxed. hitTokenCap is
-// ORed across chunks, matching Python: one truncated chunk truncates the
-// passage.
-func (e *Engine) SynthesizeLong(text string, v *voice.Profile, seed uint64, language string, speed float64, previousTokens []int, shouldCancel func() bool) (audio []float32, tokens []int, mel []float32, chunks []timing.ChunkTiming, sampleRate int, hitTokenCap bool, err error) {
+// Exactly Stream with the chunks concatenated, one loop, so the two paths
+// cannot drift. HitTokenCap is ORed across chunks: one capped chunk caps
+// the passage. When o.ShouldCancel returned true the result is nil and the
+// error is ErrCancelled: a passage cut short is never handed back as a Result.
+func (e *Engine) Synthesize(text string, v *voice.Profile, o Options) (*Result, error) {
+	out := &Result{SampleRate: e.config.SampleRate}
 	var spans []timing.Span
-	err = e.Stream(text, v, seed, language, speed, previousTokens, shouldCancel, func(c Chunk) bool {
-		audio = append(audio, c.Audio...)
-		tokens = append(tokens, c.Tokens...)
-		mel = appendMelAlongTime(mel, c.Mel)
-		hitTokenCap = hitTokenCap || c.HitTokenCap
-		// Collected as spans and timed once at the end rather than by shifting
-		// each chunk's own timing by a running float: Timeline accumulates the
-		// offsets as integer samples, so every join is exact and a highlight
-		// switching on time >= Start can neither gap nor light two chunks.
+	err := e.stream(text, v, o, func(c Chunk) bool {
+		out.Audio = append(out.Audio, c.Audio...)
+		out.Tokens = append(out.Tokens, c.Tokens...)
+		out.Mel = appendMelAlongTime(out.Mel, c.Mel)
+		out.HitTokenCap = out.HitTokenCap || c.HitTokenCap
+		// Timed once at the end: Timeline accumulates the offsets as integer
+		// samples, so every join is exact.
 		spans = append(spans, timing.Span{
 			Text: c.Text, Samples: len(c.Audio), Tokens: len(c.Tokens)})
 		return true
 	})
 	if err != nil {
-		return nil, nil, nil, nil, 0, false, err
+		return nil, err
 	}
-	return audio, tokens, mel, timing.Timeline(spans, e.config.SampleRate), e.config.SampleRate, hitTokenCap, nil
+	out.Chunks = timing.Timeline(spans, e.config.SampleRate)
+	return out, nil
 }
 
 // carryFrom is the conditioning context a call inherits from the one before it.
 //
-// The same slice the streaming loop takes between two chunks — last
-// chunking.PrefixTokens — applied to tokens that came from a different call.
+// The same slice the streaming loop takes between two chunks, the last
+// chunking.PrefixTokens, applied to tokens that came from a different call.
 // There is deliberately no second mechanism: a request boundary and a chunk
 // boundary are the same join, and the reason chunk joins do not stutter is the
 // reason request joins should not either.
@@ -1187,34 +1331,65 @@ func (e *Engine) carryFrom(previousTokens []int) ([]int, error) {
 	if len(previousTokens) == 0 {
 		return nil, nil
 	}
+	if err := e.checkSpeechTokens(previousTokens); err != nil {
+		return nil, err
+	}
+	return e.carryAligned(previousTokens), nil
+}
+
+// checkSpeechTokens refuses an id that is not an acoustic speech token.
+//
+// Shared with Generate, which indexes its repetition table with every carried
+// id and died on an out-of-range one instead of reporting it. The
+// sentence is carryFrom's own, unchanged, because the two are the same refusal
+// at two doors and a caller who already reads one should not meet a second.
+func (e *Engine) checkSpeechTokens(tokens []int) error {
 	limit := e.config.StartSpeech
-	for _, token := range previousTokens {
+	for _, token := range tokens {
 		if token < 0 || token >= limit {
-			return nil, fmt.Errorf(
+			return fmt.Errorf(
 				"previousTokens contains %d, which is not an acoustic speech "+
 					"token (expected 0 <= id < %d). Pass the tokens returned by an "+
 					"earlier call; the generator's own control tokens are already "+
 					"stripped from them", token, limit)
 		}
 	}
-	wanted := e.config.Chunking.PrefixTokens
-	// Not previousTokens[len-wanted:] unguarded: a zero there is the whole slice
-	// rather than nothing, which would condition on the entire previous
-	// utterance at exactly the setting that means "chunks are independent".
-	if wanted <= 0 {
-		return nil, nil
+	return nil
+}
+
+// checkTextRow refuses text tokens textRow would read the tables past the end
+// of.
+//
+// Load already refuses a tokenizer whose largest id does not fit the text
+// embedding table, so this catches only a row a caller assembled by hand.
+// Without it textRow panics with an index out of range inside the library,
+// which is not a failure a caller can handle.
+func (e *Engine) checkTextRow(textTokens []int) error {
+	rows := len(e.textEmb) / hiddenDim
+	for _, token := range textTokens {
+		if token < 0 || token >= rows {
+			return fmt.Errorf(
+				"textTokens contains %d, which is past the end of the "+
+					"checkpoint's text embedding table (expected 0 <= id < %d). "+
+					"Pass the ids frontend.Encode returns", token, rows)
+		}
 	}
-	if wanted > len(previousTokens) {
-		wanted = len(previousTokens)
+	// The row textRow builds is the tokens plus the start and stop markers,
+	// and it indexes the positional table by position.
+	if framed, positions := len(textTokens)+2, len(e.textPos)/hiddenDim; framed > positions {
+		return fmt.Errorf(
+			"%d text tokens frame a %d-position row, past the checkpoint's "+
+				"%d text positions; split the text first",
+			len(textTokens), framed, positions)
 	}
-	return append([]int(nil), previousTokens[len(previousTokens)-wanted:]...), nil
+	return nil
 }
 
 // appendMelAlongTime concatenates two row-major [melBins, frames] mels along
 // the TIME axis.
 //
-// Appending the flat buffers end to end — the obvious thing, and what the JS
-// port did — is not concatenation: after the first chunk the next chunk's bin 0
+// Appending the flat buffers end to end (the obvious thing, and what the JS
+// port did) is not concatenation: after the first chunk the next chunk's bin 0
 // lands after the previous chunk's bin 79, so every row but the first is wrong.
 // The audio is unaffected (it is vocoded per chunk) but the returned mel is the
 // diagnostic people reach for when two backends disagree, and a mis-shaped one
@@ -1234,6 +1409,17 @@ func appendMelAlongTime(dst, src []float32) []float32 {
 	return out
 }
 
+// chunkSeed is the seed chunk i of a passage draws. Chunk 0 takes the caller's
+// seed itself, so a text that fits one window renders the same through
+// SynthesizeWindow and through Synthesize; every later chunk derives from its own
+// stream, so its audio does not depend on how many chunks came before it.
+func chunkSeed(seed uint64, index int) uint64 {
+	if index == 0 {
+		return seed
+	}
+	return deriveSeed(seed, uint64(chunkStreamBase+index))
+}
+
 // deriveSeed mirrors engine._derive.
 func deriveSeed(seed, stream uint64) uint64 {
 	const phi = uint64(0x9e3779b97f4a7c15)
@@ -1241,9 +1427,17 @@ func deriveSeed(seed, stream uint64) uint64 {
 	return seed*phi + stream*psi
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+func (e *Engine) carryAligned(tokens []int) []int {
+	n := e.config.Chunking.PrefixTokens
+	if n <= 0 || len(tokens) == 0 {
+		return nil
 	}
-	return b
+	start := max(0, len(tokens)-n)
+	if e.config.DecodeMode == config.DecodeFusionMTP2 {
+		end := len(tokens) - len(tokens)%2
+		start = max(0, end-n)
+		start -= start % 2
+		return append([]int(nil), tokens[start:end]...)
+	}
+	return append([]int(nil), tokens[start:]...)
 }

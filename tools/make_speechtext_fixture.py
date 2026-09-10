@@ -3,7 +3,7 @@
 ``SpeechText.prepared`` is the funnel every implementation runs before
 tokenising, and the whole Polish claim rests on the ports agreeing with it
 character for character. Until now that agreement was asserted by hand-written
-cases in each language — twenty-odd in Python, a few in Go and Rust, and
+cases in each language, twenty-odd in Python, a few in Go and Rust, and
 **none at all** in the Swift funnel, which is the implementation the others
 are described as ports *of*.
 
@@ -22,12 +22,13 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 from loudkit.config import ChunkConfig
 from loudkit.frontend.chunking import split_text
-from loudkit.frontend.polish import speech_text
+from loudkit.frontend.speechtext import speech_text
 
 OUT = (
     Path(__file__).resolve().parent.parent
@@ -38,7 +39,7 @@ OUT = (
 )
 
 # Cases where the shipped Swift funnel and the Python port disagree and the
-# right answer is a judgement about how a Polish reader says the word — not
+# right answer is a judgement about how a Polish reader says the word, not
 # something to settle by picking whichever implementation was edited last.
 # Recorded here so the disagreement is visible and testable rather than lost;
 # see the conventions audit.
@@ -102,13 +103,13 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("  collapse   the    spaces  ", "en", None),
     # `H.mm` is a clock time in the eleven languages that write decimals with a
     # comma, and a decimal in the one that does not. All of these read as the
-    # clock before, in all five implementations — and "decimal 0.49" above had
+    # clock before, in all five implementations, and "decimal 0.49" above had
     # pinned the wrong answer as truth, which is how five ports agreed on it.
     ("Pi equals 3.14 exactly.", "en", None),
     ("It costs $0.49 today.", "en", None),
     ("Termin um 14.30 Uhr.", "de", None),
     # A combining mark that cannot compose into its base character. NFC leaves
-    # it standing, so it reaches the punctuation pass — where Foundation's
+    # it standing, so it reaches the punctuation pass, where Foundation's
     # `CharacterSet.letters` is documented as L* *and M\u002A* and answered
     # "letter", while `str.isalpha()` and the other three answered "not". Swift
     # kept it glued to the word and the rest turned it into a space: one funnel,
@@ -120,7 +121,7 @@ CASES: list[tuple[str, str | None, str | None]] = [
     # shrink it to zero so the guard lands on a dot rather than a letter:
     # "1.5e3" matched just the "1" and read "one.5e3", "3.14abc" read
     # "three.14abc". And an exponent's sign hid the letter from the backward
-    # walk, so "1e-3" read "1e-three" — then, once the number pass declined it,
+    # walk, so "1e-3" read "1e-three", then, once the number pass declined it,
     # punctuation took the token apart into "1e 3".
     ("The value is 1.5e3.", "en", None),
     ("The value is 1e-3.", "en", None),
@@ -130,7 +131,7 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("It is -5 degrees.", "en", None),
     ("A well-known fact.", "en", None),
     # The Polish respeller is a second, independent reader of digits, and it
-    # has a rule for dotted runs — "three or more is a version, an address or a
+    # has a rule for dotted runs, "three or more is a version, an address or a
     # date, and is left exactly as written". The rule only started on a
     # pure-digit group, so "v1.2.3" collected as ["v1", "2", "3"], never became
     # a run, and came out "fał jeden.dwa przecinek trzy". A version is a version
@@ -139,14 +140,12 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("Wersja 1.2.3 juz jest.", "pl", None),
     ("Mam R2 tutaj.", "pl", None),
     ("Cena 2.5 tutaj.", "pl", None),
-    # The first real parity break in four rounds of review, and the fixture's
-    # blind spot is why: it had no case of a *grouped* run glued to a letter.
-    # `x200 000` binds as one match in Go and Rust, whose engines do not
-    # backtrack, so the lookbehind refused the whole run and the token was left
-    # written — while Python, JS and Swift backtracked, matched the standalone
-    # `000`, and read "x200 zero zero zero". Half a token spoken, which is the
-    # class the right-hand guard exists to stop, so the three converged on the
-    # two rather than the other way round.
+    # A *grouped* digit run glued to a letter. `x200 000` binds as one match,
+    # so a non-backtracking engine lets the lookbehind refuse the whole run
+    # and leaves the token written; a backtracking one can fall back to the
+    # standalone `000` and read "x200 zero zero zero". Half a token spoken is
+    # the class the right-hand guard exists to stop, so all five leave the
+    # token written.
     ("x200 000 y", "en", None),
     ("a1 000 000 b", "en", None),
     ("200 000x here", "en", None),
@@ -155,7 +154,7 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("Sold 200 000 units.", "en", None),
     ("In 2024 200 people came.", "en", None),
     # An exponent's plus, which the number pass declines and punctuation then
-    # took apart into "1e 3" — only the hyphen was kept between alphanumerics.
+    # took apart into "1e 3", only the hyphen was kept between alphanumerics.
     ("The value is 1e+3.", "en", None),
     ("Value 2.5E+1 here.", "en", None),
     # Currency behind the amount, which the prefix rule could not see. `2.50 €`
@@ -164,29 +163,27 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("It costs 0.49¢.", "de", None),
     ("It costs 0.49¢.", "en", None),
     ("Es kostet 2.50 €.", "de", None),
-    # Ordinary text that aborted the Go and Rust processes: the ragged-run
-    # branch moves the cursor past its own match, the next match arrives from
-    # before it, and slicing backwards panics. Go was fixed first and the guard
-    # did not reach Rust — the second time this week a fix landed in four
-    # implementations of five, and the fuzzer found both.
-    # Only the one all five agree on. The other two the fuzzer found —
-    # "200 000.200 000!" and "121 euros 234 567 5 000" — also used to abort the
-    # process and no longer do, but Python and the RE2 ports still read them
-    # differently: that is the open family, and a fixture case is a claim that
-    # five implementations agree. They are pinned as crash regressions in
-    # `rust/tests/speechtext.rs` instead, which is what they are.
+    # Ordinary text that aborts a port whose ragged-run branch moves the
+    # cursor past its own match: the next match arrives from before it, and
+    # slicing backwards panics.
+    #
+    # Only the shape all five agree on. Two neighbouring ones,
+    # "200 000.200 000!" and "121 euros 234 567 5 000", are read differently
+    # by Python and the RE2 ports. That family is open, and a fixture case is
+    # a claim that five implementations agree, so those two are pinned as
+    # crash regressions in `rust/tests/speechtext.rs` instead.
     ("1 234 567 12.", "fr", None),
-    # The code speller deleted characters it had no name for and truncated at
-    # eight: `Müller123` read *em el el e er jeden dwa* with the `ü` simply
-    # gone, and `żelazny2024` lost its last digits. All or nothing now — a
-    # token half-spelled is worse than one left written, because the listener
-    # cannot tell anything was dropped.
+    # The code speller is all or nothing. Deleting a character it has no name
+    # for reads `Müller123` as *em el el e er jeden dwa* with the `ü` simply
+    # gone, and truncating at the length cap loses the last digits of
+    # `żelazny2024`. A token half-spelled is worse than one left written,
+    # because the listener cannot tell anything was dropped.
     ("Mam Müller123 tutaj.", "pl", None),
     ("Mam żelazny2024 tutaj.", "pl", None),
     ("Mam R2 tutaj.", "pl", None),
     ("Mam iOS18 tutaj.", "pl", None),
     # `R$` is the Brazilian real and this table has a wording for no
-    # multi-character mark, so matching the `$` alone said "Dollar" — the wrong
+    # multi-character mark, so matching the `$` alone said "Dollar", the wrong
     # currency, confidently, with the orphaned `R` still in front of it. The
     # mark is dropped and the amount reads as a decimal now, which is a smaller
     # lie than naming the wrong money.
@@ -218,31 +215,72 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("Dial 1 202 555 0199 now.", "en", None),
     ("Gained +1 000 000 users.", "en", None),
     ("Sold 200 000 units.", "en", None),
-    # U+2212, the typographic minus, which used to vanish into a space and take
+    # U+2212, the typographic minus, which unfolded vanishes into a space, taking
     # the sign of the number with it.
     ("Minus sign \u22125 here.", "en", None),
     ("Temperatura \u22125 stopni.", "pl", None),
     # A digit run glued to a letter on *either* side is part of that token.
-    # The lookbehind had no mirror, so a run touching a word on the right was
-    # expanded up to the letter and then abandoned: "5x3" said *fivex3* and
-    # "1e6" said *onee6*, a word welded to a digit. And an identifier that puts
-    # a dot between its letter and its digits slipped past the one-character
-    # lookbehind entirely, so "v1.2.3" read "v1.two point three".
+    # Without a mirror for the lookbehind, a run touching a word on the right
+    # is expanded up to the letter and then abandoned: "5x3" says *fivex3* and
+    # "1e6" says *onee6*, a word welded to a digit. And a one-character
+    # lookbehind cannot see past a dot between a letter and its digits, so
+    # "v1.2.3" reads "v1.two point three".
     ("Value 1e6 here.", "en", None),
     ("It is 5x3 grid.", "en", None),
     ("Version v1.2.3 out.", "en", None),
     ("See SVN r123 now.", "en", None),
     # ISO 8601 writes end-of-day as 24:00. The hour was outside the pattern,
-    # so both halves read as unrelated numbers and the colon stood between them
-    # — "twenty-four:zero zero" reaching the model as written.
+    # so both halves read as unrelated numbers and the colon stood between
+    # them: "twenty-four:zero zero" reaching the model as written.
     ("At 24:00 sharp.", "en", None),
     ("At 23:59 sharp.", "en", None),
-    # Spanish had no scale above a million, so anything from a billion up fell
-    # back to digit-by-digit. A `billón` at 10^12 is the right Spanish word and
-    # raises the ceiling enough for `mil millones` to compose on its own;
-    # modelling 10^9 as its own scale word instead gave "dos mil millones
+    # The clock pass wrote its words against the letters behind the digits, so
+    # `3:45pm` read *three forty-fivepm*, one word to a listener, while `3:45
+    # pm` read correctly. Nothing here had a meridiem in it, in any language,
+    # which is how the commonest way an English caller writes a time survived
+    # five implementations. The spaced form is beside each glued one because
+    # the claim is that they read the same.
+    ("Call at 3:45pm.", "en", None),
+    ("Call at 3:45 pm.", "en", None),
+    (
+        "It is 9:05am now.",
+        "en",
+        "a minute under ten reads as a plain cardinal, *nine five*, in all "
+        "twelve. English says *nine oh five* and the word for that zero is not "
+        "a cardinal, so it is a per-language grammar entry rather than a "
+        "boundary rule, and this case pins what the funnel says today",
+    ),
+    (
+        "Meet at 11:30AM sharp.",
+        "en",
+        "the acronym speller runs before the clock pass and sees a meridiem "
+        "only where a space already stood: `11:30 AM` becomes *ay-em* and "
+        "`11:30AM` stays `AM`. Pass order, not the boundary, and the pair below "
+        "keeps the difference visible instead of asserting one of them alone",
+    ),
+    ("Meet at 11:30 AM sharp.", "en", None),
+    (
+        "Due 12:00p.m. today.",
+        "en",
+        "the dotted spelling is letters like any other, and the speller "
+        "declines a dotted token, so both forms of this one read alike",
+    ),
+    # ...and the same boundary on the one grammar with a written infix, where a
+    # missing space made the reading say the infix twice.
+    ("Termin um 14.30Uhr.", "de", None),
+    ("Termin um 14.30 Uhr.", "de", None),
+    ("Es ist 14:30Uhr genau.", "de", None),
+    # A meridiem in a language that does not write one is still two words.
+    ("Spotkanie o 14:30am.", "pl", None),
+    # The negatives the rule must not reach: a seconds field, and a letter in
+    # front of the time rather than behind it.
+    ("Split at 10:30:45 exactly.", "en", None),
+    ("Meet at a14:30.", "en", None),
+    # Spanish scales stop at `billón`, 10^12, which is the right Spanish word
+    # and raises the ceiling enough for `mil millones` to compose on its own.
+    # Modelling 10^9 as its own scale word instead gives "dos mil millones
     # quinientos millones" for 2 500 000 000. Portuguese looks like the same
-    # defect and is not: the CLDR corpus says `um mil milhões`, so its 10^9
+    # shape and is not: the CLDR corpus says `um mil milhões`, so its 10^9
     # scale word stays and this case pins the difference.
     ("Son 2 500 000 000 personas.", "es", None),
     ("São 2 500 000 000 pessoas.", "pt", None),
@@ -261,7 +299,7 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("١٢٣", "pl", None),
     # The decimal separator that goes with those digits. U+066B is not in the
     # `[.,]` the number pass looks for, so it was dropped and "٣٫١٤" read as
-    # two numbers — *trzy czternaście*, the same change of meaning as reading a
+    # two numbers, *trzy czternaście*, the same change of meaning as reading a
     # decimal as a clock time, arriving through a character set. It folds to
     # whichever mark the language actually writes, which is why folding it to a
     # dot everywhere would have put German back on the clock.
@@ -271,19 +309,19 @@ CASES: list[tuple[str, str | None, str | None]] = [
     ("٥٪", "en", None),
     ("٥٪", "pl", None),
     # A currency mark in front of foreign digits. The five currency patterns
-    # spell their digit class differently — Python and Rust `\\d` is Unicode,
-    # Go and JS `\\d` is ASCII — so "$٥" was five dollars in two ports and a
+    # spell their digit class differently, Python and Rust `\\d` is Unicode,
+    # Go and JS `\\d` is ASCII, so "$٥" was five dollars in two ports and a
     # dollar sign in front of an unread numeral in the others. Folding the
     # digits before any pattern sees them settles it without touching five
     # regexes, which is why these cases live here rather than in a note.
     ("It costs $٥ today.", "en", None),
     ("Kosztuje $٥ dzisiaj.", "pl", None),
     ("Cost £٢٥٠ now.", "en", None),
-    # A price is the one dotted pair that is never a clock time, and the funnel
-    # used to forget it: the currency symbol becomes a trailing word before the
-    # time pass runs, so "$0.49" reached it looking exactly like "14.30" — which
-    # in the eleven comma-decimal languages is how a time is written. German
-    # answered "null Uhr neunundvierzig Dollar", a price read as an hour.
+    # A price is the one dotted pair that is never a clock time. The currency
+    # symbol becomes a trailing word before the time pass runs, so "$0.49"
+    # reaches it looking exactly like "14.30", which in the eleven
+    # comma-decimal languages is how a time is written: unguarded, German
+    # answers "null Uhr neunundvierzig Dollar", a price read as an hour.
     ("It costs $0.49.", "de", None),
     ("It costs $0.49.", "pl", None),
     ("It costs $0.49.", "en", None),
@@ -326,7 +364,7 @@ CASES: list[tuple[str, str | None, str | None]] = [
         "five funnels in one commit",
     ),
     ("Polskie słowa zostają nietknięte.", "pl", None),
-    ("deadline’u", "pl", None),  # curly apostrophe; Go used to slice one *byte* here
+    ("deadline’u", "pl", None),  # curly apostrophe: a byte-wise slice cuts it in half
     # --- language id handling -------------------------------------------
     ("download", "PL", None),
     ("download", None, None),
@@ -458,27 +496,27 @@ CASES: list[tuple[str, str | None, str | None]] = [
     (
         "iOS18 is out.",
         "en",
-        "the four number-regex shapes Swift used to read differently",
+        "the four number-regex shapes every funnel must agree on",
     ),
     (
         "I have 1 000 things.",
         "en",
-        "the four number-regex shapes Swift used to read differently",
+        "the four number-regex shapes every funnel must agree on",
     ),
     (
         "It is -5 degrees.",
         "en",
-        "the four number-regex shapes Swift used to read differently",
+        "the four number-regex shapes every funnel must agree on",
     ),
     (
         "Meet at a14:30.",
         "en",
-        "the four number-regex shapes Swift used to read differently",
+        "the four number-regex shapes every funnel must agree on",
     ),
     (
         "Price 1 234 567 exact.",
         "en",
-        "the four number-regex shapes Swift used to read differently",
+        "the four number-regex shapes every funnel must agree on",
     ),
     # --- Norwegian ------------------------------------------------------
     #
@@ -486,8 +524,8 @@ CASES: list[tuple[str, str | None, str | None]] = [
     # had *zero* cases here: the roster ships Norwegian voices and the fuzzer
     # generates Norwegian, but the one gating parity contract exercised the
     # grammar nowhere. These five are the same five shapes the other languages
-    # are held to — currency in a sentence, a clock time beside an
-    # abbreviation, a date, grouping and the decimal comma, acronyms — so a
+    # are held to, currency in a sentence, a clock time beside an
+    # abbreviation, a date, grouping and the decimal comma, acronyms, so a
     # Norwegian divergence now fails in the same place a Danish one does.
     (
         "Det koster 250 kroner.",
@@ -564,13 +602,392 @@ CASES: list[tuple[str, str | None, str | None]] = [
         "five leave it written. It read `Preis3,vierzehn` — half a token spoken, "
         "which is exactly what the refusal rule exists to stop",
     ),
+    # --- five-way divergences, each found by differential probing ---------
+    #
+    # None of these had a case here, which is why each survived. Every one was
+    # a real difference in what a listener hears, in a language the roster
+    # ships two voices for.
+    (
+        "\u00bfComo estas hoy? \u00a1Que bien!",
+        "es",
+        "the inverted marks are prosody: they are the earliest cue a Spanish "
+        "reader has that a question is coming. The reference dropped them "
+        "while Go, Rust, JS and Swift kept them, so every Spanish question "
+        "read differently in the implementation that defines the others",
+    ),
+    (
+        "Bonjour\u00a0! Comment allez-vous\u00a0? Voici\u00a0: midi\u00a0;",
+        "fr",
+        "French typography puts a non-breaking space before ! ? : ; and Word, "
+        "LibreOffice and French CMSs insert it automatically. RE2's \\s is "
+        "ASCII, so Go alone kept it, and the frontend folds NBSP to a space -- "
+        "79 token ids against 75 in the other four on this one sentence",
+    ),
+    (
+        "Cena to \U0001d7e3\U0001d7e4 zlotych.",
+        "pl",
+        "mathematical sans-serif digits, the kind pasted out of social bios. "
+        "Four Nd blocks sit back to back in this range, so walking down to "
+        "find the block's zero crossed the boundary: Rust aborted the process "
+        "on the unwrap, Go and JS read 12 as 232",
+    ),
+    (
+        "one \u6f22\u5b57 two three four",
+        "pl",
+        "a script without case is still letters. JS tested for letters by "
+        "comparing upper to lower case, which is false for CJK, Hebrew, "
+        "Arabic, Hangul, Thai and Devanagari, so the word took the "
+        "digits-only branch and was deleted from the sentence",
+    ),
+    (
+        "cena to \uff10\uff11\uff12\uff13 euro",
+        "pl",
+        "fullwidth digits. The leading-zero refusal reads the original token, "
+        "where a fullwidth zero is not an ASCII one; Swift normalised first "
+        "and then refused its own normalisation, spelling four glyphs one by "
+        "one where the other four said a hundred and twenty three",
+    ),
+    (
+        "Alpha beta\u0085gamma delta",
+        "en",
+        "U+0085 is what CP1252 byte 0x85 becomes when text is decoded as "
+        "Latin-1, which is ordinary in scraped and epub sources. It is "
+        "whitespace to Python, Go, Rust and Swift and not to ECMAScript, so "
+        "JS alone turned it into a space",
+    ),
+    # --- three places the reference deviated from all four ports ---------
+    (
+        "the end of record\u001ethe next begins",
+        "en",
+        "U+001C-U+001F: `str.isspace()` calls them whitespace and Unicode's "
+        "White_Space does not, so Python kept the separator where Rust, Go, JS "
+        "and Swift all replaced it with a space. Measured over 0..0x2FFFF, "
+        "these four are the only disagreement between the two predicates. The "
+        "tokenizer saw [UNK] where the ports saw [SPACE], and the splitter "
+        "found no word boundary where they did — different tokens and a "
+        "different chunk split under one fingerprint",
+    ),
+    (
+        "tak \u2019 nie",
+        "pl",
+        "a token with no letters and no digits was mapped through the "
+        "ASCII-keyed digit table and filtered to nothing, so a spaced "
+        "apostrophe was erased from the utterance — and it is in the prosodic "
+        "set, which is to say the funnel is meant to keep it. Swift had "
+        "already fixed this and written down why",
+    ),
+    (
+        "\u00b29",
+        "en",
+        "a superscript written against a digit left a BARE DIGIT in the "
+        'output. Every "is this a word character" test in the five ports is '
+        "\\w, \\p{N} or str.isdigit(), and all three admit No — so this was one "
+        "token, the number matcher's boundary guard declined it, and the "
+        "symbol pass then deleted the superscript and left a 9 nothing "
+        "verbalised. A bare digit is what this layer exists to prevent, and a "
+        "grapheme model reads one badly with no way to hear that it happened",
+    ),
+    (
+        "9\u00b2",
+        "en",
+        "the same, on the other side: the character has to become a space "
+        "rather than be deleted, or the digit joins whatever followed",
+    ),
+    (
+        "\u00bd7",
+        "en",
+        "a vulgar fraction is the same category (No) and was the same defect",
+    ),
+    (
+        "The area is 12 m\u00b2 and the price is $9.",
+        "en",
+        "the shape this reaches in real prose. Both numbers must be read, and "
+        "the currency mark must still find its amount",
+    ),
+    (
+        "Pok\u00f3j ma 12 m\u00b2 i kosztuje 2000 z\u0142.",
+        "pl",
+        "the same in Polish, where the respelling pass runs as well",
+    ),
+    (
+        "5\u09e93",
+        "en",
+        "a Bengali digit inside a Latin number. Unfolded, a non-ASCII Nd "
+        "passes the whole funnel untouched, so the ASCII digits around it "
+        "reach the model bare, and a funnel whose boundary test is ASCII "
+        "reads them aloud instead: one string, a reading per implementation",
+    ),
+    (
+        "\uff11\uff12\uff13",
+        "en",
+        "fullwidth digits, which are ordinary in CJK text and were not read at all",
+    ),
+    (
+        "Add \u00bd cup of flour.",
+        "en",
+        "a vulgar fraction in a recipe. Unfolded it is deleted -- 'add cup of "
+        "flour' -- which is the failure this layer exists to prevent, arriving "
+        "as fluent audio that says something else. It reads as its ASCII "
+        "spelling reads, which is the rule for every numeral this pass folds",
+    ),
+    (
+        "Chapter \u2166.",
+        "en",
+        "a Roman numeral, deleted the same way. NFKC gives the letters and the "
+        "acronym pass spells them, exactly as it would for a written IV",
+    ),
+    (
+        "x\u24d0y",
+        "en",
+        "a circled letter is So, not a letter. Rust and Swift tested the "
+        "Alphabetic property here and kept it; the other three spaced it",
+    ),
+    (
+        "\u24d0-1",
+        "en",
+        "the same class in front of a signed number, and the sharper case: "
+        "Swift's Alphabetic test made the boundary fail and left a BARE DIGIT "
+        "in front of the model, which is what the numeral fold exists to stop",
+    ),
+    (
+        "1 000.\U00017000",
+        "no",
+        "a grouped number, a dot, and a TANGUT IDEOGRAPH. Swift's walks read one "
+        "UTF-16 unit and turned half a surrogate pair into a SPACE, so the "
+        "number looked unglued and Swift alone read it aloud where the other "
+        "four left it written",
+    ),
+    (
+        "\U00017000.1",
+        "no",
+        "the same pair, the other way round: the letter is BEHIND the digit, "
+        "and the backward walk stepped into the middle of the pair",
+    ),
+    (
+        "24:00.\u4e00\u4e8c\u4e09",
+        "no",
+        "a clock, a dot, and CJK numerals. `Character.isNumber` is Numeric_Type, "
+        "so \u4e00 (category Lo, value 1) counted as a digit behind the dot, the "
+        "time looked like part of a longer number, and Swift alone read "
+        "'tjuefire:00' -- half the clock spoken and half left written",
+    ),
+    (
+        "1 000 \u4e00\u4e8c\u4e09",
+        "no",
+        "the same class at the other end: the CJK numerals made the grouped "
+        "thousand look glued to a number rather than followed by a word",
+    ),
+    (
+        "\u4e00\u4e8c\u4e09.2024",
+        "pl",
+        "the respelling pass normalised digits with `Character.isNumber`, which "
+        "is Numeric_Type: the three CJK ideographs have values 1, 2 and 3, so "
+        "Swift alone read the word as 'sto dwadziescia trzy' -- a number said "
+        "aloud where the other four leave a word written",
+    ),
+    (
+        "12.03.2026\u24d0",
+        "pt",
+        "a date followed by a CIRCLED LATIN SMALL LETTER A. ICU's \\b counts "
+        "Other_Alphabetic as a word character and Python's does not, so the "
+        "date found no boundary here and Swift alone left it written",
+    ),
+    (
+        "Add \U00010d41 cups",
+        "en",
+        "GARAY DIGIT ONE, added in Unicode 16.0. Detection driven by the "
+        "runtime's own tables, with the fold table coming from a file, reads "
+        "'Add cups' on an interpreter carrying Unicode 15 and leaves it "
+        "written on one carrying Unicode 16: two readings under one "
+        "fingerprint, from two interpreters the CI matrix both runs. The "
+        "table decides membership so that neither can",
+    ),
+    (
+        "\U00010177 of it",
+        "en",
+        "GREEK TWO THIRDS SIGN has no NFKC form, so the fold reads its numeric "
+        "value -- which arrived from `unicodedata.numeric` as the float "
+        "0.6666666666666666 and was written out as 0.666667, read aloud in full "
+        "as 'zero point six six six six six seven'. The table carries the exact "
+        "fraction now",
+    ),
+    (
+        "a\u0345b",
+        "en",
+        "COMBINING GREEK YPOGEGRAMMENI is Other_Alphabetic, so Rust's Alphabetic "
+        "test kept a mark the other four removed",
+    ),
+    (
+        "text[1,\u00a02] more",
+        "en",
+        "a footnote marker whose separator is a non-breaking space -- ordinary "
+        "French and German typography. RE2 reads \\s and \\d as ASCII, so Go kept "
+        "the marker and then READ IT ALOUD; the other four dropped it",
+    ),
+    (
+        "a\u0085.",
+        "en",
+        "NEL before a clause mark. ECMAScript \\s excludes U+0085, so JS alone "
+        "left it standing; it is ordinary in scraped and epub sources",
+    ),
+    (
+        "a\u000b.",
+        "en",
+        "VERTICAL TAB, the mirror image: Go's hand-expanded whitespace class "
+        "omitted it and Go alone left it standing",
+    ),
+    (
+        "12.03.2026\u4e00\u4e8c\u4e09",
+        "de",
+        "a date glued to a CJK ideograph. Go's byte-wise ASCII boundary and "
+        "ECMAScript's ASCII `\\b` both read that as a word boundary and spoke "
+        "the date; Python, Rust and Swift read `Lo` as a word character and "
+        "left it written. One string, two readings, one fingerprint",
+    ),
+    (
+        "1\u00e9",
+        "en",
+        "the mirror: a digit glued to a non-ASCII letter, which the same three "
+        "boundaries answered differently",
+    ),
+    (
+        "Add \u1372 cups",
+        "en",
+        "ETHIOPIC NUMBER TEN has no compatibility decomposition, so an NFKC-only "
+        "fold left it unchanged and the punctuation pass then DELETED it: 'add "
+        "cups'. The Aegean numbers, the Kaktovik digits and the Meroitic "
+        "numerals were the same. The table carries a numeric value where NFKC "
+        "has nothing",
+    ),
+    (
+        "Cena to \U0001d7e3\U0001d7e4 zlotych.",
+        "pl",
+        "MATHEMATICAL SANS-SERIF ONE and TWO. Decimal blocks are contiguous "
+        "with each other, so walking down to 'the previous character is not a "
+        "digit' walked out of the block and read these as ninety-nine. This "
+        "fixture pinned that wrong answer",
+    ),
+    (
+        "Add \U0001d7d8 cups",
+        "en",
+        "the sharpest case of the same bug: MATHEMATICAL DOUBLE-STRUCK DIGIT "
+        "ZERO sits immediately after MATHEMATICAL SANS-SERIF DIGIT NINE, so a "
+        "walk read a zero as a nine",
+    ),
+    (
+        "\u4e00\u4e8c\u4e09",
+        "en",
+        "the guard on the fix. Ideographic numerals are Numeric_Type but "
+        "category Lo — letters — so a pass keyed on str.isnumeric() or Swift's "
+        "numericType would have replaced a language's numerals with spaces. "
+        "The pass reads the general category, and these survive untouched",
+    ),
+    # --- what the funnel says, and what it must go on saying -------------
+    # Every expectation below was written from what the language says and then
+    # checked against the code, not read off it. `tests/test_speechtext.py`
+    # holds the same readings as assertions, which is where they can be read
+    # without a generator standing between them and the reader.
+    (
+        "if latency > 200 ms",
+        "en",
+        "the comparison operators were deleted, silently, in ordinary technical "
+        "prose: the Unicode spellings had words and the ASCII ones people type "
+        "did not",
+    ),
+    ("x <= 10 and y >= 3", "en", None),
+    ("a < b, a != b, a == b", "en", None),
+    (
+        "x > 3 i x <= 9",
+        "pl",
+        "the operator words come from the grammar, so a render speaks them in its own language",
+    ),
+    (
+        "i <3 u and a<b",
+        "en",
+        "the guard: whitespace on both sides is the evidence that a mark is an "
+        "operator, and without it the mark stays written",
+    ),
+    (
+        '<p>Hello</p><div class="x">Hi</div>',
+        "en",
+        "a tag name reached the model as a word. A tag becomes a space and not "
+        "nothing, because two block tags meeting are two paragraphs",
+    ),
+    ("<!-- note --> text", "en", "a comment left its ! behind as a sentence-final stop"),
+    (
+        "See the 3 April minutes",
+        "en",
+        "the article the date supplies is one the sentence already had",
+    ),
+    ("The 3 April deadline, and on 3 April.", "en", None),
+    (
+        "Chapter IV of World War II",
+        "en",
+        "a Roman numeral was spelled letter by letter: Chapter eye-vee, inside a book reader",
+    ),
+    ("Act III, Scene II", "en", None),
+    ("Rozdział XIV", "pl", None),
+    (
+        "Buy a CD, send my CV, size XL, and a MIX tape",
+        "en",
+        "the guard: L, C, D and M are outside the alphabet the numeral pass "
+        "reads, which is what keeps every initialism that is also a numeral",
+    ),
+    (
+        "Split at 10:30:45 exactly.",
+        "en",
+        "a clock time with seconds kept its colons, so a literal colon reached "
+        "the acoustic model",
+    ),
+    ("10:00:45 and 10:30:00", "en", None),
+    ("version 10.30.45 shipped", "sv", "a dotted run is a version as readily as a time"),
+    (
+        "Add ½ cup and ¾ more",
+        "en",
+        "a vulgar fraction read as two numbers. The character asserts the "
+        "fraction; a typed slash does not",
+    ),
+    ("¾", "de", None),
+    (
+        "open 24/7 and/or 3/12/2026",
+        "en",
+        "the guard on the fraction rule: ordinary prose that reads correctly",
+    ),
+    (
+        "$2.5M and $5m and $5bn and $20k and £3m",
+        "en",
+        "the scale suffix was left inside the currency word: two point five dollarsM",
+    ),
+    ("$5 million in funding", "en", "the written noun is the same defect in a longer word"),
+    ("€2 milliarder", "no", None),
+    ("$5kg costs 2.5M users", "en", "a letter that is not a magnitude leaves the price alone"),
+    (
+        "2026-03-04T10:00 and 2026-03-04T10:30:45",
+        "en",
+        "the ISO field separator glued to the last word of the date",
+    ),
+    (
+        "2026-03-04x and x2026-03-04",
+        "en",
+        "a date written against a letter is part of an identifier. The guard "
+        "named the digits and the separators and admitted the letter at either "
+        "end, so the year welded to it: twenty twenty-sixx",
+    ),
+    ("x04.03.2026 and 25/03/2026x", "de", None),
+    ("04.03.2026 and 25/03/2026", "de", "...and a date with nothing glued to it is one"),
+    (
+        "+12345678abc",
+        "en",
+        "the same guard on the telephone rule: eight digits were said and the "
+        "letters left glued to the last of them",
+    ),
+    ("+48 123 456 789 and +12345678", "pl", None),
 ]
 
 
 # Long-form splitting: where the reader breathes. Every port must cut in the
 # same places, because a different split is a different set of joins and a
-# different reading — and until now JS, Go and Rust had no long-form path at
-# all while the documentation called them supported.
+# different reading.
 CHUNK_CASES: list[str] = [
     "One. Two. Three.",
     "A single sentence that is comfortably shorter than one window.",
@@ -584,33 +1001,76 @@ CHUNK_CASES: list[str] = [
     "shorter than they need to be.",
     # A character is a code point, not a UTF-16 unit and not a byte. JS
     # indexed UTF-16 units, so it charged every one of these two characters
-    # and cut surrogate pairs in half — a lone surrogate went straight to
+    # and cut surrogate pairs in half, a lone surrogate went straight to
     # frontend.encode(). Astral text is not exotic: emoji, CJK Extension B and
     # mathematical alphanumerics all live up there.
     "😀" * 40 + ". A tail sentence after the emoji run.",
     "𠀋𠀌𠀍" * 20 + ", and a clause after the ideographs, and one more.",
     # Whitespace is Unicode. Go trimmed a four-character cutset where Python
     # uses lstrip(), so an NBSP was charged against the next chunk's budget
-    # and then removed from the chunk — every split after it drifted, usually
+    # and then removed from the chunk, every split after it drifted, usually
     # leaving a one-character chunk that becomes its own utterance with its
     # own derived seed. NBSP is ordinary in typeset prose.
     "x" * 20 + "\u00a0" + "y" * 40,
     "Ten\u2009tysięcy\u00a0złotych, a potem\u2028nowa linia, i koniec zdania.",
+    # A period that closes a title is not a full stop. Under the old law the
+    # only `. ` inside the first window was the one after "Mr", so the passage
+    # opened with the seven-character chunk "But Mr.", its own utterance, its
+    # own derived seed, and a token ceiling proportional to seven characters.
+    # It is the only chunk in a 9920-row rendered census that hit that ceiling.
+    "But Mr. Smith went home to the house on the hill where he had lived for "
+    "forty years without ever once complaining about any of it at all.",
+    # Two held candidates in a row, so the search has to walk back through the
+    # same separator more than once before it settles on a real sentence end.
+    "Alpha ends here. Mrs. Watson and Mr. Holmes then agreed on the one point "
+    "that had ever really mattered to either of them at all, and said so.",
+    # Held all the way down: every sentence end in the window closes a title,
+    # so the split falls back to the latest comma instead.
+    "Mr. Norrell, who had been waiting in the hall for the better part of an "
+    "hour, said nothing at all to either of them about what he had seen there.",
+    # The guard on the character in front of the match. "NASA" ends in "A",
+    # and "A" is a listed initial; without the guard every word whose tail
+    # spells an entry would be held.
+    "The rocket that carried them up there was built by NASA. And the rest of "
+    "the afternoon went by without anybody saying much about it to anyone.",
+    # The half of the law that no list could do. `speech_text` maps an ellipsis
+    # to `...` and then folds a run of [.,;:] to one mark, so a mid-sentence
+    # ellipsis reaches the splitter as a period. It is the dominant cause in
+    # Polish, which has no abbreviation cuts at all.
+    "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej "
+    "pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta.",
+    # `Dr` and `St` are in the list on a second measurement rather than the
+    # ten-language survey's, whose English sample contained neither. Both
+    # appear here so the five implementations are held to them by behaviour
+    # and not only by the list's copy in each of their sources.
+    "Dr. Watson walked the length of St. James Street twice over before he "
+    "found the one door he had been looking for all that long grey afternoon.",
+    # A comma is followed by a lower-case word almost every time it is
+    # written, so a rule that did not gate on the period would veto every
+    # comma in the language. This case is byte-identical under both laws.
+    "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu, "
+    "nu xi omicron pi rho, sigma tau upsilon phi chi psi omega at the end.",
 ]
 
 DIVERGENT_WHY = (
-    "What one implementation still does differently. Dates, ordinals, acronyms "
-    "and NFC used to live here; all four ports have them now and their cases "
-    "moved into `cases` above, where every implementation is held to them."
+    "What one implementation still does differently. A family leaves this "
+    "block for `cases` above as soon as every implementation agrees on it, "
+    "which is where all five are held to it."
 )
-"""Kept as a field rather than deleted: an empty `divergent` is a claim — that
-nothing is known to differ — and a reader can only tell an empty block from a
+"""Kept as a field rather than deleted: an empty `divergent` is a claim, that
+nothing is known to differ, and a reader can only tell an empty block from a
 forgotten one if the block is still there."""
 
 
 CHUNK_CONFIGS: list[tuple[str, ChunkConfig]] = [
     ("shipping", ChunkConfig()),
     ("tiny", ChunkConfig(max_tokens=40, prefix_tokens=6)),
+    # The law before `mid_sentence_period` existed, kept in the fixture rather
+    # than only in the config: a port that reads the field but ignores it
+    # passes every "shipping" case, because holding is what its hardcoded
+    # search already does not do. Only a case that asks for "break" separates
+    # a port that implements the field from one that defaults it.
+    ("break", ChunkConfig(mid_sentence_period="break")),
 ]
 
 
@@ -649,6 +1109,8 @@ def build_payload() -> dict[str, object]:
                 "max_tokens": cfg.max_tokens,
                 "prefix_tokens": cfg.prefix_tokens,
                 "split_on": list(cfg.split_on),
+                "abbreviations": list(cfg.abbreviations),
+                "mid_sentence_period": cfg.mid_sentence_period,
                 "text": text,
                 "chunks": split_text(text, cfg),
             }
@@ -681,7 +1143,9 @@ def rendered(payload: dict[str, object]) -> str:
 
 
 def main() -> None:
-    OUT.write_text(rendered(build_payload()), encoding="utf-8")
+    # `newline="\n"`: five implementations read these bytes and one of them
+    # regenerating under a translating text mode would rewrite every line.
+    OUT.write_text(rendered(build_payload()), encoding="utf-8", newline="\n")
     print(
         f"wrote {OUT} ({len(CASES)} funnel + "
         f"{len(CHUNK_CASES) * len(CHUNK_CONFIGS)} chunking cases)"
@@ -689,4 +1153,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # In the entry point, not in `main`, which the suite calls as a function.
+    # The cases are in this file and the destination is fixed, so any argument
+    # is a misreading; parsing is what makes `--help` print help rather than
+    # rewrite the fixture five ports are compared against.
+    argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    ).parse_args()
     main()

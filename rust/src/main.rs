@@ -4,8 +4,8 @@ use loudkit::engine::Engine;
 use loudkit::execution::{ExecutionConfig, OnnxProvider};
 use loudkit::voice;
 
-/// What this binary takes, and — because someone comparing the two ports will
-/// reach for both — how it differs from the Go CLI.
+/// What this binary takes, and, because someone comparing the two ports will
+/// reach for both, how it differs from the Go CLI.
 ///
 /// The two argv surfaces are deliberately not the same: each grew around what
 /// that port needed in order to be driven by hand. Saying so here is the
@@ -22,7 +22,18 @@ A dev tool for driving this port by hand. The Go CLI (go/cmd/loudkit) is
 deliberately a different surface: it carries -timestamps, which this one has no
 equivalent for, and neither --language nor --json, which this one has.";
 
-fn main() -> Result<(), String> {
+fn main() {
+    if let Err(why) = run() {
+        // Printed here rather than returned from `main`, which the runtime
+        // renders through `Debug` and so ships the sentence inside quotes as
+        // `Error: "..."`. Same stream, same exit code, no quotes, and the same
+        // idiom the usage path below already uses.
+        eprintln!("{why}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
     // Only in first position: further along it is a value, and `--text -h`
     // asks for a reading of "-h", not for this text.
@@ -39,17 +50,17 @@ fn main() -> Result<(), String> {
     let voice_path = &args[3];
     let mut text = "Hello from Rust.".to_string();
     let mut seed = 0u64;
-    // The kit ships voices for nine languages and the funnel is language-aware
-    // (Polish respells embedded English, which changes the token count). This
-    // was pinned to "en", so the CLI could not speak eight of them and silently
-    // ran the wrong funnel for any text that was not English.
+    // The kit ships voices for ten languages and the funnel is language-aware
+    // (Polish respells embedded English, which changes the token count), so a
+    // CLI pinned to "en" runs the wrong funnel for any text that is not
+    // English.
     //
-    // `None`, not "en": an omitted --language now means the voice's own
+    // `None`, not "en": an omitted --language means the voice's own
     // language, resolved by the engine. A Polish voice needs no flag.
     let mut language: Option<String> = None;
     // Playback speed, in [0.5, 2.0]. The default is the bypass: with no --speed
     // the samples are the vocoder's own, so every existing invocation of this
-    // CLI — including the JSON records the cross-port comparison hashes —
+    // CLI, including the JSON records the cross-port comparison hashes,
     // produces the same bytes it did before the flag existed.
     let mut speed = 1.0f64;
     let mut tokens_only = false;
@@ -107,8 +118,6 @@ fn main() -> Result<(), String> {
         i += 1;
     }
 
-    // The onnxruntime shared library is loaded from ORT_DYLIB_PATH at first
-    // ort::init(); ort's load-dynamic feature reads it on the first session.
     // The release ships `tokenizer.json` beside the checkpoint; appending
     // ".tokenizer.json" to the whole filename names a file no release
     // contains.
@@ -120,7 +129,7 @@ fn main() -> Result<(), String> {
             .to_string_lossy()
             .into_owned()
     });
-    let mut eng = Engine::load_with(ckpt, onnx_dir, &tokenizer, &execution)?;
+    let mut eng = Engine::load_paths_with(ckpt, onnx_dir, &tokenizer, &execution)?;
     // On stderr, on every run, beside the truncation warning: stdout is the
     // record a cross-port comparison reads and must not change shape, but a
     // benchmark figure with no provider beside it is not a figure anyone can
@@ -141,10 +150,24 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
 
-    // `None` for previous_tokens: one CLI invocation is one utterance, and there
-    // is no earlier call in this process for it to continue.
-    let (audio, tokens, _, sr, chunks, hit_cap) =
-        eng.synthesize_long(&text, &v, seed, Some(&language), speed, None, None)?;
+    let out = eng.synthesize(
+        &text,
+        &v,
+        &loudkit::engine::Options {
+            seed,
+            language: Some(language.clone()),
+            speed,
+            previous_tokens: None,
+            should_cancel: None,
+        },
+    )?;
+    let (audio, tokens, sr, chunks, hit_cap) = (
+        out.audio,
+        out.tokens,
+        out.sample_rate,
+        out.chunks,
+        out.hit_token_cap,
+    );
     if hit_cap {
         // The flag exists so truncation cannot pass silently: the audio is
         // real but incomplete. Same warning the Python CLI prints.
@@ -165,7 +188,7 @@ fn main() -> Result<(), String> {
             .map(|b| format!("{b:02x}"))
             .collect();
         // Built by serde_json rather than format!: `--text` reaches this record
-        // only through its token count, but the language does not — it comes
+        // only through its token count, but the language does not: it comes
         // from a voice header or a flag, and either can hold a quote or a
         // backslash that string interpolation would happily emit as invalid
         // JSON.
@@ -174,7 +197,7 @@ fn main() -> Result<(), String> {
             "seed": seed,
             "n_tokens": tokens.len(),
             "samples": audio.len(),
-            "wav_sha256": digest[..16],
+            "wav_sha256": digest,
             "tokens": tokens,
         })
         .to_string();

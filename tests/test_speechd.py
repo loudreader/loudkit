@@ -1,16 +1,15 @@
 """The speech-dispatcher module's protocol, as a transcript.
 
 This integration is how loudkit reaches Orca, Firefox and every ``spd-say``
-caller on Linux — an accessibility path, where a module that misbehaves does
+caller on Linux: an accessibility path, where a module that misbehaves does
 not produce a stack trace, it produces a screen reader that talks over itself.
-It had no tests at all, and four separate protocol defects: ``SPEAK`` answered
-``207`` where the spec says ``202``; the events were ``702 BEGIN``/``703 END``
-where the codes are ``701``/``702``/``703``; ``BEGIN`` was emitted *after*
-playback finished; and ``STOP`` was answered synchronously, which the protocol
-forbids, while cancelling nothing that was still being synthesised.
+So the protocol itself is pinned here, reply code by reply code: ``SPEAK``
+answers ``202``, the index events are ``701``/``702``/``703``, ``BEGIN``
+precedes playback, and ``STOP`` is answered asynchronously and cancels work
+still in flight.
 
-The module is driven here exactly as speech-dispatcher drives it — lines in,
-lines out — with the HTTP render and the audio player replaced by fakes. No
+The module is driven exactly as speech-dispatcher drives it, lines in and
+lines out, with the HTTP render and the audio player replaced by fakes. No
 server, no sound, no daemon.
 """
 
@@ -57,6 +56,9 @@ class _FakePlayer:
     def __init__(self, block: threading.Event | None = None) -> None:
         self.written = bytearray()
         self.terminated = False
+        self.killed = False
+        self.reaped = False
+        self.closed = False
         self._block = block
         self.stdin = self
 
@@ -65,11 +67,14 @@ class _FakePlayer:
         self.written.extend(data)
 
     def close(self) -> None:
-        pass
+        self.closed = True
 
-    def wait(self) -> int:
+    def wait(self, timeout: float | None = None) -> int:
+        """``timeout`` because ``_reap`` passes one: a player that ignores the
+        signal must not hold the module for longer than a stop is worth."""
         if self._block is not None:
-            self._block.wait(timeout=5)
+            self._block.wait(timeout=timeout if timeout is not None else 5)
+        self.reaped = True
         return 0
 
     def poll(self) -> int | None:
@@ -79,6 +84,10 @@ class _FakePlayer:
         self.terminated = True
         if self._block is not None:
             self._block.set()
+
+    def kill(self) -> None:
+        self.killed = True
+        self.terminate()
 
 
 def _drive(speechd, module, lines: list[str]) -> list[str]:
@@ -179,7 +188,11 @@ def test_stop_during_synthesis_prevents_playback(speechd, monkeypatch) -> None:
     assert started.wait(timeout=5), "render never started"
     module.stop()
     release.set()
-    time.sleep(0.2)
+    # Waited for, not slept through. The worker returns its slot in a `finally`,
+    # so taking one is a join; a sleep asserts nothing here, because "no player
+    # was made" is equally true of a worker that has not reached that line yet,
+    # and the test would pass on a machine slow enough to break it.
+    assert module._renders.acquire(timeout=5), "the render worker never finished"
 
     assert made_players == [], "a cancelled utterance still reached the player"
 
@@ -364,3 +377,131 @@ def test_the_protocol_answers_list_voices_and_set_voice(speechd, tmp_path) -> No
     assert "200 OK VOICE LIST SENT" in joined, joined
     assert "203 OK SETTINGS RECEIVED" in joined, joined
     assert "300 ERR UNKNOWN VOICE NOPE" in joined, joined
+
+
+def test_a_refused_speak_leaves_the_current_utterance_speaking(speechd, monkeypatch) -> None:
+    """The bound refuses the new utterance, not the one being spoken.
+
+    Bumping the generation stale-marks every render in flight and
+    ``_kill_player`` silences what is playing, so running either before the
+    semaphore is tried answers "try again" to a user who now has nothing
+    playing and nothing about to play. On a screen reader that is a sentence
+    cut off mid-word by a request that was refused.
+
+    The shape that reaches the branch: one render held in flight, one
+    utterance held at the player, both slots taken.
+    """
+    module = speechd.Module()
+    rendering = threading.Event()
+    hold_render = threading.Event()
+    speaking = threading.Event()
+    hold_player = threading.Event()
+
+    def render(text: str, speed: float = 1.0) -> bytes:
+        if text == "held in flight":
+            rendering.set()
+            hold_render.wait(timeout=5)
+        return b"RIFF" + b"\0" * 40
+
+    monkeypatch.setattr(module, "_render", render)
+
+    players: list[_FakePlayer] = []
+
+    def popen(*_a, **_k):
+        player = _FakePlayer(hold_player)
+        players.append(player)
+        speaking.set()
+        return player
+
+    monkeypatch.setattr(speechd.subprocess, "Popen", popen)
+
+    replies: list[str] = []
+    monkeypatch.setattr(speechd, "_reply", replies.append)
+
+    try:
+        module.speak("held in flight")
+        assert rendering.wait(timeout=5), "the first render never started"
+        module.speak("held at the player")
+        assert speaking.wait(timeout=5), "the second utterance never reached the player"
+        generation = module._generation
+
+        module.speak("one too many")
+
+        assert any("still rendering" in line for line in replies), replies
+        assert module._generation == generation, "the refusal bumped the generation"
+        assert not players[0].terminated, "the refusal silenced what was being spoken"
+    finally:
+        hold_render.set()
+        hold_player.set()
+
+
+@pytest.mark.parametrize("command", ["SPEAK", "SET", "AUDIO", "LOGLEVEL"])
+def test_no_block_accumulates_past_the_cap(speechd, monkeypatch, command: str) -> None:
+    """ "Bounded while it accumulates" was true of ``SPEAK`` alone.
+
+    ``speak`` re-checks the joined text, so a runaway ``SPEAK`` was caught one
+    buffer late but caught. ``SET``, ``AUDIO`` and ``LOGLEVEL`` have no
+    downstream check at all, and the block loop tested the cap only when it was
+    collecting a ``SPEAK``. Measured before this: a 200000-line ``SET`` block
+    accumulated all 1.4 MB.
+    """
+    handed: list[int] = []
+    module = speechd.Module()
+    monkeypatch.setattr(module, "_render", lambda _text, **_kw: b"RIFF" + b"\0" * 40)
+    monkeypatch.setattr(speechd.subprocess, "Popen", lambda *_a, **_k: _FakePlayer())
+    monkeypatch.setattr(module, "speak", lambda text: handed.append(len(text)))
+    monkeypatch.setattr(
+        speechd,
+        "_parse_setting",
+        lambda lines, _m: handed.append(sum(len(x) + 1 for x in lines)),
+    )
+
+    line = "RATE=0"
+    over = speechd.MAX_TEXT_CHARS // len(line) * 4
+    _drive(speechd, module, [command, *([line] * over), ".", "QUIT"])
+
+    assert handed, "the block never reached its handler"
+    # One line's slack: the cap is tested before a line is appended, so the
+    # line that crosses it is kept and the next is the first one dropped.
+    assert handed[0] <= speechd.MAX_TEXT_CHARS + len(line) + 1, (
+        f"{command} accumulated {handed[0]} characters past a cap of {speechd.MAX_TEXT_CHARS}"
+    )
+
+
+def test_a_cancelled_player_is_closed_and_waited_for(speechd, monkeypatch) -> None:
+    """``terminate`` signals and returns; it does not reap.
+
+    Without the ``wait`` the child stays a zombie until some later ``Popen``
+    happens to reap it, and without closing stdin a player blocked on its
+    input never sees the end of it -- so a player that traps SIGTERM to flush
+    its device waits forever on a pipe nothing will close.
+    """
+    playing = threading.Event()
+    player = _FakePlayer(block=threading.Event())
+    module = speechd.Module()
+    monkeypatch.setattr(module, "_render", lambda _text, **_kw: b"RIFF" + b"\0" * 40)
+
+    def popen(*_a, **_k):
+        playing.set()
+        return player
+
+    monkeypatch.setattr(speechd.subprocess, "Popen", popen)
+    monkeypatch.setattr(speechd, "_reply", lambda _line: None)
+
+    module.speak("hello")
+    assert playing.wait(timeout=5), "the utterance never reached the player"
+    module.stop()
+
+    assert player.terminated, "the player was never signalled"
+    assert player.closed, "the player's stdin was left open"
+    assert player.reaped, "the player was signalled but never waited for"
+
+
+def test_reaping_twice_is_not_an_error(speechd) -> None:
+    """The natural-end path and ``stop`` can both reach the same player."""
+    player = _FakePlayer()
+
+    speechd._reap(player)
+    speechd._reap(player)
+
+    assert player.terminated

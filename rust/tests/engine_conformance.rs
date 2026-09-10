@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use loudkit::engine::Engine;
+use loudkit::engine::{Engine, Options};
 use loudkit::sampler::{self, Sampler};
 use loudkit::voice;
 
@@ -25,7 +25,7 @@ fn need(name: &str) -> String {
 /// Report a missing prerequisite, and decide whether that is a skip or a fail.
 ///
 /// Cargo has no runtime skip, and `eprintln!` is swallowed by libtest without
-/// `--nocapture` — so a run with no assets printed `test engine_conformance ...
+/// `--nocapture`, so a run with no assets printed `test engine_conformance ...
 /// ok` / `1 passed`, indistinguishable in any CI summary from a real
 /// conformance pass. Go prints `--- SKIP:` and JS prints `# SKIP`; this was the
 /// one that lied.
@@ -51,10 +51,10 @@ fn to_f64(v: &serde_json::Value) -> f64 {
 /// Pearson correlation, on the explicit condition that the two are the same
 /// length.
 ///
-/// Correlating `min(a.len(), b.len())` samples — which this used to do — makes
-/// a truncated render score perfectly against the prefix it did produce. The
-/// length *is* the finding in that case, so it is asserted before the
-/// correlation rather than quietly discarded by it.
+/// Correlating `min(a.len(), b.len())` samples makes a truncated render score
+/// perfectly against the prefix it did produce. The length *is* the finding in
+/// that case, so it is asserted before the correlation rather than quietly
+/// discarded by it.
 fn corr(a: &[f32], b: &[f32]) -> f64 {
     assert_eq!(
         a.len(),
@@ -75,6 +75,27 @@ fn corr(a: &[f32], b: &[f32]) -> f64 {
         db += y * y;
     }
     num / (da * db).sqrt()
+}
+
+/// The RMS ratio of a render to its reference, in dB.
+///
+/// Correlation subtracts the mean and divides by the deviation, so it reports
+/// 1.0 for a render at half volume, at twenty times volume, or with a DC
+/// offset. Level is exactly what that normalisation discards, so it is the one
+/// amplitude fact worth its own gate.
+fn level_db(a: &[f32], b: &[f32]) -> f64 {
+    assert_eq!(a.len(), b.len(), "length mismatch");
+    let sa: f64 = a.iter().map(|x| f64::from(*x) * f64::from(*x)).sum();
+    let sb: f64 = b.iter().map(|x| f64::from(*x) * f64::from(*x)).sum();
+    assert!(sa > 0.0, "rendered silence");
+    20.0 * (sa / sb).sqrt().log10()
+}
+
+/// The loudest sample, against the `[-1, 1]` a waveform is declared to occupy.
+/// Everything downstream clips to that range, so a render outside it is audibly
+/// wrong and needs no tolerance to say so.
+fn peak_of(a: &[f32]) -> f64 {
+    a.iter().fold(0.0_f64, |m, v| m.max(f64::from(*v).abs()))
 }
 
 fn read_f32(path: &PathBuf) -> Vec<f32> {
@@ -101,8 +122,26 @@ fn derive(seed: u64, stream: u64) -> u64 {
 #[test]
 #[ignore = "needs LOUDKIT_CKPT, LOUDKIT_ONNX_DIR, LOUDKIT_VOICE and ORT_DYLIB_PATH"]
 fn engine_conformance() {
-    let ckpt = need("LOUDKIT_CKPT");
-    let onnx = need("LOUDKIT_ONNX_DIR");
+    run_conformance(false);
+}
+
+#[test]
+#[ignore = "needs fusion checkpoint, ONNX graphs, voice and ORT_DYLIB_PATH"]
+fn fusion_engine_conformance() {
+    run_conformance(true);
+}
+
+fn run_conformance(fused: bool) {
+    let ckpt = need(if fused {
+        "LOUDKIT_FUSION_CKPT"
+    } else {
+        "LOUDKIT_CKPT"
+    });
+    let onnx = need(if fused {
+        "LOUDKIT_FUSION_ONNX_DIR"
+    } else {
+        "LOUDKIT_ONNX_DIR"
+    });
     let vp = need("LOUDKIT_VOICE");
     let lib = need("ORT_DYLIB_PATH");
     let fixture = match fixture_dir() {
@@ -127,12 +166,18 @@ fn engine_conformance() {
         return;
     }
 
-    let vectors: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(fixture.join("vectors.json")).unwrap())
-            .unwrap();
+    let vectors: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture.join(if fused {
+            "vectors_fusion_mtp2.json"
+        } else {
+            "vectors.json"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
     let cases = vectors["end_to_end"].as_array().unwrap();
 
-    let mut eng = Engine::load(
+    let mut eng = Engine::load_paths(
         &ckpt,
         &onnx,
         fixture.join("tokenizer.json").to_str().unwrap(),
@@ -171,6 +216,63 @@ fn engine_conformance() {
             .map(|x| to_f64(x) as usize)
             .collect();
         assert_eq!(stripped, want, "{name} tokens");
+        for prefix in [&[][..], &want[..want.len().min(6)]] {
+            let mut sampler = Sampler::new(eng.config().sampling.clone(), seed);
+            let started = std::time::Instant::now();
+            let first = eng
+                .generate(&ids, &v, &mut sampler, None, None, prefix)
+                .unwrap();
+            let elapsed = started.elapsed();
+            let mut sampler = Sampler::new(eng.config().sampling.clone(), seed);
+            let repeated = eng
+                .generate(&ids, &v, &mut sampler, None, None, prefix)
+                .unwrap();
+            assert_eq!(
+                first,
+                repeated,
+                "{name}: repeat with prefix {}",
+                prefix.len()
+            );
+            eprintln!(
+                "{name}: warm prefix={} tokens={} elapsed_ms={:.2}",
+                prefix.len(),
+                first.len(),
+                elapsed.as_secs_f64() * 1000.0
+            );
+        }
+
+        if fused {
+            for cap in [1, 2, 3] {
+                let mut sampler = Sampler::new(eng.config().sampling.clone(), seed);
+                let capped = eng
+                    .generate(&ids, &v, &mut sampler, Some(cap), None, &[])
+                    .unwrap();
+                assert_eq!(capped, want[..cap], "{name}: cap {cap}");
+            }
+            let mut sampler = Sampler::new(eng.config().sampling.clone(), seed);
+            let even = eng
+                .generate(&ids, &v, &mut sampler, Some(8), None, &want[..6])
+                .unwrap();
+            let mut sampler = Sampler::new(eng.config().sampling.clone(), seed);
+            let odd = eng
+                .generate(&ids, &v, &mut sampler, Some(8), None, &want[..7])
+                .unwrap();
+            assert_eq!(even, odd, "{name}: incomplete prefix pair");
+        }
+
+        // The two public paths agree with the generator: chunk 0 draws the
+        // caller's seed, so a text that fits one window renders the same
+        // tokens through synthesize_window and through synthesize.
+        let options = Options {
+            seed,
+            language: Some(c["language"].as_str().unwrap().to_string()),
+            ..Default::default()
+        };
+        let text = c["text"].as_str().unwrap();
+        let window = eng.synthesize_window(text, &v, &options).unwrap();
+        let whole = eng.synthesize(text, &v, &options).unwrap();
+        assert_eq!(window.tokens, want, "{name}: synthesize_window");
+        assert_eq!(whole.tokens, want, "{name}: synthesize");
 
         // fixed-token render: within the band
         let mel = eng.decode_mel(&want, &v, derive(seed, 1)).unwrap();
@@ -188,7 +290,22 @@ fn engine_conformance() {
             wave_corr >= to_f64(&gates["wave_corr"]),
             "{name} wave corr {wave_corr} below gate"
         );
-        eprintln!("{name}: tokens PASS, render mel {mel_corr:.6} wave {wave_corr:.4}");
+        let level = level_db(&audio, &wav_ref);
+        let band = to_f64(&gates["wave_rms_db"]);
+        assert!(
+            level.abs() <= band,
+            "{name} level {level:+.4} dB against the reference, outside the {band} dB \
+             band; correlation cannot see this"
+        );
+        let peak = peak_of(&audio);
+        assert!(
+            peak <= 1.0,
+            "{name} peak {peak:.4} is outside the declared [-1, 1] waveform"
+        );
+        eprintln!(
+            "{name}: tokens PASS, render mel {mel_corr:.6} wave {wave_corr:.4} \
+             level {level:+.4} dB"
+        );
     }
 
     long_form(&mut eng, &v, &vectors);
@@ -226,7 +343,7 @@ fn long_form(eng: &mut Engine, v: &voice::Profile, vectors: &serde_json::Value) 
     for case in section["cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let language = case["language"].as_str().unwrap();
-        // Funnel first, then split — the order the engine uses, and the order
+        // Funnel first, then split: the order the engine uses, and the order
         // the character budget assumes.
         let prepared = loudkit::speechtext::speech_text(case["text"].as_str().unwrap(), language);
         assert_eq!(
@@ -272,7 +389,11 @@ fn long_form(eng: &mut Engine, v: &voice::Profile, vectors: &serde_json::Value) 
                     .collect();
                 assert_eq!(
                     prefix,
-                    previous[previous.len() - prefix_tokens..],
+                    loudkit::engine::carry_pair_aligned(
+                        &previous,
+                        prefix_tokens,
+                        eng.config().decode_mode == "fusion_mtp2"
+                    ),
                     "{name} chunk {index}: carry"
                 );
             }
@@ -289,6 +410,36 @@ fn long_form(eng: &mut Engine, v: &voice::Profile, vectors: &serde_json::Value) 
             let got: Vec<usize> = raw.iter().copied().filter(|t| *t < start_speech).collect();
             assert_eq!(got, want, "{name} chunk {index}");
         }
+        // The engine's own long-form path, not the generator driven with the
+        // fixture's seeds: this holds the chunk seed law (chunk 0 the caller's
+        // seed, chunk k derive(seed, 16 + k)) and the carry to the fixture.
+        let whole = eng
+            .synthesize(
+                case["text"].as_str().unwrap(),
+                v,
+                &Options {
+                    seed: to_f64(&case["seed"]) as u64,
+                    language: Some(language.to_string()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let public_tokens = if eng.config().decode_mode == "fusion_mtp2" {
+            case.get("public_tokens")
+                .expect("fusion fixture requires measured public_tokens")
+        } else {
+            &case["tokens"]
+        };
+        let flat: Vec<usize> = public_tokens
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| to_f64(x) as usize)
+            .collect();
+        assert_eq!(
+            whole.tokens, flat,
+            "{name}: synthesize against the fixture's flat list"
+        );
         eprintln!("{name}: long-form tokens PASS ({} chunks)", chunks.len());
     }
 }
