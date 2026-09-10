@@ -1932,3 +1932,18 @@ def test_notebook_first_speech_needs_no_uploaded_profile(
     monkeypatch.setitem(sys.modules, "IPython.display", display)
     exec(compile(cell, "notebook first speech", "exec"), {})
     assert calls == ["joe"]
+
+
+def test_the_model_cards_link_to_documents_absolutely() -> None:
+    """A model card is published twice: on this site, and as the README.md of
+    the model repo on the Hub. The Hub resolves a relative link against the
+    model repo, which holds no docs/, so a relative link to a document works
+    here and on GitHub and is a 404 on the Hub. The cards spell every document
+    link as a github.com URL instead."""
+    relative = []
+    for rel in ("docs/MODEL_CARD.md", "docs/MODEL_CARD-turbo.md"):
+        text = (REPO / rel).read_text(encoding="utf-8")
+        for target in re.findall(r"\]\(([^)\s]+)\)", text):
+            if ".md" in target and not target.startswith(("https://", "http://")):
+                relative.append(f"{rel}: {target}")
+    assert not relative, relative

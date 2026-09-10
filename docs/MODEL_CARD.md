@@ -139,8 +139,8 @@ measured figures, the machines and the commands.
 Synthesis and enrollment are separate so users who only need speech generation
 do not download the enrollment weights. What each graph under `onnx/` takes and
 returns, and the order to call them in, is in
-[the graph signatures](design/onnx-graphs.md), which is what a runtime loudkit
-has no port for needs. ONNX and CoreML use their own enrollment
+[the graph signatures](https://github.com/loudreader/loudkit/blob/main/docs/design/onnx-graphs.md),
+which is what a runtime loudkit has no port for needs. ONNX and CoreML use their own enrollment
 graphs. Every download is checked against the release's `SHA256SUMS` before
 it is used.
 
