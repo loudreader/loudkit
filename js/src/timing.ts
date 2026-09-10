@@ -1,5 +1,5 @@
 /**
- * Where each chunk — and, approximately, each word — lands in the waveform.
+ * Where each chunk, and approximately each word, lands in the waveform.
  *
  * Port of `loudkit.timing`. A reading app highlights the sentence it is
  * speaking, and that needs two different kinds of answer. This module keeps them
@@ -10,8 +10,8 @@
  * and concatenates them, so it knows every chunk's sample offset and sample
  * length without estimating anything. {@link ChunkTiming} reports those,
  * converted to seconds. Chunk *k*'s `end` is bit-identical to chunk *k+1*'s
- * `start` — both are the same integer sample offset divided by the same sample
- * rate — so a highlight driven by them can neither gap nor overlap.
+ * `start`, both being the same integer sample offset divided by the same
+ * sample rate, so a highlight driven by them can neither gap nor overlap.
  *
  * **Word times are estimated.** The model emits speech tokens, not an alignment;
  * nothing in this pipeline knows where a word begins. {@link WordTiming}
@@ -20,15 +20,27 @@
  * be useful for a highlight at sentence scale and wrong in the ways you would
  * expect: a long word said fast, a short word held, a pause before a clause. The
  * error grows with the length of the chunk, because a single bad guess early
- * shifts everything after it — one sentence is usually fine, a long paragraph
+ * shifts everything after it: one sentence is usually fine, a long paragraph
  * read as one chunk is not. If you need real alignment you need a forced
  * aligner; this is not one, and pretending otherwise would be worse than the
  * estimate.
  *
  * Both are computed *after* any time-stretch, on the waveform the caller
  * actually receives, so a result rendered at `speed = 1.5` needs no `1/speed`
- * correction applied to them — applying one would double-count.
+ * correction applied to them; applying one would double-count.
  */
+
+/**
+ * Unicode White_Space, written out, because ECMAScript `\s` omits U+0085 NEL.
+ *
+ * Python splits on `str.isspace()` and Go on `unicode.IsSpace`, both of which
+ * hold NEL, so with `\s` here `ab<NEL>c` is one word in this port and two
+ * everywhere else: a differently placed highlight for the same reading.
+ * Written out rather than imported from the funnel so this module keeps its
+ * foundation layer, the same rule `loudkit.timing` follows.
+ */
+const WHITE_SPACE = "\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000";
+const WHITE_SPACE_RUN = new RegExp(`[${WHITE_SPACE}]+`, "u");
 
 /**
  * What one rendered chunk contributes to a timeline.
@@ -50,7 +62,7 @@ export interface ChunkSpan {
  *
  * **Estimated, by proportional allocation.** The chunk's real duration is
  * divided among its words in proportion to their length in characters. There is
- * no alignment model here and no per-word measurement — see the module comment
+ * no alignment model here and no per-word measurement; see the module comment
  * for what that costs you.
  */
 export interface WordTiming {
@@ -75,7 +87,7 @@ export interface WordTiming {
  */
 export interface ChunkTiming {
   /**
-   * The chunk's text after the speech funnel — what was tokenised, which is not
+   * The chunk's text after the speech funnel: what was tokenised, which is not
    * always what the caller passed in (Polish respells embedded English, and
    * numbers are read as words).
    */
@@ -108,7 +120,7 @@ export interface ChunkTiming {
  * Offsets accumulate in **samples**, not seconds, and are divided by the rate
  * once at the end. Accumulating seconds instead would make chunk *k*'s `end` and
  * chunk *k+1*'s `start` two different sums of the same floats, differing in the
- * last bit — a gap or an overlap of a few nanoseconds, invisible in a test that
+ * last bit: a gap or an overlap of a few nanoseconds, invisible in a test that
  * compares with a tolerance and visible as a flicker in a highlight that
  * switches on `time >= start`.
  */
@@ -136,7 +148,7 @@ export function timeline(spans: ChunkSpan[], sampleRate: number): ChunkTiming[] 
  * The allocation is by **character count**, not by token count or by any
  * acoustic measure: a word's characters are the only thing known here, and they
  * correlate with duration well enough at sentence scale to drive a highlight.
- * Whitespace itself is not charged for — the gap between two words belongs to
+ * Whitespace itself is not charged for: the gap between two words belongs to
  * whichever side of the boundary the caller's player is on, and splitting it
  * would only invent a third kind of span.
  *
@@ -152,7 +164,7 @@ export function timeline(spans: ChunkSpan[], sampleRate: number): ChunkTiming[] 
  * rather than an error anyone would notice.
  */
 export function estimateWords(text: string, start: number, end: number): WordTiming[] {
-  const words = text.split(/\s+/u).filter((w) => w.length > 0);
+  const words = text.split(WHITE_SPACE_RUN).filter((w) => w.length > 0);
   const lengths = words.map((w) => [...w].length);
   const total = lengths.reduce((a, b) => a + b, 0);
   if (total === 0) return [];

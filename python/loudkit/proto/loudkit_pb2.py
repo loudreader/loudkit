@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rloudkit.proto\x12\nloudkit.v1\"\xb4\x01\n\x11SynthesizeRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\r\n\x05voice\x18\x02 \x01(\t\x12\x0c\n\x04seed\x18\x03 \x01(\x04\x12\x10\n\x08language\x18\x04 \x01(\t\x12\r\n\x05speed\x18\x05 \x01(\x01\x12\x16\n\tlong_form\x18\x06 \x01(\x08H\x00\x88\x01\x01\x12\x17\n\x0fprevious_tokens\x18\x07 \x03(\x05\x12\x14\n\x0c\x61udio_format\x18\x08 \x01(\tB\x0c\n\n_long_form\"\xb9\x01\n\x12SynthesizeResponse\x12\r\n\x05\x61udio\x18\x01 \x01(\x0c\x12\x12\n\nmedia_type\x18\x02 \x01(\t\x12\x18\n\x10\x64uration_seconds\x18\x03 \x01(\x01\x12\x13\n\x0btoken_count\x18\x04 \x01(\r\x12\x11\n\ttruncated\x18\x05 \x01(\x08\x12\x14\n\x0c\x63ontinuation\x18\x06 \x03(\x05\x12\x13\n\x0b\x66ingerprint\x18\x07 \x01(\t\x12\x13\n\x0bsample_rate\x18\x08 \x01(\r\"\xb6\x01\n\x0fSynthesizeChunk\x12\r\n\x05\x61udio\x18\x01 \x01(\x0c\x12\x12\n\nmedia_type\x18\x02 \x01(\t\x12\x18\n\x10\x64uration_seconds\x18\x03 \x01(\x01\x12\x13\n\x0btoken_count\x18\x04 \x01(\r\x12\x11\n\ttruncated\x18\x05 \x01(\x08\x12\x14\n\x0c\x63ontinuation\x18\x06 \x03(\x05\x12\x13\n\x0b\x66ingerprint\x18\x07 \x01(\t\x12\x13\n\x0bsample_rate\x18\x08 \x01(\r\"\x11\n\x0f\x44\x65scribeRequest\"{\n\x10\x44\x65scribeResponse\x12\x11\n\talgorithm\x18\x01 \x01(\t\x12\x11\n\texecution\x18\x02 \x01(\t\x12\x13\n\x0b\x66ingerprint\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\t\x12\x1b\n\x13\x65ngine_held_seconds\x18\x05 \x01(\x01\"\x13\n\x11ListVoicesRequest\"$\n\x12ListVoicesResponse\x12\x0e\n\x06voices\x18\x01 \x03(\t2\xbb\x02\n\x06Speech\x12K\n\nSynthesize\x12\x1d.loudkit.v1.SynthesizeRequest\x1a\x1e.loudkit.v1.SynthesizeResponse\x12P\n\x10SynthesizeStream\x12\x1d.loudkit.v1.SynthesizeRequest\x1a\x1b.loudkit.v1.SynthesizeChunk0\x01\x12\x45\n\x08\x44\x65scribe\x12\x1b.loudkit.v1.DescribeRequest\x1a\x1c.loudkit.v1.DescribeResponse\x12K\n\nListVoices\x12\x1d.loudkit.v1.ListVoicesRequest\x1a\x1e.loudkit.v1.ListVoicesResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rloudkit.proto\x12\nloudkit.v1\"\xc3\x01\n\x11SynthesizeRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\x12\r\n\x05voice\x18\x02 \x01(\t\x12\x0c\n\x04seed\x18\x03 \x01(\x04\x12\x10\n\x08language\x18\x04 \x01(\t\x12\x12\n\x05speed\x18\x05 \x01(\x01H\x00\x88\x01\x01\x12\x16\n\tlong_form\x18\x06 \x01(\x08H\x01\x88\x01\x01\x12\x17\n\x0fprevious_tokens\x18\x07 \x03(\x05\x12\x14\n\x0c\x61udio_format\x18\x08 \x01(\tB\x08\n\x06_speedB\x0c\n\n_long_form\"\xb9\x01\n\x12SynthesizeResponse\x12\r\n\x05\x61udio\x18\x01 \x01(\x0c\x12\x12\n\nmedia_type\x18\x02 \x01(\t\x12\x18\n\x10\x64uration_seconds\x18\x03 \x01(\x01\x12\x13\n\x0btoken_count\x18\x04 \x01(\r\x12\x11\n\ttruncated\x18\x05 \x01(\x08\x12\x14\n\x0c\x63ontinuation\x18\x06 \x03(\x05\x12\x13\n\x0b\x66ingerprint\x18\x07 \x01(\t\x12\x13\n\x0bsample_rate\x18\x08 \x01(\r\"\xb6\x01\n\x0fSynthesizeChunk\x12\r\n\x05\x61udio\x18\x01 \x01(\x0c\x12\x12\n\nmedia_type\x18\x02 \x01(\t\x12\x18\n\x10\x64uration_seconds\x18\x03 \x01(\x01\x12\x13\n\x0btoken_count\x18\x04 \x01(\r\x12\x11\n\ttruncated\x18\x05 \x01(\x08\x12\x14\n\x0c\x63ontinuation\x18\x06 \x03(\x05\x12\x13\n\x0b\x66ingerprint\x18\x07 \x01(\t\x12\x13\n\x0bsample_rate\x18\x08 \x01(\r\"\x11\n\x0f\x44\x65scribeRequest\"{\n\x10\x44\x65scribeResponse\x12\x11\n\talgorithm\x18\x01 \x01(\t\x12\x11\n\texecution\x18\x02 \x01(\t\x12\x13\n\x0b\x66ingerprint\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\t\x12\x1b\n\x13\x65ngine_held_seconds\x18\x05 \x01(\x01\"\x13\n\x11ListVoicesRequest\"$\n\x12ListVoicesResponse\x12\x0e\n\x06voices\x18\x01 \x03(\t2\xbb\x02\n\x06Speech\x12K\n\nSynthesize\x12\x1d.loudkit.v1.SynthesizeRequest\x1a\x1e.loudkit.v1.SynthesizeResponse\x12P\n\x10SynthesizeStream\x12\x1d.loudkit.v1.SynthesizeRequest\x1a\x1b.loudkit.v1.SynthesizeChunk0\x01\x12\x45\n\x08\x44\x65scribe\x12\x1b.loudkit.v1.DescribeRequest\x1a\x1c.loudkit.v1.DescribeResponse\x12K\n\nListVoices\x12\x1d.loudkit.v1.ListVoicesRequest\x1a\x1e.loudkit.v1.ListVoicesResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,19 +32,19 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'loudkit_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_SYNTHESIZEREQUEST']._serialized_start=30
-  _globals['_SYNTHESIZEREQUEST']._serialized_end=210
-  _globals['_SYNTHESIZERESPONSE']._serialized_start=213
-  _globals['_SYNTHESIZERESPONSE']._serialized_end=398
-  _globals['_SYNTHESIZECHUNK']._serialized_start=401
-  _globals['_SYNTHESIZECHUNK']._serialized_end=583
-  _globals['_DESCRIBEREQUEST']._serialized_start=585
-  _globals['_DESCRIBEREQUEST']._serialized_end=602
-  _globals['_DESCRIBERESPONSE']._serialized_start=604
-  _globals['_DESCRIBERESPONSE']._serialized_end=727
-  _globals['_LISTVOICESREQUEST']._serialized_start=729
-  _globals['_LISTVOICESREQUEST']._serialized_end=748
-  _globals['_LISTVOICESRESPONSE']._serialized_start=750
-  _globals['_LISTVOICESRESPONSE']._serialized_end=786
-  _globals['_SPEECH']._serialized_start=789
-  _globals['_SPEECH']._serialized_end=1104
+  _globals['_SYNTHESIZEREQUEST']._serialized_end=225
+  _globals['_SYNTHESIZERESPONSE']._serialized_start=228
+  _globals['_SYNTHESIZERESPONSE']._serialized_end=413
+  _globals['_SYNTHESIZECHUNK']._serialized_start=416
+  _globals['_SYNTHESIZECHUNK']._serialized_end=598
+  _globals['_DESCRIBEREQUEST']._serialized_start=600
+  _globals['_DESCRIBEREQUEST']._serialized_end=617
+  _globals['_DESCRIBERESPONSE']._serialized_start=619
+  _globals['_DESCRIBERESPONSE']._serialized_end=742
+  _globals['_LISTVOICESREQUEST']._serialized_start=744
+  _globals['_LISTVOICESREQUEST']._serialized_end=763
+  _globals['_LISTVOICESRESPONSE']._serialized_start=765
+  _globals['_LISTVOICESRESPONSE']._serialized_end=801
+  _globals['_SPEECH']._serialized_start=804
+  _globals['_SPEECH']._serialized_end=1119
 # @@protoc_insertion_point(module_scope)

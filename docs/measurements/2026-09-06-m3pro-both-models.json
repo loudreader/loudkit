@@ -1,0 +1,790 @@
+{
+ "date": "2026-09-06",
+ "host": "Apple M3 Pro laptop (11-core CPU, 14-core GPU, 36 GB), macOS 26.1",
+ "source_commit": "a06cbb9",
+ "bundles": {
+  "loudr-1": "dist/release-0.1.1-ready/loudr-1 (checkpoint 73e69a78\u2026)",
+  "loudr-1-turbo": "dist/release-0.1.1-ready/loudr-1-turbo (checkpoint 590dcf9e\u2026)"
+ },
+ "method": "tools/bench.py: three passages, seed 7, voice joe; the docs quote the third passage (48 words). tools/bench_ports: the same 48-word passage, four streams per process, run 0 cold, medians of runs 1-3, one process at a time. Laptop in ordinary use (editor, browser); no other loudkit process.",
+ "python_paths": {
+  "loudr-1-coreml": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device coreml --seed 7",
+   "device": "coreml",
+   "execution": "exec[gen=coreml/render=coreml attn=sdpa prec[encoder=fp32,estimator=fp16,token_generator=fp32,vocoder=fp32] tf32=off deterministic]",
+   "algorithm": "algo[e352f5d090776b54] loudkit-1 single_path euler=2(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "e352f5d090776b54",
+   "load_s": 19.10595891700359,
+   "peak_rss": 2705424384,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 0.5293224580018432,
+     "cancel_latency_s": 0.012722332998237107,
+     "duration_s": 1.76,
+     "hit_token_cap": false,
+     "mel_s": 0.373779708002985,
+     "n_tokens": 44,
+     "rtf": 1.0741352979972607,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.724371083000733,
+     "total_s": 1.6385272910047206,
+     "ttfa_s": 1.6385252500040224,
+     "ttfa_warm_s": 1.4551539590029279
+    },
+    {
+     "audio_s": 0.433082083996851,
+     "cancel_latency_s": 0.014036207998287864,
+     "duration_s": 5.04,
+     "hit_token_cap": false,
+     "mel_s": 0.3420797910002875,
+     "n_tokens": 126,
+     "rtf": 1.7561131897706248,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 2.0936402499937685,
+     "total_s": 2.8699744580007973,
+     "ttfa_s": 2.8699729580039275,
+     "ttfa_warm_s": 2.810807957997895
+    },
+    {
+     "audio_s": 1.6189340839919169,
+     "cancel_latency_s": 0.013847207999788225,
+     "duration_s": 14.440000000000001,
+     "hit_token_cap": false,
+     "mel_s": 1.0746504170019762,
+     "n_tokens": 361,
+     "rtf": 1.7381228274165823,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 6.745374416001141,
+     "total_s": 8.307813332998194,
+     "ttfa_s": 2.7865573329982,
+     "ttfa_warm_s": 2.8001725829963107
+    }
+   ]
+  },
+  "loudr-1-cpu": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device cpu --seed 7",
+   "device": "cpu",
+   "execution": "exec[cpu attn=sdpa prec[encoder=fp32,estimator=fp16,token_generator=fp16,vocoder=fp32] tf32=off deterministic]",
+   "algorithm": "algo[e352f5d090776b54] loudkit-1 single_path euler=2(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "e352f5d090776b54",
+   "load_s": 3.3600847919951775,
+   "peak_rss": 2453487616,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 0.800335083004029,
+     "cancel_latency_s": 0.007789458999468479,
+     "duration_s": 1.76,
+     "hit_token_cap": false,
+     "mel_s": 16.336794541995914,
+     "n_tokens": 44,
+     "rtf": 0.09986786493572464,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.48063749999710126,
+     "total_s": 17.62328654099838,
+     "ttfa_s": 17.62328533300024,
+     "ttfa_warm_s": 16.260638833002304
+    },
+    {
+     "audio_s": 0.7907082079982501,
+     "cancel_latency_s": 0.007984582996868994,
+     "duration_s": 5.04,
+     "hit_token_cap": false,
+     "mel_s": 14.784747166995658,
+     "n_tokens": 126,
+     "rtf": 0.2996469331352463,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 1.2433467920054682,
+     "total_s": 16.81979504100309,
+     "ttfa_s": 16.819793458002096,
+     "ttfa_warm_s": 16.879420666999067
+    },
+    {
+     "audio_s": 2.389880749004078,
+     "cancel_latency_s": 0.007939709001220763,
+     "duration_s": 14.440000000000001,
+     "hit_token_cap": false,
+     "mel_s": 44.605133750003006,
+     "n_tokens": 361,
+     "rtf": 0.28948872237619994,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 4.171767000989348,
+     "total_s": 49.88104504200601,
+     "ttfa_s": 16.89274158400076,
+     "ttfa_warm_s": 16.709947540999565
+    }
+   ]
+  },
+  "loudr-1-mps": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device mps --seed 7",
+   "device": "mps",
+   "execution": "exec[gen=cpu/render=mps attn=sdpa prec[encoder=fp32,estimator=fp16,token_generator=fp16,vocoder=fp32] tf32=off deterministic]",
+   "algorithm": "algo[e352f5d090776b54] loudkit-1 single_path euler=2(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "e352f5d090776b54",
+   "load_s": 3.5755734170015785,
+   "peak_rss": 2062532608,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 0.3335525000002235,
+     "cancel_latency_s": 0.00792212499800371,
+     "duration_s": 1.76,
+     "hit_token_cap": false,
+     "mel_s": 0.39238399999885587,
+     "n_tokens": 44,
+     "rtf": 1.459735104795164,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.4714522919966839,
+     "total_s": 1.205698207995738,
+     "ttfa_s": 1.2056971249985509,
+     "ttfa_warm_s": 0.9591351250055595
+    },
+    {
+     "audio_s": 0.2842882500044652,
+     "cancel_latency_s": 0.008142874998156913,
+     "duration_s": 5.04,
+     "hit_token_cap": false,
+     "mel_s": 0.25218104099621996,
+     "n_tokens": 126,
+     "rtf": 2.8037615186633342,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 1.2601247089987737,
+     "total_s": 1.7975851250012056,
+     "ttfa_s": 1.7975837500052876,
+     "ttfa_warm_s": 1.7956499169958988
+    },
+    {
+     "audio_s": 0.9167737090028822,
+     "cancel_latency_s": 0.008064082998316735,
+     "duration_s": 14.440000000000001,
+     "hit_token_cap": false,
+     "mel_s": 0.7249992489960277,
+     "n_tokens": 361,
+     "rtf": 3.2886792823969406,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 3.8839384579841862,
+     "total_s": 4.390820375003386,
+     "ttfa_s": 1.7822624590044143,
+     "ttfa_warm_s": 1.8646905409987085
+    }
+   ]
+  },
+  "loudr-1-onnx": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device onnx --seed 7",
+   "device": "onnx",
+   "execution": "exec[onnx attn=sdpa prec[encoder=fp32,estimator=fp32,token_generator=fp32,vocoder=fp32] tf32=off provider=cpu deterministic]",
+   "algorithm": "algo[e352f5d090776b54] loudkit-1 single_path euler=2(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "e352f5d090776b54",
+   "load_s": 2.092320167001162,
+   "peak_rss": 3810115584,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 1.2674951660010265,
+     "cancel_latency_s": 0.008827042001939844,
+     "duration_s": 1.76,
+     "hit_token_cap": false,
+     "mel_s": 1.8251897500013001,
+     "n_tokens": 44,
+     "rtf": 0.49054649892333363,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.48737641600018833,
+     "total_s": 3.5878352080035256,
+     "ttfa_s": 3.5878339170012623,
+     "ttfa_warm_s": 3.5061245420001796
+    },
+    {
+     "audio_s": 1.3388865840024664,
+     "cancel_latency_s": 0.008513374996255152,
+     "duration_s": 5.04,
+     "hit_token_cap": false,
+     "mel_s": 1.728005500001018,
+     "n_tokens": 126,
+     "rtf": 1.1848477021096882,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 1.1855946249997942,
+     "total_s": 4.253711249999469,
+     "ttfa_s": 4.253709707998496,
+     "ttfa_warm_s": 4.181088625002303
+    },
+    {
+     "audio_s": 3.728985374000331,
+     "cancel_latency_s": 0.008232375002990011,
+     "duration_s": 14.440000000000001,
+     "hit_token_cap": false,
+     "mel_s": 5.980746708999504,
+     "n_tokens": 361,
+     "rtf": 1.1352111974218975,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 4.574346540990518,
+     "total_s": 12.720100041995465,
+     "ttfa_s": 4.161278041996411,
+     "ttfa_warm_s": 4.218999791999522
+    }
+   ]
+  },
+  "loudr-1-turbo-coreml": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device coreml --seed 7",
+   "device": "coreml",
+   "execution": "exec[gen=coreml/render=coreml attn=sdpa prec[encoder=fp32,estimator=fp32,token_generator=fp32,vocoder=fp32] tf32=off deterministic]",
+   "algorithm": "algo[1d2846dfaa0f764d] loudkit-1 single_path decode=fusion_mtp2 euler=1(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "1d2846dfaa0f764d",
+   "load_s": 9.434204459001194,
+   "peak_rss": 2793816064,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 0.44846112500090385,
+     "cancel_latency_s": 0.011083790996053722,
+     "duration_s": 1.72,
+     "hit_token_cap": false,
+     "mel_s": 0.5057573750018491,
+     "n_tokens": 43,
+     "rtf": 1.2615139885328015,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.4025786669953959,
+     "total_s": 1.363441083994985,
+     "ttfa_s": 1.3634396249981364,
+     "ttfa_warm_s": 1.196979457999987
+    },
+    {
+     "audio_s": 0.42382354200526606,
+     "cancel_latency_s": 0.01180966699757846,
+     "duration_s": 4.64,
+     "hit_token_cap": false,
+     "mel_s": 0.46938337499886984,
+     "n_tokens": 116,
+     "rtf": 2.7313186669722103,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 0.8045899580029072,
+     "total_s": 1.6988131249963772,
+     "ttfa_s": 1.6988114159976249,
+     "ttfa_warm_s": 1.7080999580066418
+    },
+    {
+     "audio_s": 1.402076708000095,
+     "cancel_latency_s": 0.012569624996103812,
+     "duration_s": 14.08,
+     "hit_token_cap": false,
+     "mel_s": 1.4150525010045385,
+     "n_tokens": 352,
+     "rtf": 2.738123567644095,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 3.3702959989896044,
+     "total_s": 5.142207666001923,
+     "ttfa_s": 1.7924126249999972,
+     "ttfa_warm_s": 1.8299027909961296
+    }
+   ]
+  },
+  "loudr-1-turbo-cpu": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device cpu --seed 7",
+   "device": "cpu",
+   "execution": "exec[cpu attn=sdpa prec[encoder=fp32,estimator=fp16,token_generator=fp16,vocoder=fp32] tf32=off deterministic]",
+   "algorithm": "algo[1d2846dfaa0f764d] loudkit-1 single_path decode=fusion_mtp2 euler=1(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "1d2846dfaa0f764d",
+   "load_s": 1.9950709999975516,
+   "peak_rss": 2454929408,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 0.790391707996605,
+     "cancel_latency_s": 0.006533166000735946,
+     "duration_s": 1.72,
+     "hit_token_cap": false,
+     "mel_s": 7.455577500004438,
+     "n_tokens": 43,
+     "rtf": 0.20262155180021973,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.23721416699845577,
+     "total_s": 8.488731749996077,
+     "ttfa_s": 8.48873058299796,
+     "ttfa_warm_s": 8.599366583999654
+    },
+    {
+     "audio_s": 0.7889474170005997,
+     "cancel_latency_s": 0.006555249994562473,
+     "duration_s": 4.64,
+     "hit_token_cap": false,
+     "mel_s": 7.502369333000388,
+     "n_tokens": 116,
+     "rtf": 0.5257761299556138,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 0.532771333004348,
+     "total_s": 8.825048790997243,
+     "ttfa_s": 8.825047541002277,
+     "ttfa_warm_s": 8.83576383300533
+    },
+    {
+     "audio_s": 2.247911166996346,
+     "cancel_latency_s": 0.006494540997664444,
+     "duration_s": 14.08,
+     "hit_token_cap": false,
+     "mel_s": 21.87999241599755,
+     "n_tokens": 352,
+     "rtf": 0.5552244396706215,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 1.7966804160023457,
+     "total_s": 25.359114250000857,
+     "ttfa_s": 8.48453995899763,
+     "ttfa_warm_s": 8.582384374996764
+    }
+   ]
+  },
+  "loudr-1-turbo-mps": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device mps --seed 7",
+   "device": "mps",
+   "execution": "exec[gen=cpu/render=mps attn=sdpa prec[encoder=fp32,estimator=fp16,token_generator=fp16,vocoder=fp32] tf32=off deterministic]",
+   "algorithm": "algo[1d2846dfaa0f764d] loudkit-1 single_path decode=fusion_mtp2 euler=1(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "1d2846dfaa0f764d",
+   "load_s": 3.1816667079983745,
+   "peak_rss": 2046083072,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 0.31980291700165253,
+     "cancel_latency_s": 0.006745458995283116,
+     "duration_s": 1.72,
+     "hit_token_cap": false,
+     "mel_s": 0.2715884159988491,
+     "n_tokens": 43,
+     "rtf": 2.058628832326965,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.23872529200161807,
+     "total_s": 0.8355075830040732,
+     "ttfa_s": 0.8355063330018311,
+     "ttfa_warm_s": 0.6429134999998496
+    },
+    {
+     "audio_s": 0.2851526250015013,
+     "cancel_latency_s": 0.006893459001730662,
+     "duration_s": 4.64,
+     "hit_token_cap": false,
+     "mel_s": 0.1480643750037416,
+     "n_tokens": 116,
+     "rtf": 4.523804017368362,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 0.5914168750023236,
+     "total_s": 1.0256854590043076,
+     "ttfa_s": 1.025683542000479,
+     "ttfa_warm_s": 0.9717919999966398
+    },
+    {
+     "audio_s": 0.9064901669917163,
+     "cancel_latency_s": 0.0073631249979371205,
+     "duration_s": 14.08,
+     "hit_token_cap": false,
+     "mel_s": 0.4352366250095656,
+     "n_tokens": 352,
+     "rtf": 5.769293513911256,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 2.0260883329974604,
+     "total_s": 2.4405067910047364,
+     "ttfa_s": 1.0348517500024172,
+     "ttfa_warm_s": 1.0313259169997764
+    }
+   ]
+  },
+  "loudr-1-turbo-onnx": {
+   "loudkit_version": "0.1.1",
+   "command": "python tools/bench.py --checkpoint <checkpoint> --voice <voice> --device onnx --seed 7",
+   "device": "onnx",
+   "execution": "exec[onnx attn=sdpa prec[encoder=fp32,estimator=fp32,token_generator=fp32,vocoder=fp32] tf32=off provider=cpu deterministic]",
+   "algorithm": "algo[1d2846dfaa0f764d] loudkit-1 single_path decode=fusion_mtp2 euler=1(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255",
+   "fingerprint": "1d2846dfaa0f764d",
+   "load_s": 1.8382823749998352,
+   "peak_rss": 3714596864,
+   "rss_unit": "bytes",
+   "deterministic": true,
+   "samples": [
+    {
+     "audio_s": 1.3195211249985732,
+     "cancel_latency_s": 0.010281874994689133,
+     "duration_s": 1.72,
+     "hit_token_cap": false,
+     "mel_s": 0.9796761670004344,
+     "n_tokens": 43,
+     "rtf": 0.6581567277275379,
+     "text": "Hello from my own machine.",
+     "tokens_s": 0.30666999999812106,
+     "total_s": 2.6133592920014053,
+     "ttfa_s": 2.6133579579982325,
+     "ttfa_warm_s": 2.4802117080034805
+    },
+    {
+     "audio_s": 1.2809327080030926,
+     "cancel_latency_s": 0.02655433399922913,
+     "duration_s": 4.64,
+     "hit_token_cap": false,
+     "mel_s": 0.9450456669947016,
+     "n_tokens": 116,
+     "rtf": 1.6103343668885401,
+     "text": "The quick brown fox jumps over the lazy dog and the reader keeps its composure.",
+     "tokens_s": 0.6535757919991738,
+     "total_s": 2.8813891669997247,
+     "ttfa_s": 2.881387708999682,
+     "ttfa_warm_s": 3.06823945799988
+    },
+    {
+     "audio_s": 3.7005610830019577,
+     "cancel_latency_s": 0.009088541002711281,
+     "duration_s": 14.08,
+     "hit_token_cap": false,
+     "mel_s": 3.529813082997862,
+     "n_tokens": 352,
+     "rtf": 1.5919984065166333,
+     "text": "This is a longer passage, written to exercise more than a single window of speech tokens. It should run through several chunks and a couple of joins, so the streaming path and the long-form path are both measured, not just the shortest sentence that is fastest to type.",
+     "tokens_s": 2.6066438339912565,
+     "total_s": 8.844229957998323,
+     "ttfa_s": 2.9440886250013136,
+     "ttfa_warm_s": 2.967038708993641
+    }
+   ]
+  }
+ },
+ "ports": {
+  "loudr-1-port-go": {
+   "runtime": "go",
+   "bundle": "dist/release-0.1.1/loudr-1",
+   "load_s": 2.326053834,
+   "seed": 7,
+   "runs": [
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 0,
+     "seconds": 12.21225925,
+     "tokens": 361,
+     "ttfa_s": 4.181847375
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 1,
+     "seconds": 12.186152875,
+     "tokens": 361,
+     "ttfa_s": 4.050148208
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 2,
+     "seconds": 12.194082709,
+     "tokens": 361,
+     "ttfa_s": 4.211629625
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 3,
+     "seconds": 12.184992583,
+     "tokens": 361,
+     "ttfa_s": 4.046319375
+    }
+   ],
+   "execution": "algo[e352f5d090776b54] loudkit-1 single_path euler=2(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255 | exec[onnx provider=cpu]"
+  },
+  "loudr-1-port-js": {
+   "runtime": "js",
+   "bundle": "dist/release-0.1.1/loudr-1",
+   "load_s": 1.6475932500000001,
+   "seed": 7,
+   "runs": [
+    {
+     "run": 0,
+     "seconds": 13.264434958000002,
+     "ttfa_s": 4.486033625,
+     "audio_s": 14.44,
+     "tokens": 361,
+     "chunks": 3
+    },
+    {
+     "run": 1,
+     "seconds": 14.874035457999998,
+     "ttfa_s": 4.223149999999998,
+     "audio_s": 14.44,
+     "tokens": 361,
+     "chunks": 3
+    },
+    {
+     "run": 2,
+     "seconds": 16.180328709,
+     "ttfa_s": 5.230234875000002,
+     "audio_s": 14.44,
+     "tokens": 361,
+     "chunks": 3
+    },
+    {
+     "run": 3,
+     "seconds": 13.643259166999997,
+     "ttfa_s": 5.014869916999996,
+     "audio_s": 14.44,
+     "tokens": 361,
+     "chunks": 3
+    }
+   ],
+   "execution": null
+  },
+  "loudr-1-port-rust": {
+   "runtime": "rust",
+   "bundle": "dist/release-0.1.1/loudr-1",
+   "load_s": 1.639376959,
+   "seed": 7,
+   "runs": [
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 0,
+     "seconds": 11.884590292,
+     "tokens": 361,
+     "ttfa_s": 3.966192
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 1,
+     "seconds": 12.071335709,
+     "tokens": 361,
+     "ttfa_s": 4.174656292
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 2,
+     "seconds": 11.905390208,
+     "tokens": 361,
+     "ttfa_s": 3.925915083
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 3,
+     "seconds": 11.871104042,
+     "tokens": 361,
+     "ttfa_s": 4.036379667
+    }
+   ],
+   "execution": null
+  },
+  "loudr-1-port-swift": {
+   "runtime": "swift",
+   "bundle": "dist/release-0.1.1/loudr-1",
+   "load_s": 11.304772124996816,
+   "seed": 7,
+   "runs": [
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 0,
+     "seconds": 5.903301166661549,
+     "tokens": 361,
+     "ttfa_s": 2.123139874995104
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 1,
+     "seconds": 5.800804749997042,
+     "tokens": 361,
+     "ttfa_s": 1.9283915833293577
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 2,
+     "seconds": 5.812950333332992,
+     "tokens": 361,
+     "ttfa_s": 1.9394757083355216
+    },
+    {
+     "audio_s": 14.44,
+     "chunks": 3,
+     "run": 3,
+     "seconds": 5.686377874997561,
+     "tokens": 361,
+     "ttfa_s": 1.913336874997185
+    }
+   ],
+   "execution": null
+  },
+  "loudr-1-turbo-port-go": {
+   "runtime": "go",
+   "bundle": "dist/release-0.1.1/loudr-1-turbo",
+   "load_s": 1.9774007500000002,
+   "seed": 7,
+   "runs": [
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 0,
+     "seconds": 8.521152459,
+     "tokens": 352,
+     "ttfa_s": 2.868103875
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 1,
+     "seconds": 8.380472083,
+     "tokens": 352,
+     "ttfa_s": 2.826975417
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 2,
+     "seconds": 8.205353,
+     "tokens": 352,
+     "ttfa_s": 2.761947542
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 3,
+     "seconds": 8.258103958,
+     "tokens": 352,
+     "ttfa_s": 2.753073375
+    }
+   ],
+   "execution": "algo[1d2846dfaa0f764d] loudkit-1 single_path euler=1(cosine) temp=0.8 rep=1.2 min_p=0.05 sil=31 win=255 | exec[onnx provider=cpu]"
+  },
+  "loudr-1-turbo-port-js": {
+   "runtime": "js",
+   "bundle": "dist/release-0.1.1/loudr-1-turbo",
+   "load_s": 1.5778655,
+   "seed": 7,
+   "runs": [
+    {
+     "run": 0,
+     "seconds": 9.769583667000001,
+     "ttfa_s": 3.3654723329999996,
+     "audio_s": 14.08,
+     "tokens": 352,
+     "chunks": 3
+    },
+    {
+     "run": 1,
+     "seconds": 9.428244124999999,
+     "ttfa_s": 3.116238958,
+     "audio_s": 14.08,
+     "tokens": 352,
+     "chunks": 3
+    },
+    {
+     "run": 2,
+     "seconds": 9.336795250000003,
+     "ttfa_s": 3.160825667000001,
+     "audio_s": 14.08,
+     "tokens": 352,
+     "chunks": 3
+    },
+    {
+     "run": 3,
+     "seconds": 9.501000249999997,
+     "ttfa_s": 3.0689663329999965,
+     "audio_s": 14.08,
+     "tokens": 352,
+     "chunks": 3
+    }
+   ],
+   "execution": null
+  },
+  "loudr-1-turbo-port-rust": {
+   "runtime": "rust",
+   "bundle": "dist/release-0.1.1/loudr-1-turbo",
+   "load_s": 1.4186725,
+   "seed": 7,
+   "runs": [
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 0,
+     "seconds": 8.18898925,
+     "tokens": 352,
+     "ttfa_s": 2.77478975
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 1,
+     "seconds": 8.251477,
+     "tokens": 352,
+     "ttfa_s": 2.7783191670000003
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 2,
+     "seconds": 8.109458291,
+     "tokens": 352,
+     "ttfa_s": 2.744984041
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 3,
+     "seconds": 8.073615625,
+     "tokens": 352,
+     "ttfa_s": 2.666703333
+    }
+   ],
+   "execution": null
+  },
+  "loudr-1-turbo-port-swift": {
+   "runtime": "swift",
+   "bundle": "dist/release-0.1.1/loudr-1-turbo",
+   "load_s": 3.7503791249982896,
+   "seed": 7,
+   "runs": [
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 0,
+     "seconds": 4.188282750001235,
+     "tokens": 352,
+     "ttfa_s": 1.4811550000013085
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 1,
+     "seconds": 4.0899986250005895,
+     "tokens": 352,
+     "ttfa_s": 1.3755770416610176
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 2,
+     "seconds": 4.08498366666754,
+     "tokens": 352,
+     "ttfa_s": 1.3645130000004428
+    },
+    {
+     "audio_s": 14.08,
+     "chunks": 3,
+     "run": 3,
+     "seconds": 4.087438999995356,
+     "tokens": 352,
+     "ttfa_s": 1.3765641249992768
+    }
+   ],
+   "execution": null
+  }
+ }
+}

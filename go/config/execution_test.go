@@ -34,7 +34,7 @@ func TestExecutionAcceptsTheFiveNames(t *testing.T) {
 func TestExecutionRefusesUnknownProvider(t *testing.T) {
 	// "CUDA" and "metal" are the two shapes of this mistake: right provider
 	// spelled wrong, and a provider that does not exist. Both must be refused
-	// as spelling, before anything is probed — a resolver answer would read as
+	// as spelling, before anything is probed: a resolver answer would read as
 	// a missing library and send the caller off to install something.
 	for _, name := range []string{"CUDA", "Auto", "metal", "gpu", "mps", " cpu"} {
 		err := (ExecutionConfig{ONNXProvider: name}).Validate()
@@ -91,13 +91,19 @@ func TestDescribeNamesAlgorithmAndProvider(t *testing.T) {
 	cfg, err := FromManifest(map[string]interface{}{
 		"recipe_version":    "loudkit-1",
 		"n_cfm_timesteps":   float64(10),
-		"speech_vocab_size": float64(6561),
+		"speech_vocab_size": float64(8194),
 		"sample_rate":       float64(24000),
 		"chunking":          map[string]interface{}{},
 		"postprocess":       map[string]interface{}{},
 		"silence_token_ids": []interface{}{float64(1), float64(2)},
 		"speech_tokens": map[string]interface{}{
 			"start": float64(6561), "stop": float64(6562),
+		},
+		// Declared, not assumed: an absent window block is the ragged window,
+		// so a manifest that wants the static one says so.
+		"window": map[string]interface{}{
+			"max_speech_tokens": float64(255), "static_length": float64(255),
+			"static_prompt_tokens": float64(238), "pad_token_id": float64(4254),
 		},
 	})
 	if err != nil {
@@ -127,10 +133,12 @@ func TestDescribeNamesAlgorithmAndProvider(t *testing.T) {
 func TestDescribeMarksAnExplicitGrid(t *testing.T) {
 	cfg, err := FromManifest(map[string]interface{}{
 		"n_cfm_timesteps": float64(4),
-		"euler_grid":      []interface{}{float64(0), float64(0.5), float64(1)},
-		"sample_rate":     float64(24000),
-		"chunking":        map[string]interface{}{},
-		"postprocess":     map[string]interface{}{},
+		"euler_grid": []interface{}{
+			float64(0), float64(0.25), float64(0.5), float64(0.75), float64(1),
+		},
+		"sample_rate": float64(24000),
+		"chunking":    map[string]interface{}{},
+		"postprocess": map[string]interface{}{},
 	})
 	if err != nil {
 		t.Fatal(err)

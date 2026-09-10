@@ -1,6 +1,6 @@
 /**
- * Polish lexical respelling — a bit-parity port of
- * `loudkit.frontend.polish.lexical_respelling` (which is itself the Python half
+ * Polish lexical respelling: a bit-parity port of
+ * `loudkit.frontend.speechtext.lexical_respelling` (which is itself the Python half
  * of the Swift engine's `LexicalRespelling`).
  *
  * English words embedded in Polish text are respelled the way a Polish reader
@@ -18,7 +18,11 @@
 
 import { readFileSync } from "node:fs";
 
-// Multi-word anglicisms respelled as a unit, BEFORE the word pass — "release
+import { letterName, spellAcronym } from "./letters.js";
+import { cardinal } from "./numbers.js";
+import { RESPELL_URL } from "./textconfig.js";
+
+// Multi-word anglicisms respelled as a unit, BEFORE the word pass: "release
 // notes" word-by-word would read "notes" as the Polish homograph (the
 // notebook) and must stay Polish inside the phrase.
 const PHRASES: Array<[string, string]> = [
@@ -29,12 +33,12 @@ const PHRASES: Array<[string, string]> = [
   ["happy hour", "hepi ałer"],
 ];
 
-// English words that are ALSO everyday Polish words — the word pass leaves
+// English words that are ALSO everyday Polish words: the word pass leaves
 // them alone, and only a phrase above may respell them.
 // `words(...)` rather than `("a " + "b").split(" ")`: `.split` binds to the
 // second literal alone, so `string + Array` stringified the array and
 // `new Set(string)` iterated CHARACTERS. This set held 23 letters instead of
-// 20 words — `has("x")` was true and `has("notes")` was false — and the same
+// 20 words, so `has("x")` was true and `has("notes")` was false, and the same
 // shape hit POLISH_FUNCTION_WORDS and POLISH_ENDINGS below. Measured effect:
 // `host` → `hołst`, `python` → `pajtan`, and with no Polish function words in
 // the set an English span swallowed `tak`/`nie`/`to`/`na` and transliterated
@@ -46,19 +50,7 @@ const KEEP_POLISH = words(
   "spam port host linux unix python ruby"
 );
 
-// GPT → "gie-pe-te": an all-caps token is read letter by letter with POLISH
-// letter names. A short allowlist covers acronyms said as WORDS (NASA, RAM).
-const LETTER_NAMES: Record<string, string> = {
-  a: "a", b: "be", c: "ce", d: "de", e: "e", f: "ef",
-  g: "gie", h: "ha", i: "i", j: "jot", k: "ka", l: "el",
-  m: "em", n: "en", o: "o", p: "pe", q: "ku", r: "er",
-  s: "es", t: "te", u: "u", v: "fał", w: "wu", x: "iks",
-  y: "igrek", z: "zet",
-};
-
-const WORD_ACRONYMS = words("nasa ram rom pin vat sim lot pesel nato zus nfz pit");
-
-// Polish function words that happen to spell English words — never span
+// Polish function words that happen to spell English words. Never span
 // members, or a span eats the Polish conjunction after it.
 const POLISH_FUNCTION_WORDS = words(
   "i a o u w z no to ta ten on ona my ja do po za na od ale czy tak nie",
@@ -70,20 +62,6 @@ const POLISH_ENDINGS = words(
   "a u e y i em ie ę ą om ach ami ów owi cie sie owa owe ować uje ujesz",
   "ujemy ujecie ują owy owych owego owym"
 );
-
-const UNITS = ["", "jeden", "dwa", "trzy", "cztery", "pięć", "sześć",
-  "siedem", "osiem", "dziewięć"];
-const TEENS = ["dziesięć", "jedenaście", "dwanaście", "trzynaście", "czternaście",
-  "piętnaście", "szesnaście", "siedemnaście", "osiemnaście", "dziewiętnaście"];
-const TENS = ["", "", "dwadzieścia", "trzydzieści", "czterdzieści", "pięćdziesiąt",
-  "sześćdziesiąt", "siedemdziesiąt", "osiemdziesiąt", "dziewięćdziesiąt"];
-const HUNDREDS = ["", "sto", "dwieście", "trzysta", "czterysta", "pięćset",
-  "sześćset", "siedemset", "osiemset", "dziewięćset"];
-
-const DIGIT_WORDS: Record<string, string> = {
-  "0": "zero", "1": "jeden", "2": "dwa", "3": "trzy", "4": "cztery",
-  "5": "pięć", "6": "sześć", "7": "siedem", "8": "osiem", "9": "dziewięć",
-};
 
 // The curated lexicon: common anglicisms → Polish phonetic respelling.
 // Words Poles already read correctly by Polish rules (laptop, internet) are
@@ -138,7 +116,7 @@ const LEXICON: Record<string, string> = {
   weekend: "łikend", wow: "łał",
 };
 
-// Math and unit symbols the model cannot say, as Polish words — with context
+// Math and unit symbols the model cannot say, as Polish words, with context
 // guards, because "-" is also a hyphen and "/" is also a path.
 const RESPEL_SYMBOL_RULES: Array<[RegExp, string]> = [
   [/(?<=\d)\s?%/, " procent"],
@@ -164,12 +142,10 @@ interface LexiconPayload {
 let _payload: LexiconPayload | null = null;
 
 function payload(): LexiconPayload {
-  if (_payload === null) {
-    _payload = JSON.parse(
-      readFileSync(new URL("../data/pl_en_respell.json", import.meta.url), "utf8")
-    );
-  }
-  return _payload as LexiconPayload;
+  _payload ??= JSON.parse(
+    readFileSync(RESPELL_URL, "utf8")
+  ) as LexiconPayload;
+  return _payload;
 }
 
 function generated(): Record<string, string> {
@@ -181,10 +157,10 @@ function respellAll(): Record<string, string> {
 }
 
 // Both were O(lexicon) per word: `words` is a ~110k-entry array scanned
-// linearly by `.includes`, and `polishSet` rebuilt its Set on every call —
+// linearly by `.includes`, and `polishSet` rebuilt its Set on every call,
 // once per word. Measured at 387 ms for 1000 Polish words against Python's
-// 7.9 ms, and Python fixed exactly this in ed1f344 ("a 1170x lexicon cost").
-// Built once, on first use, and held.
+// 7.9 ms with the tables built once. Built once here too, on first use, and
+// held.
 let _englishWords: Set<string> | null = null;
 let _polishWords: Set<string> | null = null;
 
@@ -203,28 +179,60 @@ function lookup(word: string): string | undefined {
   return generated()[word];
 }
 
+// How long an all-caps token may be before this pass stops calling it an
+// acronym. `spellAcronym` reads a listed word acronym of ANY length as a word,
+// which is right where it is asked, at the top of the funnel with the
+// neighbouring capitals still visible; down here the only question is whether
+// the English-run gate should skip the token, and a long all-caps run is a
+// heading or a shout far more often than an initialism. It is why INTERPOL
+// reads as English here and as a word up there.
+const MAX_ACRONYM = 5;
+
+/** The acronym reading the English-run gate below asks about: `letters` owns
+ * the spelling for all twelve languages, this adds the narrower question. */
 function spelledAcronym(word: string): string | null {
-  if (word.length < 2 || word.length > 5) return null;
-  if (!/^[A-Z]+$/.test(word)) return null;
-  const lower = word.toLowerCase();
-  if (WORD_ACRONYMS.has(lower)) return lower;
-  const names = [...lower].map((c) => LETTER_NAMES[c]);
-  if (names.some((n) => n === undefined)) return null;
-  return names.join("-");
+  if ([...word].length > MAX_ACRONYM) return null;
+  return spellAcronym(word, "pl");
 }
 
-function under1000(n: number): string[] {
-  const parts: string[] = [];
-  if (n >= 100) parts.push(HUNDREDS[Math.floor(n / 100)]);
-  const rest = n % 100;
-  if (rest >= 10 && rest <= 19) {
-    parts.push(TEENS[rest - 10]);
-  } else {
-    if (rest >= 20) parts.push(TENS[Math.floor(rest / 10)]);
-    if (rest % 10 > 0) parts.push(UNITS[rest % 10]);
-  }
-  return parts;
+/**
+ * The ten ASCII digits as Polish words, for reading a token one character at
+ * a time.
+ *
+ * A table rather than a `cardinal` call per character, because the callers
+ * below ask "is this a digit I can say" of every character of every word. And
+ * ASCII only: `decimalValue` is true of `٥` and `൬` as well, and a token
+ * holding one is not a token this pass says character by character.
+ */
+let _digitWords: Record<string, string> | null = null;
+
+function digitWords(): Record<string, string> {
+  return (_digitWords ??= Object.fromEntries(
+    Array.from({ length: 10 }, (_, d) => [String(d), cardinal(d, "pl")])
+  ));
 }
+
+/**
+ * The letter names a mixed letter-digit token is spelled with.
+ *
+ * The names are the grammar file's, so `GPT` is *gie-pe-te* in one place. The
+ * ASCII narrowing is this pass's own: `numbers.json` also names the nine
+ * Polish letters, and reading them here would turn `Ż1`, left written today,
+ * into *żet jeden*. That is a change in what Polish says, so it belongs to a
+ * `TEXT_RECIPE` bump and not to a table move.
+ */
+let _codeLetters: Record<string, string> | null = null;
+
+function codeLetterNames(): Record<string, string> {
+  return (_codeLetters ??= Object.fromEntries(
+    [..."abcdefghijklmnopqrstuvwxyz"]
+      .map((ch) => [ch, letterName(ch, "pl")])
+      .filter(([, name]) => name !== null)
+  ) as Record<string, string>);
+}
+
+/** Nd block starts whose preceding code point is itself a decimal digit. */
+const ADJACENT_BLOCK_STARTS = new Set([0x1d7d8, 0x1d7e2, 0x1d7ec, 0x1d7f6]);
 
 /**
  * The value of a decimal digit in any script, as `int(token)` reads it in
@@ -232,23 +240,48 @@ function under1000(n: number): string[] {
  * value is the distance from the block's zero, found by walking down at most
  * nine.
  *
- * `\d` and `parseInt` are ASCII-only, so `"١٢٣"` was not a number here and
- * the Polish path declined to spell it where Python says "sto dwadzieścia
- * trzy".
+ * `\d` and `parseInt` are ASCII-only, so with them `"١٢٣"` is not a number
+ * here and the Polish path declines to spell it where Python says "sto
+ * dwadzieścia trzy".
  */
 function decimalValue(ch: string): number | null {
   if (!/\p{Nd}/u.test(ch)) return null;
-  const cp = ch.codePointAt(0)!;
+  const cp = ch.codePointAt(0) ?? 0;
   let zero = cp;
-  while (zero > 0 && /\p{Nd}/u.test(String.fromCodePoint(zero - 1))) zero--;
+  // Four block starts are listed because their predecessor is also a decimal
+  // digit: the mathematical double-struck, sans-serif, sans-serif-bold and
+  // monospace runs sit back to back, so walking down from a sans-serif '1'
+  // crosses into double-struck and keeps going. Sixty-four of the sixty-eight Nd
+  // blocks stop the walk on their own. Verified against Python's own unicodedata
+  // over every code point in Unicode: zero disagreements.
+  while (
+    zero > 0 &&
+    !ADJACENT_BLOCK_STARTS.has(zero) &&
+    /\p{Nd}/u.test(String.fromCodePoint(zero - 1))
+  ) {
+    zero--;
+  }
   return cp - zero;
 }
 
+// How many digits a bare token may carry and still be read as one number.
+// Past six the run is an identifier, an order number or a phone number far more
+// often than a quantity, and reading `9876543210` as a quantity is worse than
+// reading its digits.
+const MAX_SPOKEN_DIGITS = 6;
+
+/**
+ * A run of digits as Polish cardinal words, or `null` to leave it alone.
+ *
+ * The grammar is `cardinal`'s; what this adds is the two refusals the
+ * respelling pass makes on top of it, a leading zero and a run too long to be
+ * a quantity, both of which read better digit by digit.
+ */
 function numberWords(token: string): string | null {
   const chars = [...token];
   // Spread, not `.length`: `.length` counts UTF-16 units, and there are astral
   // Nd blocks (U+1D7CE and friends).
-  if (chars.length > 6) return null;
+  if (chars.length > MAX_SPOKEN_DIGITS) return null;
   if (token.startsWith("0") && token !== "0") return null;
   let value = 0;
   for (const ch of chars) {
@@ -256,23 +289,7 @@ function numberWords(token: string): string | null {
     if (d === null) return null;
     value = value * 10 + d;
   }
-  if (value === 0) return "zero";
-  const parts: string[] = [];
-  const thousands = Math.floor(value / 1000);
-  if (thousands > 0) {
-    if (thousands === 1) {
-      parts.push("tysiąc");
-    } else {
-      parts.push(...under1000(thousands));
-      const lastTwo = thousands % 100;
-      const last = thousands % 10;
-      if (lastTwo >= 12 && lastTwo <= 14) parts.push("tysięcy");
-      else if (last >= 2 && last <= 4) parts.push("tysiące");
-      else parts.push("tysięcy");
-    }
-  }
-  parts.push(...under1000(value % 1000));
-  return parts.join(" ");
+  return cardinal(value, "pl");
 }
 
 /**
@@ -283,23 +300,26 @@ function numberWords(token: string): string | null {
 const MAX_SPELLED_CODE = 8;
 
 function spelledCodeToken(word: string): string | null {
-  const hasLetter = [...word].some((c) => c.toUpperCase() !== c.toLowerCase());
+  // `\p{L}`, not a case comparison: a script without case is still letters.
+  const hasLetter = [...word].some((c) => /\p{L}/u.test(c));
   const hasDigit = [...word].some((c) => /[0-9]/.test(c));
   if (!(hasLetter && hasDigit)) return null;
   // All or nothing. Skipping a character with no letter name turns
-  // `Müller123` into *em el el e er jeden dwa* — the `ü` gone, a name
+  // `Müller123` into *em el el e er jeden dwa*: the `ü` gone, a name
   // changed rather than mispronounced; and an eight-character cap that truncates
   // instead of refusing drops the last digits of `żelazny2024`. A token half-read
   // is worse than one left written, because the listener cannot tell that anything
   // was dropped.
   if ([...word].length > MAX_SPELLED_CODE) return null;
+  const digits = digitWords();
+  const letters = codeLetterNames();
   const parts: string[] = [];
   for (const ch of [...word]) {
-    if (ch in DIGIT_WORDS) {
-      parts.push(DIGIT_WORDS[ch]);
+    if (ch in digits) {
+      parts.push(digits[ch]);
       continue;
     }
-    const name = LETTER_NAMES[ch.toLowerCase()];
+    const name = letters[ch.toLowerCase()];
     if (!name) return null;
     parts.push(name);
   }
@@ -313,24 +333,38 @@ function matchCase(original: string, respelled: string): string {
 }
 
 function respelled(word: string): string {
-  // No acronym branch here any more. `spellAcronyms` owns that decision for all
-  // twelve languages and takes it earlier in the funnel, where the surrounding
-  // capitals are still visible — this pass sees one word at a time and so could
-  // not tell an initialism from a shout. It spelled "THIS IS FINE" as
-  // te-ha-i-es i-es ef-i-en-e, and "CIA CIA" as ce-i-a ce-i-a where the earlier
-  // pass had already decided that a run of capitals is emphasis.
-  // `spelledAcronym` stays: the English-run test below still asks it whether a
-  // word is an acronym, which is a different question from spelling one.
+  // No acronym branch here. `spellAcronyms` owns that decision for all twelve
+  // languages and takes it earlier in the funnel, where the surrounding
+  // capitals are still visible; this pass sees one word at a time and cannot
+  // tell an initialism from a shout. Taken here, "THIS IS FINE" reads as
+  // te-ha-i-es i-es ef-i-en-e and "CIA CIA" as ce-i-a ce-i-a, where the
+  // earlier pass has already decided that a run of capitals is emphasis.
+  // `spelledAcronym` stays: the English-run test below asks it whether a word
+  // is an acronym, which is a different question from spelling one.
   const code = spelledCodeToken(word);
   if (code) return code;
   const lower = word.toLowerCase();
   const hit = lookup(lower);
   if (hit !== undefined) return matchCase(word, hit);
   // Digits-only tokens: cardinal words when sane, digit-by-digit when weird.
-  if (![...word].some((c) => c.toUpperCase() !== c.toLowerCase())) {
+  // `\p{L}`, not a case comparison. `c.toUpperCase() !== c.toLowerCase()` is
+  // false for every script without case, so it sends CJK, Hebrew, Arabic,
+  // Hiragana, Hangul, Thai and Devanagari words down the digits-only branch,
+  // where they map to "" and vanish from the sentence. Python asks
+  // `ch.isalpha()` and Go `unicode.IsLetter`; this is the same question.
+  if (![...word].some((c) => /\p{L}/u.test(c))) {
     const cardinal = numberWords(word);
     if (cardinal) return cardinal;
-    return [...word].map((c) => DIGIT_WORDS[c] ?? "").filter(Boolean).join(" ");
+    // Digit by digit -- but never to *nothing*. Dropping the characters the
+    // ASCII-keyed table does not know erases a token of punctuation alone
+    // from the utterance: the word collector keeps `'` and the right single
+    // quote inside a word, so a spaced apostrophe arrives here as a token of
+    // its own and matches neither branch. It is in the prosodic set, which is
+    // to say the funnel is meant to keep it. A word this function cannot
+    // improve is returned unchanged, because losing text is not an available
+    // outcome.
+    const digits = digitWords();
+    return [...word].map((c) => digits[c] ?? c).join(" ");
   }
   // Nothing under three letters declines from a dictionary stem.
   if (lower.length <= 3) return word;
@@ -413,7 +447,7 @@ function respellWords(text: string): string {
   while (i < words.length) {
     // The whole run of digit groups is measured before any of it is read,
     // because the decision belongs to the run and not to its first pair. Two
-    // groups is a decimal — "dwa przecinek pięć". Three or more is a version,
+    // groups is a decimal, "dwa przecinek pięć". Three or more is a version,
     // an address or a date, and is left exactly as written.
     //
     // Reading only the first pair turns "192.168.0.1" into "sto
@@ -459,7 +493,11 @@ function respellWords(text: string): string {
       }
       if (groups === 2) {
         const whole = numberWords(words[i]) ?? words[i];
-        const frac = [...words[i + 1]].map((c) => DIGIT_WORDS[c] ?? "").filter(Boolean).join(" ");
+        const digits = digitWords();
+        const frac = [...words[i + 1]]
+          .map((c) => digits[c] ?? "")
+          .filter(Boolean)
+          .join(" ");
         out += whole + " przecinek " + frac + seps[i + 2];
         i += 2;
         continue;
@@ -470,7 +508,7 @@ function respellWords(text: string): string {
       while (j < words.length && isEnglish[j]) j++;
       if (j - i >= 4) {
         // Inside a detected English span every word transliterates, gate
-        // ignored — "brown" alone stays Polish, "brown" inside "the quick
+        // ignored: "brown" alone stays Polish, "brown" inside "the quick
         // brown fox" becomes "brałn".
         for (let k = i; k < j; k++) {
           const lower = words[k].toLowerCase();

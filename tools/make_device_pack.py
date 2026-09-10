@@ -14,7 +14,7 @@ The full checkpoint is 1.27 GB; a phone doing *synthesis* needs 356 MB of it:
 
 Left out, and why that is safe:
 
-  s3gen.tokenizer        495 MB  S3 speech tokenizer — enrollment only; voices
+  s3gen.tokenizer        495 MB  S3 speech tokenizer, enrollment only; voices
                                  ship as ~165 KB profiles enrolled on a Mac
   s3gen.speaker_encoder   28 MB  enrollment only, same reason
   s3gen.flow (rest)      307 MB  baked into flow_encoder/flow_estimator.mlmodelc
@@ -22,15 +22,13 @@ Left out, and why that is safe:
 
 The renderer weights travel as the *precompiled* .mlmodelc directories, so the
 phone never pays the on-device CoreML compile (or the duplicate .mlpackage
-bytes). The embedded manifest is copied verbatim — the algorithm fingerprint
-must stay identical to the full pack — plus a `subset` metadata key naming
+bytes). The embedded manifest is copied verbatim, the algorithm fingerprint
+must stay identical to the full pack, plus a `subset` metadata key naming
 what was dropped, so a subset pack can never masquerade as the full one.
 
 Usage:
     python3 tools/make_device_pack.py \
-        --checkpoint \
-            ~/Developer/chatterbox-apple/checkpoints/loudr-1/\
-            loudr-1.safetensors \
+        --checkpoint <path>/loudr-1.safetensors \
         --out Examples/LoudKitDemo/Assets
 """
 
@@ -38,18 +36,16 @@ import argparse
 import json
 import shutil
 import struct
+import sys
 from pathlib import Path
 
 KEEP_PREFIXES = ("t3.", "s3gen.flow.spk_embed_affine_layer.")
 
 REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO / "python"))
 
-
-def read_header(path: Path):
-    with open(path, "rb") as f:
-        (n,) = struct.unpack("<Q", f.read(8))
-        header = json.loads(f.read(n))
-    return header, 8 + n
+from loudkit.checkpoint import read_header  # noqa: E402
+from loudkit.release import CHECKPOINT_NAME  # noqa: E402
 
 
 def write_subset(src: Path, dst: Path) -> None:
@@ -114,7 +110,7 @@ def main() -> None:
     ckpt_dir.mkdir(parents=True, exist_ok=True)
 
     print("device pack ->", out)
-    write_subset(args.checkpoint, ckpt_dir / "loudr-1.safetensors")
+    write_subset(args.checkpoint, ckpt_dir / CHECKPOINT_NAME)
     shutil.copy2(src_dir / "tokenizer.json", ckpt_dir / "tokenizer.json")
 
     coreml = ckpt_dir / "coreml"

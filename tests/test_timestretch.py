@@ -29,6 +29,8 @@ from loudkit.models.timestretch import (
     validate_speed,
 )
 
+from .conftest import fake_engine, fake_voice
+
 SAMPLE_RATE = 24_000
 SPEEDS = (0.5, 0.75, 0.9, 1.25, 1.5, 2.0)
 
@@ -64,13 +66,11 @@ class TestUnitySpeedIsABypass:
         x = _signal(0.3)
         assert time_stretch(x, sample_rate=SAMPLE_RATE, speed=1.0) is x
 
-    def test_bit_identical_through_the_engine(self) -> None:
+    def test_bit_identical_through_thefake_engine(self) -> None:
         """The claim that matters: every existing caller keeps their bytes."""
-        from .test_engine import _engine, _voice
-
-        engine = _engine()
-        without = engine.synthesize("One two three.", _voice(), seed=3)
-        explicit = engine.synthesize("One two three.", _voice(), seed=3, speed=1.0)
+        engine = fake_engine()
+        without = engine.synthesize("One two three.", fake_voice(), seed=3)
+        explicit = engine.synthesize("One two three.", fake_voice(), seed=3, speed=1.0)
         assert np.array_equal(without.audio, explicit.audio)
         assert without.speed == explicit.speed == 1.0
 
@@ -204,19 +204,17 @@ class TestValidation:
     def test_the_engine_refuses_before_it_generates(self) -> None:
         """Six seconds of generation should not happen to discover a typo in a
         keyword argument."""
-        from .test_engine import _engine, _voice
-
-        engine = _engine()
+        engine = fake_engine()
         with pytest.raises(ValueError, match="outside"):
-            engine.synthesize("One two.", _voice(), seed=1, speed=4.0)
-        assert engine.token_generator.calls == []  # type: ignore[attr-defined]
+            engine.synthesize("One two.", fake_voice(), seed=1, speed=4.0)
+        assert engine.token_generator.calls == []
 
 
 class TestThroughTheEngine:
     def test_the_result_records_what_was_asked_for(self) -> None:
-        from .test_engine import _engine, _voice
-
-        result = _engine().synthesize("One two three four.", _voice(), seed=1, speed=1.5)
+        result = fake_engine().synthesize(
+            "One two three four.", fake_voice(), seed=1, speed=1.5
+        )
         assert result.speed == 1.5
         assert "speed=1.5x" in repr(result)
 
@@ -224,32 +222,33 @@ class TestThroughTheEngine:
         """Computed after the stretch, on the audio the caller receives — so
         there is no ``1/speed`` correction to apply, and applying one would
         double-count."""
-        from .test_engine import _engine, _voice
-
-        result = _engine().synthesize("One two three four.", _voice(), seed=1, speed=2.0)
+        result = fake_engine().synthesize(
+            "One two three four.", fake_voice(), seed=1, speed=2.0
+        )
         assert result.chunks[-1].end == result.duration
         assert result.chunks[-1].words[-1].end == pytest.approx(result.duration)
 
     def test_long_form_stretches_every_chunk(self) -> None:
         """Per chunk, like the seeds and the prefix: a chunk's audio must not
         depend on how many came before it."""
-        from dataclasses import replace
-
         from loudkit.config import AlgorithmConfig, ChunkConfig, SamplingConfig
-
-        from .test_engine import _engine, _voice
 
         algo = AlgorithmConfig().with_(
             chunking=ChunkConfig(max_tokens=20, prefix_tokens=0),
             sampling=SamplingConfig(max_new_tokens=64),
         )
         text = "One. Two. Three. Four. Five. Six. Seven. Eight."
-        plain = _engine(algo).synthesize_long(text, _voice(), seed=1)
-        fast = _engine(algo).synthesize_long(text, _voice(), seed=1, speed=2.0)
+        plain = fake_engine(algo).synthesize(text, fake_voice(), seed=1)
+        fast = fake_engine(algo).synthesize(text, fake_voice(), seed=1, speed=2.0)
         assert len(fast.chunks) == len(plain.chunks) > 1
         assert fast.duration == pytest.approx(plain.duration / 2, rel=0.01)
         assert fast.speed == 2.0
         # And the join is still exact, on the stretched spans.
         for left, right in zip(fast.chunks, fast.chunks[1:], strict=False):
             assert left.end == right.start
-        assert replace(fast, speed=2.0).speed == 2.0
+        # Every chunk, not just the total: a run that stretched the first chunk
+        # twice as far and the last not at all sums to the same duration.
+        for slow, quick in zip(plain.chunks, fast.chunks, strict=True):
+            assert quick.end - quick.start == pytest.approx(
+                (slow.end - slow.start) / 2, rel=0.01
+            )

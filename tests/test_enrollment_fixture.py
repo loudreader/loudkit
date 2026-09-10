@@ -44,7 +44,7 @@ def _read(name: str, dtype: np.dtype, manifest: dict) -> np.ndarray:
 
 
 class TestFixtureFilesExist:
-    def test_every_manifest_file_is_present_with_the_right_size(self, manifest) -> None:  # type: ignore[no-untyped-def]
+    def test_every_manifest_file_is_present_with_the_right_size(self, manifest) -> None:
         for name, meta in manifest["files"].items():
             path = FIXTURE / name
             assert path.exists(), f"manifest names {name}, which is missing"
@@ -56,7 +56,7 @@ class TestFixtureFilesExist:
 
 
 class TestGoldenProfile:
-    def test_profile_tensors_match_the_committed_files(self, manifest) -> None:  # type: ignore[no-untyped-def]
+    def test_profile_tensors_match_the_committed_files(self, manifest) -> None:
         profile = VoiceProfile.load(FIXTURE / "profile.safetensors")
         assert profile.name == manifest["name"]
 
@@ -78,12 +78,12 @@ class TestGoldenProfile:
             profile.prompt_mel, _read("matcha_mel.f32", np.float32, manifest)
         )
 
-    def test_prompt_mel_stays_aligned_to_tokens(self, manifest) -> None:  # type: ignore[no-untyped-def]
+    def test_prompt_mel_stays_aligned_to_tokens(self, manifest) -> None:
         tokens = _read("prompt_tokens.i64", np.int64, manifest)
         mel = _read("matcha_mel.f32", np.float32, manifest)
         assert mel.shape[0] == 80
         assert mel.shape[1] == 2 * len(tokens), "2 mel frames per prompt token"
 
-    def test_the_embeddings_have_the_shapes_the_renderers_read(self, manifest) -> None:  # type: ignore[no-untyped-def]
+    def test_the_embeddings_have_the_shapes_the_renderers_read(self, manifest) -> None:
         assert _read("flow_embedding.f32", np.float32, manifest).shape == (192,)
         assert _read("speaker_embedding.f32", np.float32, manifest).shape == (256,)

@@ -1,0 +1,53 @@
+{
+ "generated_by": "tools/make_conformance.py --fixtures-only",
+ "env": "LOUDKIT_CACHE",
+ "cases": [
+  {
+   "root": "/home/ada/.cache",
+   "repo": "loudreader/loudr-1",
+   "path": "/home/ada/.cache/loudkit/loudreader--loudr-1"
+  },
+  {
+   "root": "/home/ada/.cache",
+   "repo": "loudreader/loudr-1-turbo",
+   "path": "/home/ada/.cache/loudkit/loudreader--loudr-1-turbo"
+  },
+  {
+   "root": "/home/ada/.cache",
+   "repo": "someone/model.v2",
+   "path": "/home/ada/.cache/loudkit/someone--model.v2"
+  },
+  {
+   "root": "/Users/ada/Library/Caches",
+   "repo": "loudreader/loudr-1",
+   "path": "/Users/ada/Library/Caches/loudkit/loudreader--loudr-1"
+  },
+  {
+   "root": "/Users/ada/Library/Caches",
+   "repo": "loudreader/loudr-1-turbo",
+   "path": "/Users/ada/Library/Caches/loudkit/loudreader--loudr-1-turbo"
+  },
+  {
+   "root": "/Users/ada/Library/Caches",
+   "repo": "someone/model.v2",
+   "path": "/Users/ada/Library/Caches/loudkit/someone--model.v2"
+  }
+ ],
+ "override": [
+  {
+   "cache": "/data/loudkit",
+   "repo": "loudreader/loudr-1",
+   "path": "/data/loudkit/loudreader--loudr-1"
+  },
+  {
+   "cache": "/data/loudkit",
+   "repo": "loudreader/loudr-1-turbo",
+   "path": "/data/loudkit/loudreader--loudr-1-turbo"
+  },
+  {
+   "cache": "/data/loudkit",
+   "repo": "someone/model.v2",
+   "path": "/data/loudkit/someone--model.v2"
+  }
+ ]
+}

@@ -53,34 +53,51 @@ def test_binding_copies_match_the_canonical_lexicon() -> None:
 
 
 def test_regenerating_the_lexicon_is_reproducible() -> None:
-    """The generator must be deterministic and match the committed lexicon.
+    """The committed lexicon is what ``tools/gen_pl_respell.py`` produces.
 
-    The generator writes to ``swift/LoudKitText/Resources/pl_en_respell.json``
-    (the Swift engine's copy). Regenerating it must reproduce the canonical
-    Python copy byte-for-byte — which is also the proof that the Swift engine
-    and the Python package read the same lexicon. A non-deterministic or
-    drifting generator would break the four-way byte-identity that
-    ``test_binding_copies_match_the_canonical_lexicon`` pins.
+    The generator rewrites every copy in place, so the committed bytes have to
+    be read *before* it runs: comparing two files it has just written proves
+    only that it wrote the same thing twice, and a drift between the generator
+    and the tree would then surface as a dirty working directory rather than as
+    a red test. Same shape the gRPC stub check uses — snapshot, regenerate,
+    compare, restore.
+
+    Restoring is not tidiness. A test may not leave the working tree changed,
+    and a failure here is exactly the case that would.
     """
-    pytest.importorskip("subprocess")
     import subprocess
     import sys
 
     if not (REPO / "tools" / "cmudict.dict").exists():
         pytest.skip("cmudict.dict not present (tools/ is incomplete here)")
 
-    # Asserted, not skipped: this path moved with the LoudKitText target and
-    # the test went quiet rather than red — which is the whole failure mode the
-    # module docstring is about.
-    swift_copy = _COPIES["swift"]
-    assert swift_copy.exists(), f"the Swift lexicon copy is not at {swift_copy}"
+    # Asserted, not skipped: these paths moved once with the LoudKitText target
+    # and the test went quiet rather than red — the failure mode the module
+    # docstring is about.
+    written = {"python": CANONICAL, **_COPIES}
+    for label, path in written.items():
+        assert path.exists(), f"the {label} lexicon copy is not at {path}"
 
-    subprocess.run(
-        [sys.executable, str(REPO / "tools" / "gen_pl_respell.py")],
-        check=True,
-    )
-    assert _sha256(swift_copy) == _sha256(CANONICAL), (
-        "gen_pl_respell.py output (Swift copy) differs from the canonical "
-        "Python copy — the Swift and Python engines would read Polish "
-        "differently; commit the regenerated file to all five copies"
-    )
+    # `js/data/` is package output and gitignored, so the generator's fifth
+    # copy may not be there. Whatever the generator creates that was not there
+    # before is removed again below.
+    js_copy = REPO / "js" / "data" / "pl_en_respell.json"
+    committed = {path: path.read_bytes() for path in written.values()}
+    js_existed = js_copy.exists()
+
+    try:
+        subprocess.run(
+            [sys.executable, str(REPO / "tools" / "gen_pl_respell.py")],
+            check=True,
+        )
+        for label, path in written.items():
+            assert _sha256(path) == hashlib.sha256(committed[path]).hexdigest(), (
+                f"gen_pl_respell.py does not reproduce the committed {label} copy of "
+                "pl_en_respell.json — the ports would read Polish differently from "
+                "each other; regenerate and commit all five copies"
+            )
+    finally:
+        for path, data in committed.items():
+            path.write_bytes(data)
+        if not js_existed:
+            js_copy.unlink(missing_ok=True)

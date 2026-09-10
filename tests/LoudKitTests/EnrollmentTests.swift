@@ -23,7 +23,7 @@ final class EnrollmentTests: XCTestCase {
             if Fixture.requireAssets {
                 XCTFail("LOUDKIT_REQUIRE_ASSETS is set but enrollment CoreML packages are missing")
             }
-            throw XCTSkip("enrollment CoreML packages not found — run tools/export_enroll_coreml.py")
+            throw XCTSkip("enrollment CoreML packages not found: run tools/export_enroll_coreml.py")
         }
         return dir
     }
@@ -101,5 +101,157 @@ final class EnrollmentTests: XCTestCase {
         let speaker = try readF32("speaker_embedding.f32")
         XCTAssertGreaterThan(cos(voice.flowEmbedding, flow), 0.9999, "flow embedding cosine")
         XCTAssertGreaterThan(cos(voice.speakerEmbedding, speaker), 0.9999, "speaker embedding cosine")
+    }
+    func testCloneOnceSpeaksWithBothModelsWithoutChangingProfile() throws {
+        try Fixture.requireFusionCheckpoint()
+        let enrolled = try enroll()
+        let voice = VoiceProfile(name: "shared", speakerEmbedding: enrolled.speakerEmbedding,
+            flowEmbedding: enrolled.flowEmbedding, promptTokens: enrolled.promptTokens,
+            promptMel: enrolled.promptMel, promptMelFrames: enrolled.promptMelFrames,
+            condPromptTokens: enrolled.condPromptTokens, language: "en")
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: path) }
+        try voice.save(to: path)
+        let before = try Data(contentsOf: path)
+        for engine in [try LongFormTests.loadSharedEngine(), try EndToEndConformanceTests.loadFusionEngine()] {
+            let result = try engine.synthesize("Hello from one shared voice.",
+                                               voice: VoiceProfile.load(url: path), seed: 7)
+            XCTAssertFalse(result.audio.isEmpty)
+            XCTAssertTrue(result.audio.allSatisfy(\.isFinite))
+            XCTAssertEqual(try Data(contentsOf: path), before)
+        }
+    }
+
+}
+
+/// The enrollment DSP seams that need no model: the shared DFT basis and the
+/// bundled float32 tables.
+final class EnrollmentDSPTests: XCTestCase {
+    /// The basis is built once per call site and handed to every frame, so a
+    /// frame must score exactly as it did against a basis of its own.
+    func testTheSharedBasisScoresAFrameLikeAPerFrameOne() {
+        let nfft = 16
+        var frame = [Double](repeating: 0, count: nfft)
+        for i in 0..<nfft { frame[i] = Foundation.sin(Double(i) * 0.7) + 0.25 * Double(i % 3) }
+        let (cosT, sinT) = Enrollment.basis(nfft)
+        let shared = Enrollment.powerSpectrum(frame, nfft, cosT, sinT)
+
+        var want = [Double](repeating: 0, count: nfft / 2 + 1)
+        for k in 0..<want.count {
+            var re = 0.0, im = 0.0
+            for n in 0..<nfft {
+                let (perFrameCos, perFrameSin) = Enrollment.basis(nfft)
+                let a = perFrameCos[k][n], b = perFrameSin[k][n]
+                re += a * frame[n]
+                im += b * frame[n]
+            }
+            want[k] = re * re + im * im
+        }
+        XCTAssertEqual(shared, want)
+    }
+
+    /// A table that is not in the package is an error at the missing file, not
+    /// an index trap several hundred lines later.
+    func testAMissingTableIsRefusedByName() {
+        XCTAssertThrowsError(try Enrollment.table("no_such_filterbank")) { error in
+            XCTAssertEqual(
+                (error as? LoudKitError)?.description,
+                "asset: no_such_filterbank.f32 is missing from the package resources; "
+                + "the enrollment filterbanks cannot be built without it")
+        }
+    }
+
+    func testTheBundledTablesLoad() throws {
+        for name in ["s3_hann400", "s3_mel_filters", "matcha_hann1920", "matcha_mel_filters",
+                     "kaldi_mel_filters", "kaldi_povey400", "voiceenc_hann400",
+                     "voiceenc_mel_filters"] {
+            XCTAssertFalse(try Enrollment.table(name).isEmpty, name)
+        }
+    }
+}
+
+/// The five refusals `validate_reference_audio` makes on the Python side, run
+/// here without weights. Each one used to be a trap, a padded enrollment or a
+/// silently accepted five-minute recording.
+final class ReferenceAudioValidationTests: XCTestCase {
+    private static let goodInput =
+        "A good input is 5 to 10 seconds of one person speaking, clean, "
+        + "without music or a second voice."
+
+    private func refusal(_ audio: [Float], sampleRate: Int,
+                         file: StaticString = #filePath, line: UInt = #line) -> String? {
+        do {
+            try Enrollment.validateReferenceAudio(audio, sampleRate: sampleRate)
+            XCTFail("the recording was accepted", file: file, line: line)
+            return nil
+        } catch let error as LoudKitError {
+            return error.description
+        } catch {
+            XCTFail("unexpected error \(error)", file: file, line: line)
+            return nil
+        }
+    }
+
+    func testANonPositiveRateIsRefused() {
+        XCTAssertEqual(refusal([Float](repeating: 0.5, count: 24_000), sampleRate: 0),
+                       "shape: sample rate must be positive, got 0")
+        XCTAssertEqual(refusal([Float](repeating: 0.5, count: 24_000), sampleRate: -24_000),
+                       "shape: sample rate must be positive, got -24000")
+    }
+
+    func testNaNAndInfSamplesAreRefused() {
+        var audio = [Float](repeating: 0.5, count: 24_000 * 2)
+        audio[1234] = .nan
+        XCTAssertEqual(refusal(audio, sampleRate: 24_000),
+                       "shape: the recording contains NaN or Inf samples, so no voice can "
+                       + "be derived from it. Re-export the file. " + Self.goodInput)
+        audio[1234] = .infinity
+        XCTAssertEqual(refusal(audio, sampleRate: 24_000),
+                       "shape: the recording contains NaN or Inf samples, so no voice can "
+                       + "be derived from it. Re-export the file. " + Self.goodInput)
+    }
+
+    /// The clip that killed the process: 720 samples is one short of the reflect
+    /// padding `matchaMel` reads, so it used to index past the end of the array.
+    func testAClipShorterThanASecondIsRefusedBeforeTheReflectPadding() {
+        XCTAssertEqual(refusal([Float](repeating: 0.5, count: 720), sampleRate: 24_000),
+                       "shape: the recording is 0.03 s: too short to enroll a speaker from "
+                       + "(minimum 1 s). " + Self.goodInput)
+        XCTAssertEqual(refusal([], sampleRate: 24_000),
+                       "shape: the recording is 0.00 s: too short to enroll a speaker from "
+                       + "(minimum 1 s). " + Self.goodInput)
+        // Half a second: no trap, but the utterance encoder pads it out to its
+        // 1.6 s first partial and enrolls mostly padding.
+        XCTAssertEqual(refusal([Float](repeating: 0.5, count: 12_000), sampleRate: 24_000),
+                       "shape: the recording is 0.50 s: too short to enroll a speaker from "
+                       + "(minimum 1 s). " + Self.goodInput)
+    }
+
+    func testARecordingLongerThanThirtySecondsIsRefused() {
+        XCTAssertEqual(refusal([Float](repeating: 0.5, count: 24_000 * 31), sampleRate: 24_000),
+                       "shape: the recording is 31.0 s. Only the first 10 s become the voice "
+                       + "prompt, and the whole clip shapes the speaker embedding, so a long "
+                       + "recording enrolls something the prompt does not carry. Trim it to "
+                       + "the best 5 to 10 seconds (at most 30 s). " + Self.goodInput)
+    }
+
+    func testASilentRecordingIsRefused() {
+        XCTAssertEqual(refusal([Float](repeating: 0, count: 24_000 * 2), sampleRate: 24_000),
+                       "shape: the recording is silent (peak 0.0e+00); there is no voice in "
+                       + "it to enroll. " + Self.goodInput)
+        XCTAssertEqual(refusal([Float](repeating: 5e-5, count: 24_000 * 2), sampleRate: 24_000),
+                       "shape: the recording is silent (peak 5.0e-05); there is no voice in "
+                       + "it to enroll. " + Self.goodInput)
+    }
+
+    /// The bounds are inclusive at both ends and the fixture clip sits inside
+    /// them, so tightening the guard cannot start refusing what already enrolls.
+    func testTheBandItselfIsAccepted() throws {
+        for count in [24_000, 24_000 * 15, 24_000 * 30] {
+            var audio = [Float](repeating: 0, count: count)
+            audio[0] = 1e-4
+            XCTAssertNoThrow(try Enrollment.validateReferenceAudio(audio, sampleRate: 24_000),
+                             "\(count) samples at 24 kHz")
+        }
     }
 }

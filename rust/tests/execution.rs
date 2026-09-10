@@ -4,7 +4,7 @@
 //! resolution rule takes the available set as an argument precisely so it can
 //! be held to a fixture on a machine that has none of the hardware. What is
 //! *not* covered is whether a CUDA, CoreML or DirectML session produces the
-//! right numbers — that needs the hardware, and it is a measurement for the
+//! right numbers: that needs the hardware, and it is a measurement for the
 //! convergence step rather than an assertion for this file.
 
 use loudkit::engine::Engine;
@@ -20,7 +20,7 @@ fn config(provider: OnnxProvider) -> ExecutionConfig {
 ///
 /// A default build answers from `cfg!` alone and touches no shared library. A
 /// build with any provider feature calls `GetAvailableProviders`, and `ort`
-/// *panics* rather than erroring when ORT_DYLIB_PATH names nothing loadable —
+/// *panics* rather than erroring when ORT_DYLIB_PATH names nothing loadable,
 /// so the two tests that reach that far step aside here. This is the
 /// weight-free suite; the asset-backed job is where a real library exists.
 fn probes_the_shared_library() -> bool {
@@ -72,9 +72,8 @@ fn auto_reports_the_provider_it_picked() {
 
 #[test]
 fn auto_declines_coreml_even_where_the_build_offers_it() {
-    // The EP is selectable by name and stays out of `auto`: it measured 0.62x
-    // to 0.71x real time against the CPU provider's 1.22x to 1.47x and moved
-    // the token stream. Naming it gets it; saying nothing does not.
+    // The EP is selectable by name and stays out of `auto`, for the reasons
+    // `AUTO_ORDER` states. Naming it gets it; saying nothing does not.
     let picked = Execution::resolve(
         &config(OnnxProvider::Auto),
         &[OnnxProvider::Cpu, OnnxProvider::CoreMl],
@@ -135,7 +134,7 @@ fn the_engine_refuses_an_uncompiled_provider_before_it_looks_for_assets() {
     }
     // `.err()` rather than `unwrap_err()`: an `Engine` holds six ONNX sessions
     // and is not `Debug`.
-    let err = Engine::load_with(
+    let err = Engine::load_paths_with(
         "/nonexistent/loudr-1.safetensors",
         "/nonexistent/onnx",
         "/nonexistent/tokenizer.json",

@@ -1,32 +1,34 @@
 """The synthesis surface every transport shares.
 
-``render_bytes`` is the only place in this package that turns an engine plus
-a profile into encoded audio; the HTTP server, the MCP server and the gRPC
-server are three adapters over it, and the conformance suite asserts that
-each returns the bytes calling it directly would have returned. The request
-limits here (text length, continuation length, queue wait) travel with it,
-because a limit that one transport enforces and another does not is two
-products wearing one name.
-
-Everything in this module is transport-agnostic: no FastAPI, no MCP, no
-grpcio. A transport that needs less than this module already requires is
-importing too much of it.
+See ``docs/design/transports.md``.
 """
 
 from __future__ import annotations
 
 import io
+import logging
+import os
 import threading
+import time
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .engine import Engine
 from .errors import VoiceNotFoundError
+from .result import Result
 from .voice import VoiceProfile
+from .window import carry_pair_aligned
+
+_LOG = logging.getLogger("loudkit.synthesis")
+"""Where this module's notices go. A library writing straight to stderr gives
+a host application no way to route or silence them; a logger at WARNING still
+reaches stderr through ``logging.lastResort`` on an unconfigured process, so
+the warm-up lines guide 04 documents are not lost."""
 
 _MAX_TEXT_LEN = 10_000
 """Upper bound on a synthesis request's text, in characters.
@@ -34,38 +36,27 @@ _MAX_TEXT_LEN = 10_000
 There is no auth on the server and the MCP transport is meant for agents, so
 a request with an unbounded text field is a memory/latency DoS: chunking and
 generation scale with input length. Capped here, at the single place audio is
-made, so both transports inherit it.
+made, so all three transports inherit it.
 """
 
 
 _MAX_WAIT_S = 120.0
 """How long a request may wait for the single-flight engine before 503.
 
-``_MAX_QUEUED`` bounds how many callers may be waiting; this bounds how
-*long*. Without it, one synthesis that never returns — a backend wedged on a
-driver, an ORT session deadlocked on a thread pool — holds the slot forever,
-and every queued caller holds a connection open behind it with no answer
-coming. Thirty
-seconds of real synthesis is a long utterance, so this is four times the worst
-honest wait and still a bounded one.
-
-The render itself is deliberately **not** cancelled at this deadline. It runs in
-a worker thread against an engine that is not reentrant and holds mutable
-decoder state; abandoning it would let the next caller in while it is still
-writing, which trades a hung request for a corrupted one. What the deadline
-frees is the queue behind it: waiting callers get a truthful 503 instead of an
-open socket, and ``/health`` reports the engine as stuck — see ``_started_at``.
+See ``docs/design/transports.md``.
 """
 
 
-AudioFormat = Literal["wav", "pcm16", "flac", "ogg"]
+AudioFormat = Literal["wav", "pcm16", "flac", "ogg", "mp3", "opus"]
 """What a synthesis can be encoded as.
 
 Everything here is written by the ``soundfile`` the server already depends on;
-none of it adds a package. Deliberately absent: **mp3 and opus**, which would
-need an encoder this project does not ship and cannot ship everywhere — a format
-that works on the maintainer's machine and fails on a user's is worse than one
-that was never offered.
+none of it adds a package. ``mp3`` and ``opus`` use the MPEG and Opus codecs of
+the libsndfile that soundfile loads, which its wheels bundle; a libsndfile built
+without them is refused by name before the engine runs. ``ogg`` and ``opus``
+carry a random Ogg stream serial, so their bytes differ from run to run while
+the samples do not; every other format repeats byte for byte. See
+``docs/design/transports.md``.
 """
 
 
@@ -74,12 +65,15 @@ _ENCODINGS: dict[str, tuple[str, str, str]] = {
     "wav": ("WAV", "PCM_16", "audio/wav"),
     "flac": ("FLAC", "PCM_16", "audio/flac"),
     "ogg": ("OGG", "VORBIS", "audio/ogg"),
-    # Header-less frames, little-endian, for a caller feeding a device or a
-    # socket directly. `application/octet-stream` and an explicit rate header
-    # rather than `audio/L16;rate=24000`: RFC 2586 defines L16 as **big**-endian,
-    # and these frames are little-endian. Labelling them L16 would be a lie that
-    # a conforming client would act on, and the byte order is not something the
-    # payload can be inspected for.
+    # What OpenAI clients ask for by default: MPEG-2 Layer III at the engine's
+    # 24 kHz.
+    "mp3": ("MP3", "MPEG_LAYER_III", "audio/mpeg"),
+    # Ogg Opus, what chat voice notes carry. The codecs parameter is what tells
+    # it apart from the Vorbis above, which shares the container and nothing
+    # else.
+    "opus": ("OGG", "OPUS", "audio/ogg; codecs=opus"),
+    # Header-less frames, little-endian, for a caller feeding a device or a socket
+    # directly.
     "pcm16": ("RAW", "PCM_16", "application/octet-stream"),
 }
 
@@ -87,8 +81,8 @@ _ENCODINGS: dict[str, tuple[str, str, str]] = {
 _MAX_PREVIOUS_TOKENS = 4096
 """Longest ``previous_tokens`` a request may carry.
 
-The engine uses only the last ``chunking.prefix_tokens`` of it — six by default
-— so anything beyond a previous utterance's worth is already pointless, and the
+The engine uses only the last ``chunking.prefix_tokens`` of it, six by default,
+so anything beyond a previous utterance's worth is already pointless, and the
 body bound above would not stop a caller from sending a megabyte of integers
 that this server then parses into a list of Python ints. Bounded explicitly, and
 generously: a whole window is 255 tokens, so 4096 is sixteen of them.
@@ -98,14 +92,16 @@ generously: a whole window is 255 tokens, so 4096 is sixteen of them.
 _VOICE_CACHE_BYTES = 64 * 1024 * 1024
 """How much of the voice directory stays parsed in memory.
 
-Loading a profile is a whole-file read, a SHA-256 over those bytes and a
-safetensors parse; on the HTTP path that ran once per request, for a file that
-had not changed, on the event loop. Bounded in bytes rather than in entries
-because profiles differ by an order of magnitude in size (``MAX_VOICE_BYTES``
-allows 8 MB, a real one is a few hundred KB), so an entry count is either a
-memory promise it cannot keep or a cache that the shipped twenty-voice roster
-evicts out of usefulness — the failure the generator's conditioning cache
-already had.
+See ``docs/design/transports.md``.
+"""
+
+
+_MAX_VOICE_NAME = 128
+"""Longest voice name a request may name.
+
+Every shipped name is under twenty characters. The bound exists because the
+filesystem has one of its own and enforces it with `OSError(63, 'File name too
+long')`, which is not a refusal any transport was catching.
 """
 
 
@@ -125,49 +121,54 @@ class VoiceLibrary:
     )
     """name -> ((mtime_ns, size), profile). See :data:`_VOICE_CACHE_BYTES`.
 
-    Insertion-ordered, and :meth:`load` reinserts on a hit, so the first key is
-    the least recently *used* one — what :meth:`_evict` drops. Excluded from
-    ``compare`` so two libraries over the same directory stay equal (and
-    hashable) whatever either has read.
-
-    Every read and write of this mapping happens under :attr:`_lock`.
+    See ``docs/design/transports.md``.
     """
 
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
     """Guards :attr:`_cache`, which several request threads share.
 
-    The server serves this library from a thread pool, so the LRU bookkeeping
-    is concurrent: ``pop`` then reinsert is two steps a second thread can land
-    between, and :meth:`_evict` *iterates* the mapping while summing sizes,
-    which another thread's insert turns into ``RuntimeError: dictionary
-    changed size during iteration``. Atomic dict operations do not make a
-    sequence of them atomic, which is what this class does.
-
-    Held only across the bookkeeping, never across the file read — see
-    :meth:`load`. Excluded from ``compare`` for the same reason ``_cache`` is.
+    See ``docs/design/transports.md``.
     """
 
     def names(self) -> list[str]:
-        root = self.root.resolve()
+        from .release import release_confinement
+
+        boundary = release_confinement(self.root)
         return sorted(
-            p.stem for p in self.root.glob("*.safetensors") if p.resolve().is_relative_to(root)
+            p.stem
+            for p in self.root.glob("*.safetensors")
+            if p.resolve().is_relative_to(boundary)
         )
 
     def load(self, name: str) -> VoiceProfile:
-        from .voice import VoiceProfile
-
         # Reject separators outright rather than resolving and comparing: the
-        # request supplies a name, and a name has no path in it.
-        if not name or "/" in name or "\\" in name or name.startswith("."):
+        # request supplies a name, and a name has no path in it. NUL is here
+        # for the same reason and not because it escapes anything: no path can
+        # hold one, so `resolve()` below raises `ValueError: lstat: embedded
+        # null character in path`, which the transports answered with verbatim
+        # -- an OS-layer sentence naming neither the field it came from nor
+        # what a caller should send instead.
+        if not name or "/" in name or "\\" in name or "\x00" in name or name.startswith("."):
             raise ValueError(f"not a voice name: {name!r}")
+        # Bounded, because the filesystem bounds it and answers with an `OSError` that
+        # is neither `VoiceNotFoundError` nor `ValueError`, so it would escape every
+        # transport's error ladder. No real voice name is anywhere near this long.
+        if len(name) > _MAX_VOICE_NAME:
+            raise ValueError(
+                f"not a voice name: {len(name)} characters, limit {_MAX_VOICE_NAME}"
+            )
         # A name cannot escape the directory, but a symlink sitting inside it
         # can, and `glob` follows links: `voices/x.safetensors -> /elsewhere/y`
         # would otherwise hand any `.safetensors` on the host to an
-        # unauthenticated caller. Resolve first, then confine — the same check
-        # `hub.resolve_voice` makes, arriving here by a different door.
+        # unauthenticated caller. Resolve first, then confine, the same check
+        # `hub.resolve_voice` makes, arriving here by a different door. The
+        # boundary is the release, which for a Hub-cached one includes the
+        # blob store its snapshot links into.
+        from .release import release_confinement
+
         root = self.root.resolve()
         path = (root / f"{name}.safetensors").resolve()
-        if not path.is_relative_to(root) or not path.is_file():
+        if not path.is_relative_to(release_confinement(self.root)) or not path.is_file():
             # Deliberately omits `self.root`: it's an absolute filesystem path
             # on the host, and this error is returned verbatim as an HTTP 404
             # detail to an unauthenticated client. The voice-name list is
@@ -179,19 +180,9 @@ class VoiceLibrary:
                 available=available,
             )
 
-        # Keyed on (mtime_ns, size) rather than on the name alone: a voice
-        # re-enrolled under the same name has to be picked up on the next
-        # request, and on nanoseconds rather than seconds because overwriting
-        # within one second is exactly what an enrolment loop does.
-        #
-        # Two short critical sections rather than one around the whole method:
-        # the parse below is a whole-file read plus a SHA-256, and holding
-        # `_lock` across it would serialise every other name behind whichever
-        # caller happened to miss. Two threads racing on the same cold voice
-        # therefore both read the file, which costs a duplicate read and
-        # produces the same profile either way — cheaper than making every hit
-        # wait on someone else's miss, and cheaper than a per-name guard whose
-        # own table would need the same locking as this one.
+        # Keyed on (mtime_ns, size) rather than on the name alone: a voice re-enrolled
+        # under the same name has to be picked up on the next request, and on
+        # nanoseconds because an enrolment loop overwrites within one second.
         info = path.stat()
         stamp = (info.st_mtime_ns, info.st_size)
         with self._lock:
@@ -210,13 +201,7 @@ class VoiceLibrary:
     def _evict(self) -> None:
         """Drop least-recently-used profiles until the cache is inside its budget.
 
-        The entry just stored is never dropped, even if it alone were over the
-        budget: evicting what the current request is about to use would make the
-        cache a pure cost.
-
-        Callers must hold :attr:`_lock`: this walks the mapping, and an insert
-        landing mid-walk is the ``dictionary changed size during iteration``
-        the lock exists to stop.
+        See ``docs/design/transports.md``.
         """
         total = sum(profile.n_bytes for _, profile in self._cache.values())
         while total > _VOICE_CACHE_BYTES and len(self._cache) > 1:
@@ -224,23 +209,61 @@ class VoiceLibrary:
             total -= dropped.n_bytes
 
 
+NO_WARM_ENV = "LOUDKIT_NO_WARM"
+"""Any non-empty value skips every warm-up, ``0`` and ``false`` included.
+
+A switch, not a boolean: it is either in the environment or it is not, and
+there is nothing for a value to say. The first request pays instead.
+"""
+
+
+def warm_engine(engine: Engine, voices: VoiceLibrary) -> None:
+    """Pay the first render's extra cost here, on the library's first voice.
+
+    For a process that will hold this engine and answer with it, never for a
+    library import and never for a command that renders once and exits, which
+    has nowhere to hide the cost. Skipped when :data:`NO_WARM_ENV` is set.
+    Nothing in it is fatal, the voice it reads included, because an
+    optimisation that cannot run must not stop a process that can still
+    serve. The line goes to stderr, where the MCP transport's protocol is
+    not. See ``docs/design/transports.md``.
+    """
+    if os.environ.get(NO_WARM_ENV):
+        return
+    name = ""
+    t0 = time.perf_counter()
+    try:
+        names = voices.names()
+        if not names:
+            return
+        name = names[0]
+        engine.warm(voices.load(name))
+    except Exception as exc:  # whatever it was, serving is still on
+        where = f"voice {name!r}" if name else str(voices.root)
+        _LOG.warning("warm: %s failed (%s); the first render pays instead", where, exc)
+        return
+    _LOG.warning(
+        "warm: first-use costs paid on voice '%s' (%.1fs)", name, time.perf_counter() - t0
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Rendered:
     """One encoded synthesis, with the facts a caller needs to trust it.
 
-    A tuple was enough while there were three numbers; ``hit_token_cap`` is the
-    fourth, and it is the one a caller must not be able to ignore by unpacking
-    two of three. Truncation is not an error — the audio is real, it is just
-    incomplete — so it travels as a field rather than an exception, and every
-    transport is expected to forward it.
+    A class rather than a tuple, because ``hit_token_cap`` is the field a
+    caller must not be able to drop by unpacking the first three. Truncation is
+    not an error, the audio is real, it is just incomplete, so it travels as a
+    field rather than an exception, and every transport is expected to forward
+    it.
     """
 
     data: bytes
     """The encoded audio. WAV by default; see :data:`AudioFormat`.
 
-    Named ``data`` rather than ``wav`` since it stopped always being one — a
-    field called ``wav`` holding a FLAC is the kind of small lie that survives
-    for years because nothing ever asserts on a name.
+    Named ``data`` rather than ``wav`` because it carries any of the six
+    formats: a field called ``wav`` holding a FLAC is the kind of small lie
+    that survives for years, since nothing ever asserts on a name.
     """
 
     duration: float
@@ -258,80 +281,70 @@ class Rendered:
     re-derived at the route, so the two cannot disagree."""
 
     provenance: dict[str, object] | None = None
-    """The C2PA claim-only manifest for these bytes, if one was written.
+    """The unsigned loudkit provenance manifest for these bytes, if one was written.
 
     Always built; ``None`` only when the encoding cannot carry the trailing
     box (anything but WAV). Rides an HTTP header on every format, and the WAV
-    carries the box itself — see :mod:`loudkit.provenance`.
+    carries the box itself, see :mod:`loudkit.provenance`.
     """
 
     continuation: tuple[int, ...] = ()
     """The tail to hand back as ``previous_tokens`` on the next request.
 
-    Exactly ``chunking.prefix_tokens`` ids — six by default — rather than the
-    whole token sequence, because the tail is all the engine will use and the
-    whole sequence is a few hundred integers a client would carry, log and send
-    back for nothing. Small enough to ride an HTTP header.
+    The tail the engine itself would carry into the next window, six or seven
+    ids depending on the decode recipe, rather than the whole token sequence:
+    the tail is all the engine will use and the whole sequence is a few hundred
+    integers a client would carry, log and send back for nothing. Small enough
+    to ride an HTTP header.
     """
 
 
 def _check_text(text: str) -> None:
     """The text cap, at the one place both render helpers can share.
 
-    ``_MAX_TEXT_LEN`` says it is applied "at the single place audio is made, so
-    both transports inherit it" — but only :func:`render_bytes` enforced it, and
-    :func:`render_stream_chunks` is exported beside it in ``__all__``. Over HTTP
-    pydantic covers the gap; an embedder calling the streaming helper directly
-    had no bound at all, which is the caller least likely to have one of their
-    own.
+    See ``docs/design/transports.md``.
     """
     if len(text) > _MAX_TEXT_LEN:
         raise ValueError(f"text too long: {len(text)} characters (max {_MAX_TEXT_LEN})")
 
 
-def _quantise(samples: Any) -> Any:
+def _check_encodable(audio_format: AudioFormat) -> None:
+    """Refuse a format the loaded libsndfile cannot write, before the engine runs.
+
+    Whether ``mp3`` and ``opus`` can be written depends on how that libsndfile
+    was built, not on the request, and a refusal after the render has spent
+    the render. See ``docs/design/transports.md``.
+    """
+    import soundfile as sf
+
+    from .errors import UnsupportedFormatError
+
+    fmt, subtype, _ = _ENCODINGS[audio_format]
+    if fmt in sf.available_formats() and subtype in sf.available_subtypes(fmt):
+        return
+    raise UnsupportedFormatError(
+        f"format {audio_format!r} needs libsndfile's {subtype} encoder, and the "
+        f"libsndfile this server loads ({sf.__libsndfile_version__}) was built "
+        "without it; wav and pcm16 always work"
+    )
+
+
+def _quantise(samples: NDArray[np.float32]) -> NDArray[np.int16]:
     """Float samples to int16 frames, once, by a rule of our own.
 
-    This function exists because libsndfile does **not** apply one rule. Handed
-    the same float array, its WAV writer floors and its FLAC writer rounds: at
-    0.0020349235 the product is 66.68, WAV stores 66 and FLAC stores 67. On real
-    engine audio that was 50 % of samples differing by one LSB between two
-    formats both documented here as lossless — a claim that was false, and whose
-    test could not see it because the fake vocoder renders silence and silence
-    survives every codec identically.
-
-    So the conversion happens here, once, and every container is handed the
-    resulting int16 frames rather than the floats. wav, pcm16 and flac then carry
-    identical samples *by construction* instead of by two encoders happening to
-    agree.
-
-    The rule is ``floor(x * 32768)``, clipped to the int16 range. Chosen rather
-    than invented: it is bit-for-bit what libsndfile's WAV writer already did
-    (verified over 40 009 samples including both rails and both signs), so the
-    WAV bytes this server has always returned do not move. FLAC is the format
-    that changes, by at most one LSB, toward what the WAV already said.
-
-    Clipping rather than scaling by 32767: the engine's contract is samples in
-    [-1, 1], the positive rail is one code short of the negative one in two's
-    complement, and shrinking every sample to keep +1.0 representable would move
-    every byte to accommodate a value the vocoder does not emit.
+    See ``docs/design/transports.md``.
     """
 
     scaled = np.floor(np.asarray(samples, dtype=np.float64) * 32768.0)
     return np.clip(scaled, -32768.0, 32767.0).astype("<i2")
 
 
-def _encode(frames: Any, sample_rate: int, audio_format: AudioFormat) -> tuple[bytes, str]:
+def _encode(
+    frames: NDArray[np.int16], sample_rate: int, audio_format: AudioFormat
+) -> tuple[bytes, str]:
     """Encode already-quantised frames, and say what they are.
 
-    The samples are quantised to int16 by :func:`_quantise` before any encoder
-    sees them, so wav, pcm16 and flac decode back to the *same* samples rather
-    than to three encoders' opinions of the same floats. Ogg is lossy by
-    construction and is the one format that does not round-trip.
-
-    Every container is still written by ``soundfile``, ``pcm16`` included:
-    hand-rolling the frame layout would be a second place for endianness and
-    frame size to be decided.
+    See ``docs/design/transports.md``.
     """
     import soundfile as sf
 
@@ -350,36 +363,53 @@ def _encode(frames: Any, sample_rate: int, audio_format: AudioFormat) -> tuple[b
 def _continuation(engine: Engine, tokens: Sequence[int]) -> tuple[int, ...]:
     """The tail a client hands back as ``previous_tokens`` to continue this.
 
-    Read off the engine's own ``chunking.prefix_tokens`` rather than a constant
-    here: the length is an algorithm value, it is in the fingerprint, and a
-    server that shipped its own number would hand back the wrong amount of
-    context the first time that recipe changed.
+    :func:`~loudkit.window.carry_pair_aligned` and not a plain slice, and read
+    off the engine's own ``chunking.prefix_tokens`` rather than a constant
+    here. The slice is an algorithm value in two ways: how many ids, and where
+    they start. Under ``fusion_mtp2`` the generator re-pairs a prefix from its
+    own start, so a tail beginning on the second half of a pair fuses the right
+    tokens with the wrong partners. Handing back the engine's own carry is what
+    makes a client's join and an in-process join the same join.
     """
     wanted = engine.algorithm.chunking.prefix_tokens
-    return tuple(int(t) for t in tokens[-wanted:]) if wanted > 0 else ()
+    if wanted <= 0:
+        return ()
+    return tuple(carry_pair_aligned(engine.algorithm, tokens, wanted))
+
+
+def fold_continuation(
+    engine: Engine, tail: tuple[int, ...], chunk: tuple[int, ...]
+) -> tuple[int, ...]:
+    """The running continuation after one more streamed chunk.
+
+    A stream's ``done`` event carries the passage's tail, not the last chunk's,
+    because a final chunk shorter than the prefix carries fewer ids than the
+    passage does. Here rather than in each transport so the fold obeys the same
+    pair rule :func:`_continuation` obeys, in one place, for both streams.
+    """
+    wanted = engine.algorithm.chunking.prefix_tokens
+    if wanted <= 0:
+        return ()
+    return tuple(carry_pair_aligned(engine.algorithm, tail + chunk, wanted))
 
 
 def _provenance(
     engine: Engine,
-    result: Any,
+    result: Result,
     voice: VoiceProfile,
     language: str,
     text: str,
-    frames: Any,
+    frames: NDArray[np.int16],
 ) -> dict[str, object]:
-    """The C2PA claim-only manifest for one rendered chunk.
+    """The unsigned loudkit provenance manifest for one rendered chunk.
 
-    Built over the int16 frames every encoding carries — the server quantises
-    once, so one hash binds all four formats to the same bytes.
+    Built over the int16 frames every encoding carries, the server quantises
+    once, so one hash binds all six formats to the same frames.
     """
+    from ._version import package_version
     from .provenance import build_manifest
 
-    try:
-        from importlib.metadata import version as _pkg_version
-
-        version = _pkg_version("loudkit")
-    except Exception:  # pragma: no cover - metadata present in any install
-        version = "0.1.0"
+    version = package_version()
     return build_manifest(
         audio=frames.tobytes(),
         algorithm_fingerprint=engine.algorithm.fingerprint(),
@@ -409,36 +439,39 @@ def render_bytes(
     speed: float = 1.0,
     previous_tokens: Sequence[int] | None = None,
     audio_format: AudioFormat = "wav",
+    should_cancel: Callable[[], bool] | None = None,
 ) -> Rendered:
-    """Synthesise and encode to WAV. The only place the server makes audio.
+    """Synthesise and encode to ``audio_format``. The only place the server makes audio.
 
-    ``language`` is handed to the engine as given, ``None`` included: the engine
-    owns the argument-then-voice-then-``"en"`` chain. ``speed`` and
-    ``previous_tokens`` likewise: the range, the stretch and the prefix slice
-    all live in the engine, and a transport that re-implements any of them is a
-    second place for it to drift.
+    Raises :class:`~loudkit.errors.CancelledError` when ``should_cancel``
+    fired; each transport answers that in its own way. See
+    ``docs/design/transports.md``.
     """
     _check_text(text)
+    _check_encodable(audio_format)
 
-    result = (
-        engine.synthesize_long(
-            text,
-            voice,
-            seed=seed,
-            language=language,
-            speed=speed,
-            previous_tokens=previous_tokens,
-        )
-        if long_form
-        else engine.synthesize(
-            text,
-            voice,
-            seed=seed,
-            language=language,
-            speed=speed,
-            previous_tokens=previous_tokens,
-        )
+    result = engine.synthesize(
+        text,
+        voice,
+        seed=seed,
+        language=language,
+        speed=speed,
+        previous_tokens=previous_tokens,
+        single_window=not long_form,
+        should_cancel=should_cancel,
     )
+    return _rendered(engine, result, voice, language or "", text, audio_format)
+
+
+def _rendered(
+    engine: Engine,
+    result: Result,
+    voice: VoiceProfile,
+    language: str,
+    text: str,
+    audio_format: AudioFormat,
+) -> Rendered:
+    """Encode a result and its provenance identically for every delivery mode."""
     frames = _quantise(result.audio)
     data, media_type = _encode(frames, result.sample_rate, audio_format)
     provenance = _provenance(engine, result, voice, language or "", text, frames)
@@ -469,30 +502,12 @@ def render_stream_chunks(
     audio_format: AudioFormat = "wav",
     should_cancel: Callable[[], bool] | None = None,
 ) -> Iterator[Rendered]:
-    """Synthesise chunk by chunk, yielding WAV bytes as each becomes ready.
+    """Synthesise chunk by chunk, yielding ``audio_format`` bytes as each becomes ready.
 
-    The streaming half of :func:`render_bytes`, kept next to it so the two stay
-    one path: a reader that streams and a reader that waits for the whole
-    passage are the same synthesis with different delivery, not two engines.
-    Uses :meth:`~loudkit.engine.Engine.stream` under the hood, so time to first
-    audio is set by the first chunk rather than by the passage.
-
-    ``should_cancel`` is handed to :meth:`~loudkit.engine.Engine.stream`, which
-    polls it **on every decode step**, so a disconnected client stops costing
-    GPU time within one forward pass rather than at the next chunk boundary.
-    Passing it through matters more than it looks: a chunk is up to ~10 s of
-    speech, so a callback checked only between chunks leaves a barge-in waiting
-    seconds for audio no one wants. Polling per decode step is what makes the
-    cancellation immediate.
-
-    What cancelling does **not** do is recall chunks already yielded: over SSE
-    those are events already on the wire, and stopping them playing is the
-    client's job. ``docs/design/barge-in.md`` has the whole contract.
-
-    Yields:
-        One :class:`Rendered` per chunk, in order.
+    See ``docs/design/transports.md``.
     """
     _check_text(text)
+    _check_encodable(audio_format)
 
     for result in engine.stream(
         text,
@@ -503,36 +518,14 @@ def render_stream_chunks(
         previous_tokens=previous_tokens,
         should_cancel=should_cancel,
     ):
-        frames = _quantise(result.audio)
-        data, media_type = _encode(frames, result.sample_rate, audio_format)
         chunk_text = result.chunks[0].text if result.chunks else text
-        provenance = _provenance(engine, result, voice, language or "", chunk_text, frames)
-        if audio_format == "wav":
-            from .provenance import manifest_bytes
-
-            data = data + manifest_bytes(provenance)
-        yield Rendered(
-            data=data,
-            media_type=media_type,
-            duration=result.duration,
-            n_tokens=len(result.tokens),
-            hit_token_cap=result.hit_token_cap,
-            provenance=provenance,
-            continuation=_continuation(engine, result.tokens),
-        )
+        yield _rendered(engine, result, voice, language or "", chunk_text, audio_format)
 
 
 def _first_exception(exc: BaseException) -> BaseException:
     """The real exception out of a (possibly nested) ExceptionGroup.
 
-    An anyio task group reports whatever its child raised wrapped in an
-    ExceptionGroup, whose own ``str`` is ``unhandled errors in a TaskGroup (1
-    sub-exception)`` — true, and useless to the caller whose passage did not
-    render.
-
-    Unwrapped by duck-typing rather than ``except*`` or ``isinstance(...,
-    BaseExceptionGroup)``: both are 3.11, this package supports 3.10, and on
-    3.10 the group anyio raises comes from the ``exceptiongroup`` backport.
+    See ``docs/design/transports.md``.
     """
     while True:
         nested = getattr(exc, "exceptions", None)

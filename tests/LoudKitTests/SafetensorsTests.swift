@@ -5,8 +5,8 @@ import XCTest
 
 /// The safetensors reader against files that are not safetensors.
 ///
-/// This parser is the boundary between a checkpoint or voice profile — a file
-/// that gets copied, mailed and downloaded — and `cblas_sgemm`, which reads
+/// This parser is the boundary between a checkpoint or voice profile, a file
+/// that gets copied, mailed and downloaded, and `cblas_sgemm`, which reads
 /// exactly what it is told to read with no bounds check anywhere on the path.
 /// The header was trusted about how many elements a tensor holds, so a profile
 /// declaring `shape: [256]` over four bytes of payload was not a bad tensor but
@@ -78,7 +78,7 @@ final class SafetensorsTests: XCTestCase {
     }
 
     /// `Int.max` in `data_offsets` overflowed the addition of `payloadOffset`,
-    /// and Swift traps on integer overflow — so the process died inside the
+    /// and Swift traps on integer overflow, so the process died inside the
     /// bounds check written to refuse exactly this. The same shape as the
     /// `headerLen` conversion above it, which had already been fixed for the
     /// same reason; the offsets were still doing it.
@@ -116,13 +116,13 @@ final class SafetensorsTests: XCTestCase {
 /// A header length no `Int` can hold.
 ///
 /// `payloadOffset = 8 + Int(headerLen)` converted a `UInt64` read straight
-/// from the file, and `Int(UInt64)` **traps** for anything >= 2^63 — so a
+/// from the file, and `Int(UInt64)` **traps** for anything >= 2^63, so a
 /// corrupt or hostile file did not reach the "header overruns file" refusal
 /// below it; it killed the process with SIGTRAP, inside the check meant to
 /// protect against it. Rust, Go and JS all survive the same bytes.
 ///
 /// `testHeaderLongerThanTheFileIsRefused` used `UInt64(1 << 40)`, which is
-/// under `Int.max` and therefore converts cleanly — the adjacent case.
+/// under `Int.max` and therefore converts cleanly, the adjacent case.
 final class SafetensorsHugeHeaderTests: XCTestCase {
     private func write(headerLen: UInt64) throws -> URL {
         var bytes = withUnsafeBytes(of: headerLen.littleEndian) { Data($0) }
@@ -152,7 +152,7 @@ final class SafetensorsHugeHeaderTests: XCTestCase {
 /// Go and JS have all checked embedding widths, finiteness, a minimum norm,
 /// negative token ids since the degenerate-profile fix;
 /// Rust and Go carry a comment saying "the ports accepted anything shaped like
-/// floats". Swift was still in that state — and `Renderer` divides by that zero
+/// floats". Swift was still in that state, and `Renderer` divides by that zero
 /// norm and indexes `spkWeight[r * k + c]` with `k = emb.count`, which for a
 /// wrong-width embedding runs past the array and traps.
 final class VoiceProfileValidationTests: XCTestCase {
@@ -281,11 +281,11 @@ final class VoiceProfileValidationTests: XCTestCase {
 ///
 /// `stripSpecials` ended in `.prefix(maxSpeechTokens)` and `Renderer.decode`
 /// sliced again independently, so the end of a passage simply did not exist
-/// while the audio still sounded perfectly fine — silent data loss, noticed
-/// only by a listener who knows the text. Python raises (engine.py:466) and
-/// Rust, Go and JS all return an error, each with a comment saying so; Swift
-/// was the one that still truncated, and this module has no `synthesizeLong`,
-/// so a caller handing it a paragraph had nothing raised anywhere.
+/// while the audio still sounded perfectly fine: silent data loss, noticed only
+/// by a listener who knows the text. `window.strip_specials` raises and Rust,
+/// Go and JS all return an error, each with a comment saying so; Swift was the
+/// one that still truncated, and this module has no `synthesize`, so a caller
+/// handing it a paragraph had nothing raised anywhere.
 final class OverWindowRefusalTests: XCTestCase {
     func testAPassageLongerThanTheWindowIsRefused() throws {
         XCTAssertNoThrow(try Windowing.requireFits(255, 255), "an exact fit must pass")

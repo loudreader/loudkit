@@ -52,10 +52,12 @@ a compliance verdict it can hand you.
 finding that you comply.** Whether you are a provider or a deployer, and what
 that obliges, depends on facts about you. Ask someone qualified.
 
-loudkit writes that marking by default. Every saved WAV (`Result.save`) and
-every server response carries a **claim-only C2PA manifest** (a JUMBF `c2pa`
-box, plus the `X-Loudkit-Provenance` header over HTTP) with the algorithm
-fingerprint, the seed, and the SHA-256 binding it to the audio bytes. See
+loudkit writes a marking by default. Every saved WAV (`Result.save`) and every
+server response carries an **unsigned loudkit provenance manifest** (JUMBF-shaped
+boxes in a private RIFF chunk, plus the `X-Loudkit-Provenance` header over HTTP)
+with the algorithm fingerprint, the seed, and the SHA-256 binding it to the audio
+bytes. **It is not C2PA.** A C2PA manifest is a signed manifest store; this is one
+assertion in boxes that borrow JUMBF's shape, and only `loudkit verify` reads it. See
 [`docs/reference/provenance.md`](docs/reference/provenance.md). It is unsigned,
 because signing needs a certificate and that is the deployer's choice. It says
 what made the file, not who vouches for it.
@@ -65,7 +67,7 @@ add their own signing policy and disclosure around it.
 
 ## What we ship, and what we will not
 
-We ship twenty voice profiles enrolled from recordings donated for speech
+We ship 28 voice profiles enrolled from recordings donated for speech
 technology or released under terms that permit this use. Every profile has a
 named source, licence and consent basis in the public roster. We do not ship
 profiles made from private recordings or recordings published for an unrelated
@@ -77,3 +79,7 @@ you have the right to use.
 Issues and pull requests asking for help with undisclosed impersonation, voice
 authentication bypass, or stripping provenance from generated audio will be
 closed.
+
+The same consent and attribution requirements apply to graph-based cloning
+without PyTorch and to voice profiles created by Python, Swift, Go, Rust or
+TypeScript. A portable profile can reproduce a voice in either model.

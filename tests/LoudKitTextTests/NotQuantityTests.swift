@@ -2,7 +2,7 @@ import XCTest
 
 @testable import LoudKitText
 
-/// A digit run with two or more separators is a version, an address or a date —
+/// A digit run with two or more separators is a version, an address or a date,
 /// never a number.
 ///
 /// All three used to be read as one: with the comma as the decimal mark the dots
@@ -40,7 +40,7 @@ final class NotQuantityTests: XCTestCase {
 
     func testGroupedThousandsAreStillANumber() {
         // The rule is "three digits after the first separator", not "at most
-        // one separator" — a guard that refused every multi-separator run would
+        // one separator", a guard that refused every multi-separator run would
         // stop reading grouped thousands, a regression dressed as a fix.
         for lang in Numbers.supportedLanguages where lang != "en" {
             XCTAssertNotEqual(

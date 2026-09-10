@@ -1,7 +1,22 @@
-# These files participate in the cross-language algorithm fingerprint. Git's
-# Windows checkout must not rewrite LF to CRLF, or the same release reports a
-# different algorithm identity on Windows than it does on Linux and macOS.
-python/loudkit/models/data/*.json text eol=lf
-go/speechtext/*.json text eol=lf
-rust/src/*.json text eol=lf
-swift/LoudKitText/Resources/*.json text eol=lf
+# Every text file in this repository is LF in the working tree, on every
+# platform. Git's Windows checkout rewrites LF to CRLF by default, and the
+# rewrite is invisible until something reads bytes rather than lines: the
+# fingerprint JSON reports a different algorithm identity, gofmt calls every
+# Go file unformatted, the snippet gates find no fenced blocks in a README,
+# and a generator that reproduces a committed file no longer does.
+#
+# Stated once, for every extension, rather than per file type: the rule is a
+# property of the repository, and an extension nobody has added yet is exactly
+# the one that would be missed.
+* text=auto eol=lf
+
+# Binary, whatever the content sniffer would decide. `.f32` and `.i64` are raw
+# arrays of samples and token ids, and a raw array that happens to carry no NUL
+# byte reads as text.
+*.bin binary
+*.f32 binary
+*.i64 binary
+*.npy binary
+*.opus binary
+*.png binary
+*.safetensors binary

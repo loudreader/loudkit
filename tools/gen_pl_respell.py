@@ -1,7 +1,7 @@
 """Generate the Polish respelling lexicon from CMUdict.
 
 An English word embedded in Polish text should be WRITTEN the way a Polish
-reader SAYS it — "download" → "dałnloud" — because the engine is grapheme
+reader SAYS it ("download" → "dałnloud"), because the engine is grapheme
 based and reads Polish text with Polish letter-to-sound rules. The curated
 list in LexicalRespelling.swift topped out around a hundred words and the
 long tail sounded exactly like the problem it was meant to fix; this script
@@ -13,33 +13,32 @@ TH → t, DH → d, NG → ng, W → ł, R stays a Polish r. That is how the wor
 sound in a Polish sentence, and it matches the hand-curated forms the ear
 test approved ("fidbek", "łikend", "dedlajn").
 
-  python tools/gen_pl_respell.py   # -> swift/LoudKitText/Resources/pl_en_respell.json
+  python tools/gen_pl_respell.py   # -> the five copies in OUTPUTS
 """
 
+import argparse
 import hashlib
 import io
 import json
-import os
-import pathlib
 import re
 import sys
+from pathlib import Path
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "tools", "cmudict.dict")
-PL = os.path.join(ROOT, "tools", "pl_50k.txt")
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "tools" / "cmudict.dict"
+PL = ROOT / "tools" / "pl_50k.txt"
 # Every copy, not just Swift's. This wrote one file and `tools/pack_assets.py`
-# read a different one (`python/loudkit/models/data/`), so the generated lexicon and
-# the packed lexicon were two artefacts with one generator between them —
+# read a different one (`python/loudkit/models/data/`), so the generated lexicon
+# and the packed lexicon were two artefacts with one generator between them:
 # regenerating updated Swift and left the other four to be copied by hand. They
 # are byte-identical today; nothing was keeping them that way.
 OUTPUTS = [
-    os.path.join(ROOT, "swift", "LoudKitText", "Resources", "pl_en_respell.json"),
-    os.path.join(ROOT, "python", "loudkit", "models", "data", "pl_en_respell.json"),
-    os.path.join(ROOT, "go", "speechtext", "pl_en_respell.json"),
-    os.path.join(ROOT, "rust", "src", "pl_en_respell.json"),
-    os.path.join(ROOT, "js", "data", "pl_en_respell.json"),
+    ROOT / "swift" / "LoudKitText" / "Resources" / "pl_en_respell.json",
+    ROOT / "python" / "loudkit" / "models" / "data" / "pl_en_respell.json",
+    ROOT / "go" / "speechtext" / "pl_en_respell.json",
+    ROOT / "rust" / "src" / "pl_en_respell.json",
+    ROOT / "js" / "data" / "pl_en_respell.json",
 ]
-OUT = OUTPUTS[0]
 
 # ARPAbet -> Polish orthography, Polish-accent flavour.
 PHONES = {
@@ -98,9 +97,8 @@ def respell(phones):
             return None
         out.append(mapped)
     s = "".join(out)
-    # Polish orthography cleanups: double letters collapse (except after a
-    # syllable break we cannot see — collapse is the safe default), and a
-    # trailing "y" after a vowel becomes "j" ("plej", not "pley").
+    # Polish orthography cleanup: double letters collapse, except after a
+    # syllable break we cannot see, where collapse is the safe default.
     s = re.sub(r"(.)\1", r"\1", s)
     # [ts] is exactly the Polish letter "c": "notes" -> "nołc", "sports" ->
     # "sporc". The cluster "ts" written out reads as two separate sounds with
@@ -113,15 +111,16 @@ def _write_all(payload: str) -> str:
 
     One generator, five files. This wrote Swift's copy alone while
     `tools/pack_assets.py` read Python's, so regenerating updated one of the two
-    artefacts and left the other four to be copied by hand — the drift the
+    artefacts and left the other four to be copied by hand, the drift the
     fingerprint's grammar digest exists to catch, arriving through the file the
     digest does not cover.
     """
     for path in OUTPUTS:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as handle:
-            handle.write(payload)
-    digests = {hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in OUTPUTS}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # `newline="\n"`: the lexicon is hashed into the manifest's grammar
+        # digest, and four ports carry a copy that must match byte for byte.
+        path.write_text(payload, encoding="utf-8", newline="\n")
+    digests = {hashlib.sha256(p.read_bytes()).hexdigest() for p in OUTPUTS}
     if len(digests) != 1:
         raise SystemExit(f"copies disagree after writing: {sorted(digests)}")
     return digests.pop()
@@ -129,7 +128,7 @@ def _write_all(payload: str) -> str:
 
 def main():
     # Everything this prints is Polish, and the summary below reports the
-    # respellings themselves — "ł", "ę", "ż". Python picks the console's
+    # respellings themselves: "ł", "ę", "ż". Python picks the console's
     # encoding for stdout, which on Windows is cp1252 and cannot represent any
     # of them: the generator wrote all five copies of the lexicon correctly and
     # then died on the diagnostic line describing them, exit 1, output already
@@ -141,7 +140,7 @@ def main():
 
     # The false-positive gate, baked at generation time: any word that is
     # ALSO a common Polish form ("system", "problem", "to", "ten") must stay
-    # Polish — respelling it would mangle native text, which is a worse
+    # Polish: respelling it would mangle native text, which is a worse
     # failure than missing an anglicism. OpenSubtitles top-50k carries the
     # inflected forms a lemma list would miss, which is exactly what we need.
     polish = set()
@@ -160,7 +159,7 @@ def main():
             if not line or line.startswith(";;;"):
                 continue
             head, *phones = line.split()
-            # cmudict alternates: "word(2)" — first pronunciation wins.
+            # cmudict alternates: "word(2)", first pronunciation wins.
             if "(" in head:
                 continue
             # apostrophes and dots stay out of the lexicon; the runtime
@@ -177,7 +176,7 @@ def main():
             # Rescue from the gate: the Polish list is subtitles and carries
             # English words verbatim ("weekend", "thought"). Orthography that
             # Polish never uses natively marks a word as English even when
-            # the list has it — q/v/x, and digraphs th/ck/gh/ph/ee/oo/sh.
+            # the list has it: q/v/x, and digraphs th/ck/gh/ph/ee/oo/sh.
             english_marked = re.search(r"[qvx]|th|ck|gh|ph|ee|oo|sh", word)
             respell_all[word] = r
             if word in polish and not english_marked:
@@ -187,17 +186,17 @@ def main():
             if r != word:
                 lex[word] = r
     # Two payloads: "respell" is the gated lexicon (safe to transliterate);
-    # "words" is EVERY cmudict word — the span detector's question is "is
+    # "words" is EVERY cmudict word. The span detector's question is "is
     # this an English word at all", and the gate must not answer it: "brown"
     # and "dog" leak into the Polish frequency list via subtitles and were
     # breaking spans they belonged inside.
     buf = io.StringIO()
-    # respellAll: EVERY word's transliteration, gate ignored — used only
+    # respellAll: EVERY word's transliteration, gate ignored, used only
     # INSIDE detected English spans, where "brown" must become "brałn"
-    # even though alone it stays Polish-gated. Spans read word-by-word in
-    # Polish orthography: the inline [en] tag experiment lost the ear test
-    # decisively ("brzmi jak totalne gówno").
-    # "polish": the frequency set itself — the runtime stem-walk needs to
+    # even though alone it stays Polish-gated. Spans read word by word in
+    # Polish orthography: the alternative, an inline [en] tag switching the
+    # span to English letter-to-sound rules, failed the ear test decisively.
+    # "polish": the frequency set itself. The runtime stem-walk needs to
     # know a FULL word is Polish before it tries English stems on it
     # ("temperatura" matched temperature+a and came out "tempraczera").
     json.dump(
@@ -232,4 +231,11 @@ def main():
 
 
 if __name__ == "__main__":
+    # In the entry point, not in `main`, which the suite calls as a function.
+    # Inputs and all five outputs are fixed paths, so any argument is a
+    # misreading; parsing is what makes `--help` print help rather than
+    # rewrite the lexicon in five trees.
+    argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    ).parse_args()
     main()

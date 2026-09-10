@@ -8,7 +8,7 @@ import (
 
 // The enrollment filterbanks. Each is a bit-parity port of the corresponding
 // Python reference (models/enroll.py) or, for the Kaldi path, of the Swift
-// EnrollmentDSP — all four held to the enrollment fixture through the exported
+// EnrollmentDSP: all four held to the enrollment fixture through the exported
 // ONNX graphs. The mel filters and windows are shipped as float32 data (see
 // tools/gen_dsp_assets.py) so every port multiplies the same tables.
 
@@ -118,6 +118,13 @@ func basis(nfft int) *dftBasis {
 // powerSpectrum returns |X[k]|^2 for k in 0..nfft/2 of a real frame, computed
 // in float64 and returned as float64. The frame is the windowed (or raw) input
 // of length nfft.
+//
+// This is a direct transform against a stored basis; the reference reaches the
+// same spectrum through an FFT. Two summation orders that different do not
+// meet in the last bits, so the mel stages are held to the enrollment fixture
+// by tolerance rather than by byte equality, and the accumulations below are
+// left as written. Rounding each product first is measured not to close that
+// gap, and it is the gap that decides the mel. See docs/design/models-notes.md.
 func powerSpectrum(frame []float64, nfft int) []float64 {
 	b := basis(nfft)
 	bins := nfft/2 + 1
@@ -203,9 +210,12 @@ func tokenizerMel(samples []float64) ([]float32, int) {
 	loadTables()
 	spectra := centredPowerSpectra(samples, s3hann, true)
 	frames := len(spectra[0])
-	mel := melMultiply(s3mel, 128, 201, spectra, frames)
+	mel := melMultiply(s3mel, tokenizerMelBins, len(spectra), spectra, frames)
 
-	var peak float32
+	// Seeded below every possible value, not at zero: the reference takes the
+	// true maximum, and a quiet clip's log10 values are all negative, so a zero
+	// seed would hold the ceiling at -8 instead of eight decades under the peak.
+	peak := float32(math.Inf(-1))
 	for _, v := range mel {
 		if v < 1e-10 {
 			v = 1e-10
@@ -263,7 +273,7 @@ func matchaMel(samples []float64) []float32 {
 		}
 	}
 
-	mel := melMultiply(matchaMelTable, 80, bins, spectra, frames)
+	mel := melMultiply(matchaMelTable, flowMelBins, bins, spectra, frames)
 	for i, v := range mel {
 		if v < 1e-5 {
 			v = 1e-5
@@ -314,7 +324,8 @@ func kaldiFbank(samples []float64) []float32 {
 		}
 	}
 
-	mel := melMultiply(kaldiMel, 80, 256, spectra, frames)
+	// kaldiFFT/2, not len(spectra): kaldi drops the Nyquist bin.
+	mel := melMultiply(kaldiMel, kaldiBins, kaldiFFT/2, spectra, frames)
 	epsilon := float32(1.1920928955078125e-07)
 	for i, v := range mel {
 		if v < epsilon {
@@ -323,7 +334,7 @@ func kaldiFbank(samples []float64) []float32 {
 		mel[i] = float32(math.Log(float64(v)))
 	}
 	// per-bin mean removal (the CAM++ input subtracts the utterance mean).
-	for b := 0; b < 80; b++ {
+	for b := 0; b < kaldiBins; b++ {
 		var m float64
 		for f := 0; f < frames; f++ {
 			m += float64(mel[b*frames+f])
@@ -337,8 +348,8 @@ func kaldiFbank(samples []float64) []float32 {
 	// want that orientation.
 	out := make([]float32, len(mel))
 	for f := 0; f < frames; f++ {
-		for b := 0; b < 80; b++ {
-			out[f*80+b] = mel[b*frames+f]
+		for b := 0; b < kaldiBins; b++ {
+			out[f*kaldiBins+b] = mel[b*frames+f]
 		}
 	}
 	return out
@@ -351,11 +362,11 @@ func voiceEncoderMel(samples []float64) ([]float32, int) {
 	spectra := centredPowerSpectra(samples, veHann, false)
 	frames := len(spectra[0])
 	// [bin][frame] from the shared helper; transpose to [frame][bin].
-	binMajor := melMultiply(veMel, 40, 201, spectra, frames)
-	out := make([]float32, frames*40)
+	binMajor := melMultiply(veMel, veMelBins, len(spectra), spectra, frames)
+	out := make([]float32, frames*veMelBins)
 	for f := 0; f < frames; f++ {
-		for b := 0; b < 40; b++ {
-			out[f*40+b] = binMajor[b*frames+f]
+		for b := 0; b < veMelBins; b++ {
+			out[f*veMelBins+b] = binMajor[b*frames+f]
 		}
 	}
 	return out, frames
@@ -364,6 +375,10 @@ func voiceEncoderMel(samples []float64) ([]float32, int) {
 // trim is librosa.effects.trim(top_db=20) with the default reference (np.max):
 // frame RMS with center=True reflection padding, a threshold 20 dB below the
 // peak RMS, and the sample span from the first to the last frame above it.
+//
+// The output is a span, so the only thing the RMS arithmetic can change is
+// which frames sit above the threshold, and only for a frame that lands on it.
+// The span the fixture pins is reproduced exactly.
 func trim(samples []float64) []float64 {
 	const frameLen = 2048
 	const hop = 512

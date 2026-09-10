@@ -11,7 +11,7 @@ import XCTest
 /// and nothing here claims a word lands where a listener would say it does.
 ///
 /// All of it is arithmetic over sample counts, so none of it needs the
-/// checkpoint or the CoreML packages — it runs in every checkout, which is the
+/// checkpoint or the CoreML packages, it runs in every checkout, which is the
 /// point of keeping the two tiers in a module of their own.
 final class TimingTests: XCTestCase {
     private static let sampleRate = 24_000
@@ -109,7 +109,7 @@ final class TimingTests: XCTestCase {
         // The other four ports count code points too (`RuneCountInString`,
         // `chars().count`, `[...w].length`). A byte count would give Polish and
         // Japanese text different word weights in Swift than in Python for text
-        // that reads identically, and `String.count` — grapheme clusters —
+        // that reads identically, and `String.count`, grapheme clusters,
         // would give a third answer again.
         let words = Timing.estimateWords("aaaa żółć", start: 0.0, end: 1.0)
         XCTAssertEqual(words.count, 2)

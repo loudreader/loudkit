@@ -120,7 +120,8 @@ class SpeechServicer:
     """
 
     def Synthesize(self, request, context):
-        """One utterance, one reply. Same text, voice and seed give the same bytes.
+        """One utterance, one reply. Same text, voice and seed give the same samples,
+        and the same bytes in every format but ogg and opus.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

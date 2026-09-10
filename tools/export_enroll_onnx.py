@@ -1,8 +1,8 @@
 """Export the enrollment stage graphs from the packed checkpoint.
 
 Three graphs, all fp32, each gated against the torch modules loaded from the
-*same* checkpoint before anything is saved. The DSP — the two resamplers and
-the four filterbanks — is deliberately *not* in these graphs: it lives on the
+*same* checkpoint before anything is saved. The DSP, the two resamplers and
+the four filterbanks, is deliberately *not* in these graphs: it lives on the
 host in every port (``EnrollmentDSP.swift`` is the reference), so a graph
 exported with the mel inside it would be a second, silently different copy of
 the same arithmetic. What the graphs carry is only what cannot be written
@@ -12,7 +12,7 @@ portably by hand:
   camp.onnx           kaldi fbank [1,80,F] -> x-vector [192]   (dynamic F)
   voice_encoder.onnx  partials [n,160,40] -> per-partial [n,256]
 
-The voice encoder's weights are *not* in the packed checkpoint — pass
+The voice encoder's weights are *not* in the packed checkpoint, pass
 ``--voice-encoder ve.safetensors``, the same file the enroller needs.
 
 Gates: the tokenizer emits discrete tokens, so it is gated on exact token
@@ -28,25 +28,26 @@ Usage (from the loudkit repo root):
 
 from __future__ import annotations
 
-import argparse
-import shutil
 import sys
 from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from loudkit.checkpoint import Checkpoint  # noqa: E402
-from loudkit.models.enroll import (  # noqa: E402
-    _CAMLayer,
-    _CAMPPlus,
-    _S3Tokenizer,
-    _VoiceEncoder,
+from export_enroll import (
+    _CAMPPModel,
+    _VoiceEncModel,
+    enrollment_parser,
+    load_enrollment_models,
+    load_spk_weights,
 )
+
+from loudkit.checkpoint import Checkpoint
+from loudkit.models.enroll import _CAMLayer, _CAMPPlus, _S3Tokenizer
 
 TOKENIZER_NAME = "s3_tokenizer.onnx"
 CAMP_NAME = "camp.onnx"
@@ -63,7 +64,7 @@ def _seg_pool_fixed(x: torch.Tensor, seg_len: int = 100) -> torch.Tensor:
     window is a partial segment averaged over its *available* elements. The
     TorchScript ONNX exporter lowers that to AveragePool with ``ceil_mode`` and
     ``count_include_pad`` set so the last window divides by the full kernel
-    width instead — the last segment comes out diluted by zero padding (measured
+    width instead, the last segment comes out diluted by zero padding (measured
     0.1458 -> 0.0802 on the fixture geometry). Pool the sums and the counts
     separately and divide: the last window divides by exactly the elements it
     has, matching the reference to the last ulp of the summation.
@@ -91,41 +92,14 @@ class _TokenizerModel(nn.Module):
     def __init__(self, tok: _S3Tokenizer) -> None:
         super().__init__()
         self.encoder = tok.encoder
-        self.codebook = tok.quantizer._codebook  # noqa: SLF001
+        self.codebook = tok.quantizer._codebook
 
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         hidden = self.encoder(mel)
         return self.codebook.encode(hidden)[0]
 
 
-class _CAMPPModel(nn.Module):
-    """kaldi fbank [1,80,F] -> x-vector [192], past the fbank and the mean-removal."""
-
-    def __init__(self, spk: _CAMPPlus) -> None:
-        super().__init__()
-        self.head = spk.head
-        self.xvector = spk.xvector
-
-    def forward(self, fbank: torch.Tensor) -> torch.Tensor:
-        h = self.head(fbank)
-        return self.xvector(h)[0]
-
-
-class _VoiceEncModel(nn.Module):
-    """partials [n,160,40] -> per-partial [n,256], past the trim, mel and pooling."""
-
-    def __init__(self, ve: _VoiceEncoder) -> None:
-        super().__init__()
-        self.lstm = ve.lstm
-        self.proj = ve.proj
-
-    def forward(self, partials: torch.Tensor) -> torch.Tensor:
-        _, (hidden, _) = self.lstm(partials)
-        raw = F.relu(self.proj(hidden[-1]))
-        return raw / torch.linalg.norm(raw, dim=1, keepdim=True)
-
-
-def _export_float_graph(  # type: ignore[no-untyped-def]
+def _export_float_graph(
     module: nn.Module,
     example: tuple,
     input_names: list[str],
@@ -164,46 +138,26 @@ def _export_float_graph(  # type: ignore[no-untyped-def]
     if not ok:
         tmp.unlink(missing_ok=True)
         raise SystemExit(f"{out_path.name}: ONNX parity gate failed")
-    shutil.rmtree(out_path, ignore_errors=True)
-    tmp.rename(out_path)
+    # replace, not rename: the target is a file, and rename would fail on an
+    # existing one on Windows
+    tmp.replace(out_path)
 
 
-def _load_spk_weights(ckpt: Checkpoint) -> dict[str, torch.Tensor]:
-    tensors = ckpt.tensors("s3gen.speaker_encoder.")
-    return {k: torch.from_numpy(v.copy()) for k, v in tensors.items()}
-
-
-def main() -> None:  # noqa: PLR0915 — one export per stage, linear and logged
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--checkpoint", required=True)
-    ap.add_argument("--voice-encoder", required=True, help="ve.safetensors")
-    ap.add_argument("--out", default=None, help="output dir (default: <ckpt dir>/onnx)")
-    args = ap.parse_args()
+def main() -> None:
+    args = enrollment_parser(__doc__, "onnx").parse_args()
 
     ckpt = Checkpoint.open(args.checkpoint)
     out_dir = Path(args.out) if args.out else ckpt.path.parent / "onnx"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    tok = _S3Tokenizer()
-    tok.load_state_dict(
-        {k: torch.from_numpy(v.copy()) for k, v in ckpt.tensors("s3gen.tokenizer.").items()}
-    )
-    tok = tok.float().eval()
-
-    spk = _CAMPPlus()
-    spk.load_state_dict(_load_spk_weights(ckpt))
-    spk = spk.float().eval()
-
-    from safetensors.torch import load_file
-
-    ve = _VoiceEncoder()
-    ve.load_state_dict(load_file(args.voice_encoder))
-    ve = ve.float().eval()
+    tok, spk, ve = load_enrollment_models(ckpt, args.voice_encoder)
 
     torch.manual_seed(0)
 
-    # The fixture-shaped inputs: 512 mel frames is the shipped prompt, 510
-    # fbank frames is the reference clip's Kaldi count, 160x40 is one partial.
+    # Trace probes, not the fixture's shapes: every frame axis below is
+    # exported dynamic, so the numbers here only have to be large enough to
+    # trace through. The CoreML twin has to use the real ones (998 Kaldi
+    # frames) because its packages carry fixed geometry.
     print("[s3_tokenizer]")
     tmod = _TokenizerModel(tok).eval()
     mel = torch.randn(1, 128, 512)
@@ -235,8 +189,7 @@ def main() -> None:  # noqa: PLR0915 — one export per stage, linear and logged
     if not ok:
         tmp_t.unlink(missing_ok=True)
         raise SystemExit(f"{TOKENIZER_NAME}: token parity gate failed")
-    shutil.rmtree(tmp, ignore_errors=True)
-    tmp_t.rename(tmp)
+    tmp_t.replace(tmp)  # a file target: replace overwrites, rename need not
 
     print("[camp]")
     fbank = torch.randn(1, 80, 510)
@@ -247,7 +200,7 @@ def main() -> None:  # noqa: PLR0915 — one export per stage, linear and logged
     # build a second model from the same weights to export.
     _CAMLayer._seg_pool = staticmethod(_seg_pool_fixed)  # type: ignore[method-assign]
     spk_export = _CAMPPlus()
-    spk_export.load_state_dict(_load_spk_weights(ckpt))
+    spk_export.load_state_dict(load_spk_weights(ckpt))
     spk_export = spk_export.float().eval()
     cmod = _CAMPPModel(spk_export).eval()
     _export_float_graph(
@@ -272,7 +225,7 @@ def main() -> None:  # noqa: PLR0915 — one export per stage, linear and logged
         dynamic_axes={"partials": {0: "n_partials"}},
         reference=ref,
         # The LSTM lowers to ONNX's LSTM op, whose gate layout is equivalent
-        # but not bit-identical to torch's — measured corr 0.9999988. The
+        # but not bit-identical to torch's, measured corr 0.9999988. The
         # embedding is L2-normalised downstream, so what matters is direction,
         # and the enrollment fixture gates the shipped embedding on cosine
         # > 0.9999. A corr bar of 0.9999 is the same tolerance, not a weaker one.

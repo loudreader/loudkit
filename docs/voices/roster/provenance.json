@@ -30,7 +30,12 @@
    "text": "Petroniusz obudził się zaledwie koło południa, a jak zwykle, zmęczony bardzo.",
    "work": "Quo Vadis (Henryk Sienkiewicz) — public domain",
    "audio": "audio/darkman.opus",
-   "sha256": "b30f98cf0452e9c694fcbafc27b413041c87022238f5424fc1aa452c8eb156a5"
+   "sha256": "352ae8c5ee22add24b954009d81932910619953f57eacdf9486a251bf1e2b16b",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -64,7 +69,12 @@
    "text": "Petroniusz obudził się zaledwie koło południa, a jak zwykle, zmęczony bardzo.",
    "work": "Quo Vadis (Henryk Sienkiewicz) — public domain",
    "audio": "audio/gosia.opus",
-   "sha256": "4ba1107d7f807ac2e0941167d1bc4a7cfb2039a4b0482a3bc798db5eeefe17e5"
+   "sha256": "71bda41b9bd05094b0927dee870c555fba2f02a9b5b259015d68dd23bb662717",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -94,11 +104,16 @@
   },
   "speaker_similarity": 0.924,
   "sample": {
-   "seed": 11,
+   "seed": 7,
    "text": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading.",
    "work": "Alice's Adventures in Wonderland (Lewis Carroll) — public domain",
    "audio": "audio/joe.opus",
-   "sha256": "83e0bf0a1f6b03e047de66871536c3ff77291041d0a3f2907b6990e580519fea"
+   "sha256": "c68a60bf7a533e95efbfd3b3f3e40c52c093dfd647e51b3f1f8c375c12faec8e",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -132,7 +147,12 @@
    "text": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading.",
    "work": "Alice's Adventures in Wonderland (Lewis Carroll) — public domain",
    "audio": "audio/kathleen.opus",
-   "sha256": "48615517c1d1d2d55dbb7f74f37982918236e33f079947459d56c116cd70b7a3"
+   "sha256": "6fce7c852cb31fcebb5b92b7331a16bc23fce2b23a439a32d7169d2d88e0a2fc",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -166,7 +186,12 @@
    "text": "Ach, was muss man oft von bösen Kindern hören oder lesen! Wie zum Beispiel hier von diesen, welche Max und Moritz hießen.",
    "work": "Max und Moritz (Wilhelm Busch) — public domain",
    "audio": "audio/thorsten.opus",
-   "sha256": "d45938440534f7fa11afe388fa41a9a56879809a65c8477605220ed53d5a938b"
+   "sha256": "a3245a74d9fd3f894d0bb24dfd68f1b4aa33e0a46e50c8c797f9437d78d52b30",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -200,7 +225,12 @@
    "text": "Ach, was muss man oft von bösen Kindern hören oder lesen! Wie zum Beispiel hier von diesen, welche Max und Moritz hießen.",
    "work": "Max und Moritz (Wilhelm Busch) — public domain",
    "audio": "audio/kerstin.opus",
-   "sha256": "dc1990efd85eafee75810f45fd259505d4840579f008aba9f38ca1a7c42e839b"
+   "sha256": "42cb2762a0db8faad9e7cdbcf40ca51f2b4a22cbcf3794bd100beac4e801f574",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -234,7 +264,12 @@
    "text": "Maître Corbeau, sur un arbre perché, tenait en son bec un fromage. Maître Renard, par l'odeur alléché, lui tint à peu près ce langage: Hé! bonjour, Monsieur du Corbeau.",
    "work": "Le Corbeau et le Renard (Jean de La Fontaine) — public domain",
    "audio": "audio/henri.opus",
-   "sha256": "9a63ac8258c23aa750c871b4cc050da5658cd44b77448aad3cf1caef5ecb047b"
+   "sha256": "bd2bd3fefb937bafd7d9176f1f6e67f0e2a5979724e23910d371e9fdae14492d",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -268,7 +303,12 @@
    "text": "Maître Corbeau, sur un arbre perché, tenait en son bec un fromage. Maître Renard, par l'odeur alléché, lui tint à peu près ce langage: Hé! bonjour, Monsieur du Corbeau.",
    "work": "Le Corbeau et le Renard (Jean de La Fontaine) — public domain",
    "audio": "audio/colette.opus",
-   "sha256": "e9f0084bb45e1b7647eec082dc03f43a110e10f915a2baf99d5776201ec664bd"
+   "sha256": "ba474282a31e69d6e30028e583ddfdab5b63f0120e66376f37a71abe865c9a7b",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -302,7 +342,12 @@
    "text": "Jantje zag eens pruimen hangen, o! als eieren zo groot. 't Scheen, dat Jantje wou gaan plukken, schoon zijn vader 't hem verbood.",
    "work": "De pruimeboom (Hieronymus van Alphen) — public domain",
    "audio": "audio/pim.opus",
-   "sha256": "c00535642d18623f4d2085fa0bde17bdd08c7c8b9b38ade8a85dfee7b9974b37"
+   "sha256": "cad01ecff939927659714d16d90fa6cec006b28ae69f7b0151f5262c75626f95",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -336,7 +381,12 @@
    "text": "Jantje zag eens pruimen hangen, o! als eieren zo groot. 't Scheen, dat Jantje wou gaan plukken, schoon zijn vader 't hem verbood.",
    "work": "De pruimeboom (Hieronymus van Alphen) — public domain",
    "audio": "audio/nathalie.opus",
-   "sha256": "d2bf4970c1cf1d8f4437ee183e67ed5d1f67683249d26e36c6bf7cf3904490da"
+   "sha256": "d9d3789ae6efb3786d138167a313f89d0cf41891d781fb94792a49c8047c6ec4",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -370,7 +420,12 @@
    "text": "Subió una mona a un nogal, y cogiendo una nuez verde, en la cáscara la muerde, con que le supo muy mal.",
    "work": "La mona (Felix Maria de Samaniego) — public domain",
    "audio": "audio/dave.opus",
-   "sha256": "c1240b63c1f83b5279dccd028c18410d4051f590e695199a91bdd87af4c08d22"
+   "sha256": "b582423259b8bc52f20f7d79bd66c0fe990e5668bf3cf3f58d12572a6c39d0f8",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -400,11 +455,16 @@
   },
   "speaker_similarity": null,
   "sample": {
-   "seed": 3,
+   "seed": 7,
    "text": "Subió una mona a un nogal, y cogiendo una nuez verde, en la cáscara la muerde, con que le supo muy mal.",
    "work": "La mona (Felix Maria de Samaniego) — public domain",
    "audio": "audio/carmen.opus",
-   "sha256": "aefb626d30e906f729e8ea4c7a178f3b0b3092851fdbb1af2578fb840ae2078c"
+   "sha256": "61e9efe29a40d37871f6d0dd1d5f6fcce523a329f2bb56ec39cacff490a597a3",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -438,7 +498,12 @@
    "text": "C'era una volta... Un re! diranno subito i miei piccoli lettori. No, ragazzi, avete sbagliato: c'era una volta un pezzo di legno.",
    "work": "Le avventure di Pinocchio (Carlo Collodi) — public domain",
    "audio": "audio/dante.opus",
-   "sha256": "9b05b0d44b83e208ea4c97b30a4b2e03cb323e5108adf0847f1572f18639fc04"
+   "sha256": "56b83c86e6975366db10a6cfee9fa6431ccc59288db845c109b33536bc242c30",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -472,7 +537,12 @@
    "text": "C'era una volta... Un re! diranno subito i miei piccoli lettori. No, ragazzi, avete sbagliato: c'era una volta un pezzo di legno.",
    "work": "Le avventure di Pinocchio (Carlo Collodi) — public domain",
    "audio": "audio/paola.opus",
-   "sha256": "452ae96e4a6195a781c1aa521d7a856300ae814541856702824ad413527dabd3"
+   "sha256": "36735a9655bb0d8a3ac4d2854f23d5f5319ce7c9092c420730b41b310ac9f5ca",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -506,12 +576,17 @@
    "text": "O meu amigo Jacinto nasceu num palácio, com cento e nove contos de renda em terras de semeadura, de vinhedo, de cortiça e de olival.",
    "work": "A Cidade e as Serras (Eca de Queiros) — public domain",
    "audio": "audio/tugao.opus",
-   "sha256": "ddf3be70b986247fc879f90d5dc3f9e41e28d763e08ca10de1a44ea08e3f112b"
+   "sha256": "53763a92fcad769d3e2f3e835ed575481ca472385edabe89a59e5364dbc86856",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
   "name": "ines",
-  "language": "Portuguese (European)",
+  "language": "Portuguese (Brazilian)",
   "language_id": "pt",
   "gender": "F",
   "donor": "anonymous (invented name)",
@@ -540,9 +615,14 @@
    "text": "O meu amigo Jacinto nasceu num palácio, com cento e nove contos de renda em terras de semeadura, de vinhedo, de cortiça e de olival.",
    "work": "A Cidade e as Serras (Eca de Queiros) — public domain",
    "audio": "audio/ines.opus",
-   "sha256": "55c9cb8a3716ccfce280c25b577e344363fe3978b35577ce8c20ee6d4f3869ea"
+   "sha256": "5521c0132bc1fe2e283f139839fda6d90a63f57e6bc08a3824dcb70e1ec8deb2",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   },
-  "notes": "CML-TTS is LibriVox-derived; accent is Brazilian Portuguese, unlike tugao (European)."
+  "notes": "CML-TTS is LibriVox-derived and its Portuguese split is Brazilian, unlike tugao (European). The language field above read 'Portuguese (European)' and contradicted this note; the note is the accurate one, and the record now agrees with itself. language_id stays pt: there is one Portuguese grammar."
  },
  {
   "name": "nils",
@@ -575,7 +655,12 @@
    "text": "Det var en gång en pojke, som var så där en fjorton år gammal, lång och ranglig och linhårig.",
    "work": "Nils Holgerssons underbara resa (Selma Lagerlof) — public domain",
    "audio": "audio/nils.opus",
-   "sha256": "61b704118c82878a218d0db2b0fd3da20a70d0d442e2a36cc064ccc1a7f0679b"
+   "sha256": "a5bf42795019c88ee31ce30df2aee52f58e13414ee5622840d1b42e508b17920",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -609,7 +694,12 @@
    "text": "Det var en gång en pojke, som var så där en fjorton år gammal, lång och ranglig och linhårig.",
    "work": "Nils Holgerssons underbara resa (Selma Lagerlof) — public domain",
    "audio": "audio/selma.opus",
-   "sha256": "70f186995d8b6aac965662cdff346ec5211bef98276c7ef94a69c096dccd0782"
+   "sha256": "12df6f9a93ab65676720af07ee3fed7a547d4fa2277f69aca53668409b0983d0",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -643,7 +733,12 @@
    "text": "Der var så dejligt ude på landet; det var sommer, kornet stod gult, og havren grøn.",
    "work": "Den grimme aelling (H. C. Andersen) — public domain",
    "audio": "audio/soren.opus",
-   "sha256": "f9841dd5162d30df3e67aee92128bd3708f4eff6c3d1c5c177091765cf04af2c"
+   "sha256": "fe5fdc3a5622839c07d838912546d8f432246f3a324cba28858702fbe46f453d",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
   }
  },
  {
@@ -677,7 +772,372 @@
    "text": "Der var så dejligt ude på landet; det var sommer, kornet stod gult, og havren grøn.",
    "work": "Den grimme aelling (H. C. Andersen) — public domain",
    "audio": "audio/freja.opus",
-   "sha256": "cd785cc844250a5ae97010e2a3b0ee9260c5a24d016350d931aa7ec776958812"
+   "sha256": "a08e433343e8657b87d8b6cadf43413dd360e0954e27b455d7a78af9a17b3282",
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "backend": "PyTorch CPU"
+  }
+ },
+ {
+  "name": "oliver",
+  "language": "English",
+  "language_id": "en",
+  "gender": "M",
+  "donor": "oliver (product alias, not donor identity)",
+  "speaker_id": "0a67",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/0a67.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "0a67",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "4bd75d0ef0ad3f4e82ac075eab2a132651d2463f83bec210edeeccaf69294886",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "oliver.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/oliver-reference.opus",
+   "sha256": "4bd75d0ef0ad3f4e82ac075eab2a132651d2463f83bec210edeeccaf69294886",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/oliver.safetensors",
+   "sha256": "bd2fdb4ff8fbc12b070654dc5dae82b24aee4990bda726185547ec613b9f9cb8"
+  },
+  "speaker_similarity": 0.8782104849815369,
+  "sample": {
+   "audio": "../preview/audio/oliver-long.opus",
+   "sha256": "05a6ed661a8bae47169feb1aad4fd65a5c1890bcbeb5f72dc5c5e498da54f144",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "bd2fdb4ff8fbc12b070654dc5dae82b24aee4990bda726185547ec613b9f9cb8",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 15.52,
+   "gain_db": 4.66,
+   "work": "Shared English comparison story — original text"
+  }
+ },
+ {
+  "name": "henry",
+  "language": "English",
+  "language_id": "en",
+  "gender": "M",
+  "donor": "henry (product alias, not donor identity)",
+  "speaker_id": "Dil",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/Dil.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "Dil",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "328d1e3ad60a208df41b297401df2e2e9f12b15a75b3d24f3bc1f220b24d6eb5",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "henry.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/henry-reference.opus",
+   "sha256": "328d1e3ad60a208df41b297401df2e2e9f12b15a75b3d24f3bc1f220b24d6eb5",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/henry.safetensors",
+   "sha256": "5476670162065397f01fca60a1944eb75ddef8dc7e6792dde7fb603c76c14d8c"
+  },
+  "speaker_similarity": 0.8834202885627747,
+  "sample": {
+   "audio": "../preview/audio/henry-long.opus",
+   "sha256": "f96e3ba7cbfd606198965df56ecd305c9e22747bae136d64441a52c7582eccbe",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "5476670162065397f01fca60a1944eb75ddef8dc7e6792dde7fb603c76c14d8c",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 16.8,
+   "gain_db": -1.6700000000000017,
+   "work": "Shared English comparison story — original text"
+  }
+ },
+ {
+  "name": "miles",
+  "language": "English",
+  "language_id": "en",
+  "gender": "M",
+  "donor": "miles (product alias, not donor identity)",
+  "speaker_id": "fc96",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/fc96.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "fc96",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "b768f4f59d9ad2ccd2c944ae4179240cfa7aebe1f38cdaacec52a3fb27e31541",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "miles.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/miles-reference.opus",
+   "sha256": "b768f4f59d9ad2ccd2c944ae4179240cfa7aebe1f38cdaacec52a3fb27e31541",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/miles.safetensors",
+   "sha256": "184d5552881d2e6fd644f0546d9b470130664d84faf39a31979001cafe8f4ed9"
+  },
+  "speaker_similarity": 0.9399194717407227,
+  "sample": {
+   "audio": "../preview/audio/miles-long.opus",
+   "sha256": "0238d9c114b8878a195d8478efc2f4baaa93e3803e03f489ffc4a5acd57e9cc2",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "184d5552881d2e6fd644f0546d9b470130664d84faf39a31979001cafe8f4ed9",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 15.48,
+   "gain_db": -4.170000000000002,
+   "work": "Shared English comparison story — original text"
+  }
+ },
+ {
+  "name": "oscar",
+  "language": "English",
+  "language_id": "en",
+  "gender": "M",
+  "donor": "oscar (product alias, not donor identity)",
+  "speaker_id": "ra_XOr",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/ra_XOr.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "ra_XOr",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "560caaa6193190b021811e1b0d9dcfddd1b96f7d3f75c71c098823531c305213",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "oscar.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/oscar-reference.opus",
+   "sha256": "560caaa6193190b021811e1b0d9dcfddd1b96f7d3f75c71c098823531c305213",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/oscar.safetensors",
+   "sha256": "8b8ff60604338eedddcd7317ed76ad2109fba6fa0ab79c9684a7954b64f963b2"
+  },
+  "speaker_similarity": 0.9155877828598022,
+  "sample": {
+   "audio": "../preview/audio/oscar-long.opus",
+   "sha256": "69e278b60b322d7630acd18781bbddc22cc706b7683f5ae724aede7c7865e41a",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "8b8ff60604338eedddcd7317ed76ad2109fba6fa0ab79c9684a7954b64f963b2",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 16.2,
+   "gain_db": 3.0100000000000016,
+   "work": "Shared English comparison story — original text"
+  }
+ },
+ {
+  "name": "clara",
+  "language": "English",
+  "language_id": "en",
+  "gender": "F",
+  "donor": "clara (product alias, not donor identity)",
+  "speaker_id": "bathri",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/bathri.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "bathri",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "3177c7f139851b85ab78886701bd957e07eb4fcb45a507c17310cbc977747d70",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "clara.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/clara-reference.opus",
+   "sha256": "3177c7f139851b85ab78886701bd957e07eb4fcb45a507c17310cbc977747d70",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/clara.safetensors",
+   "sha256": "c2b5db4c210657d6b2b81602fae8e73a733ac4312f33e80536a59a874e7d865f"
+  },
+  "speaker_similarity": 0.9098672866821289,
+  "sample": {
+   "audio": "../preview/audio/clara-long.opus",
+   "sha256": "5c12ead82de33910031c97b69fd531fb2091c14e821aeca6d8cb78eb86775ce5",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "c2b5db4c210657d6b2b81602fae8e73a733ac4312f33e80536a59a874e7d865f",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 16.08,
+   "gain_db": 2.539999999999999,
+   "work": "Shared English comparison story — original text"
+  }
+ },
+ {
+  "name": "emma",
+  "language": "English",
+  "language_id": "en",
+  "gender": "F",
+  "donor": "emma (product alias, not donor identity)",
+  "speaker_id": "awais_shah",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/awais_shah.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "awais_shah",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "0933f6959eaff9b81a06b99ba4b4388ff069d1813f159fb9a24a6fb73bf89afb",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "emma.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/emma-reference.opus",
+   "sha256": "0933f6959eaff9b81a06b99ba4b4388ff069d1813f159fb9a24a6fb73bf89afb",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/emma.safetensors",
+   "sha256": "0f5d8bfaceca353ca92db751c48b6a1653823f421ead3c901efe6366b8fa2dfb"
+  },
+  "speaker_similarity": 0.8317757844924927,
+  "sample": {
+   "audio": "../preview/audio/emma-long.opus",
+   "sha256": "4301abe3add09fdec6846fdeddf3290fcc4f727591e274309a17ce77e50a40bf",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "0f5d8bfaceca353ca92db751c48b6a1653823f421ead3c901efe6366b8fa2dfb",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 14.88,
+   "gain_db": 4.09,
+   "work": "Shared English comparison story — original text"
+  }
+ },
+ {
+  "name": "lucy",
+  "language": "English",
+  "language_id": "en",
+  "gender": "F",
+  "donor": "lucy (product alias, not donor identity)",
+  "speaker_id": "Haku",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/Haku.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "Haku",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "50184ec3a337a1aed0e3dd59a09eac77819694ca308f2a2a3facff6db9b10a59",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "lucy.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/lucy-reference.opus",
+   "sha256": "50184ec3a337a1aed0e3dd59a09eac77819694ca308f2a2a3facff6db9b10a59",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/lucy.safetensors",
+   "sha256": "009a5fe1b34a9c65b09254f41c01cfdc641ec671a83449ad8aa77dd933d5f27e"
+  },
+  "speaker_similarity": 0.8895525336265564,
+  "sample": {
+   "audio": "../preview/audio/lucy-long.opus",
+   "sha256": "e2fc01b8efc1049418134d55d98c2ed94462ee8bc0eb7cb7bd4eb466fe1411f5",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "009a5fe1b34a9c65b09254f41c01cfdc641ec671a83449ad8aa77dd933d5f27e",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 14.36,
+   "gain_db": 4.73,
+   "work": "Shared English comparison story — original text"
+  }
+ },
+ {
+  "name": "sophie",
+  "language": "English",
+  "language_id": "en",
+  "gender": "F",
+  "donor": "sophie (product alias, not donor identity)",
+  "speaker_id": "Hannah",
+  "source": {
+   "name": "Kyutai Voice Donations",
+   "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/Hannah.wav",
+   "license": "CC0-1.0",
+   "speaker_id": "Hannah",
+   "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+   "sha256": "439585cc5c981882a87f1b32f95dbc2c1225d145a4cf861ca36483decbc4c2a8",
+   "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+   "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+  },
+  "reference": {
+   "source_filename": "sophie.wav",
+   "published_in_model_repo": false,
+   "public_preview": "../preview/audio/sophie-reference.opus",
+   "sha256": "439585cc5c981882a87f1b32f95dbc2c1225d145a4cf861ca36483decbc4c2a8",
+   "construction": "Pinned source recording; prompt cut at a pause before ten seconds, followed by 0.4 s silence."
+  },
+  "profile": {
+   "hf_path": "voices/sophie.safetensors",
+   "sha256": "efb8047f93eda2a8e7cedaaa254b51957a845d55287298868a409662f8f75e1a"
+  },
+  "speaker_similarity": 0.8967336416244507,
+  "sample": {
+   "audio": "../preview/audio/sophie-long.opus",
+   "sha256": "135539e35629166306dec41cd5bd655a3cc4e7887ae2ecc8a57596cfcc2590cb",
+   "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+   "seed": 7,
+   "model": "loudr-1",
+   "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+   "edge_fade_seconds": 0.02,
+   "algorithm_fingerprint": "7cd75498ad4e7531",
+   "profile_sha256": "efb8047f93eda2a8e7cedaaa254b51957a845d55287298868a409662f8f75e1a",
+   "backend": "PyTorch CPU",
+   "duration_seconds": 15.36,
+   "gain_db": 0.14999999999999858,
+   "work": "Shared English comparison story — original text"
   }
  }
 ]

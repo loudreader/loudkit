@@ -1,0 +1,77 @@
+{
+ "generated_by": "tools/make_conformance.py --fixtures-only",
+ "cases": [
+  {
+   "ref": "loudreader/loudr-1",
+   "is_repo_id": true
+  },
+  {
+   "ref": "loudreader/loudr-1-turbo",
+   "is_repo_id": true
+  },
+  {
+   "ref": "someone/model.v2",
+   "is_repo_id": true
+  },
+  {
+   "ref": "org/name-with_dots.v2",
+   "is_repo_id": true
+  },
+  {
+   "ref": "łódź/model",
+   "is_repo_id": true
+  },
+  {
+   "ref": "org/日本語",
+   "is_repo_id": true
+  },
+  {
+   "ref": "loudr-1",
+   "is_repo_id": false
+  },
+  {
+   "ref": "loudreader",
+   "is_repo_id": false
+  },
+  {
+   "ref": "./model.safetensors",
+   "is_repo_id": false
+  },
+  {
+   "ref": "./loudr-1",
+   "is_repo_id": false
+  },
+  {
+   "ref": "/no/such/place",
+   "is_repo_id": false
+  },
+  {
+   "ref": "~/loudr-1",
+   "is_repo_id": false
+  },
+  {
+   "ref": "a/b/c",
+   "is_repo_id": false
+  },
+  {
+   "ref": "loudr-1.safetensors",
+   "is_repo_id": false
+  },
+  {
+   "ref": "org/x.safetensors",
+   "is_repo_id": false
+  },
+  {
+   "ref": "org/",
+   "is_repo_id": false
+  },
+  {
+   "ref": "/org",
+   "is_repo_id": false
+  },
+  {
+   "ref": "",
+   "is_repo_id": false
+  }
+ ]
+}

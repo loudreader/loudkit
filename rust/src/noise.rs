@@ -1,4 +1,4 @@
-//! Render randomness as Philox data — a bit-parity port of
+//! Render randomness as Philox data: a bit-parity port of
 //! `loudkit.models.noise`.
 
 use crate::rng;

@@ -126,6 +126,28 @@ class TestTheDayFormPerLanguage:
         assert expect_in in expand_dates(text, language)
 
 
+class TestTheYearClassMatchesTheYearBound:
+    """The five date patterns and the plausibility bound are one range.
+
+    `_MIN_YEAR` and `_MAX_YEAR` say which four-digit runs are years; the
+    patterns have to say the same thing as a character class, and the class was
+    written out at each of them. Now it is written once, and this is what keeps
+    the two from drifting apart: a bound widened to 3999 with the class left at
+    `[12]` would read a date the checker then rejected.
+    """
+
+    def test_the_class_accepts_exactly_the_years_in_range(self) -> None:
+        import re
+
+        from loudkit.frontend.dates import _MAX_YEAR, _MIN_YEAR, _YEAR
+
+        pattern = re.compile(rf"^{_YEAR}$")
+        for year in (_MIN_YEAR, _MIN_YEAR + 1, 1992, 2026, _MAX_YEAR - 1, _MAX_YEAR):
+            assert pattern.match(str(year)), f"{year} is in range and must match"
+        for outside in (_MIN_YEAR - 1, _MAX_YEAR + 1, 0, 999, 10000):
+            assert not pattern.match(str(outside)), f"{outside} is out of range"
+
+
 class TestYears:
     @pytest.mark.parametrize(
         ("language", "year", "expect"),
@@ -211,7 +233,7 @@ class TestTheFunnelRunsDatesFirst:
     """The ordering is the reason this pass exists."""
 
     def test_a_dotted_date_is_not_eaten_by_the_clock(self) -> None:
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
 
         said = speech_text("Spotkanie 12.03.2026 o 14:30.", "pl")
         assert "dwunastego marca" in said
@@ -227,14 +249,14 @@ class TestTheFunnelRunsDatesFirst:
         exist. All four have one now, verified against 144 generated pairs
         apiece, so the gate came out and this asserts what all five do.
         """
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
 
         for lang, expected in (("pl", "dwunastego marca"), ("de", "zwölfte März")):
             said = speech_text("Spotkanie 12.03.2026.", lang)
             assert expected in said, f"{lang}: {said}"
 
     def test_a_version_number_survives_the_whole_funnel(self) -> None:
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
 
         assert "1.2.3" in speech_text("Wersja 1.2.3 i adres 192.168.0.1.", "pl")
 
@@ -251,7 +273,7 @@ class TestADecimalIsNotADate:
 
     @pytest.mark.parametrize("language", supported_languages())
     def test_a_sentence_final_decimal_stays_a_number(self, language: str) -> None:
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
 
         said = speech_text("Die Zahl ist 3.5.", language)
         for month in ("Mai", "maja", "mayo", "maj", "toukokuuta", "May"):

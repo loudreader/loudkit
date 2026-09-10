@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where each chunk — and, approximately, each word — lands in the waveform.
+/// Where each chunk, and, approximately, each word, lands in the waveform.
 ///
 /// Mirrors `loudkit.timing`. A reading app highlights the sentence it is
 /// speaking, and that needs two different kinds of answer. This module is
@@ -10,8 +10,8 @@ import Foundation
 /// **Chunk times are exact.** The engine renders each chunk to its own waveform
 /// and concatenates them, so it knows every chunk's sample offset and sample
 /// length without estimating anything. ``ChunkTiming`` reports those, converted
-/// to seconds. Chunk *k*'s `end` is bit-identical to chunk *k+1*'s `start` —
-/// both are the same integer sample offset divided by the same sample rate — so
+/// to seconds. Chunk *k*'s `end` is bit-identical to chunk *k+1*'s `start`,
+/// both are the same integer sample offset divided by the same sample rate, so
 /// a highlight driven by them can neither gap nor overlap.
 ///
 /// **Word times are estimated.** The model emits speech tokens, not an
@@ -21,7 +21,7 @@ import Foundation
 /// is right often enough to be useful for a highlight at sentence scale and
 /// wrong in the ways you would expect: a long word said fast, a short word
 /// held, a pause before a clause. The error grows with the length of the chunk,
-/// because a single bad guess early shifts everything after it — one sentence
+/// because a single bad guess early shifts everything after it, one sentence
 /// is usually fine, a long paragraph read as one chunk is not. If you need real
 /// alignment you need a forced aligner; this is not one, and pretending
 /// otherwise would be worse than the estimate.
@@ -34,7 +34,7 @@ public enum Timing {
     /// Offsets accumulate in **samples**, not seconds, and are divided by the
     /// rate once at the end. Accumulating seconds instead would make chunk
     /// *k*'s `end` and chunk *k+1*'s `start` two different sums of the same
-    /// doubles, differing in the last bit — a gap or an overlap of a few
+    /// doubles, differing in the last bit, a gap or an overlap of a few
     /// nanoseconds, invisible to a test that compares with a tolerance and
     /// visible as a flicker in a highlight that switches on `time >= start`.
     public static func timeline(_ spans: [ChunkSpan], sampleRate: Int) -> [ChunkTiming] {
@@ -58,7 +58,7 @@ public enum Timing {
     /// The allocation is by **character count**, not by token count or by any
     /// acoustic measure: a word's characters are the only thing known here, and
     /// they correlate with duration well enough at sentence scale to drive a
-    /// highlight. Whitespace itself is not charged for — the gap between two
+    /// highlight. Whitespace itself is not charged for, the gap between two
     /// words belongs to whichever side of the boundary the caller's player is
     /// on, and splitting it would only invent a third kind of span.
     ///
@@ -73,6 +73,12 @@ public enum Timing {
     /// clusters, which is a third answer again, and it would give Polish and
     /// Japanese text different word weights in Swift than in Python for text
     /// that reads identically.
+    ///
+    /// The split is `Character.isWhitespace`, which is not the funnel's
+    /// ``SpeechText/whiteSpace`` set: it also breaks on the four separators
+    /// U+001C to U+001F, as Python's `str.split()` does. These are word
+    /// estimates for a highlight, so a break the funnel would not make costs
+    /// one span, not one token.
     public static func estimateWords(
         _ text: String, start: Double, end: Double
     ) -> [WordTiming] {
@@ -104,10 +110,14 @@ public enum Timing {
 /// input type rather than assembling ``ChunkTiming`` per chunk, because the
 /// offsets are only knowable once the order is known.
 public struct ChunkSpan: Sendable, Equatable {
+    /// The chunk's text after the funnel, which is what was tokenised.
     public var text: String
+    /// Samples this chunk rendered to, after any time stretch.
     public var samples: Int
+    /// Speech tokens this chunk generated.
     public var tokens: Int
 
+    /// The three facts a caller has at concatenation time, and no derived ones.
     public init(text: String, samples: Int, tokens: Int) {
         self.text = text
         self.samples = samples
@@ -119,7 +129,7 @@ public struct ChunkSpan: Sendable, Equatable {
 ///
 /// **Estimated, by proportional allocation.** The chunk's real duration is
 /// divided among its words in proportion to their length in characters. There
-/// is no alignment model here and no per-word measurement — see ``Timing`` for
+/// is no alignment model here and no per-word measurement, see ``Timing`` for
 /// what that costs you.
 public struct WordTiming: Sendable, Equatable {
     /// The word as it appears in the chunk, punctuation included.
@@ -129,9 +139,13 @@ public struct WordTiming: Sendable, Equatable {
     /// caller matching back against their own text needs the substring to be a
     /// substring.
     public var text: String
+    /// Seconds from the start of the synthesis. Estimated.
     public var start: Double
+    /// Seconds from the start of the synthesis. Estimated.
     public var end: Double
 
+    /// A span is built by `Timing`, not by a caller; the initialiser is public
+    /// so a caller can rebuild one after shifting or re-scaling it.
     public init(text: String, start: Double, end: Double) {
         self.text = text
         self.start = start
@@ -145,7 +159,7 @@ public struct WordTiming: Sendable, Equatable {
 /// tier reads `start`/`end` and ignores `words`, and the field names make it
 /// impossible to reach the estimate by accident.
 public struct ChunkTiming: Sendable, Equatable {
-    /// The chunk's text after the speech funnel — what was tokenised, which is
+    /// The chunk's text after the speech funnel, what was tokenised, which is
     /// not always what the caller passed in (Polish respells embedded English,
     /// and numbers are read as words).
     public var text: String
@@ -158,6 +172,8 @@ public struct ChunkTiming: Sendable, Equatable {
     /// so the caller stitching the stream adds the offsets.
     public var start: Double
 
+    /// Seconds from the start of this `Engine.Result`'s audio, at the sample
+    /// after this chunk's last. Exact.
     public var end: Double
 
     /// Speech tokens this chunk generated. Duration over tokens is the pacing
@@ -165,8 +181,12 @@ public struct ChunkTiming: Sendable, Equatable {
     /// carry it.
     public var tokens: Int
 
+    /// The estimated tier: one entry per whitespace-separated word, in order.
+    /// Empty when there was no text to split, as in `synthesizeTokens`.
     public var words: [WordTiming]
 
+    /// `words` defaults to empty so a caller who only has the exact tier can
+    /// build one without inventing estimates.
     public init(
         text: String, start: Double, end: Double, tokens: Int, words: [WordTiming] = []
     ) {
@@ -177,6 +197,7 @@ public struct ChunkTiming: Sendable, Equatable {
         self.words = words
     }
 
+    /// `end - start`, in seconds. Exact.
     public var duration: Double { end - start }
 
     /// This timing moved later by `by` seconds, words included.

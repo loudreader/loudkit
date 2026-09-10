@@ -5,23 +5,21 @@ import Foundation
 /// implemented natively (Accelerate BLAS, fp32) against the packed `t3.*`
 /// weights.
 ///
-/// Why native rather than the app's CoreML T3: the stateful multi-function
-/// export has no validated cross-implementation harness (the sample wall's
-/// "Not covered: T3 on the ANE", and torch segfaults beside CoreML in one
-/// process on the Python side), and a wrong row is worse than a missing one.
-/// A native fp32 generator is the same *declared execution* as the Python
-/// conformance engine (torch cpu, fp32 compute over fp16-stored weights), so
-/// "same tokens from the same seed" is a meaningful cross-language claim
-/// rather than a coincidence of two unvalidated graphs. The algorithm layer —
-/// sequence layout, learned positions, EOS floor, sampler injection — is
-/// lifted from the shipped runner (ChatterboxT3Runner.swift) and from
-/// `loudkit.models.generator`, which are the same algorithm by construction.
+/// Why native rather than a CoreML export of the generator: the stateful
+/// multi-function export has no validated cross-implementation harness, torch
+/// segfaults beside CoreML in one process on the Python side, and a wrong row
+/// is worse than a missing one. A native fp32 generator is the same declared
+/// execution as the Python conformance engine, torch cpu with fp32 compute over
+/// fp16-stored weights, so "same tokens from the same seed" is a meaningful
+/// cross-language claim rather than a coincidence of two unvalidated graphs.
+/// The algorithm layer, sequence layout, learned positions, EOS floor and
+/// sampler injection, mirrors `loudkit.models.generator`.
 ///
 /// Sequence layout, identical to both references:
 ///
 ///     [ cond (34) | [START] text [STOP] | speech: START, s0, s1, ... ]
 ///
-/// The EOS floor is applied here, before the sampler sees the logits — an EOS
+/// The EOS floor is applied here, before the sampler sees the logits, an EOS
 /// *policy* belongs to the generator, not to sampler exemptions.
 public final class TokenGenerator {
     static let startTextToken = 255
@@ -48,13 +46,21 @@ public final class TokenGenerator {
         var postNorm: [Float]
     }
 
-    private var layers: [Layer] = []
-    private var finalNorm: [Float]
+    private let layers: [Layer]
+    private let finalNorm: [Float]
     private let speechEmb: [Float]     // [8194, hidden]
     private let textEmb: [Float]       // [textVocab, hidden]
     private let speechPos: [Float]     // [4100, hidden]
     private let textPos: [Float]       // [2050, hidden]
     private let speechHead: [Float]    // [8194, hidden]
+    private struct Fusion {
+        let head: [Float]
+        let up: [Float]
+        let upBias: [Float]
+        let down: [Float]
+        let downBias: [Float]
+    }
+    private let fusion: Fusion?
     // cond encoder
     private let spkrW: [Float]         // [hidden, 256]
     private let spkrB: [Float]
@@ -71,10 +77,17 @@ public final class TokenGenerator {
     private let percOut: [Float]
     private let percOutB: [Float]
 
-    private var invFreq: [Float] = []  // [headDim/2]
+    private let invFreq: [Float]  // [headDim/2]
 
+    /// Build the generator from a pack's weights and the algorithm it declares.
+    ///
+    /// - Throws: `LoudKitError.manifest` when the pack declares a decode mode
+    ///   this build does not implement, or is missing a block the loop needs.
     public init(checkpoint: Checkpoint, config: AlgorithmConfig) throws {
         self.config = config
+        guard Checkpoint.supportedDecodeModes.contains(config.decode) else {
+            throw LoudKitError.manifest("unsupported decode mode \(config.decode)")
+        }
         guard let llama = checkpoint.manifest["llama_config"] as? [String: Any] else {
             throw LoudKitError.manifest("manifest is missing llama_config")
         }
@@ -88,17 +101,15 @@ public final class TokenGenerator {
 
         // Corroborated against the weights before a single allocation.
         //
-        // This was the only port that took the manifest's word for its
-        // dimensions. Python refuses a manifest the tensors cannot fill --
-        // `intermediate_size: 16_000_000` beside a 26 MB file asks for 197 GB
-        // and gets a `ValueError` naming the field -- while here the same
-        // manifest reached `matmulT`, which trusts the shapes it is handed and
-        // reads past the end of the buffer.
+        // The manifest states the dimensions and `matmulT` trusts the shapes
+        // it is handed, so a manifest the tensors cannot fill reads past the
+        // end of the buffer. The two are compared here, before a model is
+        // built from them, as the Python reference compares them.
         //
         // Whole shapes, not row counts: a `(16_000_000, 0)` matrix weighs
-        // almost nothing on disk and satisfies a row check, which is the hole
-        // the Python version had until this week. A projection here is always
-        // `(something, hidden_size)`, so both halves are knowable.
+        // almost nothing on disk and satisfies a row check. A projection here
+        // is always `(something, hidden_size)`, so both halves are knowable and
+        // both are checked.
         //
         // Layer zero only. If layer zero is consistent, the rest are the same
         // architecture or `floats(_:)` refuses them by size when it reads them;
@@ -127,9 +138,11 @@ public final class TokenGenerator {
         let s = checkpoint.store
         func f(_ name: String) throws -> [Float] { try s.floats("t3." + name) }
 
+        var built: [Layer] = []
+        built.reserveCapacity(nLayers)
         for i in 0..<nLayers {
             let p = "tfmr.layers.\(i)."
-            layers.append(Layer(
+            built.append(Layer(
                 qProj: try f(p + "self_attn.q_proj.weight"),
                 kProj: try f(p + "self_attn.k_proj.weight"),
                 vProj: try f(p + "self_attn.v_proj.weight"),
@@ -140,12 +153,30 @@ public final class TokenGenerator {
                 inputNorm: try f(p + "input_layernorm.weight"),
                 postNorm: try f(p + "post_attention_layernorm.weight")))
         }
+        layers = built
         finalNorm = try f("tfmr.norm.weight")
         speechEmb = try f("speech_emb.weight")
         textEmb = try f("text_emb.weight")
         speechPos = try f("speech_pos_emb.emb.weight")
         textPos = try f("text_pos_emb.emb.weight")
         speechHead = try f("speech_head.weight")
+        if config.decode == "fusion_mtp2" {
+            for (name, shape) in [
+                ("head2.weight", [config.speechVocabSize, hidden * 2]),
+                ("fuse.0.weight", [hidden, hidden * 2]), ("fuse.0.bias", [hidden]),
+                ("fuse.2.weight", [hidden, hidden]), ("fuse.2.bias", [hidden])
+            ] {
+                guard try s.shape("t3." + name) == shape else {
+                    throw LoudKitError.manifest("t3.\(name) does not match fusion decoder dimensions")
+                }
+            }
+            fusion = Fusion(head: try f("head2.weight"), up: try f("fuse.0.weight"),
+                            upBias: try f("fuse.0.bias"), down: try f("fuse.2.weight"),
+                            downBias: try f("fuse.2.bias"))
+        } else {
+            fusion = nil
+        }
+
         spkrW = try f("cond_enc.spkr_enc.weight")
         spkrB = try f("cond_enc.spkr_enc.bias")
         emotionW = try f("cond_enc.emotion_adv_fc.weight")
@@ -162,7 +193,7 @@ public final class TokenGenerator {
         percOutB = try f("cond_enc.perceiver.attn.proj_out.bias")
 
         // RoPE inverse frequencies, llama3 wavelength-dependent rescale,
-        // fp64 until the end — verbatim the rule in loudkit.models.generator.
+        // fp64 until the end, verbatim the rule in loudkit.models.generator.
         let rope = llama["rope_scaling"] as? [String: Any] ?? [:]
         let theta = (llama["rope_theta"] as? NSNumber)?.doubleValue ?? 500_000.0
         let factor = (rope["factor"] as? NSNumber)?.doubleValue ?? 8.0
@@ -359,6 +390,8 @@ public final class TokenGenerator {
                     }
                     scores[j] = dot * scale
                 }
+                // `baseAddress` is non-nil because `scores` has `s` elements
+                // and `s` is the key count, at least one for any real row.
                 scores.withUnsafeMutableBufferPointer { softmaxRow($0.baseAddress!, count: s) }
                 for j in 0..<s {
                     let w = scores[j]
@@ -408,6 +441,10 @@ public final class TokenGenerator {
         let qDim = nHeads * headDim
         let scale = 1.0 / Float(Double(headDim).squareRoot())
         let group = nHeads / nKV
+        // Every `baseAddress!` below is non-nil: the five buffers are the
+        // caches, the query, the score row and the output, all sized from
+        // `nHeads`, `headDim`, `maxLen` and `rows`, none of which is zero on a
+        // configured generator.
         kCache.withUnsafeBufferPointer { kp in
             vCache.withUnsafeBufferPointer { vp in
                 q.withUnsafeBufferPointer { qp in
@@ -452,6 +489,9 @@ public final class TokenGenerator {
     private func forward(
         _ embeds: [Float], rows: Int, positions: [Int], cache: Cache
     ) -> [Float] {
+        // `positions` carries one entry per row and `forward` is never
+        // called with zero rows, so the trap here is a caller bug reported
+        // where it happens rather than a wrong table built from a default.
         let maxPos = positions.max()! + 1
         let tables = ropeTables(length: maxPos)
         let qDim = nHeads * headDim
@@ -516,34 +556,75 @@ public final class TokenGenerator {
         matmulT(hiddenRow, m: 1, k: hidden, w: speechHead, n: config.speechVocabSize)
     }
 
+    private func pairEmbedding(_ first: Int, _ second: Int, position: Int) -> [Float] {
+        guard let weights = fusion else {
+            preconditionFailure("pair decoding needs the fusion weights the manifest declared")
+        }
+        let left = Array(speechEmb[first * hidden..<(first + 1) * hidden])
+        let right = Array(speechEmb[second * hidden..<(second + 1) * hidden])
+        var fused = matmulT(left + right, m: 1, k: hidden * 2, w: weights.up, n: hidden)
+        for i in fused.indices {
+            let x = fused[i] + weights.upBias[i]
+            fused[i] = 0.5 * x * (1 + Foundation.erff(x * Float(0.7071067811865476)))
+        }
+        var output = matmulT(fused, m: 1, k: hidden, w: weights.down, n: hidden)
+        for i in output.indices {
+            output[i] += weights.downBias[i]
+            output[i] += 0.5 * (left[i] + right[i])
+            output[i] += speechPos[position * hidden + i]
+        }
+        return output
+    }
+
+    private func secondLogits(_ state: [Float], first: Int) -> [Float] {
+        guard let weights = fusion else {
+            preconditionFailure("pair decoding needs the fusion weights the manifest declared")
+        }
+        let embedding = Array(speechEmb[first * hidden..<(first + 1) * hidden])
+        return matmulT(state + embedding, m: 1, k: hidden * 2,
+                       w: weights.head, n: config.speechVocabSize)
+    }
+
     // MARK: contract
 
+    /// What one decode produced, before the detectors read it.
     public struct Generation {
-        public let rawTokens: [Int]  // includes the natural stop token when it fired
+        /// The generated ids, including the natural stop token when it fired.
+        /// `Engine.stripSpecials` is what removes it.
+        public let rawTokens: [Int]
+        /// Generation stopped at the cap rather than at the stop token, so the
+        /// row is cut off mid-sentence.
         public let hitTokenCap: Bool
     }
 
     /// Autoregressive decode to the stop token or the cap. The sampler owns
     /// the law; this loop owns only the EOS floor and the `seen` bookkeeping.
     ///
-    /// `prefix` holds speech tokens from the preceding chunk — fed through
+    /// `prefix` holds speech tokens from the preceding chunk, fed through
     /// for context, seeded into the repetition-penalty state, and dropped
     /// from the result. Same contract as the Python protocol, present from
     /// the first release because adding it later would break implementers.
-    /// `onStep` is a cooperative hook called once per decoded token — for
+    /// `onStep` is a cooperative hook called once per decoded token, for
     /// progress UIs, and for harnesses that must duty-cycle a long burst
-    /// (iOS kills a background process that holds >80% CPU over 60 s; the
-    /// demo app's benchmark sleeps inside this hook and subtracts the slept
-    /// time from what it reports). It runs on the decoding thread; whatever
-    /// it spends is part of the caller's wall clock.
+    /// (iOS kills a background process that holds over 80% CPU for 60 s, so a
+    /// benchmark can sleep inside this hook and subtract the slept time from
+    /// what it reports). It runs on the decoding thread; whatever it spends is
+    /// part of the caller's wall clock.
+    ///
+    /// `shouldCancel` is polled before every decode step and throws
+    /// `LoudKitError.cancelled` at the poll that fires, so the contract is
+    /// held at the site that stops the loop, as in the other four ports; the
+    /// partial row never leaves this function.
     public func generate(
         textTokens: [Int], voice: VoiceProfile, sampler: LRSamplerV1,
         maxNewTokens: Int? = nil, prefix: [Int] = [], onStep: (() -> Void)? = nil,
         shouldCancel: (() -> Bool)? = nil
-    ) -> Generation {
+    ) throws -> Generation {
         let cap = maxNewTokens ?? config.sampling.maxNewTokens
         let floor = config.eosFloor(nTextTokens: textTokens.count)
         let stop = config.stopSpeechToken
+
+        let prefix = fusion == nil ? prefix : Array(prefix.prefix(prefix.count - prefix.count % 2))
 
         // [ cond | START text STOP | speech START | prefix... ]
         let cond = condEmbeds(voice: voice)
@@ -559,21 +640,34 @@ public final class TokenGenerator {
             embeds.append(speechEmb[config.startSpeechToken * hidden + d] + speechPos[d])
         }
         var seen = [Bool](repeating: false, count: config.speechVocabSize)
-        for (k, tok) in prefix.enumerated() {
-            for d in 0..<hidden {
-                embeds.append(speechEmb[tok * hidden + d] + speechPos[(k + 1) * hidden + d])
+        if fusion != nil {
+            for pair in stride(from: 0, to: prefix.count, by: 2) {
+                embeds += pairEmbedding(prefix[pair], prefix[pair + 1], position: pair / 2 + 1)
             }
-            seen[tok] = true
+        } else {
+            for (k, tok) in prefix.enumerated() {
+                for d in 0..<hidden {
+                    embeds.append(speechEmb[tok * hidden + d] + speechPos[(k + 1) * hidden + d])
+                }
+            }
         }
+        for token in prefix { seen[token] = true }
         let prefillLen = embeds.count / hidden
 
-        let cache = Cache(layers: nLayers, nKV: nKV, maxLen: prefillLen + cap + 1, headDim: headDim)
+        let slots = fusion == nil ? cap : (cap + 1) / 2
+        let cache = Cache(layers: nLayers, nKV: nKV, maxLen: prefillLen + slots + 1, headDim: headDim)
         let hiddenStates = forward(embeds, rows: prefillLen, positions: Array(0..<prefillLen), cache: cache)
         var logits = speechLogits(Array(hiddenStates[(prefillLen - 1) * hidden..<prefillLen * hidden]))
 
+        if fusion != nil {
+            return try generatePairs(
+                cap: cap, floor: floor, prefixCount: prefix.count, prefillLength: prefillLen,
+                state: Array(hiddenStates.suffix(hidden)), logits: logits, seen: seen,
+                cache: cache, sampler: sampler, onStep: onStep, shouldCancel: shouldCancel)
+        }
         var out: [Int] = []
         for step in 0..<cap {
-            if shouldCancel?() == true { break } // token-level barge-in
+            if shouldCancel?() == true { throw LoudKitError.cancelled }
             if out.count < floor { logits[stop] = -Float.infinity }
             let token = sampler.sample(logits: logits, step: step, seen: seen)
             out.append(token)
@@ -590,4 +684,40 @@ public final class TokenGenerator {
         }
         return Generation(rawTokens: out, hitTokenCap: out.count >= cap && !out.contains(stop))
     }
+    private func generatePairs(  // swiftlint:disable:this function_parameter_count
+        cap: Int, floor: Int, prefixCount: Int, prefillLength: Int,
+        state initialState: [Float], logits initialLogits: [Float], seen initialSeen: [Bool],
+        cache: Cache, sampler: LRSamplerV1, onStep: (() -> Void)?, shouldCancel: (() -> Bool)?
+    ) throws -> Generation {
+        var state = initialState
+        var logits = initialLogits
+        var seen = initialSeen
+        var out: [Int] = []
+        var pair = 0
+        let stop = config.stopSpeechToken
+        while out.count < cap {
+            if shouldCancel?() == true { throw LoudKitError.cancelled }
+            if out.count < floor { logits[stop] = -.infinity }
+            let first = sampler.sample(logits: logits, step: out.count, seen: seen)
+            out.append(first)
+            onStep?()
+            if first == stop { break }
+            seen[first] = true
+            if out.count >= cap { break }
+            var secondScores = secondLogits(state, first: first)
+            if out.count < floor { secondScores[stop] = -.infinity }
+            let second = sampler.sample(logits: secondScores, step: out.count, seen: seen)
+            out.append(second)
+            onStep?()
+            if second == stop { break }
+            seen[second] = true
+            if out.count >= cap { break }
+            let embedding = pairEmbedding(first, second, position: prefixCount / 2 + pair + 1)
+            state = forward(embedding, rows: 1, positions: [prefillLength + pair], cache: cache)
+            logits = speechLogits(state)
+            pair += 1
+        }
+        return Generation(rawTokens: out, hitTokenCap: out.count >= cap && !out.contains(stop))
+    }
+
 }

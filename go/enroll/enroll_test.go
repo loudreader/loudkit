@@ -16,6 +16,17 @@ import (
 // cosine > 0.9999. Needs the exported enrollment graphs and the onnxruntime
 // shared library; skips with a named reason otherwise.
 func testEnroll(t *testing.T) *Result {
+	enr, audio := testEnroller(t)
+	res, err := enr.Enroll(audio, 24000)
+	if err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+	return res
+}
+
+// testEnroller is testEnroll's setup, split out so a test can run the clone
+// more than once against one set of graphs.
+func testEnroller(t *testing.T) (*Enroller, []float32) {
 	onnxDir := os.Getenv("LOUDKIT_ONNX_DIR")
 	lib := os.Getenv("LOUDKIT_ONNXRUNTIME_LIB")
 	fixture := os.Getenv("LOUDKIT_ENROLL_FIXTURE")
@@ -49,12 +60,7 @@ func testEnroll(t *testing.T) *Result {
 	}
 	t.Cleanup(enr.Close)
 
-	audio := readF32(t, filepath.Join(fixture, "ref_audio.f32"))
-	res, err := enr.Enroll(audio, 24000)
-	if err != nil {
-		t.Fatalf("enroll: %v", err)
-	}
-	return res
+	return enr, readF32(t, filepath.Join(fixture, "ref_audio.f32"))
 }
 
 func readF32(t *testing.T, path string) []float32 {
@@ -129,6 +135,95 @@ func TestEmbeddingsMatch(t *testing.T) {
 	speaker := readF32(t, filepath.Join(fx, "speaker_embedding.f32"))
 	if cos(res.SpeakerEmbedding, speaker) <= 0.9999 {
 		t.Fatalf("speaker embedding cosine %f <= 0.9999", cos(res.SpeakerEmbedding, speaker))
+	}
+}
+
+// Two clones from one enroller in one process must agree element for element.
+// The enroller destroys every tensor it builds and every tensor a Run hands
+// back, and a Result that still aliased a released output buffer would read
+// differently, or crash, once the second clone reused the memory.
+//
+// The length-against-capacity check is the cheap half and needs no second run:
+// a view returned straight from GetData over a larger output tensor carries a
+// capacity past its length, and a copy does not.
+func TestEnrollmentIsStableAcrossTwoRuns(t *testing.T) {
+	enr, audio := testEnroller(t)
+
+	first, err := enr.Enroll(audio, 24000)
+	if err != nil {
+		t.Fatalf("first enroll: %v", err)
+	}
+	second, err := enr.Enroll(audio, 24000)
+	if err != nil {
+		t.Fatalf("second enroll: %v", err)
+	}
+
+	// Two enrolments must not hand out slices over one array, and neither may
+	// carry spare capacity: a caller appending to a profile's slice would then
+	// write into that profile's own array, and two such appends would alias.
+	// Length against capacity alone does not say this, because a grown copy
+	// lands on an exact capacity whenever the length happens to sit on one of
+	// the growth steps, so both are checked.
+	if len(first.FlowEmbedding) != cap(first.FlowEmbedding) {
+		t.Errorf("flow embedding carries slack: len %d, cap %d",
+			len(first.FlowEmbedding), cap(first.FlowEmbedding))
+	}
+	if len(first.CondPromptTokens) != cap(first.CondPromptTokens) {
+		t.Errorf("cond prompt tokens carry slack: len %d, cap %d",
+			len(first.CondPromptTokens), cap(first.CondPromptTokens))
+	}
+	if len(first.CondPromptTokens) > 0 {
+		was := second.CondPromptTokens[0]
+		first.CondPromptTokens[0] = was + 1
+		if second.CondPromptTokens[0] != was {
+			t.Error("the two enrolments share one array of cond prompt tokens")
+		}
+		first.CondPromptTokens[0] = was
+	}
+	if len(first.FlowEmbedding) > 0 {
+		was := second.FlowEmbedding[0]
+		first.FlowEmbedding[0] = was + 1
+		if second.FlowEmbedding[0] != was {
+			t.Error("the two enrolments share one flow embedding array")
+		}
+		first.FlowEmbedding[0] = was
+	}
+
+	sameI64(t, "prompt tokens", first.PromptTokens, second.PromptTokens)
+	sameI64(t, "cond prompt tokens", first.CondPromptTokens, second.CondPromptTokens)
+	sameF32(t, "flow embedding", first.FlowEmbedding, second.FlowEmbedding)
+	sameF32(t, "speaker embedding", first.SpeakerEmbedding, second.SpeakerEmbedding)
+	sameF32(t, "prompt mel", first.PromptMel, second.PromptMel)
+	if first.PromptMelFrames != second.PromptMelFrames {
+		t.Errorf("prompt mel frames: %d then %d", first.PromptMelFrames, second.PromptMelFrames)
+	}
+}
+
+func sameI64(t *testing.T, what string, a, b []int64) {
+	t.Helper()
+	if len(a) != len(b) {
+		t.Errorf("%s: %d values then %d", what, len(a), len(b))
+		return
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Errorf("%s[%d]: %d then %d", what, i, a[i], b[i])
+			return
+		}
+	}
+}
+
+func sameF32(t *testing.T, what string, a, b []float32) {
+	t.Helper()
+	if len(a) != len(b) {
+		t.Errorf("%s: %d values then %d", what, len(a), len(b))
+		return
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			t.Errorf("%s[%d]: %g then %g", what, i, a[i], b[i])
+			return
+		}
 	}
 }
 

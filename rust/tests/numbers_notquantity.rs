@@ -1,11 +1,9 @@
-//! A digit run with two or more separators is a version, an address or a date —
+//! A digit run with two or more separators is a version, an address or a date,
 //! never a number.
 //!
-//! All three used to be read as one: with the comma as the decimal mark the dots
-//! were treated as thousands grouping and the segments concatenated, so
-//! `192.168.0.1` was spoken as "nineteen million two hundred sixteen thousand
-//! eight hundred one". The Python reference additionally crashed on these, which
-//! is how the class was found.
+//! Read as one number, with the comma as the decimal mark, the dots become
+//! thousands grouping and the segments concatenate, so `192.168.0.1` is spoken
+//! as "nineteen million two hundred sixteen thousand eight hundred one".
 //!
 //! Regression tests: every literal below is one that shipped wrong.
 

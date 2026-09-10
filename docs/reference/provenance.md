@@ -1,16 +1,22 @@
 # Provenance
 
-**Every WAV `Result.save()` writes carries a C2PA manifest, by default.** If you
-copied the three-line example from the README, your file has one. This page says
-what is in it, how it is verified, and how to switch it off.
+**Every WAV `Result.save()` writes carries a loudkit provenance manifest, by
+default.** If you copied the three-line example from the README, your file has
+one. This page says what is in it, how it is verified, and how to switch it off.
+
+**It is not [C2PA](https://c2pa.org).** A C2PA manifest is a signed manifest
+store, and this is one JSON assertion in boxes that borrow JUMBF's shape and
+nothing else. C2PA tools do not read it, and it does not sit in the `C2PA` chunk
+they look in, so they pass over the file rather than reporting a broken
+manifest. `loudkit verify` is what reads it.
 
 ## What it is
 
-A [C2PA](https://c2pa.org) *claim-only* manifest: a JSON document in a JUMBF box
-appended after the WAV's data chunk. The box sits **outside the size the RIFF
-header declares**, so every player that reads the declared length ignores it and
-plays the audio unchanged. The bytes before the box are byte-identical to the
-same synthesis saved without one.
+A JSON document in JUMBF-shaped boxes, carried in a RIFF chunk named `LKPV`
+after the audio. A player walks the chunks it knows and ignores the one it does
+not, so the audio plays unchanged, and **the `data` chunk is byte-identical to
+the same synthesis saved without a manifest**: adding provenance appends a chunk
+and grows the size the RIFF header declares, and touches nothing else.
 
 ```python
 r = engine.synthesize("Hello from loudkit.", narrator, seed=7)
@@ -20,9 +26,12 @@ r.save("bare.wav", include_provenance=False)  # audio only
 
 ## What it says
 
-Two assertions. The first is the standard `c2pa.actions` one: this audio was
+Two assertions. The first follows the shape C2PA uses for `c2pa.actions`, and
+carries IPTC's `digitalSourceType` term for media a model made: this audio was
 *created* by software, naming loudkit and its version, with a timestamp. The
-second is loudkit's own:
+shape is borrowed so that a future move to real Content Credentials is
+mechanical; it is not a claim that this file is one. The second is loudkit's
+own:
 
 | field | what it pins |
 | --- | --- |
@@ -50,10 +59,10 @@ for your use, pass `include_provenance=False`.
 ## Reading it back
 
 ```python
-import loudkit as lk
+from loudkit.provenance import read_provenance, verify_provenance
 
-info = lk.read_provenance("hello.wav")  # the manifest, or None
-manifest, ok = lk.verify_provenance("hello.wav")  # does audio_sha256 still match?
+info = read_provenance("hello.wav")  # the manifest, or None
+manifest, ok = verify_provenance("hello.wav")  # does audio_sha256 still match?
 ```
 
 `verify_provenance` re-hashes the audio and compares. It catches a manifest
@@ -62,9 +71,10 @@ verification too.
 
 ## Trust model
 
-**It is unsigned.** A full C2PA chain signs the manifest with a certificate, so a
-verifier can tell who made the claim and that nobody edited it. This one carries
-no signature: anyone can write, alter, or strip it. Treat it as **disclosure, not
+**It is unsigned.** C2PA signs a manifest with a certificate, so a verifier can
+tell who made the claim and that nobody edited it. This one carries no
+signature, which is most of why it is not C2PA: anyone can write, alter, or
+strip it. Treat it as **disclosure, not
 proof**. It tells an honest downstream tool where a file came from, and it stops
 nobody who does not want to be told on.
 

@@ -21,6 +21,7 @@ build/
 /assets/*
 !/assets/logo.png
 !/assets/logo-wordmark.png
+!/assets/logo-mark-flat.png
 # `/out/` is ignored outright further down, so the ten `out/…` rules that used
 # to sit here never applied — a negation cannot re-include a path under an
 # ignored directory. Two of them also named a machine that is nobody's business
@@ -31,6 +32,8 @@ checkpoints/
 *.safetensors
 !tests/data/reference/*.safetensors
 !tests/data/enrollment/*.safetensors
+# Small standalone preview voice profiles linked by the documentation gallery.
+!docs/voices/preview/profiles/*.safetensors
 *.wav
 .DS_Store
 .build/
@@ -88,7 +91,16 @@ checkpoints/
 # Editor and tool state, not source.
 .swiftpm/
 .claude/
+# `npm ci` in js/ creates this, and it was never listed: every contributor
+# who built the TypeScript port carried ~40 MB of untracked files in
+# `git status`, and one `git add -A` commits them. No trailing slash, so a
+# symlinked node_modules -- which is how a worktree borrows the main
+# checkout's install -- is covered too.
+node_modules
 
 # Internal reports: strategy, optimisation candidates, review notes. Useful to
 # the people writing them and noise to anyone reading the library.
 /reports/
+
+# Session file some local tooling drops into the checkout; never part of the release.
+:memory:.ses

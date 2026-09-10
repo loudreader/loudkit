@@ -112,3 +112,36 @@ fn embeddings_match() {
     assert!(cf > 0.9999, "flow embedding cosine {cf} <= 0.9999");
     assert!(cs > 0.9999, "speaker embedding cosine {cs} <= 0.9999");
 }
+
+#[test]
+#[ignore = "needs both synthesis graph sets, enrollment graphs and ORT_DYLIB_PATH"]
+fn clone_once_runs_on_both_models() {
+    let (enrolled, _) = enroll();
+    let profile = enrolled.profile("shared", "en");
+    let fixture = PathBuf::from("../tests/data/conformance");
+    for (checkpoint, graphs) in [
+        ("LOUDKIT_CKPT", "LOUDKIT_ONNX_DIR"),
+        ("LOUDKIT_FUSION_CKPT", "LOUDKIT_FUSION_ONNX_DIR"),
+    ] {
+        let mut engine = loudkit::engine::Engine::load_paths(
+            &need(checkpoint),
+            &need(graphs),
+            fixture.join("tokenizer.json").to_str().unwrap(),
+        )
+        .unwrap();
+        let options = loudkit::engine::Options {
+            seed: 0,
+            ..Default::default()
+        };
+        let first = engine
+            .synthesize_window("Hello, how are you?", &profile, &options)
+            .unwrap();
+        let repeated = engine
+            .synthesize_window("Hello, how are you?", &profile, &options)
+            .unwrap();
+        assert!(!first.tokens.is_empty());
+        assert_eq!(first.tokens, repeated.tokens, "{checkpoint} repeat tokens");
+        assert_eq!(first.audio, repeated.audio, "{checkpoint} repeat audio");
+        assert!(first.audio.iter().all(|v| v.is_finite()));
+    }
+}

@@ -334,6 +334,69 @@
    "expected": "At twenty-three fifty-nine sharp."
   },
   {
+   "text": "Call at 3:45pm.",
+   "language": "en",
+   "expected": "Call at three forty-five pm."
+  },
+  {
+   "text": "Call at 3:45 pm.",
+   "language": "en",
+   "expected": "Call at three forty-five pm."
+  },
+  {
+   "text": "It is 9:05am now.",
+   "language": "en",
+   "expected": "It is nine five am now.",
+   "why": "a minute under ten reads as a plain cardinal, *nine five*, in all twelve. English says *nine oh five* and the word for that zero is not a cardinal, so it is a per-language grammar entry rather than a boundary rule, and this case pins what the funnel says today"
+  },
+  {
+   "text": "Meet at 11:30AM sharp.",
+   "language": "en",
+   "expected": "Meet at eleven thirty AM sharp.",
+   "why": "the acronym speller runs before the clock pass and sees a meridiem only where a space already stood: `11:30 AM` becomes *ay-em* and `11:30AM` stays `AM`. Pass order, not the boundary, and the pair below keeps the difference visible instead of asserting one of them alone"
+  },
+  {
+   "text": "Meet at 11:30 AM sharp.",
+   "language": "en",
+   "expected": "Meet at eleven thirty ay-em sharp."
+  },
+  {
+   "text": "Due 12:00p.m. today.",
+   "language": "en",
+   "expected": "Due twelve p.m. today.",
+   "why": "the dotted spelling is letters like any other, and the speller declines a dotted token, so both forms of this one read alike"
+  },
+  {
+   "text": "Termin um 14.30Uhr.",
+   "language": "de",
+   "expected": "Termin um vierzehn Uhr dreißig."
+  },
+  {
+   "text": "Termin um 14.30 Uhr.",
+   "language": "de",
+   "expected": "Termin um vierzehn Uhr dreißig."
+  },
+  {
+   "text": "Es ist 14:30Uhr genau.",
+   "language": "de",
+   "expected": "Es ist vierzehn Uhr dreißig genau."
+  },
+  {
+   "text": "Spotkanie o 14:30am.",
+   "language": "pl",
+   "expected": "Spotkanie o czternaście trzydzieści am."
+  },
+  {
+   "text": "Split at 10:30:45 exactly.",
+   "language": "en",
+   "expected": "Split at ten thirty forty-five exactly."
+  },
+  {
+   "text": "Meet at a14:30.",
+   "language": "en",
+   "expected": "Meet at afourteen thirty."
+  },
+  {
    "text": "Son 2 500 000 000 personas.",
    "language": "es",
    "expected": "Son dos mil quinientos millones personas."
@@ -657,31 +720,31 @@
    "text": "iOS18 is out.",
    "language": "en",
    "expected": "iOS18 is out.",
-   "why": "the four number-regex shapes Swift used to read differently"
+   "why": "the four number-regex shapes every funnel must agree on"
   },
   {
    "text": "I have 1 000 things.",
    "language": "en",
    "expected": "I have one thousand things.",
-   "why": "the four number-regex shapes Swift used to read differently"
+   "why": "the four number-regex shapes every funnel must agree on"
   },
   {
    "text": "It is -5 degrees.",
    "language": "en",
    "expected": "It is minus five degrees.",
-   "why": "the four number-regex shapes Swift used to read differently"
+   "why": "the four number-regex shapes every funnel must agree on"
   },
   {
    "text": "Meet at a14:30.",
    "language": "en",
    "expected": "Meet at afourteen thirty.",
-   "why": "the four number-regex shapes Swift used to read differently"
+   "why": "the four number-regex shapes every funnel must agree on"
   },
   {
    "text": "Price 1 234 567 exact.",
    "language": "en",
    "expected": "Price one million two hundred and thirty-four thousand, five hundred and sixty-seven exact.",
-   "why": "the four number-regex shapes Swift used to read differently"
+   "why": "the four number-regex shapes every funnel must agree on"
   },
   {
    "text": "Det koster 250 kroner.",
@@ -742,6 +805,392 @@
    "language": "de",
    "expected": "Preis3,14 iOS.",
    "why": "the mixed-script class this fuzzer was written for, now closed: foreign digits fold to ASCII, the token still has a letter glued to it, and all five leave it written. It read `Preis3,vierzehn` — half a token spoken, which is exactly what the refusal rule exists to stop"
+  },
+  {
+   "text": "¿Como estas hoy? ¡Que bien!",
+   "language": "es",
+   "expected": "¿Como estas hoy? ¡Que bien!",
+   "why": "the inverted marks are prosody: they are the earliest cue a Spanish reader has that a question is coming. The reference dropped them while Go, Rust, JS and Swift kept them, so every Spanish question read differently in the implementation that defines the others"
+  },
+  {
+   "text": "Bonjour ! Comment allez-vous ? Voici : midi ;",
+   "language": "fr",
+   "expected": "Bonjour! Comment allez-vous? Voici: midi;",
+   "why": "French typography puts a non-breaking space before ! ? : ; and Word, LibreOffice and French CMSs insert it automatically. RE2's \\s is ASCII, so Go alone kept it, and the frontend folds NBSP to a space -- 79 token ids against 75 in the other four on this one sentence"
+  },
+  {
+   "text": "Cena to 𝟣𝟤 zlotych.",
+   "language": "pl",
+   "expected": "Cena to dwanaście zlotych.",
+   "why": "mathematical sans-serif digits, the kind pasted out of social bios. Four Nd blocks sit back to back in this range, so walking down to find the block's zero crossed the boundary: Rust aborted the process on the unwrap, Go and JS read 12 as 232"
+  },
+  {
+   "text": "one 漢字 two three four",
+   "language": "pl",
+   "expected": "one 漢字 two tri four",
+   "why": "a script without case is still letters. JS tested for letters by comparing upper to lower case, which is false for CJK, Hebrew, Arabic, Hangul, Thai and Devanagari, so the word took the digits-only branch and was deleted from the sentence"
+  },
+  {
+   "text": "cena to ０１２３ euro",
+   "language": "pl",
+   "expected": "cena to zero jeden dwa trzy euro",
+   "why": "fullwidth digits. The leading-zero refusal reads the original token, where a fullwidth zero is not an ASCII one; Swift normalised first and then refused its own normalisation, spelling four glyphs one by one where the other four said a hundred and twenty three"
+  },
+  {
+   "text": "Alpha betagamma delta",
+   "language": "en",
+   "expected": "Alpha betagamma delta",
+   "why": "U+0085 is what CP1252 byte 0x85 becomes when text is decoded as Latin-1, which is ordinary in scraped and epub sources. It is whitespace to Python, Go, Rust and Swift and not to ECMAScript, so JS alone turned it into a space"
+  },
+  {
+   "text": "the end of record\u001ethe next begins",
+   "language": "en",
+   "expected": "the end of record the next begins",
+   "why": "U+001C-U+001F: `str.isspace()` calls them whitespace and Unicode's White_Space does not, so Python kept the separator where Rust, Go, JS and Swift all replaced it with a space. Measured over 0..0x2FFFF, these four are the only disagreement between the two predicates. The tokenizer saw [UNK] where the ports saw [SPACE], and the splitter found no word boundary where they did — different tokens and a different chunk split under one fingerprint"
+  },
+  {
+   "text": "tak ’ nie",
+   "language": "pl",
+   "expected": "tak ’ nie",
+   "why": "a token with no letters and no digits was mapped through the ASCII-keyed digit table and filtered to nothing, so a spaced apostrophe was erased from the utterance — and it is in the prosodic set, which is to say the funnel is meant to keep it. Swift had already fixed this and written down why"
+  },
+  {
+   "text": "²9",
+   "language": "en",
+   "expected": "two nine",
+   "why": "a superscript written against a digit left a BARE DIGIT in the output. Every \"is this a word character\" test in the five ports is \\w, \\p{N} or str.isdigit(), and all three admit No — so this was one token, the number matcher's boundary guard declined it, and the symbol pass then deleted the superscript and left a 9 nothing verbalised. A bare digit is what this layer exists to prevent, and a grapheme model reads one badly with no way to hear that it happened"
+  },
+  {
+   "text": "9²",
+   "language": "en",
+   "expected": "nine two",
+   "why": "the same, on the other side: the character has to become a space rather than be deleted, or the digit joins whatever followed"
+  },
+  {
+   "text": "½7",
+   "language": "en",
+   "expected": "one divided by two seven",
+   "why": "a vulgar fraction is the same category (No) and was the same defect"
+  },
+  {
+   "text": "The area is 12 m² and the price is $9.",
+   "language": "en",
+   "expected": "The area is twelve m two and the price is nine dollars.",
+   "why": "the shape this reaches in real prose. Both numbers must be read, and the currency mark must still find its amount"
+  },
+  {
+   "text": "Pokój ma 12 m² i kosztuje 2000 zł.",
+   "language": "pl",
+   "expected": "Pokój ma dwanaście m dwa i kosztuje dwa tysiące zł.",
+   "why": "the same in Polish, where the respelling pass runs as well"
+  },
+  {
+   "text": "5৩3",
+   "language": "en",
+   "expected": "five hundred and thirty-three",
+   "why": "a Bengali digit inside a Latin number. Unfolded, a non-ASCII Nd passes the whole funnel untouched, so the ASCII digits around it reach the model bare, and a funnel whose boundary test is ASCII reads them aloud instead: one string, a reading per implementation"
+  },
+  {
+   "text": "１２３",
+   "language": "en",
+   "expected": "one hundred and twenty-three",
+   "why": "fullwidth digits, which are ordinary in CJK text and were not read at all"
+  },
+  {
+   "text": "Add ½ cup of flour.",
+   "language": "en",
+   "expected": "Add one divided by two cup of flour.",
+   "why": "a vulgar fraction in a recipe. Unfolded it is deleted -- 'add cup of flour' -- which is the failure this layer exists to prevent, arriving as fluent audio that says something else. It reads as its ASCII spelling reads, which is the rule for every numeral this pass folds"
+  },
+  {
+   "text": "Chapter Ⅶ.",
+   "language": "en",
+   "expected": "Chapter seven.",
+   "why": "a Roman numeral, deleted the same way. NFKC gives the letters and the acronym pass spells them, exactly as it would for a written IV"
+  },
+  {
+   "text": "xⓐy",
+   "language": "en",
+   "expected": "x y",
+   "why": "a circled letter is So, not a letter. Rust and Swift tested the Alphabetic property here and kept it; the other three spaced it"
+  },
+  {
+   "text": "ⓐ-1",
+   "language": "en",
+   "expected": "minus one",
+   "why": "the same class in front of a signed number, and the sharper case: Swift's Alphabetic test made the boundary fail and left a BARE DIGIT in front of the model, which is what the numeral fold exists to stop"
+  },
+  {
+   "text": "1 000.𗀀",
+   "language": "no",
+   "expected": "1 000.𗀀",
+   "why": "a grouped number, a dot, and a TANGUT IDEOGRAPH. Swift's walks read one UTF-16 unit and turned half a surrogate pair into a SPACE, so the number looked unglued and Swift alone read it aloud where the other four left it written"
+  },
+  {
+   "text": "𗀀.1",
+   "language": "no",
+   "expected": "𗀀.1",
+   "why": "the same pair, the other way round: the letter is BEHIND the digit, and the backward walk stepped into the middle of the pair"
+  },
+  {
+   "text": "24:00.一二三",
+   "language": "no",
+   "expected": "tjuefire.一二三",
+   "why": "a clock, a dot, and CJK numerals. `Character.isNumber` is Numeric_Type, so 一 (category Lo, value 1) counted as a digit behind the dot, the time looked like part of a longer number, and Swift alone read 'tjuefire:00' -- half the clock spoken and half left written"
+  },
+  {
+   "text": "1 000 一二三",
+   "language": "no",
+   "expected": "tusen 一二三",
+   "why": "the same class at the other end: the CJK numerals made the grouped thousand look glued to a number rather than followed by a word"
+  },
+  {
+   "text": "一二三.2024",
+   "language": "pl",
+   "expected": "一二三.dwa tysiące dwadzieścia cztery",
+   "why": "the respelling pass normalised digits with `Character.isNumber`, which is Numeric_Type: the three CJK ideographs have values 1, 2 and 3, so Swift alone read the word as 'sto dwadziescia trzy' -- a number said aloud where the other four leave a word written"
+  },
+  {
+   "text": "12.03.2026ⓐ",
+   "language": "pt",
+   "expected": "doze de março de dois mil e vinte e seis",
+   "why": "a date followed by a CIRCLED LATIN SMALL LETTER A. ICU's \\b counts Other_Alphabetic as a word character and Python's does not, so the date found no boundary here and Swift alone left it written"
+  },
+  {
+   "text": "Add 𐵁 cups",
+   "language": "en",
+   "expected": "Add one cups",
+   "why": "GARAY DIGIT ONE, added in Unicode 16.0. Detection driven by the runtime's own tables, with the fold table coming from a file, reads 'Add cups' on an interpreter carrying Unicode 15 and leaves it written on one carrying Unicode 16: two readings under one fingerprint, from two interpreters the CI matrix both runs. The table decides membership so that neither can"
+  },
+  {
+   "text": "𐅷 of it",
+   "language": "en",
+   "expected": "two divided by three of it",
+   "why": "GREEK TWO THIRDS SIGN has no NFKC form, so the fold reads its numeric value -- which arrived from `unicodedata.numeric` as the float 0.6666666666666666 and was written out as 0.666667, read aloud in full as 'zero point six six six six six seven'. The table carries the exact fraction now"
+  },
+  {
+   "text": "aͅb",
+   "language": "en",
+   "expected": "a b",
+   "why": "COMBINING GREEK YPOGEGRAMMENI is Other_Alphabetic, so Rust's Alphabetic test kept a mark the other four removed"
+  },
+  {
+   "text": "text[1, 2] more",
+   "language": "en",
+   "expected": "text more",
+   "why": "a footnote marker whose separator is a non-breaking space -- ordinary French and German typography. RE2 reads \\s and \\d as ASCII, so Go kept the marker and then READ IT ALOUD; the other four dropped it"
+  },
+  {
+   "text": "a.",
+   "language": "en",
+   "expected": "a.",
+   "why": "NEL before a clause mark. ECMAScript \\s excludes U+0085, so JS alone left it standing; it is ordinary in scraped and epub sources"
+  },
+  {
+   "text": "a\u000b.",
+   "language": "en",
+   "expected": "a.",
+   "why": "VERTICAL TAB, the mirror image: Go's hand-expanded whitespace class omitted it and Go alone left it standing"
+  },
+  {
+   "text": "12.03.2026一二三",
+   "language": "de",
+   "expected": "12.03.2026一二三",
+   "why": "a date glued to a CJK ideograph. Go's byte-wise ASCII boundary and ECMAScript's ASCII `\\b` both read that as a word boundary and spoke the date; Python, Rust and Swift read `Lo` as a word character and left it written. One string, two readings, one fingerprint"
+  },
+  {
+   "text": "1é",
+   "language": "en",
+   "expected": "1é",
+   "why": "the mirror: a digit glued to a non-ASCII letter, which the same three boundaries answered differently"
+  },
+  {
+   "text": "Add ፲ cups",
+   "language": "en",
+   "expected": "Add ten cups",
+   "why": "ETHIOPIC NUMBER TEN has no compatibility decomposition, so an NFKC-only fold left it unchanged and the punctuation pass then DELETED it: 'add cups'. The Aegean numbers, the Kaktovik digits and the Meroitic numerals were the same. The table carries a numeric value where NFKC has nothing"
+  },
+  {
+   "text": "Cena to 𝟣𝟤 zlotych.",
+   "language": "pl",
+   "expected": "Cena to dwanaście zlotych.",
+   "why": "MATHEMATICAL SANS-SERIF ONE and TWO. Decimal blocks are contiguous with each other, so walking down to 'the previous character is not a digit' walked out of the block and read these as ninety-nine. This fixture pinned that wrong answer"
+  },
+  {
+   "text": "Add 𝟘 cups",
+   "language": "en",
+   "expected": "Add zero cups",
+   "why": "the sharpest case of the same bug: MATHEMATICAL DOUBLE-STRUCK DIGIT ZERO sits immediately after MATHEMATICAL SANS-SERIF DIGIT NINE, so a walk read a zero as a nine"
+  },
+  {
+   "text": "一二三",
+   "language": "en",
+   "expected": "一二三",
+   "why": "the guard on the fix. Ideographic numerals are Numeric_Type but category Lo — letters — so a pass keyed on str.isnumeric() or Swift's numericType would have replaced a language's numerals with spaces. The pass reads the general category, and these survive untouched"
+  },
+  {
+   "text": "if latency > 200 ms",
+   "language": "en",
+   "expected": "if latency greater than two hundred ms",
+   "why": "the comparison operators were deleted, silently, in ordinary technical prose: the Unicode spellings had words and the ASCII ones people type did not"
+  },
+  {
+   "text": "x <= 10 and y >= 3",
+   "language": "en",
+   "expected": "x at most ten and y at least three"
+  },
+  {
+   "text": "a < b, a != b, a == b",
+   "language": "en",
+   "expected": "a less than b, a not equal to b, a equals b"
+  },
+  {
+   "text": "x > 3 i x <= 9",
+   "language": "pl",
+   "expected": "eks większe niż trzy i eks najwyżej dziewięć",
+   "why": "the operator words come from the grammar, so a render speaks them in its own language"
+  },
+  {
+   "text": "i <3 u and a<b",
+   "language": "en",
+   "expected": "i three u and a b",
+   "why": "the guard: whitespace on both sides is the evidence that a mark is an operator, and without it the mark stays written"
+  },
+  {
+   "text": "<p>Hello</p><div class=\"x\">Hi</div>",
+   "language": "en",
+   "expected": "Hello Hi",
+   "why": "a tag name reached the model as a word. A tag becomes a space and not nothing, because two block tags meeting are two paragraphs"
+  },
+  {
+   "text": "<!-- note --> text",
+   "language": "en",
+   "expected": "text",
+   "why": "a comment left its ! behind as a sentence-final stop"
+  },
+  {
+   "text": "See the 3 April minutes",
+   "language": "en",
+   "expected": "See the third of April minutes",
+   "why": "the article the date supplies is one the sentence already had"
+  },
+  {
+   "text": "The 3 April deadline, and on 3 April.",
+   "language": "en",
+   "expected": "The third of April deadline, and on the third of April."
+  },
+  {
+   "text": "Chapter IV of World War II",
+   "language": "en",
+   "expected": "Chapter four of World War two",
+   "why": "a Roman numeral was spelled letter by letter: Chapter eye-vee, inside a book reader"
+  },
+  {
+   "text": "Act III, Scene II",
+   "language": "en",
+   "expected": "Act three, Scene two"
+  },
+  {
+   "text": "Rozdział XIV",
+   "language": "pl",
+   "expected": "Rozdział czternaście"
+  },
+  {
+   "text": "Buy a CD, send my CV, size XL, and a MIX tape",
+   "language": "en",
+   "expected": "Buy a see-dee, send my see-vee, size ex-el, and a em-eye-ex tape",
+   "why": "the guard: L, C, D and M are outside the alphabet the numeral pass reads, which is what keeps every initialism that is also a numeral"
+  },
+  {
+   "text": "Split at 10:30:45 exactly.",
+   "language": "en",
+   "expected": "Split at ten thirty forty-five exactly.",
+   "why": "a clock time with seconds kept its colons, so a literal colon reached the acoustic model"
+  },
+  {
+   "text": "10:00:45 and 10:30:00",
+   "language": "en",
+   "expected": "ten zero forty-five and ten thirty"
+  },
+  {
+   "text": "version 10.30.45 shipped",
+   "language": "sv",
+   "expected": "version 10.30.45 shipped",
+   "why": "a dotted run is a version as readily as a time"
+  },
+  {
+   "text": "Add ½ cup and ¾ more",
+   "language": "en",
+   "expected": "Add one divided by two cup and three divided by four more",
+   "why": "a vulgar fraction read as two numbers. The character asserts the fraction; a typed slash does not"
+  },
+  {
+   "text": "¾",
+   "language": "de",
+   "expected": "drei geteilt durch vier"
+  },
+  {
+   "text": "open 24/7 and/or 3/12/2026",
+   "language": "en",
+   "expected": "open twenty-four seven and or three twelve two thousand and twenty-six",
+   "why": "the guard on the fraction rule: ordinary prose that reads correctly"
+  },
+  {
+   "text": "$2.5M and $5m and $5bn and $20k and £3m",
+   "language": "en",
+   "expected": "two point five million dollars and five million dollars and five billion dollars and twenty thousand dollars and three million pounds",
+   "why": "the scale suffix was left inside the currency word: two point five dollarsM"
+  },
+  {
+   "text": "$5 million in funding",
+   "language": "en",
+   "expected": "five million dollars in funding",
+   "why": "the written noun is the same defect in a longer word"
+  },
+  {
+   "text": "€2 milliarder",
+   "language": "no",
+   "expected": "to milliarder euro"
+  },
+  {
+   "text": "$5kg costs 2.5M users",
+   "language": "en",
+   "expected": "five dollarskg costs 2.5M users",
+   "why": "a letter that is not a magnitude leaves the price alone"
+  },
+  {
+   "text": "2026-03-04T10:00 and 2026-03-04T10:30:45",
+   "language": "en",
+   "expected": "fourth March twenty twenty-six ten and fourth March twenty twenty-six ten thirty forty-five",
+   "why": "the ISO field separator glued to the last word of the date"
+  },
+  {
+   "text": "2026-03-04x and x2026-03-04",
+   "language": "en",
+   "expected": "2026-03-04x and x2026-03-04",
+   "why": "a date written against a letter is part of an identifier. The guard named the digits and the separators and admitted the letter at either end, so the year welded to it: twenty twenty-sixx"
+  },
+  {
+   "text": "x04.03.2026 and 25/03/2026x",
+   "language": "de",
+   "expected": "x04.03.2026 and fünfundzwanzig null drei 2026x"
+  },
+  {
+   "text": "04.03.2026 and 25/03/2026",
+   "language": "de",
+   "expected": "vierte März zweitausendsechsundzwanzig and fünfundzwanzigste März zweitausendsechsundzwanzig",
+   "why": "...and a date with nothing glued to it is one"
+  },
+  {
+   "text": "+12345678abc",
+   "language": "en",
+   "expected": "12345678abc",
+   "why": "the same guard on the telephone rule: eight digits were said and the letters left glued to the last of them"
+  },
+  {
+   "text": "+48 123 456 789 and +12345678",
+   "language": "pl",
+   "expected": "cztery osiem jeden dwa trzy cztery pięć sześć siedem osiem dziewięć and jeden dwa trzy cztery pięć sześć siedem osiem"
   }
  ],
  "chunking": [
@@ -756,6 +1205,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "One. Two. Three.",
    "chunks": [
     "One. Two. Three."
@@ -772,6 +1248,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "A single sentence that is comfortably shorter than one window.",
    "chunks": [
     "A single sentence that is comfortably shorter than one window."
@@ -788,6 +1291,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while. Sentence number 4 runs on for a while. Sentence number 5 runs on for a while. Sentence number 6 runs on for a while. Sentence number 7 runs on for a while. Sentence number 8 runs on for a while. Sentence number 9 runs on for a while. Sentence number 10 runs on for a while. Sentence number 11 runs on for a while.",
    "chunks": [
     "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while.",
@@ -807,6 +1337,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space between two of them so that is where it goes even though nobody enjoys it",
    "chunks": [
     "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space",
@@ -824,6 +1381,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "Clauses, separated only by commas, keep going and going and going, and the splitter should prefer the latest comma inside the budget, not the first one it happens to find while scanning, which would make chunks shorter than they need to be.",
    "chunks": [
     "Clauses, separated only by commas, keep going and going and going,",
@@ -842,6 +1426,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run.",
    "chunks": [
     "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run."
@@ -858,6 +1469,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more.",
    "chunks": [
     "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more."
@@ -874,6 +1512,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
    "chunks": [
     "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
@@ -890,9 +1555,344 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "Ten tysięcy złotych, a potem nowa linia, i koniec zdania.",
    "chunks": [
     "Ten tysięcy złotych, a potem nowa linia, i koniec zdania."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at all.",
+   "chunks": [
+    "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of",
+    "it at all."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Alpha ends here. Mrs. Watson and Mr. Holmes then agreed on the one point that had ever really mattered to either of them at all, and said so.",
+   "chunks": [
+    "Alpha ends here.",
+    "Mrs. Watson and Mr. Holmes then agreed on the one point that had ever really mattered to either of them at all, and said so."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Mr. Norrell, who had been waiting in the hall for the better part of an hour, said nothing at all to either of them about what he had seen there.",
+   "chunks": [
+    "Mr. Norrell, who had been waiting in the hall for the better part of an hour,",
+    "said nothing at all to either of them about what he had seen there."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The rocket that carried them up there was built by NASA. And the rest of the afternoon went by without anybody saying much about it to anyone.",
+   "chunks": [
+    "The rocket that carried them up there was built by NASA.",
+    "And the rest of the afternoon went by without anybody saying much about it to anyone."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta.",
+   "chunks": [
+    "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie,",
+    "a potem gasna powoli i nikt juz nie pamieta."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long grey afternoon.",
+   "chunks": [
+    "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long",
+    "grey afternoon."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu, nu xi omicron pi rho, sigma tau upsilon phi chi psi omega at the end.",
+   "chunks": [
+    "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu, nu xi omicron pi rho,",
+    "sigma tau upsilon phi chi psi omega at the end."
    ]
   },
   {
@@ -906,6 +1906,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "One. Two. Three.",
    "chunks": [
     "One. Two. Three."
@@ -922,6 +1949,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "A single sentence that is comfortably shorter than one window.",
    "chunks": [
     "A single sentence",
@@ -941,6 +1995,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while. Sentence number 4 runs on for a while. Sentence number 5 runs on for a while. Sentence number 6 runs on for a while. Sentence number 7 runs on for a while. Sentence number 8 runs on for a while. Sentence number 9 runs on for a while. Sentence number 10 runs on for a while. Sentence number 11 runs on for a while.",
    "chunks": [
     "Sentence number 1",
@@ -978,6 +2059,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space between two of them so that is where it goes even though nobody enjoys it",
    "chunks": [
     "No punctuation at",
@@ -1004,6 +2112,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "Clauses, separated only by commas, keep going and going and going, and the splitter should prefer the latest comma inside the budget, not the first one it happens to find while scanning, which would make chunks shorter than they need to be.",
    "chunks": [
     "Clauses,",
@@ -1034,6 +2169,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run.",
    "chunks": [
     "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
@@ -1053,6 +2215,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more.",
    "chunks": [
     "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌",
@@ -1074,6 +2263,33 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
    "chunks": [
     "xxxxxxxxxxxxxxxxxxxx",
@@ -1092,11 +2308,1096 @@
     "; ",
     ", "
    ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
    "text": "Ten tysięcy złotych, a potem nowa linia, i koniec zdania.",
    "chunks": [
     "Ten tysięcy złotych,",
     "a potem nowa linia,",
     "i koniec zdania."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at all.",
+   "chunks": [
+    "But Mr. Smith went",
+    "home to the house on",
+    "the hill where he",
+    "had lived for forty",
+    "years without ever",
+    "once complaining",
+    "about any of it at",
+    "all."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Alpha ends here. Mrs. Watson and Mr. Holmes then agreed on the one point that had ever really mattered to either of them at all, and said so.",
+   "chunks": [
+    "Alpha ends here.",
+    "Mrs. Watson and Mr.",
+    "Holmes then agreed",
+    "on the one point",
+    "that had ever really",
+    "mattered to either",
+    "of them at all,",
+    "and said so."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Mr. Norrell, who had been waiting in the hall for the better part of an hour, said nothing at all to either of them about what he had seen there.",
+   "chunks": [
+    "Mr. Norrell,",
+    "who had been waiting",
+    "in the hall for the",
+    "better part of an",
+    "hour,",
+    "said nothing at all",
+    "to either of them",
+    "about what he had",
+    "seen there."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The rocket that carried them up there was built by NASA. And the rest of the afternoon went by without anybody saying much about it to anyone.",
+   "chunks": [
+    "The rocket that",
+    "carried them up",
+    "there was built by",
+    "NASA.",
+    "And the rest of the",
+    "afternoon went by",
+    "without anybody",
+    "saying much about it",
+    "to anyone."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta.",
+   "chunks": [
+    "Grzeja sie i swieca.",
+    "ciepłem ktore",
+    "pamietaja z lata i z",
+    "kazdej innej pory",
+    "roku na swiecie,",
+    "a potem gasna powoli",
+    "i nikt juz nie",
+    "pamieta."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long grey afternoon.",
+   "chunks": [
+    "Dr. Watson walked",
+    "the length of St.",
+    "James Street twice",
+    "over before he found",
+    "the one door he had",
+    "been looking for all",
+    "that long grey",
+    "afternoon."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu, nu xi omicron pi rho, sigma tau upsilon phi chi psi omega at the end.",
+   "chunks": [
+    "Alpha beta gamma",
+    "delta,",
+    "epsilon zeta eta",
+    "theta,",
+    "iota kappa lambda",
+    "mu,",
+    "nu xi omicron pi",
+    "rho,",
+    "sigma tau upsilon",
+    "phi chi psi omega at",
+    "the end."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "One. Two. Three.",
+   "chunks": [
+    "One. Two. Three."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "A single sentence that is comfortably shorter than one window.",
+   "chunks": [
+    "A single sentence that is comfortably shorter than one window."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while. Sentence number 4 runs on for a while. Sentence number 5 runs on for a while. Sentence number 6 runs on for a while. Sentence number 7 runs on for a while. Sentence number 8 runs on for a while. Sentence number 9 runs on for a while. Sentence number 10 runs on for a while. Sentence number 11 runs on for a while.",
+   "chunks": [
+    "Sentence number 1 runs on for a while. Sentence number 2 runs on for a while. Sentence number 3 runs on for a while.",
+    "Sentence number 4 runs on for a while. Sentence number 5 runs on for a while. Sentence number 6 runs on for a while.",
+    "Sentence number 7 runs on for a while. Sentence number 8 runs on for a while. Sentence number 9 runs on for a while.",
+    "Sentence number 10 runs on for a while. Sentence number 11 runs on for a while."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space between two of them so that is where it goes even though nobody enjoys it",
+   "chunks": [
+    "No punctuation at all just a very long run of words that has to break somewhere and the only available boundary is a space",
+    "between two of them so that is where it goes even though nobody enjoys it"
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Clauses, separated only by commas, keep going and going and going, and the splitter should prefer the latest comma inside the budget, not the first one it happens to find while scanning, which would make chunks shorter than they need to be.",
+   "chunks": [
+    "Clauses, separated only by commas, keep going and going and going,",
+    "and the splitter should prefer the latest comma inside the budget, not the first one it happens to find while scanning,",
+    "which would make chunks shorter than they need to be."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run.",
+   "chunks": [
+    "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀. A tail sentence after the emoji run."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more.",
+   "chunks": [
+    "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍, and a clause after the ideographs, and one more."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "chunks": [
+    "xxxxxxxxxxxxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Ten tysięcy złotych, a potem nowa linia, i koniec zdania.",
+   "chunks": [
+    "Ten tysięcy złotych, a potem nowa linia, i koniec zdania."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at all.",
+   "chunks": [
+    "But Mr.",
+    "Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at",
+    "all."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Alpha ends here. Mrs. Watson and Mr. Holmes then agreed on the one point that had ever really mattered to either of them at all, and said so.",
+   "chunks": [
+    "Alpha ends here. Mrs. Watson and Mr.",
+    "Holmes then agreed on the one point that had ever really mattered to either of them at all, and said so."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Mr. Norrell, who had been waiting in the hall for the better part of an hour, said nothing at all to either of them about what he had seen there.",
+   "chunks": [
+    "Mr.",
+    "Norrell, who had been waiting in the hall for the better part of an hour,",
+    "said nothing at all to either of them about what he had seen there."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "The rocket that carried them up there was built by NASA. And the rest of the afternoon went by without anybody saying much about it to anyone.",
+   "chunks": [
+    "The rocket that carried them up there was built by NASA.",
+    "And the rest of the afternoon went by without anybody saying much about it to anyone."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta.",
+   "chunks": [
+    "Grzeja sie i swieca.",
+    "ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long grey afternoon.",
+   "chunks": [
+    "Dr. Watson walked the length of St.",
+    "James Street twice over before he found the one door he had been looking for all that long grey afternoon."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu, nu xi omicron pi rho, sigma tau upsilon phi chi psi omega at the end.",
+   "chunks": [
+    "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu, nu xi omicron pi rho,",
+    "sigma tau upsilon phi chi psi omega at the end."
    ]
   }
  ],
@@ -1115,6 +3416,6 @@
   }
  ],
  "divergent": {
-  "why": "What one implementation still does differently. Dates, ordinals, acronyms and NFC used to live here; all four ports have them now and their cases moved into `cases` above, where every implementation is held to them."
+  "why": "What one implementation still does differently. A family leaves this block for `cases` above as soon as every implementation agrees on it, which is where all five are held to it."
  }
 }

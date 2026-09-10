@@ -69,7 +69,7 @@ class _FakeInferenceSession:
 
 
 @pytest.fixture
-def fake_ort(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+def fake_ort(monkeypatch: pytest.MonkeyPatch):
     """An onnxruntime whose available providers this test decides.
 
     Substituted in ``sys.modules`` rather than patched onto the real module,
@@ -166,7 +166,7 @@ class TestExplicitProvider:
     ) -> None:
         fake_ort([CPU, "AzureExecutionProvider"])
         with pytest.raises(ValueError) as excinfo:
-            resolve_provider(provider)  # type: ignore[arg-type]
+            resolve_provider(provider)
         message = str(excinfo.value)
         assert provider in message  # what was asked for
         assert ort_name in message  # what onnxruntime calls it
@@ -296,6 +296,7 @@ class _StubComponent:
 
 class _StubCheckpoint:
     file_digest = "0" * 64
+    path = Path("/nonexistent/loudr-1.safetensors")
 
     def tensors(self, prefix: str) -> dict[str, Any]:
         del prefix
@@ -310,7 +311,7 @@ class _StubCheckpoint:
 
 
 @pytest.fixture
-def stub_backend(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+def stub_backend(monkeypatch: pytest.MonkeyPatch):
     """``build_onnx_engine`` with the graph loading taken out.
 
     What is left is the part under test: the provider is resolved once, written
@@ -318,19 +319,38 @@ def stub_backend(monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-de
     """
     from loudkit.backends import onnx_backend
 
-    monkeypatch.setattr(onnx_backend, "_assets_dir", lambda _ckpt: Path("/nonexistent"))
+    monkeypatch.setattr(
+        onnx_backend, "_assets_dir", lambda _ckpt, _algorithm: Path("/nonexistent")
+    )
     monkeypatch.setattr(onnx_backend, "GraphemeTextFrontend", lambda _path: object())
     for name in ("ONNXTokenGenerator", "ONNXMelDecoder", "ONNXVocoder"):
         monkeypatch.setattr(onnx_backend, name, _StubComponent)
 
     def build(execution: ExecutionConfig) -> Any:
         return onnx_backend.build_onnx_engine(
-            _StubCheckpoint(),  # type: ignore[arg-type]
+            _StubCheckpoint(),
             execution,
             STATIC,
         )
 
     return build
+
+
+class TestTheBuilderChecksProvenance:
+    """That `build_onnx_engine` consults the export record at all.
+
+    The unit tests for `_check_provenance` pass whether or not anything calls
+    it, which is the shape that lets a check exist and never run. `/nonexistent`
+    carries no record, so a builder that consults it warns and a builder that
+    does not is silent.
+    """
+
+    def test_building_over_a_folder_with_no_record_warns(
+        self, fake_ort: Any, stub_backend: Any
+    ) -> None:
+        fake_ort([CPU])
+        with pytest.warns(RuntimeWarning, match="came from one export"):
+            stub_backend(ExecutionConfig(device="onnx"))
 
 
 class TestEngineReportsTheProvider:

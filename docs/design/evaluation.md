@@ -10,12 +10,12 @@ five implementations. These catch drift and regression; they cannot hear.
 
 ## Tier 1 — the ASR round-trip, against per-language floors
 
-`tools/eval_roundtrip.py` renders the probe corpus and scores transcripts
-against each language's **own** floor (`tools/eval_floors.json`): Whisper's CER
-on human speech is 2.1–3.1% in eight of our languages and **4.8% in Danish** —
-one global threshold would hold Danish to an impossible bar while letting
-English coast. The gate is `CER ≤ 2.0 × floor`, both numbers always printed
-together.
+`research/eval_roundtrip.py` renders the probe corpus and scores transcripts
+against each language's **own** floor (`research/eval_floors.json`): Whisper's
+CER on human speech is 2.1–3.1% in eight of our languages and **4.8% in
+Danish** — one global threshold would hold Danish to an impossible bar while
+letting English coast. The gate is `CER ≤ 2.0 × floor`, both numbers always
+printed together.
 
 What this tier cannot see, written down so nobody trusts it further than it
 goes: French liaison (ASR normalises it away), the Portuguese variant axis
@@ -31,7 +31,7 @@ The highest-value evaluation available, and an inexpensive one — an hour
 per language with a native speaker. The protocol:
 
 1. Render `tests/data/probes/probes.json` for the language
-   (`tools/eval_roundtrip.py` does this).
+   (`research/eval_roundtrip.py` does this).
 2. Sit a native speaker down with the wavs and the texts. Binary pass/fail per
    item, no scales — a Likert score on a stød error measures the listener's
    politeness, not the audio.
@@ -44,6 +44,16 @@ the signal lives: the one controlled study that compared input representations
 found them indistinguishable on a held-out set and distinguishable at 70/30 on
 targeted stimuli. A random-sample listening test at the measured 1–10% failure
 base rate would measure zero.
+
+## Tier 2.5 — the pairwise judge, when a comparative number is needed now
+
+An LLM judge hears loudkit and a comparator read the same passage and says
+which read it better, every passage judged in both presentation orders. 400
+frozen English passages, about $13 per comparator, no people. It answers "how
+do we compare" quickly and it is not a listening panel: its notion of good
+prosody is its own and unvalidated against human ears here, and it hears voice
+identity whatever the rubric says. Full method, confounds and commands in
+[pairwise-judge.md](pairwise-judge.md).
 
 ## Tier 3 — only for a published comparative claim
 
@@ -63,7 +73,7 @@ buys that sentence.
 ## The NST lexicons — the unused gold
 
 Språkbanken's NST pronunciation lexicons are all CC0 and all fetched by
-`tools/fetch_nst_lexicons.py`: Swedish (927k entries, **accent-1/accent-2
+`research/fetch_nst_lexicons.py`: Swedish (927k entries, **accent-1/accent-2
 marked** — labels no open toolchain uses, and espeak-ng has no word-accent
 machinery at all), Danish (238k entries, **stød marked** — the contrast the
 standard phonemizer collapses: hun/hund come out identical), Norwegian (785k,

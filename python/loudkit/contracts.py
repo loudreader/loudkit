@@ -1,35 +1,6 @@
 """The seams. Five components, five protocols, one direction of data.
 
-::
-
-    text ──▶ TextFrontend ──▶ text tokens
-                                   │
-    voice ─▶ VoiceEnroller ──▶ VoiceProfile
-                                   │
-                                   ▼
-                            TokenGenerator ──▶ speech tokens   (25 Hz, discrete)
-                                   │
-                                   ▼
-                              MelDecoder ──▶ mel               (80 bins)
-                                   │
-                                   ▼
-                                Vocoder ──▶ waveform           (24 kHz)
-
-Every protocol takes an :class:`~loudkit.config.AlgorithmConfig` and is forbidden
-from carrying algorithm state of its own. A backend supplies implementations;
-it does not supply behaviour.
-
-Why protocols rather than base classes: an implementation may be a torch module,
-an ONNX session, or a CoreML package, and none of those want a shared ancestor.
-What they share is a shape of call, which is what a protocol says and a base
-class only implies.
-
-**The contract that matters most** is that these boundaries are *value*
-boundaries. Tokens are integers, a mel is an array, a waveform is an array. No
-component hands another a live model object, a device handle, or a cache. That
-is what makes it possible to run the token generator on the CPU and the mel
-decoder on the GPU — which, on Apple silicon, is measurably the right split —
-and to compare two backends stage by stage when they disagree.
+See ``docs/design/engine-pipeline.md``.
 """
 
 from __future__ import annotations
@@ -53,6 +24,9 @@ __all__ = [
     "SpeechTokens",
     "Mel",
     "Waveform",
+    "MEL_BINS",
+    "TOKEN_RATE_HZ",
+    "TOKEN_MEL_RATIO",
 ]
 
 SpeechTokens = Sequence[int]
@@ -65,6 +39,20 @@ Mel = NDArray[np.float32]
 
 Waveform = NDArray[np.float32]
 """Mono audio in [-1, 1] at ``AlgorithmConfig.sample_rate``."""
+
+
+# -- the geometry of the seams above, stated once ----------------------------
+# These three numbers describe the shapes that cross the boundaries this module
+# draws.
+
+MEL_BINS = 80
+"""Mel bins per frame. The height of :data:`Mel` and the vocoder's input width."""
+
+TOKEN_RATE_HZ = 25
+"""Speech tokens per second of audio: one token is 40 ms."""
+
+TOKEN_MEL_RATIO = 2
+"""Mel frames per speech token, 25 Hz tokens become 50 Hz mel frames."""
 
 
 @runtime_checkable
@@ -81,7 +69,7 @@ class VoiceEnroller(Protocol):
     """Reference audio to a :class:`VoiceProfile`.
 
     Enrollment is deliberately separate from synthesis: it is slow, it needs
-    models synthesis does not (a speaker encoder, a speech tokenizer — together
+    models synthesis does not (a speaker encoder, a speech tokenizer, together
     about 40% of the checkpoint), and its result is a few hundred kilobytes of
     tensors that can be cached, shipped and versioned on their own.
     """
@@ -93,10 +81,7 @@ class VoiceEnroller(Protocol):
 class Sampler(Protocol):
     """Logits to one token. The whole sampling law, and nothing else.
 
-    Kept a component rather than a function because it owns the RNG stream, and
-    the RNG stream is the single thing most likely to make two correct backends
-    disagree. ``torch.multinomial`` gives different samples for the same
-    probability vector and the same generator on x86 and arm64.
+    See ``docs/design/engine-pipeline.md``.
     """
 
     def __call__(
@@ -108,15 +93,15 @@ class Sampler(Protocol):
     ) -> int:
         """Choose the next token.
 
-        Args:
-            logits: raw scores over the speech vocabulary, unnormalised.
-            step: index of this decode step. The RNG is addressed by it, so the
-                result does not depend on how many tokens were drawn before —
-                which is what lets two backends agree while computing in
-                different orders.
-            seen: which tokens have already been emitted, for the repetition
-                penalty. Silence tokens are exempt; see
-                :class:`~loudkit.config.SamplingConfig`.
+        See ``docs/design/engine-pipeline.md``.
+        """
+        ...
+
+    @property
+    def eos_peak(self) -> tuple[int, float]:
+        """Where the model came closest to stopping, as ``(step, probability)``.
+
+        See ``docs/design/engine-pipeline.md``.
         """
         ...
 
@@ -143,19 +128,7 @@ class TokenGenerator(Protocol):
     ) -> SpeechTokens:
         """Run to the stop token or the cap, whichever comes first.
 
-        Args:
-            prefix: speech tokens from the preceding chunk, fed in as context
-                and **not** included in the return value.
-
-                This parameter is why long-form reading does not stutter.
-                Generated independently, each chunk restarts its pitch contour
-                like a fresh sentence, and the restart is audible at every join;
-                conditioning on the tail of the previous chunk removes it.
-
-                It is in the protocol from the first release on purpose. Adding
-                a parameter to a ``Protocol`` after other people have written
-                implementations against it breaks all of them, and this is the
-                one extension we already know is coming.
+        See ``docs/design/engine-pipeline.md``.
         """
         ...
 
@@ -167,13 +140,7 @@ class TokenGenerator(Protocol):
     ) -> NDArray[np.float32]:
         """Logits at each step when the given tokens are fed back regardless.
 
-        Required by every implementation because it is the only comparison
-        between backends that is not confounded by chaos: once two free-running
-        generations differ by one token they are reading different histories,
-        and every later logit is incomparable. Teacher forcing holds the context
-        identical and asks only what the arithmetic did.
-
-        Returns ``(len(forced) + 1, vocab)``.
+        See ``docs/design/engine-pipeline.md``.
         """
         ...
 
@@ -182,10 +149,10 @@ class TokenGenerator(Protocol):
 class MelDecoder(Protocol):
     """Speech tokens and a voice to a mel. Non-autoregressive, whole sequence.
 
-    The opposite shape from the token generator — one large parallel pass rather
-    than hundreds of tiny serial ones — which is why the two stages disagree
-    about which hardware they want. Measured on an M3 Pro: this stage is 2.6x
-    faster on the GPU, while the token generator is 1.7x slower there.
+    The opposite shape from the token generator, one large parallel pass rather
+    than hundreds of tiny serial ones, which is why the two stages disagree
+    about which hardware they want: on Apple silicon this stage is faster on the
+    GPU while the token generator is faster on the CPU.
     """
 
     config: AlgorithmConfig
@@ -195,7 +162,7 @@ class MelDecoder(Protocol):
 
         ``seed`` is mandatory, not optional with a default. The prior is drawn
         from it, and an unseeded implementation of this stage produced waveforms
-        correlating at 0.109 across two runs of *identical* tokens — larger than
+        correlating at 0.109 across two runs of *identical* tokens, larger than
         every effect we have ever tried to measure here.
         """
         ...

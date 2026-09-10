@@ -2,8 +2,10 @@ package speechtext
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -57,4 +59,41 @@ func TestFunnelAgainstTheSharedFixture(t *testing.T) {
 		}
 	}
 	t.Logf("%d cases compared", len(fixture.Cases))
+}
+
+// TestTheGrammarIsParsedOnce fails if a second reader of numbers.json appears.
+//
+// The four tables in this package (numbers, dates, letters, unit words) read
+// overlapping slices of one schema. A parse per table is a parse per table at
+// startup and a place per table to forget a field when the grammar grows, so
+// they share grammarDocument and this pins that.
+func TestTheGrammarIsParsedOnce(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sites []string
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if strings.Contains(line, "json.Unmarshal(numbersJSON") {
+				sites = append(sites, fmt.Sprintf("%s:%d", name, i+1))
+			}
+		}
+	}
+	if len(sites) != 1 {
+		t.Errorf("numbers.json is unmarshalled at %d sites (%v); it is parsed once, in grammarDocument",
+			len(sites), sites)
+	}
+	// And the parse is idempotent: every caller sees the one table.
+	if a, b := grammarDocument(), grammarDocument(); len(a) == 0 || len(a) != len(b) {
+		t.Errorf("grammarDocument returned %d languages then %d", len(a), len(b))
+	}
 }

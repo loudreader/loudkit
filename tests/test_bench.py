@@ -17,31 +17,25 @@ import time
 import numpy as np
 import pytest
 
-from loudkit.bench import Sample, bench, render_table, run_bench, to_json
 from loudkit.config import AlgorithmConfig
-from loudkit.contracts import Mel, Sampler, SpeechTokens, Waveform
+from loudkit.contracts import Sampler, SpeechTokens
 from loudkit.engine import Engine
-from loudkit.profile import profile_passage
 from loudkit.voice import VoiceProfile
 
+from .conftest import fake_engine, fake_voice, tool
 
-def _voice() -> VoiceProfile:
-    return VoiceProfile(
-        name="fake",
-        speaker_embedding=np.full(256, 0.0625, np.float32),
-        flow_embedding=np.full(192, 0.0625, np.float32),
-        prompt_tokens=np.zeros(8, np.int64),
-        prompt_mel=np.zeros((80, 16), np.float32),
-        cond_prompt_tokens=np.zeros(8, np.int64),
-    )
-
-
-class _FakeFrontend:
-    def encode(self, text: str, language: str = "en") -> np.ndarray:
-        return np.arange(len(text.split()), dtype=np.int64)
+_bench = tool("bench")
+Sample, bench, render_table, run_bench, to_json = (
+    _bench.Sample,
+    _bench.bench,
+    _bench.render_table,
+    _bench.run_bench,
+    _bench.to_json,
+)
+profile_passage = tool("profile_stages").profile_passage
 
 
-class _FakeGenerator:
+class FakeGenerator:
     step_delay_s = 0.002
     """Cost of one decode step.
 
@@ -84,36 +78,16 @@ class _FakeGenerator:
         return np.zeros((len(forced) + 1, self.config.speech_vocab_size), np.float32)
 
 
-class _FakeMelDecoder:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def decode(self, tokens: SpeechTokens, voice: VoiceProfile, *, seed: int) -> Mel:
-        return np.full((80, max(1, len(tokens)) * 2), float(seed % 97), np.float32)
-
-
-class _FakeVocoder:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def synthesize(self, mel: Mel, voice: VoiceProfile, *, seed: int) -> Waveform:
-        return np.zeros(mel.shape[1] * 256, np.float32)
-
-
-def _engine() -> Engine:
-    algo = AlgorithmConfig()
-    return Engine(
-        frontend=_FakeFrontend(),
-        token_generator=_FakeGenerator(algo),
-        mel_decoder=_FakeMelDecoder(algo),
-        vocoder=_FakeVocoder(algo),
-        algorithm=algo,
-    )
+def _slow_engine() -> Engine:
+    """The shared fakes, but with a generator that costs time per decode step."""
+    return fake_engine(generator=FakeGenerator)
 
 
 def test_run_bench_collects_one_sample_per_text() -> None:
-    engine = _engine()
-    result = run_bench(engine, _voice(), texts=["one two three", "four five six seven"], seed=7)
+    engine = _slow_engine()
+    result = run_bench(
+        engine, fake_voice(), texts=["one two three", "four five six seven"], seed=7
+    )
     assert len(result.samples) == 2
     assert all(isinstance(s, Sample) for s in result.samples)
     assert all(s.rtf > 0 for s in result.samples)
@@ -132,7 +106,7 @@ def test_determinism_check_detects_drift() -> None:
         def __getattr__(self, name: str) -> object:
             return getattr(self._inner, name)
 
-        def synthesize(self, *a, **kw):  # type: ignore[no-untyped-def]
+        def synthesize(self, *a, **kw):
             from dataclasses import replace
 
             r = self._inner.synthesize(*a, **kw)
@@ -141,13 +115,13 @@ def test_determinism_check_detects_drift() -> None:
                 return replace(r, audio=r.audio + 1e-6)
             return r
 
-    result = run_bench(Drifting(_engine()), _voice(), texts=["hello"], seed=7)
+    result = run_bench(Drifting(_slow_engine()), fake_voice(), texts=["hello"], seed=7)
     assert result.deterministic is False
 
 
 def test_bench_records_load_time_and_peak_rss() -> None:
-    engine = _engine()
-    result = bench(engine, _voice(), texts=["hello"], load_s=1.25)
+    engine = _slow_engine()
+    result = bench(engine, fake_voice(), texts=["hello"], load_s=1.25)
     assert result.load_s == 1.25
     assert result.peak_rss > 0
     assert result.rss_unit in ("bytes", "kB")
@@ -164,9 +138,9 @@ def test_bench_preserves_every_field_run_bench_set() -> None:
     field added is covered without editing this test."""
     from dataclasses import replace
 
-    engine = _engine()
-    plain = run_bench(engine, _voice(), texts=["hello"], seed=7)
-    loaded = bench(engine, _voice(), texts=["hello"], load_s=1.25)
+    engine = _slow_engine()
+    plain = run_bench(engine, fake_voice(), texts=["hello"], seed=7)
+    loaded = bench(engine, fake_voice(), texts=["hello"], load_s=1.25)
     # Everything except the three fields that legitimately differ: load_s is the
     # point of bench(), samples carry wall-clock timings from a second run, and
     # peak_rss is a measurement of the process rather than of the result. The
@@ -184,7 +158,7 @@ def test_host_names_the_machine_not_just_the_device() -> None:
     `device: cpu` names an abstraction: out/rows/ and out/rows_s1/ each held a
     cpu row, one an Apple M3 Pro and one a 2016 i7, and nothing in either file
     distinguished them — the attribution lived only in a markdown table."""
-    result = run_bench(_engine(), _voice(), texts=["hello"], seed=7)
+    result = run_bench(_slow_engine(), fake_voice(), texts=["hello"], seed=7)
     assert result.host, "no host recorded"
     # Hostname, OS and CPU brand at minimum, so two machines cannot collide.
     assert len(result.host.split(" | ")) >= 3, result.host
@@ -192,7 +166,7 @@ def test_host_names_the_machine_not_just_the_device() -> None:
 
 
 def test_json_round_trips() -> None:
-    result = run_bench(_engine(), _voice(), texts=["one two"], seed=7)
+    result = run_bench(_slow_engine(), fake_voice(), texts=["one two"], seed=7)
     blob = json.loads(to_json(result))
     assert blob["fingerprint"] == result.fingerprint
     assert len(blob["samples"]) == 1
@@ -211,11 +185,11 @@ def test_cancel_latency_is_measured_mid_generation() -> None:
     excellent precisely because nothing had happened. The flag now stays false
     long enough for the interrupt to land inside the decode loop.
     """
-    from loudkit.bench import _CANCEL_AFTER_POLLS
+    cancel_after = _bench._CANCEL_AFTER_POLLS
 
-    engine = _engine()
-    long_text = " ".join(f"word{i}" for i in range(_CANCEL_AFTER_POLLS * 3))
-    result = run_bench(engine, _voice(), texts=[long_text], seed=7)
+    engine = _slow_engine()
+    long_text = " ".join(f"word{i}" for i in range(cancel_after * 3))
+    result = run_bench(engine, fake_voice(), texts=[long_text], seed=7)
 
     sample = result.samples[0]
     assert sample.cancel_latency_s is not None, (
@@ -223,14 +197,14 @@ def test_cancel_latency_is_measured_mid_generation() -> None:
     )
     # The generator really decoded before the cancel landed: more polls than
     # the passage has chunks, which is all a pre-chunk-only cancel would show.
-    assert engine.token_generator.polls > _CANCEL_AFTER_POLLS  # type: ignore[attr-defined]
+    assert engine.token_generator.polls > cancel_after
 
     # The interrupt is armed on one poll and honoured on the next, so at least
     # one decode step sits inside the number. An implementation that flips the
     # flag and returns true in the same poll times only the loop unwinding —
     # microseconds, ~30x under the truth, and wrong in the flattering
     # direction. Anchor against the step the fake generator actually takes.
-    step_s = engine.token_generator.step_delay_s  # type: ignore[attr-defined]
+    step_s = engine.token_generator.step_delay_s
     assert sample.cancel_latency_s >= step_s, (
         f"cancel latency {sample.cancel_latency_s:.6f}s is under one decode step "
         f"({step_s:.6f}s) — the wait for the next poll is missing from the measurement"
@@ -238,15 +212,15 @@ def test_cancel_latency_is_measured_mid_generation() -> None:
 
 
 def test_render_table_contains_reproduce_line() -> None:
-    result = run_bench(_engine(), _voice(), texts=["one"], seed=7)
+    result = run_bench(_slow_engine(), fake_voice(), texts=["one"], seed=7)
     table = render_table(result)
     assert "reproduce:" in table
     assert "RTF" in table
 
 
 def test_profile_reports_medians_and_warmup_separately() -> None:
-    engine = _engine()
-    result = profile_passage(engine, _voice(), "one two three", seed=7, runs=4)
+    engine = _slow_engine()
+    result = profile_passage(engine, fake_voice(), "one two three", seed=7, runs=4)
     assert result.n_runs == 4
     # Medians must be actual medians, not means. The fake vocoder is instant, so
     # the interesting assert is structural: warm timing is a single sample and
@@ -275,8 +249,8 @@ def test_profile_total_is_a_median_of_totals_not_a_sum_of_medians() -> None:
 
     from loudkit.engine import Result, StageTimings
 
-    engine = _engine()
-    voice = _voice()
+    engine = _slow_engine()
+    voice = fake_voice()
     real = engine.synthesize("one two", voice, seed=7)
 
     # Three runs with deliberately anti-correlated stage times.
@@ -289,7 +263,7 @@ def test_profile_total_is_a_median_of_totals_not_a_sum_of_medians() -> None:
             seed=7,
             sample_rate=real.sample_rate,
             timings=StageTimings(*t),
-            algorithm_fingerprint=real.algorithm_fingerprint,
+            provenance=real.provenance,
         )
         # The warm-up consumes one before the timed runs begin.
         for t in [(0.0, 0.0, 0.0), *timings]
@@ -312,13 +286,13 @@ def test_profile_rejects_zero_runs() -> None:
     """`statistics.median([])` raises a StatisticsError that names neither this
     function nor the argument that was wrong."""
     with pytest.raises(ValueError, match="runs must be at least 1"):
-        profile_passage(_engine(), _voice(), "one", runs=0)
+        profile_passage(_slow_engine(), fake_voice(), "one", runs=0)
 
 
 def test_profile_json_round_trips() -> None:
-    from loudkit.profile import to_json as profile_to_json
+    profile_to_json = tool("profile_stages").to_json
 
-    result = profile_passage(_engine(), _voice(), "hello world", runs=3)
+    result = profile_passage(_slow_engine(), fake_voice(), "hello world", runs=3)
     blob = json.loads(profile_to_json(result))
     assert blob["n_runs"] == 3
     assert blob["text"] == "hello world"

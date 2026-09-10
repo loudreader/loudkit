@@ -1,0 +1,822 @@
+[
+  {
+    "name": "oliver",
+    "display_name": "Oliver",
+    "selection_label": "L02",
+    "language": "English",
+    "language_id": "en",
+    "gender": "M",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Lower mid register; 15.5-second delivery of the shared story.",
+    "f0_hz": 137,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/oliver-short.opus",
+        "sha256": "c2794f46943c296f5f3f508598008caf79a19ea0a1a8c55157929b5cc443c338",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "bd2fdb4ff8fbc12b070654dc5dae82b24aee4990bda726185547ec613b9f9cb8",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.28
+      },
+      "long": {
+        "audio": "audio/oliver-long.opus",
+        "sha256": "05a6ed661a8bae47169feb1aad4fd65a5c1890bcbeb5f72dc5c5e498da54f144",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "bd2fdb4ff8fbc12b070654dc5dae82b24aee4990bda726185547ec613b9f9cb8",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 15.56
+      }
+    },
+    "reference": {
+      "audio": "audio/oliver-reference.opus",
+      "sha256": "414df65d6021a283cf550e39682fe72d046b2f6c49c2ee81b19a8837164875b7"
+    },
+    "profile": {
+      "path": "profiles/oliver.safetensors",
+      "sha256": "bd2fdb4ff8fbc12b070654dc5dae82b24aee4990bda726185547ec613b9f9cb8"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/0a67.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "0a67",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "4bd75d0ef0ad3f4e82ac075eab2a132651d2463f83bec210edeeccaf69294886",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/oliver-short-turbo.opus",
+        "sha256": "d17d2788b25d5883e94680f18c8919a58406129b6373981ada53d95a1ad97480",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "bd2fdb4ff8fbc12b070654dc5dae82b24aee4990bda726185547ec613b9f9cb8",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.08
+      },
+      "long": {
+        "audio": "audio/oliver-long-turbo.opus",
+        "sha256": "1a546cebc4ab9138ebf285f0e8fca85a91580e7ac4ae0917a67e6983e32334b0",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "bd2fdb4ff8fbc12b070654dc5dae82b24aee4990bda726185547ec613b9f9cb8",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 14.88
+      }
+    }
+  },
+  {
+    "name": "henry",
+    "display_name": "Henry",
+    "selection_label": "L03",
+    "language": "English",
+    "language_id": "en",
+    "gender": "M",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Lower mid register; 16.8-second delivery of the shared story.",
+    "f0_hz": 140,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/henry-short.opus",
+        "sha256": "aaa42074380f06583ca9933c4a43a77cba30ec6c468448331d8bf71f98f02d35",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "5476670162065397f01fca60a1944eb75ddef8dc7e6792dde7fb603c76c14d8c",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.52
+      },
+      "long": {
+        "audio": "audio/henry-long.opus",
+        "sha256": "f96e3ba7cbfd606198965df56ecd305c9e22747bae136d64441a52c7582eccbe",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "5476670162065397f01fca60a1944eb75ddef8dc7e6792dde7fb603c76c14d8c",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.8
+      }
+    },
+    "reference": {
+      "audio": "audio/henry-reference.opus",
+      "sha256": "b948a15335b60477d0e576aa4f80c1d95bbc6d7ca89538c9fd1fab3800e4b7df"
+    },
+    "profile": {
+      "path": "profiles/henry.safetensors",
+      "sha256": "5476670162065397f01fca60a1944eb75ddef8dc7e6792dde7fb603c76c14d8c"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/Dil.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "Dil",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "328d1e3ad60a208df41b297401df2e2e9f12b15a75b3d24f3bc1f220b24d6eb5",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/henry-short-turbo.opus",
+        "sha256": "5f5f13adef571b0a17174c92dce7977f79421e681c603bedc42e35331f8e2783",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "5476670162065397f01fca60a1944eb75ddef8dc7e6792dde7fb603c76c14d8c",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.72
+      },
+      "long": {
+        "audio": "audio/henry-long-turbo.opus",
+        "sha256": "ce02af08480c05a59143fcc37a70c31dd53f542d6119868be82aafc471a4de7c",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "5476670162065397f01fca60a1944eb75ddef8dc7e6792dde7fb603c76c14d8c",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.24
+      }
+    }
+  },
+  {
+    "name": "miles",
+    "display_name": "Miles",
+    "selection_label": "L05",
+    "language": "English",
+    "language_id": "en",
+    "gender": "M",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Mid register; 15.5-second delivery of the shared story.",
+    "f0_hz": 153,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/miles-short.opus",
+        "sha256": "ccbbe198bdb3cca0f1eae5837540b4f2d2afeabf691932477c415a5165bbe369",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "184d5552881d2e6fd644f0546d9b470130664d84faf39a31979001cafe8f4ed9",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.28
+      },
+      "long": {
+        "audio": "audio/miles-long.opus",
+        "sha256": "0238d9c114b8878a195d8478efc2f4baaa93e3803e03f489ffc4a5acd57e9cc2",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "184d5552881d2e6fd644f0546d9b470130664d84faf39a31979001cafe8f4ed9",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.88
+      }
+    },
+    "reference": {
+      "audio": "audio/miles-reference.opus",
+      "sha256": "90f90e726fa8bcf97ff3726d1d8791bebf3ca10ca0ae762a4d91ee563f496b57"
+    },
+    "profile": {
+      "path": "profiles/miles.safetensors",
+      "sha256": "184d5552881d2e6fd644f0546d9b470130664d84faf39a31979001cafe8f4ed9"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/fc96.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "fc96",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "b768f4f59d9ad2ccd2c944ae4179240cfa7aebe1f38cdaacec52a3fb27e31541",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/miles-short-turbo.opus",
+        "sha256": "c19b431824f9b899407d4090c59753ae4e82baf948ad926d7b1aa8ba5643ba9c",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "184d5552881d2e6fd644f0546d9b470130664d84faf39a31979001cafe8f4ed9",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.32
+      },
+      "long": {
+        "audio": "audio/miles-long-turbo.opus",
+        "sha256": "35e4c89b4a127b0fdf0dae6f00d35171de457c2e71e076e52d9e085c10571751",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "184d5552881d2e6fd644f0546d9b470130664d84faf39a31979001cafe8f4ed9",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 15.16
+      }
+    }
+  },
+  {
+    "name": "oscar",
+    "display_name": "Oscar",
+    "selection_label": "L06",
+    "language": "English",
+    "language_id": "en",
+    "gender": "M",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Mid register; 16.2-second delivery of the shared story.",
+    "f0_hz": 148,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/oscar-short.opus",
+        "sha256": "be3de4b21d6b7512d7cdd8b897cbb17c710afc6ad3f500daab0683b8d661418f",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "8b8ff60604338eedddcd7317ed76ad2109fba6fa0ab79c9684a7954b64f963b2",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 3.96
+      },
+      "long": {
+        "audio": "audio/oscar-long.opus",
+        "sha256": "69e278b60b322d7630acd18781bbddc22cc706b7683f5ae724aede7c7865e41a",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "8b8ff60604338eedddcd7317ed76ad2109fba6fa0ab79c9684a7954b64f963b2",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 15.8
+      }
+    },
+    "reference": {
+      "audio": "audio/oscar-reference.opus",
+      "sha256": "c7d158bfc90daf22d6317278b3d4c3c9dd19300e4a65acd03af2ca1abf46a1e8"
+    },
+    "profile": {
+      "path": "profiles/oscar.safetensors",
+      "sha256": "8b8ff60604338eedddcd7317ed76ad2109fba6fa0ab79c9684a7954b64f963b2"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/ra_XOr.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "ra_XOr",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "560caaa6193190b021811e1b0d9dcfddd1b96f7d3f75c71c098823531c305213",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/oscar-short-turbo.opus",
+        "sha256": "f5227b28097d4c490f3b9607cce9e5e436c7212f3603737dccb3cbbe64b3bf06",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "8b8ff60604338eedddcd7317ed76ad2109fba6fa0ab79c9684a7954b64f963b2",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.24
+      },
+      "long": {
+        "audio": "audio/oscar-long-turbo.opus",
+        "sha256": "4a0078e08819f962be2abdacc397c32f24c6526b11af3c43c6bc4d302854646d",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "8b8ff60604338eedddcd7317ed76ad2109fba6fa0ab79c9684a7954b64f963b2",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.4
+      }
+    }
+  },
+  {
+    "name": "clara",
+    "display_name": "Clara",
+    "selection_label": "H02",
+    "language": "English",
+    "language_id": "en",
+    "gender": "F",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Higher register; 16.1-second delivery of the shared story.",
+    "f0_hz": 194,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/clara-short.opus",
+        "sha256": "a003977845840a5809db64472ebf4a1cc2a36ed7b5d23fefc6baa9e8bb762784",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "c2b5db4c210657d6b2b81602fae8e73a733ac4312f33e80536a59a874e7d865f",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.72
+      },
+      "long": {
+        "audio": "audio/clara-long.opus",
+        "sha256": "5c12ead82de33910031c97b69fd531fb2091c14e821aeca6d8cb78eb86775ce5",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "c2b5db4c210657d6b2b81602fae8e73a733ac4312f33e80536a59a874e7d865f",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.08
+      }
+    },
+    "reference": {
+      "audio": "audio/clara-reference.opus",
+      "sha256": "2e3cc0b9822a6a85db4f08c49531d171b6268b80c7d5bf28d713086e05f0ed52"
+    },
+    "profile": {
+      "path": "profiles/clara.safetensors",
+      "sha256": "c2b5db4c210657d6b2b81602fae8e73a733ac4312f33e80536a59a874e7d865f"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/bathri.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "bathri",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "3177c7f139851b85ab78886701bd957e07eb4fcb45a507c17310cbc977747d70",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/clara-short-turbo.opus",
+        "sha256": "500f9108a9add95df3c70820a502419bdb3d6ca003b441a177ace635860e82e8",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "c2b5db4c210657d6b2b81602fae8e73a733ac4312f33e80536a59a874e7d865f",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.24
+      },
+      "long": {
+        "audio": "audio/clara-long-turbo.opus",
+        "sha256": "463a4c4f811b07ea8db88f70d4e387cc3a7f30a634ee9f2e58ab263cb37595c2",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "c2b5db4c210657d6b2b81602fae8e73a733ac4312f33e80536a59a874e7d865f",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 15.76
+      }
+    }
+  },
+  {
+    "name": "emma",
+    "display_name": "Emma",
+    "selection_label": "H03",
+    "language": "English",
+    "language_id": "en",
+    "gender": "F",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Higher register; 14.9-second delivery of the shared story.",
+    "f0_hz": 190,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/emma-short.opus",
+        "sha256": "db0e326796be46aa7fb322fc8803bf244295c857aaa98067e73457e504d8b54e",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "0f5d8bfaceca353ca92db751c48b6a1653823f421ead3c901efe6366b8fa2dfb",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.24
+      },
+      "long": {
+        "audio": "audio/emma-long.opus",
+        "sha256": "4301abe3add09fdec6846fdeddf3290fcc4f727591e274309a17ce77e50a40bf",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "0f5d8bfaceca353ca92db751c48b6a1653823f421ead3c901efe6366b8fa2dfb",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 14.88
+      }
+    },
+    "reference": {
+      "audio": "audio/emma-reference.opus",
+      "sha256": "affbf44eae6ab9895f0bb3c512f33546d18d6b9edb8a6fac44e0310a4f65ed0a"
+    },
+    "profile": {
+      "path": "profiles/emma.safetensors",
+      "sha256": "0f5d8bfaceca353ca92db751c48b6a1653823f421ead3c901efe6366b8fa2dfb"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/awais_shah.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "awais_shah",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "0933f6959eaff9b81a06b99ba4b4388ff069d1813f159fb9a24a6fb73bf89afb",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/emma-short-turbo.opus",
+        "sha256": "d783734146f79e82db6670b2b8fe81b150907a162fb678a2fae0c50742d96f88",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "0f5d8bfaceca353ca92db751c48b6a1653823f421ead3c901efe6366b8fa2dfb",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.04
+      },
+      "long": {
+        "audio": "audio/emma-long-turbo.opus",
+        "sha256": "5489eab084d9fa1e252d38e703d3dc50466bf1600a52a6f1098eef5fed868a50",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "0f5d8bfaceca353ca92db751c48b6a1653823f421ead3c901efe6366b8fa2dfb",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.0
+      }
+    }
+  },
+  {
+    "name": "lucy",
+    "display_name": "Lucy",
+    "selection_label": "H05",
+    "language": "English",
+    "language_id": "en",
+    "gender": "F",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "High register; 14.4-second delivery of the shared story.",
+    "f0_hz": 217,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/lucy-short.opus",
+        "sha256": "5f62c8ad9d5289a5e462a05190ffbfe97c403cc926f05042c0df2ee6252e2bfe",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "009a5fe1b34a9c65b09254f41c01cfdc641ec671a83449ad8aa77dd933d5f27e",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 3.72
+      },
+      "long": {
+        "audio": "audio/lucy-long.opus",
+        "sha256": "e2fc01b8efc1049418134d55d98c2ed94462ee8bc0eb7cb7bd4eb466fe1411f5",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "009a5fe1b34a9c65b09254f41c01cfdc641ec671a83449ad8aa77dd933d5f27e",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 14.36
+      }
+    },
+    "reference": {
+      "audio": "audio/lucy-reference.opus",
+      "sha256": "49e058ca158a8ae704bd32aae1323fd327917c49d18fd5df9215bcb8a771bcd7"
+    },
+    "profile": {
+      "path": "profiles/lucy.safetensors",
+      "sha256": "009a5fe1b34a9c65b09254f41c01cfdc641ec671a83449ad8aa77dd933d5f27e"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/Haku.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "Haku",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "50184ec3a337a1aed0e3dd59a09eac77819694ca308f2a2a3facff6db9b10a59",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/lucy-short-turbo.opus",
+        "sha256": "bd79a4e6d5816ef4ed9603c6d1f853cf8852bb43793ce7c8f63dab30c9ef6ea7",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "009a5fe1b34a9c65b09254f41c01cfdc641ec671a83449ad8aa77dd933d5f27e",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 3.56
+      },
+      "long": {
+        "audio": "audio/lucy-long-turbo.opus",
+        "sha256": "e1ec8d0e763c36b97a93858f2bcdf5ddc51b7ca75ea38a98bdd656e41b954dcd",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "009a5fe1b34a9c65b09254f41c01cfdc641ec671a83449ad8aa77dd933d5f27e",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 15.44
+      }
+    }
+  },
+  {
+    "name": "sophie",
+    "display_name": "Sophie",
+    "selection_label": "H06",
+    "language": "English",
+    "language_id": "en",
+    "gender": "F",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "High register; 15.4-second delivery of the shared story.",
+    "f0_hz": 216,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/sophie-short.opus",
+        "sha256": "813955a4f58d92b68434ac4e0edffc2aec3bef7397055463d48ea8755255fab6",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "efb8047f93eda2a8e7cedaaa254b51957a845d55287298868a409662f8f75e1a",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.04
+      },
+      "long": {
+        "audio": "audio/sophie-long.opus",
+        "sha256": "135539e35629166306dec41cd5bd655a3cc4e7887ae2ecc8a57596cfcc2590cb",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531",
+        "profile_sha256": "efb8047f93eda2a8e7cedaaa254b51957a845d55287298868a409662f8f75e1a",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.08
+      }
+    },
+    "reference": {
+      "audio": "audio/sophie-reference.opus",
+      "sha256": "248f4365279f7c0e80d6c0bf757441c3a3b03a04bdfef9570ed23b3e85d55515"
+    },
+    "profile": {
+      "path": "profiles/sophie.safetensors",
+      "sha256": "efb8047f93eda2a8e7cedaaa254b51957a845d55287298868a409662f8f75e1a"
+    },
+    "source": {
+      "name": "Kyutai Voice Donations",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/voice-donations/Hannah.wav",
+      "license": "CC0-1.0",
+      "speaker_id": "Hannah",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "sha256": "439585cc5c981882a87f1b32f95dbc2c1225d145a4cf861ca36483decbc4c2a8",
+      "terms": "https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf",
+      "consent": "Donation terms expressly cover speech synthesis, voice embeddings and commercial use; individual signed forms were not independently inspected."
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/sophie-short-turbo.opus",
+        "sha256": "b5983bdf3b031da8d29775f0440c8195dba4d933bbc39b6732410447363a4702",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "efb8047f93eda2a8e7cedaaa254b51957a845d55287298868a409662f8f75e1a",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.24
+      },
+      "long": {
+        "audio": "audio/sophie-long-turbo.opus",
+        "sha256": "b875639a32f3d729e8cb0f04dbdc316fffdb05c73d549e6d2db6682e3fe4dfa3",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "efb8047f93eda2a8e7cedaaa254b51957a845d55287298868a409662f8f75e1a",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 15.84
+      }
+    }
+  },
+  {
+    "name": "joe",
+    "display_name": "Joe",
+    "selection_label": "joe",
+    "language": "English",
+    "language_id": "en",
+    "gender": "M",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Low register; 14.6-second delivery of the shared story.",
+    "f0_hz": 111,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/joe-short.opus",
+        "sha256": "66d611170886bb3f2be35c98f0c2b5a1ecc15e1a7f72389d0c3bbd9dbbf6fefc",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531"
+      },
+      "long": {
+        "audio": "audio/joe-long.opus",
+        "sha256": "99bfdd6343e3dfe40c93a569abd46889e87e1aa3afb5252522f59f54642fd86f",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531"
+      }
+    },
+    "reference": {
+      "audio": "audio/joe-reference.opus",
+      "sha256": "292b0923d9601f5f3b6acf0b7c9c8125d1fe72a3cb9d01d0d4003529b40b65ee"
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/joe-short-turbo.opus",
+        "sha256": "1d4cf0873dcb646b93ec91cf0c3e9568fcdac4233a99cdf128a8f960d69383c5",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "cfc3687fdb1f6b56fe13e252ca4a5bd681cef0702dc5cd56d4ebbc60e1aea6e8",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 4.16
+      },
+      "long": {
+        "audio": "audio/joe-long-turbo.opus",
+        "sha256": "fd05ec1094d74002422d7d5ded7c76e1d99bc4e2d52908d1b54b7ea56384d13c",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "cfc3687fdb1f6b56fe13e252ca4a5bd681cef0702dc5cd56d4ebbc60e1aea6e8",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 14.04
+      }
+    }
+  },
+  {
+    "name": "kathleen",
+    "display_name": "Kathleen",
+    "selection_label": "kathleen",
+    "language": "English",
+    "language_id": "en",
+    "gender": "F",
+    "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
+    "description": "Mid register; 14.8-second delivery of the shared story.",
+    "f0_hz": 163,
+    "status": "bundled",
+    "sample": {
+      "short": {
+        "audio": "audio/kathleen-short.opus",
+        "sha256": "38e8c1f18b02fa19f9a2a8991a0787765fe1e17abfcf76dbf2efcfa2f0cca5e7",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531"
+      },
+      "long": {
+        "audio": "audio/kathleen-long.opus",
+        "sha256": "6bc3996ec3338b8f7993de83fb8d7f3757942e99411f92460cbdce74449b9164",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1",
+        "checkpoint_sha256": "73e69a78d58176a3e4b39ca992c7b37a9c51f7251d08e4334c27d9994faac44e",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "7cd75498ad4e7531"
+      }
+    },
+    "reference": {
+      "audio": "audio/kathleen-reference.opus",
+      "sha256": "a2f06ac9796806fc3fd4ea137bb05dab9fae898e40b67c49f094b7da00fb4019"
+    },
+    "sample_turbo": {
+      "short": {
+        "audio": "audio/kathleen-short-turbo.opus",
+        "sha256": "b0b37d076cf6db7395e8761ca262114c863cf17d3754e323992ed7047dc797fc",
+        "text": "Good morning. Take a moment to settle in, and let me tell you a story.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "6a845e4eb11989fc9bd8e19eed7c5ac585e6d08e1ec824211f0eb240ce523d29",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 3.68
+      },
+      "long": {
+        "audio": "audio/kathleen-long-turbo.opus",
+        "sha256": "624fcef1279790b4b43b8ff6f7e3b08c1c7da3a36b4d40f8987de54e6ae75ac4",
+        "text": "The room was quiet when she opened the letter. Outside, the rain had finally stopped. She read the first line slowly, then looked up and smiled. There was still time to change her plans, but for once, she decided to stay exactly where she was.",
+        "seed": 7,
+        "model": "loudr-1-turbo",
+        "checkpoint_sha256": "590dcf9e1dcec31c54650ee139f345b248bdd7ba11288def664c5f1508f33593",
+        "edge_fade_seconds": 0.02,
+        "algorithm_fingerprint": "e5303ba243087222",
+        "profile_sha256": "6a845e4eb11989fc9bd8e19eed7c5ac585e6d08e1ec824211f0eb240ce523d29",
+        "backend": "PyTorch CPU",
+        "duration_seconds": 16.16
+      }
+    }
+  }
+]

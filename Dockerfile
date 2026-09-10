@@ -1,40 +1,34 @@
 # loudkit, as a container.
 #
-# One service, three variants. There is no microservice split here and there
-# should not be: the engine is single-flight, holds one model in memory, and
-# takes a decode step every ~40 ms. Cutting it into a "tokenizer service" and a
-# "generator service" would put a network hop inside that loop and pay
-# serialisation thousands of times per utterance. The seams that look like
-# service boundaries on a diagram are the ones that cost the most to cross.
+# One service, three variants. The engine is single-flight and holds one model
+# in memory, so the backend is the only axis worth varying: `--build-arg
+# VARIANT=` takes `cpu`, `cuda` or `onnx`, because torch-CUDA is about three
+# gigabytes and a CPU user should not download it.
 #
-# What *is* worth splitting is the backend, because torch-CUDA is about three
-# gigabytes and a CPU user should not download it:
+# The variant decides the backend, so `serve` has to be told which one: the
+# onnx image carries no torch, and without `--device onnx` the server asks for
+# the torch backend and dies at import. `compose.yaml` derives the flag from
+# `VARIANT`; a bare `docker run` of `loudkit:onnx` passes `--device onnx`
+# itself.
 #
-#   docker build --build-arg VARIANT=cpu  -t loudkit:cpu  .
-#   docker build --build-arg VARIANT=cuda -t loudkit:cuda .
-#   docker build --build-arg VARIANT=onnx -t loudkit:onnx .
+# `cuda` is an amd64 image in practice, and it fails softly rather than loudly:
+# the torch wheel carrying the CUDA runtime is published for x86_64 only, while
+# the aarch64 wheel of the same version is a CPU build, so an arm64 `cuda`
+# image installs cleanly, starts, and quietly has no GPU. Build that one on
+# amd64. `cpu` and `onnx` build natively on either architecture.
 #
-# The variant decides the backend, so `serve` has to be told: the onnx image
-# carries no torch, and without `--device onnx` the server asks for the torch
-# backend and dies at import. `compose.yaml` derives the flag from `VARIANT`;
-# a bare `docker run` of `loudkit:onnx` passes `--device onnx` itself.
+# On macOS every variant is CPU-only, whatever the host: Docker runs Linux
+# containers in a VM and Apple does not pass Metal through to it, so MPS and
+# CoreML are unreachable from inside a container. On a Mac, install natively.
 #
 # Weights are not baked in. Synthesis downloads a 747 MB checkpoint, versioned
-# separately from the code, so baking it would mean a new image for every
-# weight release. Mount it, or let `loudkit.load("org/name")` fetch it:
+# separately from the code, so baking it in would mean a new image for every
+# weight release. Mount it, or let `loudkit.load("org/name")` fetch it.
 #
-#   TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
-#   docker run --rm -p 127.0.0.1:8000:8000 -e LOUDKIT_TOKEN="$TOKEN" \
-#     -v "$PWD/checkpoints:/weights:ro" \
-#     loudkit:cpu serve --checkpoint /weights/loudr-1.safetensors \
-#     --host 0.0.0.0 --port 8000 --allow-public
-#
-# Every one of those three server flags is load-bearing, and the example used to
-# carry none of them. A container has to bind 0.0.0.0 -- its own loopback is not
-# reachable from the host, so the default bind published nothing through the
-# mapping. 0.0.0.0 then means `--allow-public`, which means a token. And
-# `--port 8000` because the server's own default is 8765, so the mapping above
-# pointed at a port nothing was listening on.
+# Three server flags are load-bearing in a container. `--host 0.0.0.0`, because
+# a container's own loopback is not reachable through a port mapping;
+# `--allow-public`, because the server treats a non-loopback bind as public;
+# and `--port`, because the server's own default is 8765.
 #
 # The token is the one thing that is *not* a flag. `-e LOUDKIT_TOKEN` is the
 # CLI's documented fallback and argv is world-readable: `docker inspect`, `ps`
@@ -45,23 +39,8 @@
 # The boundary is the `127.0.0.1:` on the left of the mapping, not the bind
 # address. The server cannot see that, which is why it insists on the token.
 #
-# **Architecture: whatever you build it on.** Nothing publishes these images —
-# no registry, no CI job, no manifest list — so "multi-arch" is not a claim this
-# repository is entitled to make. What is known: `python:3.12-slim` is published
-# for linux/amd64 and linux/arm64, and so are the wheels the `cpu` and `onnx`
-# variants install, so both build natively on either — `cpu` was built and run
-# on linux/arm64 on 2026-08-22 (`doctor` reported torch 2.13.0+cpu on Linux
-# aarch64), which is the only architecture anyone here has measured. `cuda` is
-# amd64 in practice, and it fails softly rather than loudly: the torch wheel
-# carrying the CUDA runtime is published for x86_64 only, while the aarch64
-# wheel of the same version is a CPU build — an arm64 `cuda` image therefore
-# installs cleanly, starts, and quietly has no GPU. Build that one on amd64.
-#
-# **On macOS this image is CPU-only, whatever the host.** Docker runs Linux
-# containers in a VM and Apple does not pass Metal through to it, so MPS and
-# CoreML are unreachable from inside a container. A `loudkit:mps` image would
-# build, run, and silently fall back to the CPU — a benchmark row that says MPS
-# and measures something else. On a Mac, install natively.
+# docs/platforms/docker.md carries the build and run commands, the variant
+# table and the rest of the deployment story.
 
 ARG VARIANT=cpu
 
@@ -100,10 +79,9 @@ RUN set -eu; \
 
 FROM base AS final
 ARG VARIANT
-# Not a version literal: three files already carry one (see RELEASING.md §1 and
-# tests/test_release.py) and a fourth would be a fourth thing to forget. The
-# builder passes `--build-arg VERSION=0.1.0` at release time; an unlabelled
-# local build says `dev`, which is what it is.
+# Not a version literal: the version lives in the files RELEASING.md §1 lists
+# and tests/test_release.py checks. Release builds pass
+# `--build-arg VERSION=...`; an unlabelled local build says `dev`.
 ARG VERSION=dev
 ARG REVISION=unknown
 # Where this image came from, in the one vocabulary registries and scanners

@@ -1,149 +1,119 @@
 ---
-/*
-  The shipped voice roster, as a playable card grid.
+import roster from '../../../docs/voices/roster/provenance.json';
+import comparisons from '../../../docs/voices/preview/catalog.json';
 
-  The data is read at build time from docs/voices/roster/provenance.json —
-  the same file the repository ships and the same file VOICES.md points at.
-  Nothing is copied into site/. The audio is copied into the build by
-  scripts/sync-docs.mjs, which writes site/public/voices/*.opus and is
-  gitignored, so the .opus files exist once in the repository.
-
-  The player is plain JavaScript in src/scripts/voice-player.ts. One <audio>
-  element is shared by every card and by the landing page's single sample, so
-  starting a second voice stops the first without any bookkeeping.
-*/
-// A static import, not fs.readFileSync: the component is bundled before it
-// runs, so at render time `import.meta.url` is the chunk in dist/ and a path
-// derived from it resolves inside site/. Vite resolves this one at transform
-// time, against this file, and inlines the data.
-import rosterJson from '../../../docs/voices/roster/provenance.json';
-
-interface Props {
-  /** Heading rendered above the filter row. Omit for no heading. */
-  heading?: string;
-  /** One short line under the heading. */
-  note?: string;
-  /**
-   * Set on a page that already prints the roster table. The footnote then
-   * points down at that table instead of at the Voices page.
-   */
-  sourcesBelow?: boolean;
-}
-
-const { heading, note, sourcesBelow = false } = Astro.props;
-
-const roster = rosterJson as Array<{
-  name: string;
-  language: string;
-  language_id: string;
-  gender: string;
-  sample: { audio: string };
-}>;
-
+interface Props { heading?: string; note?: string; sourcesBelow?: boolean }
+const { heading, note } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-
-// One language order, used by the card grid and by the filter row. English,
-// Spanish, French, German, Italian first; the rest keep the roster's order.
-const LANGUAGE_ORDER = ['en', 'es', 'fr', 'de', 'it'];
-
-function languageRank(id: string): number {
-  const i = LANGUAGE_ORDER.indexOf(id);
-  return i === -1 ? LANGUAGE_ORDER.length : i;
-}
-
-const voices = [...roster]
-  .sort((a, b) => languageRank(a.language_id) - languageRank(b.language_id))
-  .map((v) => ({
+const languageOrder = ['en', 'es', 'fr', 'de', 'it', 'pl', 'pt', 'nl', 'sv', 'da'];
+const previewAudio = (file: string) => `${base}/voices/preview/${file}`;
+const all = roster;
+const voices = all.map(v => {
+  const extra = comparisons.find(c => c.name === v.name);
+  const original = roster.find(c => c.name === v.name);
+  const source = extra?.source ?? original!.source;
+  return {
     name: v.name,
-    language: v.language,
-    languageId: v.language_id,
-    gender: v.gender === 'F' ? 'female' : 'male',
-    audio: `${base}/voices/${v.sample.audio.split('/').pop()}`,
-  }));
-
-// The filter row follows the grid, so the pills and the cards read in the
-// same order.
-const languages: Array<{ id: string; label: string }> = [];
-for (const v of voices) {
-  if (!languages.some((l) => l.id === v.languageId)) {
-    languages.push({ id: v.languageId, label: v.language });
-  }
-}
+    title: extra?.display_name ?? v.name.charAt(0).toUpperCase() + v.name.slice(1),
+    language: v.language, languageId: v.language_id,
+    presentation: v.gender === 'F' ? 'feminine' : 'masculine',
+    description: extra?.description ?? `${v.language} voice from ${source.name}.`,
+    audio: extra ? previewAudio(extra.sample.long.audio) : `${base}/voices/${original!.sample.audio.split('/').pop()}`,
+    turbo: extra ? previewAudio(extra.sample_turbo.long.audio) : null,
+    reference: extra ? previewAudio(extra.reference.audio) : `${base}/voices/${original!.reference.public_preview.replace('audio/', '')}`,
+    profile: extra?.profile ? previewAudio(extra.profile.path) : null,
+    use: `voice = engine.voice("${v.name}")`,
+    source,
+  };
+}).sort((a, b) => {
+  const rank = (id: string) => languageOrder.includes(id) ? languageOrder.indexOf(id) : languageOrder.length;
+  return rank(a.languageId) - rank(b.languageId) || a.title.localeCompare(b.title);
+});
+const languages = [...new Map(voices.map(v => [v.languageId, v.languageId === 'pt' ? 'Portuguese' : v.language])).entries()];
 ---
-
 <div class="lk-voices not-content">
   {heading && <h2 class="lk-voices-heading">{heading}</h2>}
   {note && <p class="lk-voices-note">{note}</p>}
-
-  <div class="lk-voice-filters" role="group" aria-label="Filter voices by language">
-    <button type="button" class="lk-voice-filter" data-filter="all" aria-pressed="true">
-      All <span>{voices.length}</span>
-    </button>
-    {
-      languages.map((l) => (
-        <button type="button" class="lk-voice-filter" data-filter={l.id} aria-pressed="false">
-          {l.label}
-        </button>
-      ))
-    }
+  <div class="lk-voice-tools">
+    <label>English model <select class="lk-voice-model"><option value="base">loudr-1</option><option value="turbo">loudr-1-turbo</option></select></label>
+    <span class="lk-voice-meta">Other languages play loudr-1.</span>
   </div>
-
+  <div class="lk-voice-filters" role="group" aria-label="Filter voices by language">
+    <button type="button" class="lk-voice-filter" data-filter="all" aria-pressed="true">All <span>{voices.length}</span></button>
+    {languages.map(([id, label]) => <button type="button" class="lk-voice-filter" data-filter={id} aria-pressed="false">{label}</button>)}
+  </div>
+  <div class="lk-voice-tools">
+    <label>Find a voice <input type="search" class="lk-voice-search" placeholder="Name or language" /></label>
+    <label>Voice presentation <select class="lk-voice-presentation"><option value="all">All voices</option><option value="masculine">Masculine</option><option value="feminine">Feminine</option></select></label>
+    <span class="lk-voice-count" role="status">{voices.length} voices</span>
+  </div>
+  <details class="lk-voice-texts">
+    <summary>English sample text</summary>
+    <p>{comparisons[0].sample.long.text}</p>
+  </details>
   <ul class="lk-voice-grid">
-    {
-      voices.map((v) => (
-        <li class="lk-voice" data-lang={v.languageId}>
-          <button
-            type="button"
-            class="lk-voice-play"
-            data-src={v.audio}
-            data-name={v.name}
-            aria-label={`Play ${v.name}, ${v.language}`}
-          >
-            <span class="lk-voice-icon" aria-hidden="true" />
-          </button>
-          <div class="lk-voice-body">
-            <strong>{v.name}</strong>
-            <span class="lk-voice-meta">
-              {v.language} <i>&middot;</i> {v.gender}
-            </span>
-          </div>
-        </li>
-      ))
-    }
+    {voices.map(v => (
+      <li class="lk-voice" data-lang={v.languageId} data-presentation={v.presentation} data-search={`${v.title} ${v.name} ${v.language}`.toLowerCase()}>
+        <button type="button" class="lk-voice-play" data-src={v.audio} data-base-src={v.audio} data-turbo-src={v.turbo} data-name={v.title} aria-label={`Play ${v.title}, loudr-1`}><span class="lk-voice-icon" aria-hidden="true" /></button>
+        <div class="lk-voice-body">
+          <strong>{v.title}</strong>
+          <span class="lk-voice-meta">{v.language} · {v.presentation}</span>
+          <p class="lk-voice-description">{v.description}</p>
+          <details>
+            <summary>Use this voice · source</summary>
+            <p><code>{v.name}</code></p>
+            {v.profile && <p><a href={v.profile} download>Download {v.title} profile</a></p>}
+            <code class="lk-voice-code">{v.use}</code>
+            <button type="button" class="lk-voice-copy" data-copy={v.use}>Copy Python line</button>
+            <p><a href={v.source.url}>{v.source.name}</a> · {v.source.license}</p>
+            <button type="button" class="lk-voice-play lk-voice-text-button" data-src={v.reference} data-name={`${v.title} reference`} aria-label={`Play enrollment reference for ${v.title}`}>Hear original recording</button>
+          </details>
+        </div>
+      </li>
+    ))}
   </ul>
-
-  <p class="lk-voices-foot">
-    Each sample is one seeded render of a public-domain sentence. The source, the licence
-    and the hashes of every voice are {
-      sourcesBelow ? (
-        <span>in the table below.</span>
-      ) : (
-        <span>
-          in <a href={`${base}/voices/`}>Voices</a>.
-        </span>
-      )
-    }
-  </p>
+  <p class="lk-voices-foot">The ten English voices compare loudr-1 and turbo on the same passage, with seed 7 and matched loudness. Other languages use loudr-1 on their own texts. Voice names are product aliases; presentation labels describe the selected sound, not verified donor gender. <a href={`${base}/voices/`}>Sources, licences and usage</a>.</p>
 </div>
-
 <script>
-  // Playback is shared with the landing page's single sample, so it lives in
-  // one module rather than in this component. Importing it registers the one
-  // player for the page. Only the filter row is this component's own.
-  import '../scripts/voice-player.ts';
-
-  document.addEventListener('click', (event) => {
+  import { stop as stopVoicePlayback } from '../scripts/voice-player.ts';
+  function filterVoices(root: Element) {
+    const language = root.querySelector<HTMLButtonElement>('.lk-voice-filter[aria-pressed="true"]')?.dataset.filter ?? 'all';
+    const query = root.querySelector<HTMLInputElement>('.lk-voice-search')!.value.trim().toLowerCase();
+    const presentation = root.querySelector<HTMLSelectElement>('.lk-voice-presentation')!.value;
+    let visible = 0;
+    root.querySelectorAll<HTMLElement>('.lk-voice').forEach(card => {
+      card.hidden = (language !== 'all' && card.dataset.lang !== language) || (presentation !== 'all' && card.dataset.presentation !== presentation) || !card.dataset.search!.includes(query);
+      if (!card.hidden) visible++;
+    });
+    root.querySelector('.lk-voice-count')!.textContent = visible ? `${visible} ${visible === 1 ? 'voice' : 'voices'}` : 'No matching voices';
+  }
+  document.addEventListener('click', async event => {
     const target = event.target as HTMLElement | null;
-    const filter = target?.closest<HTMLButtonElement>('.lk-voice-filter');
-    if (!filter) return;
-    const root = filter.closest('.lk-voices');
-    if (!root) return;
-    const want = filter.dataset.filter;
-    root.querySelectorAll<HTMLButtonElement>('.lk-voice-filter').forEach((b) => {
-      b.setAttribute('aria-pressed', String(b === filter));
-    });
-    root.querySelectorAll<HTMLElement>('.lk-voice').forEach((card) => {
-      card.hidden = want !== 'all' && card.dataset.lang !== want;
-    });
+    const button = target?.closest<HTMLButtonElement>('.lk-voice-filter');
+    if (button) {
+      const root = button.closest('.lk-voices')!;
+      root.querySelectorAll('.lk-voice-filter').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+      filterVoices(root);
+    }
+    const copy = target?.closest<HTMLButtonElement>('.lk-voice-copy');
+    if (copy) {
+      try { await navigator.clipboard.writeText(copy.dataset.copy!); copy.textContent = 'Copied'; }
+      catch { copy.textContent = 'Select and copy the line above'; }
+    }
+  });
+  document.addEventListener('input', event => {
+    const target = event.target as HTMLElement;
+    if (target.matches('.lk-voice-model')) {
+      stopVoicePlayback();
+      const turbo = (target as HTMLSelectElement).value === 'turbo';
+      target.closest('.lk-voices')!.querySelectorAll<HTMLButtonElement>('[data-base-src]').forEach(button => {
+        const model = turbo && button.dataset.turboSrc ? 'loudr-1-turbo' : 'loudr-1';
+        button.dataset.src = model === 'loudr-1-turbo' ? button.dataset.turboSrc : button.dataset.baseSrc;
+        const label = `Play ${button.dataset.name}, ${model}`;
+        button.dataset.label = label;
+        button.setAttribute('aria-label', label);
+      });
+    }
+    if (target.matches('.lk-voice-search, .lk-voice-presentation')) filterVoices(target.closest('.lk-voices')!);
   });
 </script>

@@ -1,0 +1,529 @@
+{
+ "generated_by": "tools/make_conformance.py --fixtures-only",
+ "name": ".loudkit-release.json",
+ "fields": [
+  "repo",
+  "revision",
+  "commit",
+  "sha256sums",
+  "fetched_at"
+ ],
+ "example": {
+  "repo": "loudreader/loudr-1",
+  "revision": "main",
+  "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+  "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+  "fetched_at": "2026-09-02T12:00:00Z"
+ },
+ "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+ "files": [
+  "manifest.json",
+  "tokenizer.json"
+ ],
+ "cases": [
+  {
+   "name": "the commit matches",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "use",
+   "online": "hit"
+  },
+  {
+   "name": "the revision moved",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "offline": "use",
+   "online": "fetch"
+  },
+  {
+   "name": "no receipt",
+   "receipt": null,
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a receipt for another repo",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "someone/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a receipt with no commit",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "an empty commit",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a commit that is not forty hex",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "main",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a field of the wrong type",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": 1,
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a receipt that is a JSON array",
+   "receipt": [],
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a receipt that is a number",
+   "receipt": 3,
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a receipt that is a string",
+   "receipt": "main",
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a null repo",
+   "receipt": {
+    "repo": null,
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a null revision",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": null,
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a null commit",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": null,
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a null sha256sums",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": null,
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a null fetched_at",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": null
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a digest that is not the manifest's",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "0000000000000000000000000000000000000000000000000000000000000000",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a receipt claiming no manifest over a release that ships one",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": null,
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a listed file absent",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "nothing resolved",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "",
+   "offline": "use",
+   "online": "fetch"
+  },
+  {
+   "name": "a field a reader does not know",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z",
+    "note": "x"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "use",
+   "online": "hit"
+  },
+  {
+   "name": "the revision asked for is not the rule",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "v0.1.1",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "use",
+   "online": "hit"
+  },
+  {
+   "name": "no sums in the release",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": null,
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": null,
+   "files": [],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "use",
+   "online": "hit"
+  },
+  {
+   "name": "a commit in uppercase hex",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3F2C1E0D9B8A7F6E5D4C3B2A1F0E9D8C7B6A5F4E",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a digest in uppercase hex",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731DD287314CEFBABA63870DD4F7D0238079D74437EB333A082D3AEC240",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a fetched_at that is not a timestamp",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23565731dd287314cefbaba63870dd4f7d0238079d74437eb333a082d3aec240",
+    "fetched_at": "yesterday"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "use",
+   "online": "hit"
+  },
+  {
+   "name": "a manifest naming a file outside the release",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "23722efd66618bd2d4f6a72aa68f111b784dc9da856d61bbabb9f6b818c41099",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n224931eb13f8d2471acd38a4a0d7417d20e8ea340160a467ceaa359d25197b87  tokenizer.json\n0000000000000000000000000000000000000000000000000000000000000000  ../escape\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "error",
+   "online": "fetch"
+  },
+  {
+   "name": "a rewritten manifest under a recomputed digest",
+   "receipt": {
+    "repo": "loudreader/loudr-1",
+    "revision": "main",
+    "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+    "sha256sums": "b4caac29e3c870798f4514624cf2b5cd002b2ef547defb858eece72097eb91f8",
+    "fetched_at": "2026-09-02T12:00:00Z"
+   },
+   "sums": "ffa5b716b5a57837f7929dfcca4b4dfdeb97210a7fd5a12d2f1978846d6f1743  manifest.json\n0000000000000000000000000000000000000000000000000000000000000000  tokenizer.json\n",
+   "files": [
+    "manifest.json",
+    "tokenizer.json"
+   ],
+   "repo": "loudreader/loudr-1",
+   "commit": "3f2c1e0d9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+   "offline": "use",
+   "online": "hit"
+  }
+ ]
+}

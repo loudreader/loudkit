@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pytest
 
 from .assets import asset, needs_module, requires, skip_or_fail
+from .conftest import assert_amplitude
 
 FIXTURE_DIR = Path(__file__).parent / "data" / "conformance"
 CKPT = asset("checkpoint")
@@ -44,11 +46,8 @@ class TestPhilox:
         from loudkit.rng import philox_4x32_10
 
         for case in fixture["philox"]["kat"]:
-            got = philox_4x32_10(
-                *(np.array([c], dtype=np.uint64) for c in case["counter"]),
-                case["key"][0],
-                case["key"][1],
-            )
+            c0, c1, c2, c3 = (np.array([c], dtype=np.uint64) for c in case["counter"])
+            got = philox_4x32_10(c0, c1, c2, c3, case["key"][0], case["key"][1])
             assert [int(g[0]) for g in got] == case["expected"]
 
     def test_uniform_bits(self, fixture: dict) -> None:
@@ -129,10 +128,107 @@ class TestFrontend:
 
 class TestSeeds:
     def test_derivation(self, fixture: dict) -> None:
-        from loudkit.engine import _derive
+        from loudkit.window import _derive
 
         for probe in fixture["seeds"]["derivation"]:
             assert hex(_derive(probe["seed"], probe["stream"])) == probe["derived"]
+
+    def test_the_stream_bases_are_the_ones_the_fixture_publishes(self, fixture: dict) -> None:
+        """Two constants the four ports read weight-free and Python did not.
+
+        `chunk_stream_base` and `resplit_stream` are in the fixture precisely so
+        five implementations derive the same per-chunk and per-half seeds. Rust,
+        Go, JS and Swift all read them; Python's own tests took the seed
+        straight out of the fixture row instead of deriving it, and
+        `tests/test_engine.py` imports `_STREAM_CHUNK` to *build* the
+        expectation it should be pinning. Verified by mutation: `_STREAM_CHUNK
+        = 17` and seeding the second half from the chunk seed instead of
+        `_derive(chunk_seed, _STREAM_RESPLIT)` both survive the whole
+        weight-free suite. They are caught once assets are present, which is
+        the asset-backed job on `main` and same-repo PRs only.
+        """
+        from loudkit.window import _STREAM_CHUNK, _STREAM_RESPLIT
+
+        assert fixture["long_form"]["chunk_stream_base"] == _STREAM_CHUNK
+        assert fixture["resplit"]["resplit_stream"] == _STREAM_RESPLIT
+
+
+def test_the_production_values_hash_to_the_fixture(fixture: dict) -> None:
+    """The fingerprint, from the values alone, with no checkpoint.
+
+    Go, Rust and JS spell the production algorithm out and compare it to the
+    fixture weight-free; Python read it from the checkpoint, so in the
+    weight-free job a change to a Python default that moved the fingerprint
+    was caught only by a port's pin. The three lists are the checkpoint's
+    censuses; everything else is a default this package ships.
+    """
+    from loudkit.backends import PRODUCTION_WINDOW
+    from loudkit.config import AlgorithmConfig, SamplingConfig
+    from loudkit.postprocess import PostprocessConfig
+
+    silence_render_ids = (4137, 4215, 4218, 4299, 6162, 6324, 6405, 6486)
+    quiet_render_ids = (
+        1458, 1461, 1488, 1701, 1704, 1707, 1716, 1731, 1785, 1788, 1869, 1947,
+        1950, 1951, 1959, 1978, 2028, 2031, 2040, 2058, 2076, 2112, 2139, 3645,
+        3648, 3651, 3704, 3888, 3894, 4188, 5838, 6081, 6183, 6537,
+    )  # fmt: skip
+    silence_token_ids = (
+        1731, 1821, 1822, 1824, 1975, 2058, 2068, 3190, 3377, 3918, 3927, 3928,
+        3930, 4008, 4009, 4011, 4012, 4137, 4146, 4161, 4171, 4173, 4174, 4218,
+        4245, 4251, 4252, 4254, 4255, 4260, 4282,
+    )  # fmt: skip
+    algo = AlgorithmConfig(
+        recipe_version="loudkit-1",
+        guidance="single_path",
+        guidance_rate=0.0,
+        euler_steps=2,
+        euler_grid=None,
+        sample_rate=24_000,
+        token_rate_hz=25.0,
+        speech_vocab_size=8194,
+        start_speech_token=6561,
+        stop_speech_token=6562,
+        window=PRODUCTION_WINDOW,
+        postprocess=PostprocessConfig(
+            silence_render_ids=silence_render_ids, quiet_render_ids=quiet_render_ids
+        ),
+        sampling=SamplingConfig(
+            temperature=0.8,
+            repetition_penalty=1.2,
+            min_p=0.05,
+            max_new_tokens=255,
+            min_tokens_floor=10,
+            min_tokens_text_ratio=1.2,
+            silence_token_ids=silence_token_ids,
+        ),
+    )
+    assert algo.canonical_form() == fixture["algorithm"]["canonical_form"]
+    assert algo.fingerprint() == fixture["algorithm"]["fingerprint"]
+
+
+@pytest.mark.parametrize(
+    ("what", "render"),
+    [
+        ("-6 dB", lambda w: w * 0.5),
+        ("-12 dB", lambda w: w * 0.25),
+        ("+0.2 DC", lambda w: w + 0.2),
+        ("20x gain", lambda w: w * 20.0),
+    ],
+)
+def test_the_amplitude_gate_sees_what_the_correlation_cannot(what, render, fixture) -> None:
+    """Weight-free, on the committed reference: four renders no port should ship.
+
+    Each of them correlates 1.000000 with the reference, because correlation is
+    invariant to scale and to offset. A port rendering everything at half
+    volume, or clipping, passes a correlation band and nothing else in the
+    end-to-end stage would say so. The amplitude gate is what does.
+    """
+    case = fixture["end_to_end"][0]
+    reference = np.fromfile(FIXTURE_DIR / case["wav"]["file"], dtype="<f4")
+    audio = render(reference.astype(np.float64))
+    assert np.corrcoef(audio, reference)[0, 1] == pytest.approx(1.0, abs=1e-12), what
+    with pytest.raises(AssertionError):
+        assert_amplitude(what, case["gates"]["wave_rms_db"], audio, reference)
 
 
 @requires("checkpoint")
@@ -202,7 +298,7 @@ class TestEndToEnd:
         import loudkit
         from loudkit.config import ExecutionConfig
         from loudkit.frontend.chunking import split_text
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
         from loudkit.sampler import LRSamplerV1
         from loudkit.voice import VoiceProfile
 
@@ -243,6 +339,89 @@ class TestEndToEnd:
                 )
                 got = [int(t) for t in raw if int(t) < algo.start_speech_token]
                 assert got == chunk["tokens"], f"{name} chunk {index}"
+
+            # The loop above reads each chunk's seed and carry from the
+            # fixture, so it cannot notice the engine deriving either one
+            # differently. The public paths walk their own chunk loop: they
+            # are what the four ports hold against the same rows.
+            streamed = list(
+                engine.stream(case["text"], voice, seed=case["seed"], language=language)
+            )
+            assert [list(r.tokens) for r in streamed] == [c["tokens"] for c in chunks], (
+                f"{name}: stream"
+            )
+            joined = engine.synthesize(
+                case["text"], voice, seed=case["seed"], language=language
+            )
+            assert list(joined.tokens) == case["tokens"], f"{name}: synthesize"
+
+    def test_resplit_windows(self, fixture: dict) -> None:
+        """A chunk the window could not hold, and the two it becomes.
+
+        This drives `engine.stream` rather than reimplementing the chain. An
+        earlier version walked the token generator itself and agreed with its
+        own arithmetic: it injected a token ceiling the engine never passes,
+        and after the trigger was gated on `window.max_speech_tokens` the
+        fixture pinned a path the engine could not take at all. Three mutations
+        to `_windows_for_chunk` survived the whole suite.
+
+        The case moves the window rather than the ceiling, because
+        `AlgorithmConfig` refuses a chunk budget larger than the window and the
+        sampler's cap has to move with it or the window is never what stops a
+        row. What weights cannot reach here is a half that still overruns: a
+        chunk is at most `window * CHARS_PER_TOKEN` characters, so a half is a
+        quarter of the window. `tests/test_engine.py` covers that with a fake.
+        """
+        from dataclasses import replace
+
+        import loudkit
+        from loudkit.config import ExecutionConfig
+        from loudkit.frontend.chunking import split_text
+        from loudkit.frontend.speechtext import speech_text
+        from loudkit.voice import VoiceProfile
+
+        section = fixture.get("resplit")
+        if not section:
+            skip_or_fail("fixture has no resplit section")
+        execution = ExecutionConfig(device="cpu", precision=section["execution"])
+        base = loudkit.load(str(CKPT), device="cpu", execution=execution)
+        voice = VoiceProfile.load(FIXTURE_DIR / section["voice"])
+        assert base.algorithm.chunking.prefix_tokens == section["prefix_tokens"]
+        assert base.algorithm.chunking.cap_resplit == "word"
+
+        for case in section["cases"]:
+            name, language, window = case["name"], case["language"], case["window"]
+            a = base.algorithm
+            algo = a.with_(
+                window=replace(a.window, max_speech_tokens=window, static_length=window),
+                sampling=replace(a.sampling, max_new_tokens=window),
+                chunking=replace(a.chunking, max_tokens=window),
+            )
+            engine = loudkit.load(str(CKPT), device="cpu", execution=execution, algorithm=algo)
+            prepared = speech_text(case["text"], language)
+            assert prepared == case["prepared"], f"{name}: the speech funnel drifted"
+            chunks = split_text(prepared, algo.chunking)
+            want = case["windows"]
+            assert len(want) > len(chunks), f"{name} recorded no re-split"
+
+            got = list(engine.stream(case["text"], voice, seed=case["seed"], language=language))
+            assert len(got) == len(want), (
+                f"{name}: the engine produced {len(got)} windows, the fixture has "
+                f"{len(want)} — a split that did not happen, or one that happened twice"
+            )
+            for i, (result, w) in enumerate(zip(got, want, strict=True)):
+                where = f"{name} window {i} (chunk index {w['index']})"
+                text = " ".join(span.text for span in result.chunks)
+                assert text == w["text"], f"{where}: text"
+                assert list(result.tokens) == w["tokens"], f"{where}: tokens"
+                assert result.hit_token_cap == w["hit_cap"], f"{where}: cap flag"
+            # Both halves of a repair carry the ORIGINAL chunk's index, so a
+            # later chunk's seed cannot move. Nothing else in the suite says so.
+            indices = [w["index"] for w in want]
+            assert indices == sorted(indices), f"{name}: indices are not monotonic"
+            assert max(indices) + 1 == len(chunks), (
+                f"{name}: {max(indices) + 1} distinct indices for {len(chunks)} chunks"
+            )
 
     def test_render_band(self, fixture: dict) -> None:
         needs_module("coremltools")
@@ -285,6 +464,7 @@ class TestEndToEnd:
             assert wave_corr >= case["gates"]["wave_corr"], (
                 f"{case['name']} wave {wave_corr:.4f}"
             )
+            assert_amplitude(case["name"], case["gates"]["wave_rms_db"], result.audio, wav_ref)
 
     def test_render_band_onnx(self, fixture: dict) -> None:
         """The ONNX renderer must land inside the same fixture band the CoreML
@@ -338,3 +518,128 @@ class TestEndToEnd:
             assert wave_corr >= case["gates"]["wave_corr"], (
                 f"{case['name']} wave {wave_corr:.4f}"
             )
+            assert_amplitude(case["name"], case["gates"]["wave_rms_db"], result.audio, wav_ref)
+
+
+@requires("turbo_checkpoint")
+@pytest.mark.parametrize("device", ["onnx", "coreml"])
+def test_fused_graph_conformance(device: Literal["onnx", "coreml"]) -> None:
+    """Both graph hosts consume the CPU reference's own model recipe."""
+    checkpoint = asset("turbo_checkpoint")
+    needs_module("onnxruntime" if device == "onnx" else "coremltools")
+    import loudkit
+    from loudkit.config import ExecutionConfig
+    from loudkit.sampler import LRSamplerV1
+    from loudkit.voice import VoiceProfile
+
+    rows = json.loads((FIXTURE_DIR / "vectors_fusion_mtp2.json").read_text(encoding="utf-8"))
+    engine = loudkit.load(
+        str(checkpoint),
+        device=device,
+        execution=ExecutionConfig(device=device, num_threads=1, onnx_provider="cpu"),
+    )
+    assert engine.algorithm.fingerprint() == rows["algorithm"]["fingerprint"]
+    for case in rows["end_to_end"]:
+        voice = VoiceProfile.load(FIXTURE_DIR / case["voice"])
+        text = engine.frontend.encode(case["text"], case["language"])
+        tokens = engine.token_generator.generate(
+            text, voice, sampler=LRSamplerV1(engine.algorithm.sampling, seed=case["seed"])
+        )
+        assert [int(t) for t in tokens if t < engine.algorithm.start_speech_token] == case[
+            "tokens"
+        ]
+        result = engine.synthesize_tokens(case["tokens"], voice, seed=case["seed"])
+        mel = np.fromfile(FIXTURE_DIR / case["mel"]["file"], dtype="<f4").reshape(
+            case["mel"]["shape"]
+        )
+        wave = np.fromfile(FIXTURE_DIR / case["wav"]["file"], dtype="<f4")
+        assert result.mel.shape == mel.shape
+        assert result.audio.shape == wave.shape
+        assert np.corrcoef(result.mel.ravel(), mel.ravel())[0, 1] >= case["gates"]["mel_corr"]
+        assert np.corrcoef(result.audio, wave)[0, 1] >= case["gates"]["wave_corr"]
+        assert_amplitude(case["name"], case["gates"]["wave_rms_db"], result.audio, wave)
+
+    chain = rows["long_form"]
+    voice = VoiceProfile.load(FIXTURE_DIR / chain["voice"])
+    for case in chain["cases"]:
+        for chunk in case["chunks"]:
+            text = engine.frontend.encode(chunk["text"], case["language"])
+            tokens = engine.token_generator.generate(
+                text,
+                voice,
+                sampler=LRSamplerV1(engine.algorithm.sampling, seed=int(chunk["seed"], 16)),
+                prefix=chunk["prefix"],
+            )
+            assert [int(t) for t in tokens if t < engine.algorithm.start_speech_token] == chunk[
+                "tokens"
+            ]
+
+        result = engine.synthesize(
+            case["text"], voice, seed=case["seed"], language=case["language"]
+        )
+        assert list(result.tokens) == case["public_tokens"]
+
+    if device == "coreml":
+        import gc
+        import time
+
+        del engine
+        gc.collect()
+        time.sleep(1)  # Let native reset queues release their retained array views.
+
+
+def _torch_generator_beside_coreml_tokens(
+    checkpoint: Path, fixture: str, precision: Literal["fp32", "fp16"]
+) -> None:
+    import loudkit
+    from loudkit.config import ExecutionConfig
+    from loudkit.sampler import LRSamplerV1
+    from loudkit.voice import VoiceProfile
+
+    engine = loudkit.load(
+        str(checkpoint),
+        device="coreml",
+        execution=ExecutionConfig(
+            device="coreml",
+            num_threads=1,
+            generator_device="cpu",
+            precision={"token_generator": precision},
+        ),
+    )
+    rows = json.loads((FIXTURE_DIR / fixture).read_text(encoding="utf-8"))
+    for case in rows["end_to_end"]:
+        voice = VoiceProfile.load(FIXTURE_DIR / case["voice"])
+        text = engine.frontend.encode(case["text"], case["language"])
+        tokens = engine.token_generator.generate(
+            text, voice, sampler=LRSamplerV1(engine.algorithm.sampling, seed=case["seed"])
+        )
+        got = [int(t) for t in tokens if t < engine.algorithm.start_speech_token]
+        assert got == case["tokens"], f"{case['name']} at {precision}"
+
+
+@requires("checkpoint")
+@pytest.mark.parametrize("precision", ["fp32", "fp16"])
+def test_the_torch_generator_beside_coreml_keeps_the_fixture_tokens(
+    precision: Literal["fp32", "fp16"],
+) -> None:
+    """``generator_device="cpu"`` keeps the torch generator under a CoreML renderer.
+
+    The engine choice is a placement, and the precision under it is the one
+    knob that could move a token. Measured on both fixture cases: fp16 and
+    fp32 give the reference tokens exactly, so the flag buys speed on Apple
+    silicon without changing what is said.
+    """
+    needs_module("coremltools")
+    _torch_generator_beside_coreml_tokens(asset("checkpoint"), "vectors.json", precision)
+
+
+@requires("turbo_checkpoint")
+@pytest.mark.parametrize("precision", ["fp32", "fp16"])
+def test_the_torch_generator_beside_coreml_keeps_the_fusion_tokens(
+    precision: Literal["fp32", "fp16"],
+) -> None:
+    """The same placement under ``fusion_mtp2``, held to its own fixture."""
+    needs_module("coremltools")
+    _torch_generator_beside_coreml_tokens(
+        asset("turbo_checkpoint"), "vectors_fusion_mtp2.json", precision
+    )

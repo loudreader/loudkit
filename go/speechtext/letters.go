@@ -1,7 +1,7 @@
 // Acronyms, spelled in the language being read.
 //
 // CIA is see-eye-ay in an English render and ce-i-a in a Polish one, and those
-// are not two spellings of one thing — they are what the two languages actually
+// are not two spellings of one thing: they are what the two languages actually
 // say. The engine is grapheme-based with a single language tag per utterance, so
 // the letter name has to be written in the target language's own orthography:
 // English "see" reads as /siː/ under English letter-to-sound rules, Polish "ce"
@@ -16,26 +16,28 @@
 // language in the shared grammar file; this reads them for all twelve, out of
 // the same numbers.json every other implementation reads.
 //
-// What is not spelled: an acronym that is a word in its language stays a word —
+// What is not spelled: an acronym that is a word in its language stays a word,
 // NASA and NATO everywhere, SIDA and OVNI in the Romance three, PESEL and ZUS in
-// Polish, TUTKA in Finnish. Those lists are per language because the fact is:
-// LOT is an airline in Poland and a common noun in English, and only one of them
-// should be spelled out.//
-// Python reference: `loudkit/frontend/letters.py`.
+// Polish, TUTKA in Finnish. Those lists are per language because the fact is
+// per language: LOT is an airline in Poland and a common noun in English, and
+// only one of them should be spelled out.
+//
+// Python reference: loudkit/frontend/letters.py.
 package speechtext
 
 import (
-	"encoding/json"
 	"strings"
 	"sync"
 	"unicode"
+
+	"github.com/loudreader/loudkit/go/internal/unicase"
 )
 
 const (
 	minAcronymLetters = 2
 	// Above five letters an all-caps run is far more often a shout, a product
 	// name or a heading than an initialism, and spelling one out is a worse
-	// error than leaving it — the listener can read SIGGRAPH; they cannot
+	// error than leaving it: the listener can read SIGGRAPH; they cannot
 	// un-hear ess-eye-gee-gee-ar-ay-pee-aitch.
 	maxAcronymLetters = 5
 )
@@ -51,17 +53,9 @@ var (
 )
 
 func loadLetterTables() {
-	var doc struct {
-		Languages map[string]struct {
-			LetterNames  map[string]string `json:"letter_names"`
-			WordAcronyms []string          `json:"word_acronyms"`
-		} `json:"languages"`
-	}
-	if err := json.Unmarshal(numbersJSON, &doc); err != nil {
-		panic("speechtext: embedded numbers.json is unreadable: " + err.Error())
-	}
-	letterTables = make(map[string]*letterTable, len(doc.Languages))
-	for lang, e := range doc.Languages {
+	langs := grammarDocument()
+	letterTables = make(map[string]*letterTable, len(langs))
+	for lang, e := range langs {
 		if len(e.LetterNames) == 0 {
 			continue
 		}
@@ -94,14 +88,17 @@ func LetterName(letter, language string) string {
 	if !ok {
 		return ""
 	}
-	return t.names[strings.ToLower(letter)]
+	return t.names[unicase.ToLower(letter)]
 }
 
 // SpellAcronym returns word as spelled-out letters, or "" to leave it alone.
 //
-// Empty — "not an acronym, or not one I can spell" — for a word that is not
-// all-caps, is too short or too long, is a word in this language, or contains a
-// letter this language has no name for.
+// Empty ("not an acronym, or not one I can spell"), for a word that is not
+// all-caps, is too short or too long, or contains a letter this language has
+// no name for.
+//
+// A word that is on this language's word list comes back lowercased instead,
+// so no later pass reads it as an acronym again.
 func SpellAcronym(word, language string) string {
 	if len([]rune(word)) < minAcronymLetters || !isAllCapsWord(word) {
 		return ""
@@ -110,7 +107,7 @@ func SpellAcronym(word, language string) string {
 	if !ok {
 		return ""
 	}
-	lowered := strings.ToLower(word)
+	lowered := unicase.ToLower(word)
 	if t.words[lowered] {
 		// A word, not an initialism: read as itself, lowercased so no later
 		// pass mistakes it for an acronym again.
@@ -118,7 +115,7 @@ func SpellAcronym(word, language string) string {
 		// Checked before the length cap, and the order matters: the cap is
 		// about how long a thing may be before spelling
 		// it becomes worse than leaving it, and it has nothing to say about a
-		// word. With the cap first, every entry over five letters is dead —
+		// word. With the cap first, every entry over five letters is dead,
 		// UNESCO, UNICEF and INTERPOL never reach this branch.
 		return lowered
 	}
@@ -142,7 +139,7 @@ func SpellAcronym(word, language string) string {
 //
 // Shouting is left alone, and the rule for telling it from an initialism is
 // context rather than anything inside the word. An initialism appears as a
-// single capitalised island in ordinary text — "the CIA said" — while emphasis
+// single capitalised island in ordinary text ("the CIA said"), while emphasis
 // comes in runs. That distinction is not available from the word itself: IT is a
 // word, an initialism and a shout depending only on what sits beside it, and no
 // table can separate those. So a capitalised word spells out only when neither
@@ -168,7 +165,7 @@ func spellAcronyms(text, language string) string {
 		// The whole text is capitals: someone pasted a shout, or a headline.
 		//
 		// More than one word, though. A text that is a single capitalised token
-		// — Prepared("GPT") — is an acronym on its own, not a shout: there is no
+		// (Prepared("GPT")) is an acronym on its own, not a shout: there is no
 		// run to read emphasis from, and refusing it would mean the one call
 		// shaped exactly like "say this acronym" was the one that did not.
 		return text

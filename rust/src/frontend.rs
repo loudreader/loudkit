@@ -1,12 +1,10 @@
-//! Text to text-tokens — a bit-parity port of `loudkit.frontend.text`:
+//! Text to text-tokens, a bit-parity port of `loudkit.frontend.text`:
 //! lowercase, NFKD, a language tag, spaces to `[SPACE]`, then BPE.
 
 use unicode_normalization::UnicodeNormalization;
 
 use crate::numbers::supported_languages;
-use crate::tokenizer;
-
-const SPACE: &str = "[SPACE]";
+use crate::tokenizer::{self, SPACE};
 
 /// Refused languages whose refusal has a *specific* reason worth stating: their
 /// upstream pipeline wants Cangjie codes, kana conversion, diacritisation, jamo
@@ -34,12 +32,13 @@ impl Frontend {
     /// Normalise and tokenise. Same text and language give the same ids.
     ///
     /// The language is an **allowlist**: the twelve ids
-    /// [`crate::numbers::supported_languages`] reports. This was a blacklist of
-    /// the five model-based ones, and the difference matters because the
-    /// tokenizer's vocabulary carries tags for 31 languages — a blacklist let
-    /// the other 26 through and the tag was emitted, so `encode(text, "bg")`
-    /// NFKD-mangled Cyrillic into ids the model reads as sounds it was never
-    /// trained to make: no error, plausible audio, wrong language.
+    /// [`crate::numbers::supported_languages`] reports, the same roster the
+    /// number grammar covers. The tokenizer's vocabulary carries tags for far
+    /// more languages than the text layer is written for, and every one of
+    /// them encodes without complaint, so an unchecked tag is the dangerous
+    /// case: `encode(text, "bg")` NFKD-mangles Cyrillic into ids the model
+    /// reads as sounds it was never trained to make. No error, plausible
+    /// audio, wrong language.
     ///
     /// # Errors
     /// The language is not on the roster.
@@ -78,7 +77,7 @@ mod tests {
     /// The vocabulary carries tags for 31 languages; the text layer is written
     /// for twelve. A blacklist of only zh/ja/he/ko/ru lets the other 26
     /// go straight through: `encode(text, "bg")` NFKD-mangles Cyrillic
-    /// into ids the model reads as sounds it never learned — no error,
+    /// into ids the model reads as sounds it never learned: no error,
     /// plausible-sounding audio, wrong language.
     ///
     /// Asserted against the roster rather than a literal list because

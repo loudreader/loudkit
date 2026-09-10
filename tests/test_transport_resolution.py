@@ -20,9 +20,12 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
+
+if TYPE_CHECKING:
+    from loudkit.engine import Engine
 
 TRANSPORTS = ("http", "grpc", "mcp")
 DEVICES = [
@@ -58,17 +61,17 @@ def _release(tmp_path: Path) -> Path:
     return root
 
 
-def _ask(
-    transport: str, monkeypatch, ref: str, device: str | None, answer: Path
-) -> tuple[_Recorder, Path | None]:
-    """Drive one transport up to the moment it opens its voice library.
+def _stop_at_the_library(monkeypatch, answer: Path) -> tuple[_Recorder, dict[str, Path]]:
+    """Stand-ins for the two calls ``open_release`` makes, and where they land.
 
-    Each transport imports the resolver from the hub inside its entry point, so
-    the hub is where the stand-in has to sit for all three.
+    The hub resolver is patched on ``loudkit.hub``, because ``open_release``
+    imports it inside its body. ``VoiceLibrary`` is patched on
+    ``transports.resolve``, which is the one module that builds one for all
+    three doors, so patching it once covers every transport.
     """
     import loudkit.hub
+    import loudkit.transports.resolve as resolve_mod
 
-    module = importlib.import_module(f"loudkit.transports.{transport}")
     recorder = _Recorder(answer)
     monkeypatch.setattr(loudkit.hub, "resolve_checkpoint", recorder)
     seen: dict[str, Path] = {}
@@ -78,11 +81,57 @@ def _ask(
             seen["voices"] = Path(directory)
             raise _StopError
 
-    monkeypatch.setattr(module, "VoiceLibrary", _Library)
+    monkeypatch.setattr(resolve_mod, "VoiceLibrary", _Library)
+    return recorder, seen
+
+
+def _ask(
+    transport: str, monkeypatch, ref: str, device: str | None, answer: Path
+) -> tuple[_Recorder, Path | None]:
+    """Drive one transport up to the moment it opens its voice library.
+
+    Reaching the stand-in at all is the per-door claim: a door that stopped
+    calling the shared resolver would build its own library, or none, and
+    never raise.
+    """
+    module = importlib.import_module(f"loudkit.transports.{transport}")
+    recorder, seen = _stop_at_the_library(monkeypatch, answer)
     entry = module.build_server if transport == "mcp" else module.serve
     with pytest.raises(_StopError):
         entry(ref, device=device)
     return recorder, seen.get("voices")
+
+
+@pytest.mark.parametrize(("device", "backend"), DEVICES)
+def test_the_resolver_asks_the_hub_for_the_set_the_device_needs(
+    tmp_path, monkeypatch, device: str, backend: str
+) -> None:
+    """The rule itself, once, where the three doors now read it from.
+
+    The per-door cases below still run: they are what catches a door that
+    stops calling this. What they can no longer catch is the rule being wrong,
+    because they would all be wrong together -- which is the trade the three
+    copies were.
+    """
+    from loudkit.transports.resolve import open_release
+
+    root = _release(tmp_path)
+    recorder, _ = _stop_at_the_library(monkeypatch, root / "loudr-1.safetensors")
+    with pytest.raises(_StopError):
+        open_release(str(root), None, device)
+    assert recorder.calls[0] == {"ref": str(root), "revision": None, "backend": backend}
+
+
+def test_the_resolver_puts_named_voices_ahead_of_the_snapshots_own(tmp_path, monkeypatch):
+    """A voice directory given is the voice directory used, resolved or not."""
+    from loudkit.transports.resolve import open_release
+
+    root = _release(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    _, seen = _stop_at_the_library(monkeypatch, root / "loudr-1.safetensors")
+    with pytest.raises(_StopError):
+        open_release(str(root), elsewhere, "cpu")
+    assert seen["voices"] == elsewhere
 
 
 @pytest.mark.parametrize("transport", TRANSPORTS)
@@ -180,12 +229,15 @@ def test_a_ready_engine_and_named_voices_cost_no_download(monkeypatch, tmp_path)
     voices = tmp_path / "already" / "local"
     voices.mkdir(parents=True)
     monkeypatch.setattr(mcp_mod, "_load_mcp", lambda: _StubMcpServer)
-    mcp_mod.build_server("loudreader/loudr-1", str(voices), engine=object())
+    # An engine that is never called: what this pins is that a repo id with a
+    # ready engine reaches no resolver at all.
+    engine = cast("Engine", object())
+    mcp_mod.build_server("loudreader/loudr-1", str(voices), engine=engine)
 
 
 class _StubMcpServer:
     def __init__(self, *_a: Any, **_kw: Any) -> None:
         pass
 
-    def tool(self, *_a: Any, **_kw: Any):  # type: ignore[no-untyped-def]
+    def tool(self, *_a: Any, **_kw: Any):
         return lambda fn: fn

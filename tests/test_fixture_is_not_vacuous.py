@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 FIXTURE = Path(__file__).resolve().parent / "data/conformance/vectors.json"
+POSTPROCESS = Path(__file__).resolve().parent / "data/conformance/postprocess.json"
 
 # Section -> the number of cases present when this control was written.
 EXPECTED_AT_LEAST = {
@@ -40,6 +41,47 @@ EXPECTED_AT_LEAST = {
     ("frontend", "cases"): 5,
     ("end_to_end",): 2,
     ("long_form", "cases"): 1,
+    # Both of these were walked by the ports and floored by nothing. `resplit`
+    # is the whole `cap_resplit` law — the one whose own port comments record
+    # that it broke three ways while it was being written — and it holds a
+    # single case, so emptying it left all five suites green.
+    ("seeds", "derivation"): 6,
+    ("resplit", "cases"): 1,
+    # The Euler grid the flow ODE integrates on. Unfloored until the control
+    # above learned to recurse, and emptying it left the weight-free suites of
+    # Python, Rust and Go green: only two tests read it and both are
+    # checkpoint-gated, so the grid was pinned nowhere a fork would notice.
+    ("algorithm", "euler_grid"): 3,
+}
+
+# The second shared fixture. It had no control at all: six of its sections are
+# bare lists walked with an unguarded `for` in Python, Rust, Go and JS (Swift
+# is the exception and guards every one), so emptying them reported 50 passes
+# in Python — including every test of the precedence resolver, which is the
+# layer that file exists for.
+POSTPROCESS_AT_LEAST = {
+    ("ceiling",): 3,
+    ("trailing_filler",): 6,
+    ("desperation",): 7,
+    ("ended_tail",): 8,
+    ("terminal_echo",): 5,
+    ("repetition",): 9,
+    ("resolve",): 8,
+    ("silence_token_ids",): 8,
+    ("dropout", "cases"): 6,
+    ("pacing", "cases"): 5,
+    ("stall", "cases"): 8,
+    # The render censuses the two rules read. Not "cases", so the shallow
+    # control never saw them; emptying any of the four turns five Python tests
+    # red, which is what makes them worth a floor rather than a shrug.
+    ("stall", "silence_render_ids"): 4,
+    ("stall", "quiet_render_ids"): 4,
+    ("repetition_silence", "silence_render_ids"): 5,
+    ("repetition_silence", "quiet_render_ids"): 5,
+    ("starved_rescue", "cases"): 4,
+    ("repetition_silence", "cases"): 5,
+    ("repetition_resume", "cases"): 6,
+    ("language_guard", "cases"): 27,
 }
 
 
@@ -48,9 +90,14 @@ def fixture() -> dict:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))
 
 
+@pytest.fixture(scope="module")
+def postprocess_fixture() -> dict:
+    return json.loads(POSTPROCESS.read_text(encoding="utf-8"))
+
+
 def _at(data: dict, path: tuple[str, ...]) -> object:
     for key in path:
-        data = data[key]  # type: ignore[assignment]
+        data = data[key]
     return data
 
 
@@ -64,6 +111,73 @@ def test_every_section_still_carries_its_cases(
         f"{'.'.join(path)} has {len(section)} cases, down from {least}. "
         "A section that loses cases makes every suite that walks it quieter "
         "without making any of them fail."
+    )
+
+
+@pytest.mark.parametrize(("path", "least"), sorted(POSTPROCESS_AT_LEAST.items()))
+def test_every_postprocess_section_still_carries_its_cases(
+    postprocess_fixture: dict, path: tuple[str, ...], least: int
+) -> None:
+    section = _at(postprocess_fixture, path)
+    assert isinstance(section, list), f"{'.'.join(path)} is not a list of cases"
+    assert len(section) >= least, (
+        f"postprocess.json {'.'.join(path)} has {len(section)} cases, down from "
+        f"{least}. Four of the five ports walk this with an unguarded `for`."
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "path", "floors"),
+    [
+        ("vectors.json", FIXTURE, EXPECTED_AT_LEAST),
+        ("postprocess.json", POSTPROCESS, POSTPROCESS_AT_LEAST),
+    ],
+)
+def test_no_section_carries_cases_without_a_floor(
+    name: str, path: Path, floors: dict[tuple[str, ...], int]
+) -> None:
+    """The control inverted, which is the half that was missing.
+
+    A table of floors only guards the sections somebody remembered to list.
+    `resplit` landed in `vectors.json` without an entry and nothing noticed;
+    the plan for the next release adds a `fusion` section, which would land in
+    the same hole. So walk the fixture instead and refuse a list of cases that
+    no floor covers — a new section is then a red build until it is floored,
+    which is one line and the right kind of friction.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    covered = set(floors)
+    unfloored = []
+
+    def walk(node: object, path_so_far: tuple[str, ...]) -> None:
+        """Every list of cases, at any depth.
+
+        This used to look one level down and one key deep — a top-level list,
+        or a `<section>.cases`. Five of this file's own eleven floors are
+        neither shape (`philox.kat`, `philox.uniform_bits`, `philox.gumbel`,
+        `seeds.derivation`), so the control could not see the very sections it
+        was written to cover, and the `fusion` block it names as the next
+        arrival lands in exactly that hole. `algorithm.euler_grid` was
+        unfloored the whole time for the same reason: emptying it left the
+        weight-free suites of Python, Rust and Go green.
+        """
+        if isinstance(node, list):
+            looks_like_cases = (
+                bool(node)
+                and isinstance(node[0], (dict, list, int, float))
+                and bool(path_so_far)
+            )
+            if looks_like_cases and path_so_far not in covered:
+                unfloored.append(".".join(path_so_far))
+            return
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(value, (*path_so_far, key))
+
+    walk(data, ())
+    assert not unfloored, (
+        f"{name} carries case lists with no floor in this file: {sorted(unfloored)}. "
+        f"Add each to the table above with the count it has today."
     )
 
 

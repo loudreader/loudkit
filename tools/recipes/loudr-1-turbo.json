@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "What loudr-1-turbo is made of. Consumed by tools/pack_turbo.py:",
+    "    python tools/pack_turbo.py --recipe tools/recipes/loudr-1-turbo.json --root ~/chatterbox",
+    "Paths are relative to --root, which is the research tree on the machine that",
+    "holds the training checkpoints. The sha256s are the contract: a file that no",
+    "longer hashes to what is written here stops the build rather than quietly",
+    "producing a different model under the same name."
+  ],
+
+  "name": "loudkit-v0.1-turbo",
+  "recipe_version": "loudkit-1",
+
+  "n_cfm_timesteps": 1,
+  "_n_cfm_timesteps_note": [
+    "The estimator below was step-distilled 6 -> 1: it reproduces a six-step",
+    "stock rollout in one Euler step (dev-seen mel median 0.9973, unseen 0.9956,",
+    "against 0.9699 for the same weights simply run at K=1). Running it at any",
+    "other K is a different algorithm, which is why this number ships beside the",
+    "weights instead of being a runtime flag."
+  ],
+
+  "inputs": {
+    "t3": {
+      "path": "MIMI_onpolicy_r1/best.pt",
+      "sha256": "4b95731c7a6924ac1b70f7e906e4149430944720e825e9895f64b4e6f124f937",
+      "_note": "fusion student after on-policy KD x H7 — the round that fixed the tempo"
+    },
+    "s3gen": {
+      "path": "models/s3gen.safetensors",
+      "sha256": "2b78103c654207393955e4900aac14a12de8ef25f4b09424f1ef91941f161d4e",
+      "_note": "stock renderer; only the flow estimator is replaced below"
+    },
+    "estimator": {
+      "path": "distill/ckpt_s3gen_k1_v2/best.pt",
+      "sha256": "cc902928c65b049e7fde705e9ae0cebb6e6d3dbdf8c7b63e512cc4481c541674",
+      "_note": "step-distilled 6 -> 1, EMA half; ckpt_s3gen_k1_full is the same recipe against a two-step teacher and is NOT this file"
+    },
+    "template_manifest": {
+      "path": "loudr-1-manifest.json",
+      "sha256": "b1e3f7152e7be4082c1729537a8c0cb9afa1fbc7d1783a267710d9165e3f9e2c",
+      "_note": "policy inherited verbatim: silence lists, postprocess thresholds, sampling defaults, dtype map"
+    }
+  }
+}

@@ -1,29 +1,31 @@
 //! Dates and ordinals, said the way each language says them.
 //!
-//! A port of `loudkit.frontend.dates`: `12.03.2026` is the
-//! ordinary written date of five of these twelve languages, and without this
-//! funnel it reads as a clock time with a stray year, or as one eight-digit
-//! number. `1st`
-//! arrives as *onest*, because the number pass expands the digits and leaves the
-//! suffix stuck to them.
+//! A port of `loudkit.frontend.dates`: `12.03.2026` is the ordinary written
+//! date of five of these twelve languages, and without this funnel it reads as
+//! a clock time with a stray year, or as one eight-digit number. `1st` arrives
+//! as *onest*, because the number pass expands the digits and leaves the suffix
+//! stuck to them.
 //!
-//! Every rule is data from the shared `numbers.json` — month names, day forms,
+//! Every rule is data from the shared `numbers.json`: month names, day forms,
 //! the infixes Spanish and Portuguese speak between the parts, the German
 //! oblique triggers, the ordinal tables. What is code here is the *shape*: which
 //! written forms are dates at all, and how each language reads a year.
 //!
 //! Two refusals are as deliberate as anything it does. A yearless `12.3.` is
-//! never matched — its closing period is indistinguishable from a sentence's, so
-//! `Die Zahl ist 3.5.` would otherwise come out as *dritte Mai*. And `3/12/2026` is left alone
-//! in English, where it is March twelfth to half the world and the third of
-//! December to the other half: a listener recovers from hearing digits, not from
-//! a confident wrong month.
+//! never matched, its closing period is indistinguishable from a sentence's, so
+//! `Die Zahl ist 3.5.` would otherwise come out as *dritte Mai*. And `3/12/2026`
+//! is left alone in English, where it is March twelfth to half the world and
+//! the third of December to the other half: a listener recovers from hearing
+//! digits, not from a confident wrong month.
+//!
 //! Python reference: `loudkit/frontend/dates.py`.
 
-use crate::numbers::cardinal;
-use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+
+use regex::Regex;
+
+use crate::numbers::cardinal;
 
 /// Above this a four-digit run is an identifier, not a year.
 const MAX_YEAR: i64 = 2999;
@@ -36,6 +38,13 @@ const DAYS_IN_MONTH: [i64; 12] = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
 
 #[derive(Default)]
 pub struct Rules {
+    /// The day-first and month-first written shapes, compiled from the month
+    /// names and the infixes below. `None` when the language does not name
+    /// twelve months, which is what [`textual`] refuses on.
+    written_dates: Option<(Regex, Regex)>,
+    /// `1st`, from this language's ordinal suffixes. `None` when it lists none,
+    /// where an alternation of nothing would match every digit run.
+    written_ordinal: Option<Regex>,
     day_words: HashMap<i64, String>,
     day_words_oblique: HashMap<i64, String>,
     oblique_triggers: Vec<String>,
@@ -52,7 +61,6 @@ pub struct Rules {
     year_two_thousand: String,
     dotted_is_ambiguous: bool,
     no_dotted_dates: bool,
-    ord_suffixes: Vec<String>,
     ord_units: HashMap<i64, String>,
     ord_teens: HashMap<i64, String>,
     ord_tens: HashMap<i64, String>,
@@ -60,41 +68,20 @@ pub struct Rules {
 }
 
 static RULES: LazyLock<HashMap<String, Rules>> = LazyLock::new(|| {
-    let doc: serde_json::Value =
-        serde_json::from_str(include_str!("numbers.json")).expect("numbers.json unreadable");
-    let Some(langs) = doc["languages"].as_object() else {
-        return HashMap::new();
-    };
+    use crate::grammar::{strings, text};
+
+    // An empty form means "this language has no separate word here", which is
+    // not the same as a word that is the empty string: the readers below ask
+    // whether the key is there at all. English ordinal 0 and 10, Polish year 0
+    // and 10, are written empty for exactly that.
     fn int_keys(v: &serde_json::Value) -> HashMap<i64, String> {
-        v.as_object()
-            .map(|m| {
-                m.iter()
-                    .filter_map(|(k, val)| {
-                        let s = val.as_str()?;
-                        if s.is_empty() {
-                            return None;
-                        }
-                        Some((k.parse::<i64>().ok()?, s.to_string()))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-    fn strings(v: &serde_json::Value) -> Vec<String> {
-        v.as_array()
-            .map(|a| {
-                a.iter()
-                    .filter_map(|x| x.as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-    fn text(v: &serde_json::Value) -> String {
-        v.as_str().unwrap_or_default().to_string()
+        let mut m = crate::grammar::int_map(v);
+        m.retain(|_, form| !form.is_empty());
+        m
     }
 
     let mut out = HashMap::new();
-    for (lang, entry) in langs {
+    for (lang, entry) in crate::grammar::languages() {
         let d = &entry["dates"];
         if !d.is_object() {
             continue;
@@ -104,16 +91,22 @@ static RULES: LazyLock<HashMap<String, Rules>> = LazyLock::new(|| {
             Some(s) if !s.is_empty() => s.to_string(),
             _ => "-".to_string(),
         };
+        let months = strings(&d["months"]);
+        let day_month_infix = text(&d["day_month_infix"]);
+        let month_year_infix = text(&d["month_year_infix"]);
+        let ord_suffixes = strings(&o["suffixes"]);
         out.insert(
             lang.clone(),
             Rules {
+                written_dates: written_date_patterns(&months, &day_month_infix, &month_year_infix),
+                written_ordinal: written_ordinal_pattern(&ord_suffixes),
                 day_words: int_keys(&d["day_words"]),
                 day_words_oblique: int_keys(&d["day_words_oblique"]),
                 oblique_triggers: strings(&d["oblique_triggers"]),
                 day_one_word: text(&d["day_one_word"]),
-                months: strings(&d["months"]),
-                day_month_infix: text(&d["day_month_infix"]),
-                month_year_infix: text(&d["month_year_infix"]),
+                months,
+                day_month_infix,
+                month_year_infix,
                 day_first_prefix: text(&d["day_first_prefix"]),
                 day_first_infix: text(&d["day_first_infix"]),
                 year_rule: text(&d["year_rule"]),
@@ -123,7 +116,6 @@ static RULES: LazyLock<HashMap<String, Rules>> = LazyLock::new(|| {
                 year_two_thousand: text(&d["year_two_thousand"]),
                 dotted_is_ambiguous: d["dotted_is_ambiguous"].as_bool().unwrap_or(false),
                 no_dotted_dates: d["no_dotted_dates"].as_bool().unwrap_or(false),
-                ord_suffixes: strings(&o["suffixes"]),
                 ord_units: int_keys(&o["units"]),
                 ord_teens: int_keys(&o["teens"]),
                 ord_tens: int_keys(&o["tens"]),
@@ -134,8 +126,59 @@ static RULES: LazyLock<HashMap<String, Rules>> = LazyLock::new(|| {
     out
 });
 
-fn card(n: i64, lang: &str) -> String {
-    cardinal(n, lang, "").unwrap_or_default()
+/// The two written date shapes, built once from the month names.
+///
+/// Spanish and Portuguese speak a preposition between every part, so the
+/// written form carries it too: "12 de marzo de 2026".
+fn written_date_patterns(
+    months: &[String],
+    day_month_infix: &str,
+    month_year_infix: &str,
+) -> Option<(Regex, Regex)> {
+    if months.len() != 12 {
+        return None;
+    }
+    let names = months
+        .iter()
+        .map(|m| regex::escape(m))
+        .collect::<Vec<_>>()
+        .join("|");
+    let optional = |word: &str| {
+        if word.is_empty() {
+            String::new()
+        } else {
+            format!(r"(?:\s+{})?", regex::escape(word))
+        }
+    };
+    let infix = optional(day_month_infix);
+    let yinfix = optional(month_year_infix);
+    Some((
+        Regex::new(&format!(
+            r"(?i)([0-3]?[0-9])\.?{infix}\s+({names})(?:{yinfix}\s+([12][0-9]{{3}}))?"
+        ))
+        .expect("day-first date pattern"),
+        Regex::new(&format!(
+            r"(?i)({names})\s+([0-3]?[0-9])(?:st|nd|rd|th)?,?(?:\s+([12][0-9]{{3}}))?"
+        ))
+        .expect("month-first date pattern"),
+    ))
+}
+
+/// `1st` in this language's suffixes, or `None` when it lists none.
+fn written_ordinal_pattern(suffixes: &[String]) -> Option<Regex> {
+    if suffixes.is_empty() {
+        return None;
+    }
+    Regex::new(&format!(r"(?i)([0-9]+)({})", suffixes.join("|"))).ok()
+}
+
+/// `n` in words, or `None` when this language cannot spell it.
+///
+/// `None`, not the empty string: every caller here concatenates the result, so
+/// an unspellable value shipped as a fragment beginning with a space rather
+/// than as either words or a decline.
+fn card(n: i64, lang: &str) -> Option<String> {
+    cardinal(n, lang, "").ok()
 }
 
 /// The month's name in this language, or `None` when it has no table.
@@ -149,7 +192,7 @@ pub fn month_name(month: i64, language: &str) -> Option<String> {
 
 /// The day-of-month word, in whatever form this language's dates take.
 ///
-/// `oblique` is German only — the `-en` ending that `am`/`den`/`vom` select.
+/// `oblique` is German only: the `-en` ending that `am`/`den`/`vom` select.
 pub fn ordinal_day(day: i64, language: &str, oblique: bool) -> Option<String> {
     let r = RULES.get(language)?;
     if !(1..=31).contains(&day) {
@@ -168,16 +211,24 @@ pub fn ordinal_day(day: i64, language: &str, oblique: bool) -> Option<String> {
     if day == 1 && !r.day_one_word.is_empty() {
         return Some(r.day_one_word.clone());
     }
-    Some(card(day, language))
+    card(day, language)
 }
 
 /// A year, read the way this language reads years.
 ///
 /// English and Norwegian split it; German, Dutch and Swedish group it in
-/// hundreds; the rest say one plain cardinal. Spanish is the explicit case — the
+/// hundreds; the rest say one plain cardinal. Spanish is the explicit case: the
 /// RAE writes that a year is read as its cardinal and *not* in two-figure blocks
 /// as in English, so 2021 is *dos mil veintiuno*.
+///
+/// A year this language's grammar cannot spell comes back as its digits: a
+/// pass that cannot say something leaves the text as written, which is the
+/// decline every other pass in this funnel makes.
 pub fn say_year(year: i64, language: &str) -> String {
+    year_words(year, language).unwrap_or_else(|| year.to_string())
+}
+
+fn year_words(year: i64, language: &str) -> Option<String> {
     let Some(r) = RULES.get(language) else {
         return card(year, language);
     };
@@ -193,23 +244,25 @@ pub fn say_year(year: i64, language: &str) -> String {
     }
 }
 
-fn year_english(year: i64) -> String {
+fn year_english(year: i64) -> Option<String> {
     if year == 1000 || year == 2000 || (2001..=2009).contains(&year) {
         return card(year, "en");
     }
     if (1001..=1999).contains(&year) || year >= 2100 {
         let (century, rest) = (year / 100, year % 100);
+        let head = card(century, "en")?;
         if rest == 0 {
-            return format!("{} hundred", card(century, "en"));
+            return Some(format!("{head} hundred"));
         }
-        // "nineteen oh five" — never "nineteen five", which nobody says.
+        let tail = card(rest, "en")?;
+        // "nineteen oh five": never "nineteen five", which nobody says.
         if rest < 10 {
-            return format!("{} oh {}", card(century, "en"), card(rest, "en"));
+            return Some(format!("{head} oh {tail}"));
         }
-        return format!("{} {}", card(century, "en"), card(rest, "en"));
+        return Some(format!("{head} {tail}"));
     }
     if (2010..=2099).contains(&year) {
-        return format!("twenty {}", card(year % 100, "en"));
+        return Some(format!("twenty {}", card(year % 100, "en")?));
     }
     card(year, "en")
 }
@@ -218,44 +271,45 @@ fn year_english(year: i64) -> String {
 /// joiner and the range differ. German stops at 1999 because the GfdS explicitly
 /// rejects `zwanzighundert…`; Swedish runs to 2099 because Isof has recommended
 /// the `tjugohundra…` series for decades.
-fn year_hundreds(year: i64, lang: &str, joiner: &str, lo: i64, hi: i64) -> String {
+fn year_hundreds(year: i64, lang: &str, joiner: &str, lo: i64, hi: i64) -> Option<String> {
     if !(lo..=hi).contains(&year) {
         return card(year, lang);
     }
     let (century, rest) = (year / 100, year % 100);
-    let head = format!("{}{}", card(century, lang), joiner);
+    let head = format!("{}{}", card(century, lang)?, joiner);
     if rest == 0 {
-        head
+        Some(head)
     } else {
-        format!("{head}{}", card(rest, lang))
+        Some(format!("{head}{}", card(rest, lang)?))
     }
 }
 
 /// Norwegian splits 1100–1999 and drops `hundre`: 1972 is `nittensyttito`.
-fn year_norwegian(year: i64) -> String {
+fn year_norwegian(year: i64) -> Option<String> {
     if !(1100..=1999).contains(&year) {
         return card(year, "no");
     }
     let (century, rest) = (year / 100, year % 100);
+    let head = card(century, "no")?;
     if rest == 0 {
-        format!("{}hundre", card(century, "no"))
+        Some(format!("{head}hundre"))
     } else {
-        format!("{}{}", card(century, "no"), card(rest, "no"))
+        Some(format!("{head}{}", card(rest, "no")?))
     }
 }
 
 /// Dansk Sprognævn: the long form works for every year, and the short
 /// "telephone-number" form is explicitly poor for a century's first decade.
-fn year_danish(year: i64) -> String {
+fn year_danish(year: i64) -> Option<String> {
     if !(1100..=1999).contains(&year) {
         return card(year, "da");
     }
     let (century, rest) = (year / 100, year % 100);
-    let head = format!("{} hundrede", card(century, "da"));
+    let head = format!("{} hundrede", card(century, "da")?);
     if rest == 0 {
-        head
+        Some(head)
     } else {
-        format!("{head} og {}", card(rest, "da"))
+        Some(format!("{head} og {}", card(rest, "da")?))
     }
 }
 
@@ -264,18 +318,18 @@ fn year_danish(year: i64) -> String {
 /// keep their cardinal form and the ordinal genitive lands on the last two
 /// digits. Where those are zero the declension moves left, which is why 2000 has
 /// its own word.
-fn year_polish(year: i64, r: &Rules) -> String {
+fn year_polish(year: i64, r: &Rules) -> Option<String> {
     if year == 2000 && !r.year_two_thousand.is_empty() {
-        return r.year_two_thousand.clone();
+        return Some(r.year_two_thousand.clone());
     }
     let (head, rest) = (year / 100, year % 100);
     let lead = if head != 0 {
-        card(head * 100, "pl")
+        card(head * 100, "pl")?
     } else {
         String::new()
     };
     if rest == 0 {
-        return lead;
+        return Some(lead);
     }
     let tail = if let Some(teen) = r.year_teens.get(&rest) {
         teen.clone()
@@ -294,7 +348,7 @@ fn year_polish(year: i64, r: &Rules) -> String {
             .collect::<Vec<_>>()
             .join(" ")
     };
-    format!("{lead} {tail}").trim().to_string()
+    Some(format!("{lead} {tail}").trim().to_string())
 }
 
 fn valid(day: i64, month: i64, year: Option<i64>) -> bool {
@@ -329,10 +383,23 @@ fn spoken(
     Some(parts.join(" "))
 }
 
+/// A written date is bounded by a word boundary, and not by digits alone: a run
+/// that continues into a letter is an identifier, and `25/03/2026x` is no more a
+/// date than `x25/03/2026` is. Each callback below asks `word_boundary_before`
+/// and `word_boundary_after` as well as the separators its own form names.
+///
+/// ISO. Unambiguous by definition, and the Swedish norm. The `T` before a
+/// clock time is taken with the date: it is a field separator and not a letter,
+/// and left behind it glues to the last word of the date. Optional in the
+/// pattern and decided in the callback, the reference's `(?=[0-2][0-9]:[0-5]
+/// [0-9])` being a lookahead this engine cannot write.
 static ISO: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"([12][0-9]{3})-([01][0-9])-([0-3][0-9])").unwrap());
+    LazyLock::new(|| Regex::new(r"([12][0-9]{3})-([01][0-9])-([0-3][0-9])(T)?").unwrap());
+/// The clock shape that makes the `T` a field separator.
+static ISO_TIME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\A[0-2][0-9]:[0-5][0-9]").unwrap());
 /// With the year, which is what makes it a date rather than a guess. The
-/// yearless `12.3.` is deliberately not matched — see the module note.
+/// yearless `12.3.` is deliberately not matched: see the module note.
 static DOTTED: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([0-3]?[0-9])\.([01]?[0-9])\.([12][0-9]{3})").unwrap());
 /// Day-first in every language here; English is handled in the callback, where
@@ -350,13 +417,30 @@ pub fn expand_dates(text: &str, language: &str) -> String {
     };
     let out = replace(text, &ISO, &|g: &[String], at, whole: &str| {
         let (y, m, d) = (num(&g[1]), num(&g[2]), num(&g[3]));
-        if !bounded_before(whole, at, "0123456789.,:/-")
-            || !bounded_after(whole, at + g[0].len(), "0123456789-")
+        let end = at + g[0].len();
+        // The `T` is only a separator in front of a clock. Where it is not, the
+        // match gives it back and the day answers to the guard it always did.
+        let separator = g.get(4).is_some_and(|t| t == "T");
+        let taken = separator && ISO_TIME.is_match(&whole[end..]);
+        let day_end = if separator { end - 1 } else { end };
+        if !word_boundary_before(whole, at)
+            || !bounded_before(whole, at, "0123456789.,:/-")
+            || (!taken
+                && (!word_boundary_after(whole, day_end)
+                    || !bounded_after(whole, day_end, "0123456789-")))
             || !valid(d, m, Some(y))
         {
             return None;
         }
-        spoken(d, m, Some(y), language, is_oblique(whole, at, r))
+        let said = spoken(d, m, Some(y), language, is_oblique(whole, at, r))?;
+        // The separator becomes the space that keeps the date and the time two
+        // spoken units. A word for it would be a per-language fact this grammar
+        // does not carry, and a plainer reading is not a wrong one.
+        Some(match (taken, separator) {
+            (true, _) => format!("{said} "),
+            (false, true) => format!("{said}T"),
+            (false, false) => said,
+        })
     });
     let out = replace(&out, &DOTTED, &|g: &[String], at, whole: &str| {
         // Swedish marks an ordinal with a colon (`1:a`), never a trailing
@@ -367,7 +451,8 @@ pub fn expand_dates(text: &str, language: &str) -> String {
             return None;
         }
         let (d, m, y) = (num(&g[1]), num(&g[2]), num(&g[3]));
-        if !bounded_before(whole, at, "0123456789.,:/-")
+        if !word_boundary_before(whole, at)
+            || !bounded_before(whole, at, "0123456789.,:/-")
             || !word_boundary_after(whole, at + g[0].len())
             || !valid(d, m, Some(y))
         {
@@ -377,7 +462,9 @@ pub fn expand_dates(text: &str, language: &str) -> String {
     });
     let out = replace(&out, &SLASHED, &|g: &[String], at, whole: &str| {
         let (d, m, y) = (num(&g[1]), num(&g[2]), num(&g[3]));
-        if !bounded_before(whole, at, "0123456789.,:/-")
+        if !word_boundary_before(whole, at)
+            || !bounded_before(whole, at, "0123456789.,:/-")
+            || !word_boundary_after(whole, at + g[0].len())
             || !bounded_after(whole, at + g[0].len(), "0123456789/")
         {
             return None;
@@ -417,14 +504,14 @@ fn word_boundary_after(s: &str, end: usize) -> bool {
     s[end..]
         .chars()
         .next()
-        .is_none_or(|c| !(c.is_alphanumeric() || c == '_'))
+        .is_none_or(|c| !(crate::unicode::is_letter_or_digit(c) || c == '_'))
 }
 
 fn word_boundary_before(s: &str, at: usize) -> bool {
     s[..at]
         .chars()
         .next_back()
-        .is_none_or(|c| !(c.is_alphanumeric() || c == '_'))
+        .is_none_or(|c| !(crate::unicode::is_letter_or_digit(c) || c == '_'))
 }
 
 /// German only: `am`/`den`/`vom` before the day select the `-en` ending.
@@ -432,46 +519,40 @@ fn is_oblique(whole: &str, at: usize, r: &Rules) -> bool {
     if r.oblique_triggers.is_empty() || at > whole.len() {
         return false;
     }
-    let before = whole[..at].trim_end();
-    let Some(last) = before.split_whitespace().next_back() else {
+    let Some(tail) = word_before(whole, at) else {
         return false;
     };
-    let tail = last.to_lowercase();
-    let tail = tail.trim_matches(|c| c == ',' || c == ';' || c == ':');
     r.oblique_triggers.iter().any(|w| w.to_lowercase() == tail)
 }
 
-/// `12 marca 2026`, `12. März 2026`, `March 12, 2026` — a written month name
+/// The word standing immediately before the match, folded, or `None` when the
+/// match opens the string.
+///
+/// Read out of the string the pass is substituting over, so the neighbour is
+/// the previous pass's output rather than the original text, and folded
+/// because a sentence may open with the word.
+fn word_before(whole: &str, at: usize) -> Option<String> {
+    if at > whole.len() {
+        return None;
+    }
+    let before = whole[..at].trim_end();
+    let last = before.split_whitespace().next_back()?;
+    let lowered = last.to_lowercase();
+    Some(
+        lowered
+            .trim_matches(|c| c == ',' || c == ';' || c == ':')
+            .to_string(),
+    )
+}
+
+/// `12 marca 2026`, `12. März 2026`, `March 12, 2026`: a written month name
 /// beside a bare day. The name is the disambiguator, so this runs for every
 /// language including English.
 fn textual(text: &str, language: &str, r: &Rules) -> String {
-    if r.months.len() != 12 {
+    let Some((day_first, month_first)) = r.written_dates.as_ref() else {
         return text.to_string();
-    }
-    let names = r
-        .months
-        .iter()
-        .map(|m| regex::escape(m))
-        .collect::<Vec<_>>()
-        .join("|");
-    // Spanish and Portuguese speak a preposition between every part, so the
-    // written form carries it too: "12 de marzo de 2026".
-    let infix = if r.day_month_infix.is_empty() {
-        String::new()
-    } else {
-        format!(r"(?:\s+{})?", regex::escape(&r.day_month_infix))
     };
-    let yinfix = if r.month_year_infix.is_empty() {
-        String::new()
-    } else {
-        format!(r"(?:\s+{})?", regex::escape(&r.month_year_infix))
-    };
-
-    let day_first = Regex::new(&format!(
-        r"(?i)([0-3]?[0-9])\.?{infix}\s+({names})(?:{yinfix}\s+([12][0-9]{{3}}))?"
-    ))
-    .expect("day-first date pattern");
-    let out = replace(text, &day_first, &|g: &[String], at, whole: &str| {
+    let out = replace(text, day_first, &|g: &[String], at, whole: &str| {
         if !word_boundary_before(whole, at) || !word_boundary_after(whole, at + g[0].len()) {
             return None;
         }
@@ -489,7 +570,11 @@ fn textual(text: &str, language: &str, r: &Rules) -> String {
             if let Some(y) = y {
                 rest.push(say_year(y, language));
             }
-            let prefix = if r.day_first_prefix.is_empty() {
+            // The sentence may already carry the article: "the 3 April
+            // minutes" is a noun phrase whose determiner is written, and a
+            // second one is a stammer.
+            let written = word_before(whole, at) == Some(r.day_first_prefix.to_lowercase());
+            let prefix = if r.day_first_prefix.is_empty() || written {
                 String::new()
             } else {
                 format!("{} ", r.day_first_prefix)
@@ -509,11 +594,7 @@ fn textual(text: &str, language: &str, r: &Rules) -> String {
     if r.day_first_infix.is_empty() {
         return out;
     }
-    let month_first = Regex::new(&format!(
-        r"(?i)({names})\s+([0-3]?[0-9])(?:st|nd|rd|th)?,?(?:\s+([12][0-9]{{3}}))?"
-    ))
-    .expect("month-first date pattern");
-    replace(&out, &month_first, &|g: &[String], at, whole: &str| {
+    replace(&out, month_first, &|g: &[String], at, whole: &str| {
         if !word_boundary_before(whole, at) || !word_boundary_after(whole, at + g[0].len()) {
             return None;
         }
@@ -554,7 +635,7 @@ pub fn ordinal(value: i64, language: &str) -> Option<String> {
     if head == 0 {
         return Some(tail);
     }
-    let lead = card(head * 100, language);
+    let lead = card(head * 100, language)?;
     Some(if rest != 0 {
         format!("{lead} {tail}")
     } else {
@@ -578,7 +659,7 @@ fn two_digit_ordinal(value: i64, r: &Rules) -> Option<String> {
     // twelve writing an ordinal as digits plus a suffix.
     Some(format!(
         "{}{}{unit_word}",
-        card(tens * 10, "en"),
+        card(tens * 10, "en")?,
         r.ord_joiner
     ))
 }
@@ -593,13 +674,10 @@ pub fn expand_ordinals(text: &str, language: &str) -> String {
     let Some(r) = RULES.get(language) else {
         return text.to_string();
     };
-    if r.ord_suffixes.is_empty() {
-        return text.to_string();
-    }
-    let Ok(re) = Regex::new(&format!(r"(?i)([0-9]+)({})", r.ord_suffixes.join("|"))) else {
+    let Some(re) = r.written_ordinal.as_ref() else {
         return text.to_string();
     };
-    replace(text, &re, &|g: &[String], at, whole: &str| {
+    replace(text, re, &|g: &[String], at, whole: &str| {
         if !word_boundary_before(whole, at) || !word_boundary_after(whole, at + g[0].len()) {
             return None;
         }
@@ -615,7 +693,7 @@ type SubstitutionBody<'a> = dyn Fn(&[String], usize, &str) -> Option<String> + '
 /// Rewrite every match, right to left so earlier offsets stay valid.
 ///
 /// The callback gets the capture groups (index 0 is the whole match), the match
-/// offset, and the string being scanned — the last two because the German
+/// offset, and the string being scanned: the last two because the German
 /// oblique test reads the word *before* the date, and because `regex` cannot
 /// express the lookaround Python uses. Returning `None` leaves that match
 /// exactly as written, which is this module's answer whenever evidence runs out.

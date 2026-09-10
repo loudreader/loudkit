@@ -91,7 +91,7 @@ TF_KL_GATE = 1e-3
 
 
 class TestTeacherForcedGate:
-    def test_top1_and_kl(self, onnx_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_top1_and_kl(self, onnx_engine, voice, reference) -> None:
         """The registered ONNX gate: top-1 >= 99.5%, median KL < 1e-3 (fp32).
 
         The reference side is the torch fp32 engine, *not* the stored fp16
@@ -130,7 +130,7 @@ class TestTeacherForcedGate:
 
 
 class TestFreeRunTokens:
-    def test_tokens_identical_to_reference(self, onnx_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_tokens_identical_to_reference(self, onnx_engine, voice, reference) -> None:
         """Same sampler, same seed, logits inside the decision boundary: the
         ONNX engine must emit exactly the fp32 reference tokens."""
         from loudkit.sampler import LRSamplerV1
@@ -141,11 +141,17 @@ class TestFreeRunTokens:
             text_ids = np.asarray(rec["text_ids"], dtype=np.int64)
             raw = list(onnx_engine.token_generator.generate(text_ids, voice, sampler=sampler))
             stripped = [t for t in raw if t < onnx_engine.algorithm.start_speech_token]
-            assert stripped == rec["speech_tokens"], f"sentence {i} diverged"
+            # Against the free-run stream (`tokens`), not `speech_tokens`: the
+            # free-run goldens re-base whenever the sampling law moves (see
+            # meta.json's free_run_note), while `speech_tokens` stays frozen as
+            # the fixed input the teacher-forced and renderer dumps were made
+            # from. What this asserts is torch/ONNX token identity.
+            want = [t for t in rec["tokens"] if t < onnx_engine.algorithm.start_speech_token]
+            assert stripped == want, f"sentence {i} diverged"
 
 
 class TestRenderer:
-    def test_fixed_token_mel_and_wave(self, onnx_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_fixed_token_mel_and_wave(self, onnx_engine, voice, reference) -> None:
         for i in ("0", "1", "2"):
             rec = reference[i]
             result = onnx_engine.synthesize_tokens(
@@ -160,7 +166,7 @@ class TestRenderer:
             assert mel_corr >= 0.999, f"s{i} mel corr {mel_corr:.6f}"
             assert wave_corr >= 0.98, f"s{i} wave corr {wave_corr:.4f}"
 
-    def test_rerender_is_bit_identical(self, onnx_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_rerender_is_bit_identical(self, onnx_engine, voice, reference) -> None:
         rec = reference["0"]
         a = onnx_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
         b = onnx_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
@@ -168,7 +174,7 @@ class TestRenderer:
 
 
 class TestPrecisionRefusal:
-    def test_non_fp32_precision_refused(self) -> None:  # type: ignore[no-untyped-def]
+    def test_non_fp32_precision_refused(self) -> None:
         """The ONNX graphs are fp32; int8 stays blocked and fp16 was measured
         not worth exporting. A caller asking for either gets told, not half a
         graph."""
@@ -210,10 +216,10 @@ class TestPolishFreeRun:
 
     POLISH = "Pobierz download i zrób code review na 15% szybciej, bo mamy deadline."
 
-    def test_polish_free_run_is_same_distribution_not_same_stream(  # type: ignore[no-untyped-def]
+    def test_polish_free_run_is_same_distribution_not_same_stream(
         self, onnx_engine, voice
     ) -> None:
-        from loudkit.frontend.polish import speech_text
+        from loudkit.frontend.speechtext import speech_text
         from loudkit.sampler import LRSamplerV1
 
         torch_fp32 = _torch_fp32_engine()
@@ -261,12 +267,12 @@ class TestPolishFreeRun:
 def _derive_seed() -> int:
     """The engine's flow-stage seed derivation, imported lazily to stay
     independent of the engine internals elsewhere in this module."""
-    from loudkit.engine import _STREAM_FLOW, _derive
+    from loudkit.window import _STREAM_FLOW, _derive
 
     return _derive(7, _STREAM_FLOW)
 
 
-def test_missing_assets_error_names_command_with_fake_checkpoint(tmp_path) -> None:  # type: ignore[no-untyped-def]
+def test_missing_assets_error_names_command_with_fake_checkpoint(tmp_path, monkeypatch) -> None:
     """The missing-assets error names the export command, even with a valid
     checkpoint that simply has no onnx/ directory beside it."""
     needs_module("onnxruntime")
@@ -275,10 +281,11 @@ def test_missing_assets_error_names_command_with_fake_checkpoint(tmp_path) -> No
     from loudkit.backends.onnx_backend import _assets_dir
 
     # A real Checkpoint object is overkill: _assets_dir only reads .path.
+    monkeypatch.delenv("LOUDKIT_ONNX_ASSETS", raising=False)
     ckpt = SimpleNamespace(path=tmp_path / "ckpt.safetensors")
     (tmp_path / "ckpt.safetensors").write_bytes(b"x")
     with pytest.raises(FileNotFoundError) as exc:
-        _assets_dir(ckpt)  # type: ignore[arg-type]
+        _assets_dir(ckpt)
     msg = str(exc.value)
     assert "ONNX assets not found" in msg
     assert "export_onnx.py" in msg, "missing-assets error must name the export command"

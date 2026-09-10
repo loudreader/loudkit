@@ -1,4 +1,4 @@
-// Package enroll turns reference audio into a voice profile — a bit-parity
+// Package enroll turns reference audio into a voice profile: a bit-parity
 // port of loudkit.models.enroll over the exported enrollment ONNX graphs.
 //
 // The DSP (resampler, filterbanks) is implemented here in Go and held to the
@@ -11,9 +11,18 @@ import "math"
 // resample downsamples/upsamples a 1-D float32 signal with the one portable
 // Hann-windowed-sinc law, a bit-parity port of loudkit.models.resample.
 //
-// The kernel is computed in float64 and rounded to float32 once; the FIR
-// accumulates left to right in float32, never a fused multiply-add. That
-// contract is what keeps the five ports bit-identical, and it must not drift.
+// The kernel is computed in float64 and rounded to float32 once, and the FIR
+// accumulates left to right in float32, one multiply and one add per tap. Those
+// three are the contract; the source order of the sum is what the other ports
+// match.
+//
+// The explicit conversion at the accumulation is the third of them. Go lets the
+// compiler fuse a multiply into the following add, keeping one rounding where
+// the contract asks for two, and on arm64 it does; the conversion rounds the
+// product first and takes the choice away from the compiler. Without it this
+// loop computes a different number from the one the other four ports compute,
+// and enrollment is where that lands in a file a user keeps. See
+// docs/design/models-notes.md.
 func resample(waveform []float32, origFreq, newFreq int) []float32 {
 	if origFreq == newFreq {
 		out := make([]float32, len(waveform))
@@ -24,7 +33,7 @@ func resample(waveform []float32, origFreq, newFreq int) []float32 {
 	orig, new := origFreq/g, newFreq/g
 
 	kernel, width := sincHannKernel(orig, new, 6, 0.99)
-	taps := len(kernel[0][0])
+	taps := len(kernel[0])
 
 	padded := make([]float32, width+len(waveform)+width+orig)
 	for i, v := range waveform {
@@ -38,7 +47,7 @@ func resample(waveform []float32, origFreq, newFreq int) []float32 {
 		for phase := 0; phase < new; phase++ {
 			var acc float32
 			for c := 0; c < taps; c++ {
-				acc += kernel[phase][0][c] * padded[base+c]
+				acc += float32(kernel[phase][c] * padded[base+c])
 			}
 			out[i*new+phase] = acc
 		}
@@ -51,14 +60,13 @@ func resample(waveform []float32, origFreq, newFreq int) []float32 {
 // sincHannKernel returns the float32 Hann-windowed-sinc kernel and its
 // half-width, after GCD reduction. Mirrors loudkit.models.resample and
 // torchaudio's sinc_interp_hann.
-func sincHannKernel(orig, new, lowpassFilterWidth int, rolloff float64) ([][][]float32, int) {
+func sincHannKernel(orig, new, lowpassFilterWidth int, rolloff float64) ([][]float32, int) {
 	base := float64(min(orig, new)) * rolloff
 	width := int(math.Ceil(float64(lowpassFilterWidth) * float64(orig) / base))
 
-	kernel := make([][][]float32, new)
+	kernel := make([][]float32, new)
 	for phase := 0; phase < new; phase++ {
-		kernel[phase] = make([][]float32, 1)
-		kernel[phase][0] = make([]float32, 2*width+orig)
+		kernel[phase] = make([]float32, 2*width+orig)
 		for idx := 0; idx < 2*width+orig; idx++ {
 			t := float64(-phase)/float64(new) + float64(idx-width)/float64(orig)
 			t *= base
@@ -76,7 +84,7 @@ func sincHannKernel(orig, new, lowpassFilterWidth int, rolloff float64) ([][][]f
 			} else {
 				sinc = math.Sin(tt) / tt
 			}
-			kernel[phase][0][idx] = float32(sinc * window * (base / float64(orig)))
+			kernel[phase][idx] = float32(sinc * window * (base / float64(orig)))
 		}
 	}
 	return kernel, width
@@ -87,11 +95,4 @@ func gcd(a, b int) int {
 		a, b = b, a%b
 	}
 	return a
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

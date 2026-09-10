@@ -26,8 +26,8 @@ var ONNXProviders = []string{
 // best first. CPU is last and always reachable, so auto always has an answer.
 //
 // auto prefers a provider only where a measurement says it is faster. CoreML
-// is faster -- the split placement in the onnx package measures RTF 1.35-1.70
-// on an M3 Pro against 0.85-1.02 for all-CPU -- and is still not here, for a
+// is faster (the split placement in the onnx package measures RTF 1.35-1.70
+// on an M3 Pro against 0.85-1.02 for all-CPU) and is still not here, for a
 // reason that is not speed: compiling the renderer graphs costs about 146 s
 // the first time on a machine and leaves 1.6 GB of cache behind, and a default
 // may not spend either without being asked. DirectML has never been run by
@@ -46,7 +46,7 @@ var ProviderPreference = []string{
 //
 // Kept apart from ProviderPreference because the two answer different
 // questions. Probing only the preference list would make a provider that auto
-// declines unreachable by name as well -- a caller asking for coreml would be
+// declines unreachable by name as well: a caller asking for coreml would be
 // told the library does not offer it, on a machine where it does.
 var ConcreteProviders = []string{
 	ProviderCUDA, ProviderCoreML, ProviderDirectML, ProviderCPU,
@@ -89,7 +89,7 @@ func (e ExecutionConfig) RequestedProvider() string {
 // Validate refuses a provider name outside ONNXProviders.
 //
 // Spelling is checked before anything is probed, because a typo that reached
-// the resolver would come back as "this build does not offer metal" — which
+// the resolver would come back as "this build does not offer metal": which
 // reads as a missing library and sends the caller off to install something
 // that does not exist.
 func (e ExecutionConfig) Validate() error {

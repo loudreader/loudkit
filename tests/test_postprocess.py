@@ -22,6 +22,7 @@ from loudkit.postprocess import (
     desperation_cut,
     ended_tail_trim,
     inspect,
+    is_stalled,
     is_trailing_filler,
     pacing_outliers,
     repetition_cut,
@@ -46,6 +47,13 @@ def build(shape: list[list[Any]]) -> list[int]:
             out.extend(20 + i % 60 for i in range(count))
         elif kind == "quiet":
             out.extend(i % 8 for i in range(count))
+        elif kind == "sil":
+            # True digital silence in the stall section's two-class scheme.
+            out.extend(i % 4 for i in range(count))
+        elif kind == "breath":
+            # The contextually-quiet family: extends a dead-air run without
+            # counting toward its gate.
+            out.extend(4 + i % 4 for i in range(count))
         elif kind == "cycle":
             # `count` is the period here and segment[2] the repeat count.
             cycle = [20 + i % 60 for i in range(count)]
@@ -54,6 +62,18 @@ def build(shape: list[list[Any]]) -> list[int]:
             # Second half silence: the word-then-pause stutter.
             half = count // 2
             cycle = [20 + i for i in range(count - half)] + [i % 8 for i in range(half)]
+            out.extend(cycle * segment[2])
+        elif kind == "dead":
+            # True silence only the render census knows (the 6405 class):
+            # outside the fixture's sampler list, inside its silence census.
+            out.extend([12] * count)
+        elif kind == "sigh":
+            # Breath only the quiet census knows.
+            out.extend([13] * count)
+        elif kind == "cycle_dead":
+            # The stutter with its pause on a census-only id.
+            half = count // 2
+            cycle = [20 + i for i in range(count - half)] + [12] * half
             out.extend(cycle * segment[2])
         else:  # pragma: no cover - a typo in the fixture, not a code path
             raise ValueError(f"unknown segment kind {kind!r}")
@@ -141,6 +161,424 @@ class TestRepetition:
         # the cases that must NOT fire carry more weight than the ones that must.
         negatives = [c for c in fx["repetition"] if c["expect"] is None]
         assert len(negatives) >= 4, "too few negative cases to trust a mid-row cut"
+
+
+class TestStall:
+    """The decoder trapped in silence — the failure no tail rule can see.
+
+    Every mute chunk and every mid-row hole in the interior-stall study
+    shipped as ``clean``, because all six other rules anchor on the tail. The
+    stall rule condemns instead of cutting: the failure is a hole, and the fix
+    is the retry ladder. Detection is two-class (a true-silence gate, a
+    quiet-family continuation), which the fixture pins because single-set
+    counting was measured broken.
+    """
+
+    @staticmethod
+    def _config(fx: dict[str, Any], case: dict[str, Any]) -> PostprocessConfig:
+        if not case["render_ids"]:
+            # The fallback arm: a checkpoint packed before the censuses.
+            return config_from(fx)
+        section = fx["stall"]
+        return config_from(
+            fx,
+            silence_render_ids=tuple(section["silence_render_ids"]),
+            quiet_render_ids=tuple(section["quiet_render_ids"]),
+        )
+
+    def test_the_rule_matches_the_fixture(self, fx: dict[str, Any]) -> None:
+        cases = fx["stall"]["cases"]
+        assert cases, "the fixture has no stall cases; nothing was compared"
+        for case in cases:
+            got = is_stalled(
+                build(case["shape"]),
+                hit_ceiling=case["hit_ceiling"],
+                silence=fx["silence_token_ids"],
+                config=self._config(fx, case),
+            )
+            assert got == case["stalled"], f"{case['name']}: {case['why']}"
+
+    def test_the_resolver_matches_the_fixture(self, fx: dict[str, Any]) -> None:
+        # The wiring is part of the contract: after repetition, before every
+        # tail rescue, condemned like dropout.
+        for case in fx["stall"]["cases"]:
+            got = inspect(
+                build(case["shape"]),
+                text_token_count=case["text_tokens"],
+                min_tokens=case["min_tokens"],
+                eos_peak_at=case["eos_peak_at"],
+                eos_peak_prob=case["eos_peak_prob"],
+                ended=case["ended"],
+                is_terminal=case["is_terminal"],
+                hit_ceiling=case["hit_ceiling"],
+                silence=fx["silence_token_ids"],
+                config=self._config(fx, case),
+            )
+            want = case["expect"]
+            why = f"{case['name']}: {case['why']}"
+            assert got.keep == want["keep"], why
+            assert got.reason == want["reason"], why
+            assert got.suspect == want["suspect"], why
+
+    def test_it_never_cuts(self, fx: dict[str, Any]) -> None:
+        section = fx["stall"]
+        cfg = config_from(
+            fx,
+            silence_render_ids=tuple(section["silence_render_ids"]),
+            quiet_render_ids=tuple(section["quiet_render_ids"]),
+        )
+        row = build([["speech", 30], ["sil", 30], ["speech", 30]])
+        got = inspect(
+            row,
+            text_token_count=40,
+            min_tokens=48,
+            eos_peak_at=-1,
+            eos_peak_prob=0.0,
+            ended=True,
+            is_terminal=True,
+            hit_ceiling=False,
+            silence=fx["silence_token_ids"],
+            config=cfg,
+        )
+        assert got.reason == "stall"
+        assert got.keep == len(row), (
+            "a stalled row must be handed back whole; the hole is mid-row and "
+            "no cut can remove it"
+        )
+        assert got.suspect, "the caller has to be told, since nothing was changed"
+
+    def test_repetition_outranks_it(self, fx: dict[str, Any]) -> None:
+        # A row that both loops and stalls answers to the loop: an exactly
+        # repeated cycle pins where the failure began. Here the decoder
+        # resumed after the region, so the loop condemns rather than cuts —
+        # but it still outranks the stall's condemnation, and the verdict
+        # names the anchor that was found.
+        section = fx["stall"]
+        cfg = config_from(
+            fx,
+            silence_render_ids=tuple(section["silence_render_ids"]),
+            quiet_render_ids=tuple(section["quiet_render_ids"]),
+        )
+        row = build([["cycle", 4, 8], ["sil", 30], ["speech", 20]])
+        got = inspect(
+            row,
+            text_token_count=40,
+            min_tokens=48,
+            eos_peak_at=-1,
+            eos_peak_prob=0.0,
+            ended=True,
+            is_terminal=True,
+            hit_ceiling=False,
+            silence=fx["silence_token_ids"],
+            config=cfg,
+        )
+        assert got.reason == "repetition", "the exact anchor outranks the condemnation"
+
+    def test_zero_run_threshold_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="stall_run_tokens"):
+            PostprocessConfig(stall_run_tokens=0)
+
+    def test_every_count_is_covered_by_the_non_negative_rule(self) -> None:
+        """The two names the `>= 0` loop omitted, and why they are in it now.
+
+        A negative `desperation_band_floor` closes the band it exists to open
+        and a negative `dropout_min_tokens` makes no row short enough to be a
+        dropout: both are typos in a manifest, refused like every other count.
+        Rust holds its counts as `usize` and cannot represent either, so while
+        these were unnamed here that port refused two manifests the reference
+        accepted.
+        """
+        for name in ("desperation_band_floor", "dropout_min_tokens"):
+            with pytest.raises(ValueError, match=f"{name} must be >= 0: -1"):
+                PostprocessConfig(**{name: -1})
+        # Zero is a configuration, not a typo, and still loads.
+        PostprocessConfig(desperation_band_floor=0, dropout_min_tokens=0)
+
+
+class TestStarvedRescue:
+    """A cap-hit desperation cut that keeps less than any full read.
+
+    The one row that survived the stall fix: soren/da0028 chunk 4 burned 132
+    tokens to the ceiling and the seam cut kept 36 — 1.44 s in which 33 of
+    the 36 kept tokens render near-silent through ids outside both manifest
+    censuses, invisible to every set-membership rule. The keep's *length* is
+    the only evidence there is: a keep under
+    ``desperation_min_keep_per_text_token`` per text token cannot hold a full
+    read, so the verdict is condemned into the retry ladder. The cut stands
+    as the keep — an exhausted ladder ships the trim, flagged, rather than
+    the untrimmed babble.
+    """
+
+    def _inspect(self, fx: dict[str, Any], case: dict[str, Any], **overrides: Any):
+        return inspect(
+            build(case["shape"]),
+            text_token_count=case["text_tokens"],
+            min_tokens=case["min_tokens"],
+            eos_peak_at=case["eos_peak_at"],
+            eos_peak_prob=case["eos_peak_prob"],
+            ended=case["ended"],
+            is_terminal=case["is_terminal"],
+            hit_ceiling=case["hit_ceiling"],
+            silence=fx["silence_token_ids"],
+            config=config_from(fx, **overrides),
+        )
+
+    def test_the_resolver_matches_the_fixture(self, fx: dict[str, Any]) -> None:
+        cases = fx["starved_rescue"]["cases"]
+        assert cases, "the fixture has no starved_rescue cases; nothing was compared"
+        for case in cases:
+            got = self._inspect(fx, case)
+            want = case["expect"]
+            why = f"{case['name']}: {case['why']}"
+            assert got.keep == want["keep"], why
+            assert got.reason == want["reason"], why
+            assert got.suspect == want["suspect"], why
+
+    def test_the_floor_is_exclusive(self, fx: dict[str, Any]) -> None:
+        # keep == floor ships: `<`, not `<=`, so the pinned law has no
+        # ambiguity at the boundary for a port to resolve differently.
+        # text 20 puts the floor at exactly 34.0.
+        case = dict(fx["starved_rescue"]["cases"][0])
+        case["shape"] = [["speech", 34], ["sil", 12], ["speech", 90]]
+        case["text_tokens"] = 20
+        case["min_tokens"] = 24
+        got = self._inspect(fx, case)
+        assert got.reason == "desperation"
+        assert got.keep == 34
+        assert not got.suspect, "a keep exactly at the floor is not under it"
+
+    def test_zero_disables_the_trigger(self, fx: dict[str, Any]) -> None:
+        case = fx["starved_rescue"]["cases"][0]
+        got = self._inspect(fx, case, desperation_min_keep_per_text_token=0.0)
+        assert got.reason == "desperation"
+        assert not got.suspect
+
+    def test_a_negative_floor_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="desperation_min_keep_per_text_token"):
+            PostprocessConfig(desperation_min_keep_per_text_token=-0.1)
+
+    def test_a_floor_above_the_band_is_refused(self) -> None:
+        # Above `desperation_band_ratio` the rule would condemn cuts landing
+        # exactly where the band admits them.
+        with pytest.raises(ValueError, match="desperation_band_ratio"):
+            PostprocessConfig(desperation_min_keep_per_text_token=2.7)
+
+    def test_the_condemned_verdict_keeps_the_cut(self, fx: dict[str, Any]) -> None:
+        # Unlike `stall`, which hands the row back whole (a hole has no
+        # anchor), the starved verdict carries the trim: when every retry is
+        # also condemned the engine ships `keep` — today's audio — rather
+        # than the full cap-hit babble.
+        case = fx["starved_rescue"]["cases"][0]
+        got = self._inspect(fx, case)
+        assert got.suspect
+        assert got.keep < len(build(case["shape"]))
+
+
+class TestRepetitionSilence:
+    """The loop exemption keys on acoustic silence, not the sampler list.
+
+    The specimen: kathleen/en0023 seed 1234 parked a mid-chunk pause on ids
+    6486 (x7) then 6405 (x24) — both render true silence, both in the
+    manifest's ``silence_render_ids``, neither in the sampler's list the
+    exemption used to read. The period-1 run fired as a loop and the cut
+    deleted the pause plus two whole sentences of correctly-read speech
+    behind it, verdict ``repetition``, not suspect, audibly fluent. Six of
+    the checkpoint's eight truly-silent ids sit outside the sampler list, so
+    the exemption was blind on most real pauses. The law now unions the
+    sampler list with both render censuses for this one rule; the tail rules
+    keep the list they were calibrated against.
+    """
+
+    @staticmethod
+    def _config(fx: dict[str, Any], **overrides: Any) -> PostprocessConfig:
+        section = fx["repetition_silence"]
+        return config_from(
+            fx,
+            silence_render_ids=tuple(section["silence_render_ids"]),
+            quiet_render_ids=tuple(section["quiet_render_ids"]),
+            **overrides,
+        )
+
+    def test_the_rule_matches_the_fixture(self, fx: dict[str, Any]) -> None:
+        cases = fx["repetition_silence"]["cases"]
+        assert cases, "the fixture has no repetition_silence cases; nothing was compared"
+        for case in cases:
+            got = repetition_cut(
+                build(case["shape"]),
+                silence=fx["silence_token_ids"],
+                config=self._config(fx),
+            )
+            assert got == case["loop"], f"{case['name']}: {case['why']}"
+
+    def test_the_resolver_matches_the_fixture(self, fx: dict[str, Any]) -> None:
+        # The cascade is part of the contract: a declined loop falls through
+        # to `stall`, which condemns the specimen's pause into the retry
+        # ladder instead of shipping the cut.
+        for case in fx["repetition_silence"]["cases"]:
+            got = inspect(
+                build(case["shape"]),
+                text_token_count=case["text_tokens"],
+                min_tokens=case["min_tokens"],
+                eos_peak_at=case["eos_peak_at"],
+                eos_peak_prob=case["eos_peak_prob"],
+                ended=case["ended"],
+                is_terminal=case["is_terminal"],
+                hit_ceiling=case["hit_ceiling"],
+                silence=fx["silence_token_ids"],
+                config=self._config(fx),
+            )
+            want = case["expect"]
+            why = f"{case['name']}: {case['why']}"
+            assert got.keep == want["keep"], why
+            assert got.reason == want["reason"], why
+            assert got.suspect == want["suspect"], why
+
+    def test_sampling_names_the_old_law(self, fx: dict[str, Any]) -> None:
+        # The pre-amendment behaviour stays nameable — a checkpoint measured
+        # under it can declare what it measured — and this is what it did:
+        # cut at the pause and delete everything behind it.
+        case = fx["repetition_silence"]["cases"][0]
+        got = repetition_cut(
+            build(case["shape"]),
+            silence=fx["silence_token_ids"],
+            config=self._config(fx, repetition_silence="sampling"),
+        )
+        assert got == 31, "the old law cut one token past the pause's start"
+
+    def test_without_censuses_the_union_is_the_sampler_list(self, fx: dict[str, Any]) -> None:
+        # A checkpoint packed before the censuses changes nothing: nothing on
+        # such a build knows id 12 is silent, so the run still reads as a
+        # loop there, under either field value.
+        case = fx["repetition_silence"]["cases"][0]
+        got = repetition_cut(
+            build(case["shape"]), silence=fx["silence_token_ids"], config=config_from(fx)
+        )
+        assert got == 31
+
+    def test_an_unknown_family_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="repetition_silence"):
+            PostprocessConfig(repetition_silence="both")
+
+
+class TestRepetitionResume:
+    """A loop the decoder resumed from is condemned, never cut.
+
+    The census fix (``repetition_silence``) needs a manifest that names the
+    silent ids, and the published pack has none: on it the en0023 pause fired
+    again as a period-1 loop and the cut kept 52 of 206 tokens, deleting two
+    sentences of correctly-read speech, verdict ``repetition``, no retry.
+    The guard here needs no silence knowledge at all: a genuine lock-up runs
+    its cycle to the end of the row (a ceiling truncates at most one
+    incomplete copy, ``period - 1`` tokens), so a qualifying loop followed by
+    a full period or more of other content is a decoder that resumed — and a
+    decoder that resumed was never locked. Such a row is handed back whole,
+    ``suspect``, into the retry ladder. The section configures no censuses on
+    purpose: it is the arm ``repetition_silence`` cannot reach.
+    """
+
+    def test_the_rule_matches_the_fixture(self, fx: dict[str, Any]) -> None:
+        # The bare rule still reports the loop; the law lives in the resolver.
+        cases = fx["repetition_resume"]["cases"]
+        assert cases, "the fixture has no repetition_resume cases; nothing was compared"
+        for case in cases:
+            got = repetition_cut(
+                build(case["shape"]), silence=fx["silence_token_ids"], config=config_from(fx)
+            )
+            assert got == case["loop"], f"{case['name']}: {case['why']}"
+
+    def test_the_resolver_matches_the_fixture(self, fx: dict[str, Any]) -> None:
+        for case in fx["repetition_resume"]["cases"]:
+            got = inspect(
+                build(case["shape"]),
+                text_token_count=case["text_tokens"],
+                min_tokens=case["min_tokens"],
+                eos_peak_at=case["eos_peak_at"],
+                eos_peak_prob=case["eos_peak_prob"],
+                ended=case["ended"],
+                is_terminal=case["is_terminal"],
+                hit_ceiling=case["hit_ceiling"],
+                silence=fx["silence_token_ids"],
+                config=config_from(fx),
+            )
+            want = case["expect"]
+            why = f"{case['name']}: {case['why']}"
+            assert got.keep == want["keep"], why
+            assert got.reason == want["reason"], why
+            assert got.suspect == want["suspect"], why
+
+    def test_the_condemned_row_is_handed_back_whole(self, fx: dict[str, Any]) -> None:
+        # Unlike a starved desperation cut, there is no trim worth keeping as
+        # a fallback: the trim is the defect, so an exhausted retry ladder
+        # ships the full row rather than the cut.
+        case = fx["repetition_resume"]["cases"][0]
+        tokens = build(case["shape"])
+        got = inspect(
+            tokens,
+            text_token_count=case["text_tokens"],
+            min_tokens=case["min_tokens"],
+            eos_peak_at=case["eos_peak_at"],
+            eos_peak_prob=case["eos_peak_prob"],
+            ended=case["ended"],
+            is_terminal=case["is_terminal"],
+            hit_ceiling=case["hit_ceiling"],
+            silence=fx["silence_token_ids"],
+            config=config_from(fx),
+        )
+        assert got.keep == len(tokens), (
+            "a resumed loop must be handed back whole; the cut would delete "
+            "what the decoder came back to say"
+        )
+        assert got.suspect, "the caller has to be told, since nothing was changed"
+
+    def test_cut_names_the_old_law(self, fx: dict[str, Any]) -> None:
+        # The pre-amendment behaviour stays nameable — a checkpoint measured
+        # under it can declare what it measured — and this is what it did:
+        # cut at the pause and delete everything behind it.
+        case = fx["repetition_resume"]["cases"][0]
+        got = inspect(
+            build(case["shape"]),
+            text_token_count=case["text_tokens"],
+            min_tokens=case["min_tokens"],
+            eos_peak_at=case["eos_peak_at"],
+            eos_peak_prob=case["eos_peak_prob"],
+            ended=case["ended"],
+            is_terminal=case["is_terminal"],
+            hit_ceiling=case["hit_ceiling"],
+            silence=fx["silence_token_ids"],
+            config=config_from(fx, repetition_resume="cut"),
+        )
+        assert got.reason == "repetition"
+        assert got.keep == case["loop"], "the old law shipped the specimen's cut"
+        assert not got.suspect
+
+    def test_the_census_arm_is_untouched(self, fx: dict[str, Any]) -> None:
+        # With the censuses configured the specimen's pause is exempt from the
+        # loop rule entirely and `stall` condemns it — the repetition_silence
+        # contract, byte for byte, guard or no guard.
+        section = fx["repetition_silence"]
+        case = section["cases"][0]
+        got = inspect(
+            build(case["shape"]),
+            text_token_count=case["text_tokens"],
+            min_tokens=case["min_tokens"],
+            eos_peak_at=case["eos_peak_at"],
+            eos_peak_prob=case["eos_peak_prob"],
+            ended=case["ended"],
+            is_terminal=case["is_terminal"],
+            hit_ceiling=case["hit_ceiling"],
+            silence=fx["silence_token_ids"],
+            config=config_from(
+                fx,
+                silence_render_ids=tuple(section["silence_render_ids"]),
+                quiet_render_ids=tuple(section["quiet_render_ids"]),
+            ),
+        )
+        assert got.reason == "stall"
+        assert got.keep == case["expect"]["keep"]
+
+    def test_an_unknown_law_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="repetition_resume"):
+            PostprocessConfig(repetition_resume="maybe")
 
 
 class TestTrailingFiller:
@@ -238,7 +676,7 @@ class TestConfigRefusesNonsense:
 
     def test_unknown_mode(self) -> None:
         with pytest.raises(ValueError, match="unknown postprocess mode"):
-            PostprocessConfig(mode="quiet")  # type: ignore[arg-type]
+            PostprocessConfig(mode="quiet")
 
 
 class TestSamplerObservesTheEosPeak:
@@ -371,6 +809,38 @@ class TestRecipeAndManifest:
         moved = base.with_(postprocess=PostprocessConfig(trailing_silence_run_tokens=13))
         assert base.fingerprint() != moved.fingerprint()
         assert "postprocess" in base.canonical_form()
+
+    def test_render_censuses_are_read_from_the_top_level(self) -> None:
+        # Properties of the weights live beside silence_token_ids, where the
+        # next backend cannot re-guess them.
+        cfg = AlgorithmConfig.from_manifest(
+            {
+                "recipe_version": "loudkit-1",
+                "silence_render_ids": [4137, 4218],
+                "quiet_render_ids": [1458, 1461],
+            }
+        )
+        assert cfg.postprocess.silence_render_ids == (4137, 4218)
+        assert cfg.postprocess.quiet_render_ids == (1458, 1461)
+
+    def test_absent_censuses_default_to_empty(self) -> None:
+        # The fallback contract: an old pack loads, and the stall rule keys
+        # its run trigger to silence_token_ids.
+        cfg = AlgorithmConfig.from_manifest({"recipe_version": "loudkit-1"})
+        assert cfg.postprocess.silence_render_ids == ()
+        assert cfg.postprocess.quiet_render_ids == ()
+
+    def test_a_census_in_the_postprocess_block_is_refused(self) -> None:
+        # One value, one home: the censuses are top-level manifest fields.
+        with pytest.raises(ValueError, match="top level"):
+            AlgorithmConfig.from_manifest({"postprocess": {"silence_render_ids": [1, 2]}})
+
+    def test_the_censuses_are_hashed(self) -> None:
+        # The stall detector reads them, so they are audible values: two
+        # engines disagreeing on the census must not share a fingerprint.
+        base = AlgorithmConfig()
+        moved = base.with_(postprocess=PostprocessConfig(silence_render_ids=(4137,)))
+        assert base.fingerprint() != moved.fingerprint()
 
 
 class TestDropout:

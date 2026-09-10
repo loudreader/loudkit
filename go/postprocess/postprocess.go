@@ -1,25 +1,31 @@
-// Package postprocess mirrors loudkit.postprocess — deciding where a generated
+// Package postprocess mirrors loudkit.postprocess: deciding where a generated
 // chunk actually ended.
 //
 // This is a detector, not a filter. It reads the speech tokens a chunk produced
-// and answers one question — where did the sentence really stop? — then returns
+// and answers one question (where did the sentence really stop?), then returns
 // a verdict. It never touches a sample of audio.
 //
 // The artifact it removes is generated, not spectral. The decoder is
-// free-running, and silence tokens are exempt from both the repetition penalty
-// and the min_p cutoff (penalising silence measurably removes pauses), so once
-// the sentence is over those tokens keep probability mass indefinitely. The
-// decoder free-runs silence, and any step where a non-silence token survives
-// the cutoff becomes a hallucinated word — heard as "it finished, then a long
-// gap, then one random word".
+// free-running, and silence tokens are exempt from the min_p cutoff (a pause
+// token is the only way to pause, and a filter that removes it removes
+// prosody), so once the sentence is over those tokens keep probability mass
+// indefinitely. The decoder free-runs silence, and any step where a
+// non-silence token survives the cutoff becomes a hallucinated word: heard
+// as "it finished, then a long gap, then one random word". Silence is not
+// exempt from the repetition penalty either: an exempt silence run is
+// absorbing mid-row as well. See the stall rule below for the failure that
+// guards against and the sampler for the measurement.
 //
 // Every constant here came from a device trace or a regression, and every rule
 // is pinned by tests/data/conformance/postprocess.json, which all five ports
-// run. Provenance is in docs/reference/postprocess.md.//
-// Python reference: `loudkit/postprocess.py`.
+// run. Provenance is in docs/design/postprocess.md.
+//
+// Python reference: loudkit/postprocess.py.
 package postprocess
 
-import "sort"
+import (
+	"sort"
+)
 
 // Mode is what the engine does with a verdict.
 //
@@ -36,11 +42,28 @@ const (
 const (
 	ReasonClean        = "clean"
 	ReasonDropout      = "dropout"
+	ReasonStall        = "stall"
 	ReasonRepetition   = "repetition"
 	ReasonSilenceTail  = "silence_tail"
 	ReasonTerminalEcho = "terminal_echo"
 	ReasonDesperation  = "desperation"
 	ReasonEndedTail    = "ended_tail"
+)
+
+// Which silence family the all-silence-cycle exemption in RepetitionCut
+// reads. "acoustic" is the shipping default; "sampling" names the
+// pre-amendment law. See Config.RepetitionSilence.
+const (
+	RepetitionSilenceAcoustic = "acoustic"
+	RepetitionSilenceSampling = "sampling"
+)
+
+// What a qualifying loop the decoder *resumed from* receives in Inspect.
+// "condemn" is the shipping default; "cut" names the pre-amendment law. See
+// Config.RepetitionResume.
+const (
+	RepetitionResumeCondemn = "condemn"
+	RepetitionResumeCut     = "cut"
 )
 
 // Config holds the detector constants. Algorithm layer: a port that
@@ -50,8 +73,8 @@ type Config struct {
 	Mode string
 
 	// CeilingSpeechPerTextToken is the hard stop for generation, as a multiple
-	// of the text-token count. Device trace of the showcase render:
-	// "t3.overrun gen=92 ceiling=92 bestEOS=74@0.003 floor=31" — ~26 text
+	// of the text-token count. Device trace of the showcase render,
+	// "t3.overrun gen=92 ceiling=92 bestEOS=74@0.003 floor=31": ~26 text
 	// tokens stopped only because it hit the ceiling, mid-sentence, already at
 	// 3.5 speech tokens per text token. NOT the chunker's 2.6: there, guessing
 	// high only wastes window; here, guessing low cuts a sentence off.
@@ -88,15 +111,30 @@ type Config struct {
 	// different rows.
 	FillerMaxSpeechAfterRun int
 
-	// DesperationSpeechPerTextToken: past this the row certainly contains
-	// garbage. "It was as he expected." — 14 text tokens — came back as 96
-	// speech tokens of sentence-then-dense-babble with the stop peak at the
-	// right place (45) but confidence 0.000, so every probability-gated rescue
-	// refused. Real speech runs 1.75-2.35 per text token.
+	// DesperationSpeechPerTextToken: past this ratio the row certainly
+	// contains garbage, whatever its stop confidence said. Real speech runs
+	// 1.75-2.35 speech tokens per text token. The specimen and the measured
+	// band are in docs/design/postprocess-detectors.md.
 	DesperationSpeechPerTextToken float64
 	// DesperationMinTextTokens exempts tiny texts, where fixed overheads give a
 	// clean "No!" a ratio of 6+ by itself.
 	DesperationMinTextTokens int
+	// DesperationMinKeepPerTextToken: a cap-hit row whose desperation cut
+	// keeps fewer speech tokens than this many per text token is condemned
+	// into the retry ladder instead of shipping the trim.
+	//
+	// The defect it closes is a seam cut that keeps a short span rendering
+	// near-silent through ids outside both manifest censuses, where no
+	// set-membership rule can see it: the trim ships a mute chunk and the
+	// caller is never told to retry.
+	//
+	// 1.7 sits inside the measured gap between a mute keep and a real one,
+	// and deliberately under 1.75, the floor of the healthy band of speech
+	// tokens per text token, so a complete read is never condemned. Cap-hit
+	// rows only: a row that ended on its own corroborated its trim with a
+	// stop token. Zero disables the trigger. The specimen and the
+	// calibration rows are in docs/design/postprocess-detectors.md.
+	DesperationMinKeepPerTextToken float64
 
 	// EndedTailSilenceRun is the silence before a blip that counts as stranding
 	// it (~0.24 s).
@@ -104,7 +142,7 @@ type Config struct {
 	// EndedTailBlipMax: <= 80 ms of "speech" is a click, not a word.
 	EndedTailBlipMax int
 	// EndedTailWordMax: a stray word behind a full seam on a terminal chunk is
-	// cut with it. Continuation chunks keep their tails — their pauses are the
+	// cut with it. Continuation chunks keep their tails: their pauses are the
 	// sentence's rhythm and their "end" is not an end.
 	EndedTailWordMax int
 	// EndedTailKeep is the pause left in place after trimming (~0.2 s).
@@ -148,8 +186,110 @@ type Config struct {
 	// cycle count alone fired on 22 of those 27.
 	RepetitionMinSpan int
 
+	// RepetitionResume is what a qualifying loop the decoder *resumed from*
+	// receives.
+	//
+	// The guard that holds without a census. A genuine lock-up is a tail
+	// pathology: the model's own output is its context, the state is
+	// absorbing, and the repeating region runs to the end of the row, and a
+	// ceiling can truncate at most one incomplete copy, period - 1 tokens.
+	// A qualifying repetition followed by a full period or more of other
+	// content is therefore a different event: a decoder that resumed was
+	// never locked, and on a checkpoint without render censuses the thing it
+	// resumed from is a pause parked on a silent-rendering id the sampler
+	// list cannot name.
+	//
+	// "condemn" (the default): the row is reported whole (Keep is the full
+	// row, verdict repetition, Suspect) and routed into the retry ladder
+	// like stall. The cut is refused because on such a row the cut *is* the
+	// defect: it keeps one cycle and deletes the pause together with the
+	// correctly-read speech behind it, reporting the row fluent.
+	// RepetitionSilence closes that on a manifest that carries the censuses;
+	// this field closes it on every checkpoint, including ids no census
+	// lists.
+	//
+	// Not a discard-fraction guard: a fraction reads geometry, so a pause
+	// with less speech behind it slips under any cap and ships the deletion
+	// as clean. The largest resume a truncated genuine loop can produce is
+	// period - 1, so the law is resume >= period: integer-exact, no constant
+	// to tune, and a cut that survives it only ever removes a tail, like
+	// every other rule in the layer.
+	//
+	// "cut" names the pre-amendment law, for a checkpoint measured under it.
+	// The bare rule (RepetitionCut) reports the loop either way; this field
+	// decides what the resolver does with one that resumed. The specimen is
+	// in docs/design/postprocess-detectors.md.
+	RepetitionResume string
+
+	// RepetitionSilence is which silence family the all-silence-cycle
+	// exemption in RepetitionCut reads.
+	//
+	// "acoustic": the union of the configured sampler silence ids and both
+	// render censuses (SilenceRenderIds, QuietRenderIds). A pause parked on
+	// *any* silent-rendering id is never mistaken for a decoder loop. Keyed
+	// to the sampler list alone, the exemption cannot see a pause parked on
+	// ids that render true silence but sit outside that list: the run fires
+	// as a loop, and the cut keeps one cycle and deletes the pause together
+	// with the correctly-read speech behind it, verdict repetition, not
+	// suspect, no retry, audibly fluent. Most of the measured checkpoint's
+	// truly-silent ids sit outside the sampler list, so this is the rule's
+	// behaviour on most real pauses, and the shape is inaudible content loss
+	// shipping as clean.
+	//
+	// "sampling": the configured sampler list alone, the pre-amendment law,
+	// nameable so a checkpoint measured under it can declare what it
+	// measured. A checkpoint without censuses gets this behaviour under
+	// either value, since the union degenerates to the sampler list.
+	//
+	// This family feeds the loop exemption only. The tail rules
+	// (silence_tail, ended_tail, the filler and desperation seams) stay
+	// keyed to the sampler list they were calibrated against; see
+	// docs/design/postprocess.md for the two-lists decision, and
+	// docs/design/postprocess-detectors.md for the specimen and the measured
+	// prevalence.
+	RepetitionSilence string
+
+	// StallRunTokens: a non-tail dead-air run this long condemns the row
+	// (~1.0 s at 25 Hz). The run is measured two-class, and the two classes
+	// are essential: only true-silence ids (SilenceRenderIds) count toward
+	// this threshold, but the run continues across quiet-family ids
+	// (QuietRenderIds), breath and decay tokens that render inaudible in
+	// context. Single-set counting was measured broken: one breath token in
+	// the middle of real dead air split a 47-token run into two short ones
+	// and the rule missed it. Calibrated across all ten shipping languages
+	// (120 passages per arm): healthy interior runs top out at 13–19 tokens
+	// and healthy leading runs at 11, so 25 is outside anything ordinary
+	// prose produced anywhere while sitting under every measured stall. 20
+	// also clears the healthy maxima; 25 is the shipped margin.
+	StallRunTokens int
+
+	// SilenceRenderIds are the token ids that render as true digital silence.
+	// A property of the checkpoint, measured by rendering (per-id median
+	// energy below -80 dBFS across two independent censuses), and therefore
+	// supplied by the manifest: top level, beside silence_token_ids,
+	// precisely so the next backend cannot re-guess it. Empty means the
+	// checkpoint predates the census; the stall rule then runs its run
+	// trigger only, keyed to the configured silence_token_ids: degraded
+	// (only 8 of that list's 31 ids actually render silent, so the whole-row
+	// and majority triggers cannot be trusted with it) but safe.
+	//
+	// NOT a sampling exemption list. Widening the sampler's min_p exemption
+	// to exactly these ids was measured harmful: pause-time share doubles,
+	// and the repetition penalty applies to every token regardless. This
+	// list exists so the detectors read dead air where dead air actually is.
+	SilenceRenderIds []int
+
+	// QuietRenderIds are the contextually-quiet family: breath and decay ids.
+	// Measured by per-instance RMS attribution (>= 90% of instances quiet,
+	// >= 5 sightings), minus the true-silence census. Dead-air runs continue
+	// across these ids but they never count toward the run gate: a breath
+	// inside dead air is still dead air, and a breath between words is not.
+	// Manifest-supplied like SilenceRenderIds; empty when the checkpoint
+	// predates the census.
+	QuietRenderIds []int
+
 	// Early truncation: the row is too short to be the text it was asked for.
-	// Reported, never cut — there is nothing to cut, and it is the most damaging
+	// Reported, never cut: there is nothing to cut, and it is the most damaging
 	// failure in the set because a listener cannot hear that content is absent.
 	// The 25-token floor is the published criterion for a catastrophic
 	// neural-codec TTS failure; the proportional test exempts a genuinely short
@@ -160,45 +300,57 @@ type Config struct {
 // Production is the shipping detector configuration.
 func Production() Config {
 	return Config{
-		Mode:                          ModeTrim,
-		CeilingSpeechPerTextToken:     4.0,
-		CeilingSlackTokens:            40,
-		TrailingFillerThreshold:       0.7,
-		TrailingSilenceRunTokens:      12,
-		DesperationBandRatio:          2.6,
-		DesperationBandFloor:          12,
-		FillerMinEosProbability:       0.05,
-		FillerMaxSpeechAfterRun:       10,
-		DesperationSpeechPerTextToken: 4.5,
-		DesperationMinTextTokens:      10,
-		EndedTailSilenceRun:           6,
-		EndedTailBlipMax:              2,
-		EndedTailWordMax:              10,
-		EndedTailKeep:                 5,
-		EchoStrongEosProbability:      0.1,
-		EchoStrongMaxTail:             30,
-		EchoStrongMinPositionPct:      68,
-		EchoWeakEosProbability:        0.003,
-		EchoWeakMaxTail:               16,
-		EchoWeakMinPositionPct:        85,
-		RetryMaxAttempts:              2,
-		PacingTolerance:               1.6,
-		RepetitionMaxPeriod:           12,
-		RepetitionMinCycles:           3,
-		RepetitionMinSpan:             24,
-		DropoutMinTokens:              25,
+		Mode:                           ModeTrim,
+		CeilingSpeechPerTextToken:      4.0,
+		CeilingSlackTokens:             40,
+		TrailingFillerThreshold:        0.7,
+		TrailingSilenceRunTokens:       12,
+		DesperationBandRatio:           2.6,
+		DesperationBandFloor:           12,
+		FillerMinEosProbability:        0.05,
+		FillerMaxSpeechAfterRun:        10,
+		DesperationSpeechPerTextToken:  4.5,
+		DesperationMinTextTokens:       10,
+		DesperationMinKeepPerTextToken: 1.7,
+		EndedTailSilenceRun:            6,
+		EndedTailBlipMax:               2,
+		EndedTailWordMax:               10,
+		EndedTailKeep:                  5,
+		EchoStrongEosProbability:       0.1,
+		EchoStrongMaxTail:              30,
+		EchoStrongMinPositionPct:       68,
+		EchoWeakEosProbability:         0.003,
+		EchoWeakMaxTail:                16,
+		EchoWeakMinPositionPct:         85,
+		RetryMaxAttempts:               2,
+		PacingTolerance:                1.6,
+		RepetitionMaxPeriod:            12,
+		RepetitionMinCycles:            3,
+		RepetitionMinSpan:              24,
+		RepetitionResume:               RepetitionResumeCondemn,
+		RepetitionSilence:              RepetitionSilenceAcoustic,
+		StallRunTokens:                 25,
+		DropoutMinTokens:               25,
 	}
 }
 
 // Inspection is what the detectors concluded about one chunk.
 type Inspection struct {
-	// Keep is how many leading tokens survive — equal to the input length when
+	// Keep is how many leading tokens survive: equal to the input length when
 	// nothing fired, so a caller can always slice by it without branching.
 	Keep   int
 	Reason string
-	// Suspect means the row is impossibly long for its text and no anchor
-	// agreed where to cut. Not an error and not a cut: a report. Shipping such
-	// a row silently is how the artifact reached listeners in the first place.
+	// Suspect means the row is certainly wrong in a way no cut can fix. Set
+	// with dropout (content missing), with stall (the row is dead air where
+	// speech should be), with repetition on a loop the decoder resumed from
+	// (the cut would delete what it came back to say, so the row is handed
+	// back whole), with a starved desperation cut (a cap-hit trim that
+	// keeps less than any full read of its text: here Keep still holds the
+	// cut, as the fallback if every retry is also condemned), and on a row
+	// impossibly long for its text that dodged every token anchor. Not an
+	// error and not a cut: a report, and the engine's signal to retry.
+	// Shipping such a row silently is how the artifact reached listeners in
+	// the first place.
 	Suspect bool
 }
 
@@ -248,18 +400,6 @@ func silenceFlags(tokens []int, silence []int) []bool {
 	return flags
 }
 
-// IsTrailingFiller reports whether what follows index is a trailing tail rather
-// than more sentence.
-//
-// The overrun rescue cuts back to where the model came closest to stopping, and
-// that peak is a hint, not a verdict. Trusting it alone truncated whole
-// sentences: a voice reading a language its tag does not match may never commit
-// to stopping, so its best moment of hesitation lands a third of the way in. So
-// the peak is corroborated by what it proposes to discard — either the tail is
-// mostly silence by share, or it holds a long unbroken run with only a stray
-// word behind it. Without that second half, a rhetorical pause mid-tail (25
-// silent tokens, then 80 of speech) matched the run rule and the rescue cut the
-// rest of the sentence off.
 // IsDropout reports whether the row is too short to be the text it was asked
 // for.
 //
@@ -275,7 +415,10 @@ func IsDropout(tokenCount, textTokenCount int, cfg Config) bool {
 }
 
 // PacingOutliers reports indices of chunks whose pace drifts past the
-// tolerance from the median. Long-form drift: per-chunk pace (speech tokens / text tokens) against the passage's own median, report-only. The median rather than the mean, so one broken chunk cannot drag the baseline toward itself and hide.
+// tolerance from the median. Long-form drift: per-chunk pace (speech tokens /
+// text tokens) against the passage's own median, report-only. The median
+// rather than the mean, so one broken chunk cannot drag the baseline toward
+// itself and hide.
 func PacingOutliers(ratios []float64, cfg Config) []int {
 	if len(ratios) < 3 {
 		// One chunk has no neighbours; two cannot say which of them drifted.
@@ -303,30 +446,74 @@ func PacingOutliers(ratios []float64, cfg Config) []int {
 // RepetitionCut reports where a stuck decoder started looping, or -1.
 //
 // The failure the tail rules cannot see, because it happens *inside* the row.
-// The mechanism is the one behind the trailing hallucinated word — the model's
-// own output becomes its context — but it strikes mid-sequence, so no rule that
+// The mechanism is the one behind the trailing hallucinated word: the model's
+// own output becomes its context, but it strikes mid-sequence, so no rule that
 // reads the end can find it.
 //
-// Deliberately hard to trigger, because it is the only rule here that cuts
+// Deliberately hard to trigger, because it is the only rule here that anchors
 // mid-sequence: a short cycle, repeated many times, matched exactly. A decoder
 // that has genuinely locked up emits the same tokens rather than similar ones,
 // and a fuzzy match on a signal this destructive would truncate real speech.
+// And under RepetitionResume "condemn" an *applied* cut only ever removes a
+// tail: a loop the decoder resumed from is condemned by the resolver instead
+// (Inspect reads the resumption off loopCandidate and judges it), so the
+// mid-sequence anchor never deletes what followed it.
 //
-// A cycle that is entirely silence is never a loop — silence repeating is what
+// A cycle that is entirely silence is never a loop: silence repeating is what
 // silence is, and the tail rules already judge pauses against where they sit.
+// Under RepetitionSilence "acoustic" the exemption reads *acoustic* silence,
+// the passed ids unioned with both render censuses, the same way IsStalled
+// reads its censuses off the config. Keyed to the sampler list alone it was
+// blind to six of the eight truly-silent ids, and a long pause parked on one
+// of them fired as a period-1 loop whose cut deleted the pause and every
+// correctly-read token behind it (kathleen, en0023, seed 1234: two sentences,
+// verdict repetition, audibly fluent). A cycle mixing silence with speech
+// still counts: a word-then-pause stutter is one of the shapes this failure
+// takes.
 //
 // Returns one full cycle past the loop's start: the first instance is plausibly
 // the word the sentence wanted.
 func RepetitionCut(tokens []int, silence []int, cfg Config) int {
+	cut, _ := loopCandidate(tokens, silence, cfg)
+	return cut
+}
+
+// loopCandidate is the earliest qualifying loop: (cut index, decoder
+// resumed). Cut is -1 when no loop qualifies.
+//
+// One search serves both questions. The cut index is RepetitionCut's
+// contract, unchanged. Resumed is whether the winning loop's repeating region
+// ends period or more tokens before the row does: a locked decoder emits its
+// cycle to the end of the row, and a ceiling can truncate at most one
+// incomplete copy (period - 1 tokens), so a full period of anything else
+// after the region means the decoder came back, which a locked decoder, by
+// definition, does not. No extra scan pays for it: a matching full copy would
+// have been counted as another cycle, so n - end >= period already implies a
+// deviation.
+func loopCandidate(tokens []int, silence []int, cfg Config) (int, bool) {
 	n := len(tokens)
 	if n < cfg.RepetitionMinSpan {
-		return -1
+		return -1, false
 	}
-	quiet := silenceFlags(tokens, silence)
+	// The exemption's family, not the run rules': the tail rules keep reading
+	// the sampler list they were calibrated against. Resolved here rather
+	// than by the caller for the same reason IsStalled reads its censuses off
+	// the config: a family that lives in a caller is a family the next
+	// caller feeds wrong. Without censuses the union is the sampler list,
+	// unchanged.
+	family := silence
+	if cfg.RepetitionSilence == RepetitionSilenceAcoustic {
+		family = make([]int, 0, len(silence)+len(cfg.SilenceRenderIds)+len(cfg.QuietRenderIds))
+		family = append(family, silence...)
+		family = append(family, cfg.SilenceRenderIds...)
+		family = append(family, cfg.QuietRenderIds...)
+	}
+	quiet := silenceFlags(tokens, family)
 
 	// Earliest loop wins: a row that locks up twice locked up first at the
 	// first one, and everything after it is already inside the failure.
 	best := -1
+	resumed := false
 	longestPeriod := cfg.RepetitionMaxPeriod
 	if limit := n / cfg.RepetitionMinCycles; limit < longestPeriod {
 		longestPeriod = limit
@@ -357,14 +544,123 @@ func RepetitionCut(tokens []int, silence []int, cfg Config) int {
 			if cycles >= cfg.RepetitionMinCycles && cycles*period >= cfg.RepetitionMinSpan && !allQuiet {
 				if best < 0 || start+period < best {
 					best = start + period
+					resumed = n-(start+cycles*period) >= period
 				}
 				break
 			}
 		}
 	}
-	return best
+	return best, resumed
 }
 
+// IsStalled reports whether the decoder spent this row trapped in silence.
+//
+// The failure the tail rules structurally cannot see. The decoder enters a
+// silence run at a pause point (its own argmax) and, with min_p stripping
+// every non-silence candidate while the exemption re-admits the listed silence
+// ids, the run's exit probability is effectively zero. The sampler applies the
+// repetition penalty to silence, which closes the trap at its source; this
+// rule is the detector for what still gets through, and for any checkpoint or
+// configuration where the trap re-opens. A trapped row reads clean to every
+// other rule in the layer, because all six of them anchor on the tail.
+//
+// Three triggers, all integer-exact, any one condemns:
+//
+//   - no speech at all: every generated token is in the silence-or-quiet
+//     family. A mute row is a seed lottery, so the route out is a re-roll
+//     rather than a cut.
+//   - a non-tail dead-air run of at least StallRunTokens true-silence tokens.
+//     Two-class: quiet-family ids extend a run without counting toward it
+//     (see StallRunTokens for why single-set counting is broken). Tail runs
+//     are excluded: the tail rules own the tail, and a trailing pause is
+//     judged against the place it sits in.
+//   - a ceiling overrun that is mostly silence: hitCeiling and the family
+//     holds a strict majority of the row. A tail run on a cap-hit row is not
+//     a natural tail: the ceiling truncated the read, so the dead air is a
+//     stall the cap happened to interrupt. This also closes a structural
+//     hole: the ceiling clips rows to 4.0x text tokens + 40, so past 80 text
+//     tokens a cap-hit stall can never reach the 4.5x desperation threshold,
+//     which puts the rule that means "certainly broken" out of reach of the
+//     most broken rows this layer sees.
+//
+// Without a census (SilenceRenderIds empty, a checkpoint packed before it)
+// only the run trigger fires, keyed to the configured silence_token_ids. That
+// is the measured-safe subset: 13 of the configured list's 31 ids render
+// audible speech, so whole-row membership in that list does not prove a mute
+// row, and a whole-row trigger keyed to it could condemn real speech.
+// Degraded-but-safe beats a fallback that lies.
+//
+// Returns true for a condemned row. There is nothing to cut: the failure is a
+// hole, not a tail, and the fix is the retry ladder, the same route dropout
+// takes, for the same reason.
+//
+// The trap measurements, the specimens and the prevalence of each trigger are
+// in docs/design/postprocess-detectors.md.
+func IsStalled(tokens []int, hitCeiling bool, silence []int, cfg Config) bool {
+	if len(tokens) == 0 {
+		return false
+	}
+	census := len(cfg.SilenceRenderIds) > 0
+	gateIds := cfg.SilenceRenderIds
+	if !census {
+		gateIds = silence
+	}
+	gate := make(map[int]struct{}, len(gateIds))
+	for _, id := range gateIds {
+		gate[id] = struct{}{}
+	}
+	family := make(map[int]struct{}, len(gate)+len(cfg.QuietRenderIds))
+	for id := range gate {
+		family[id] = struct{}{}
+	}
+	for _, id := range cfg.QuietRenderIds {
+		family[id] = struct{}{}
+	}
+
+	inFamily := make([]bool, len(tokens))
+	familyCount := 0
+	for i, t := range tokens {
+		_, inFamily[i] = family[t]
+		if inFamily[i] {
+			familyCount++
+		}
+	}
+	if census && familyCount == len(tokens) {
+		return true
+	}
+	if census && hitCeiling && 2*familyCount > len(tokens) {
+		return true
+	}
+
+	gateCount := 0
+	for i, t := range tokens {
+		if inFamily[i] {
+			if _, ok := gate[t]; ok {
+				gateCount++
+			}
+		} else {
+			// The run ended before the row did, so it is not the tail.
+			if gateCount >= cfg.StallRunTokens {
+				return true
+			}
+			gateCount = 0
+		}
+	}
+	return false
+}
+
+// IsTrailingFiller reports whether what follows index is a trailing tail
+// rather than more sentence.
+//
+// The overrun rescue cuts back to where the model came closest to stopping,
+// and that peak is a hint, not a verdict. On its own it truncates whole
+// sentences: a voice reading a language its tag does not match may never
+// commit to stopping, so its best moment of hesitation lands a third of the
+// way in. The peak is therefore corroborated by what it proposes to discard,
+// and either the tail is mostly silence by share or it holds a long unbroken
+// run with only a stray word behind it. Without that second half a rhetorical
+// pause mid-tail (25 silent tokens, then 80 of speech) matches the run rule
+// and the rescue cuts the rest of the sentence off.
 func IsTrailingFiller(tokens []int, index int, silence []int, cfg Config) bool {
 	if index < 0 || index >= len(tokens) {
 		return false
@@ -390,8 +686,8 @@ func IsTrailingFiller(tokens []int, index int, silence []int, cfg Config) bool {
 		return false
 	}
 
-	// Collect qualifying runs, then require every gap of speech between them —
-	// and after the last — to be a stray word or less. [seam][real
+	// Collect qualifying runs, then require every gap of speech between them,
+	// and after the last, to be a stray word or less. [seam][real
 	// sentence][seam][word] fails: the tokens between the two seams are the
 	// sentence itself, not filler trailing the first boundary.
 	type runSpan struct{ start, end int }
@@ -547,8 +843,8 @@ func EndedTailTrim(tokens []int, silence []int, cfg Config, isTerminal bool) int
 // There is no silence seam here, so IsTrailingFiller has nothing to anchor on.
 // Instead the earlier stop candidate must be strong, late and followed by a
 // short tail. The second acceptance path is narrower and exists for one
-// regression where the model never sampled a stop token but its best — very
-// weak — stop was 15 tokens before the hard ceiling.
+// regression where the model never sampled a stop token but its best stop,
+// very weak, was 15 tokens before the hard ceiling.
 func TerminalEchoCut(tokenCount, eosPeakAt int, eosPeakProb float64,
 	minTokens int, isTerminal, hitCeiling bool, cfg Config) int {
 	if !isTerminal {
@@ -583,10 +879,23 @@ func TerminalEchoCut(tokenCount, eosPeakAt int, eosPeakProb float64,
 // written down, because an order that lives in a caller is an order the next
 // caller gets wrong.
 //
-// Peak-anchored rescues first, then the length-anchored one — it is the
-// bluntest, and it applies to ended rows too, because a model that babbles past
-// its sentence and only then samples a stop token has forfeited the trust that
-// stopping implies. The ended-tail trim runs only when nothing above fired.
+// The order, which is the contract:
+//
+//  1. `dropout`: the row is too short for the text. Reported whole, never
+//     cut: nothing below can help a row that is missing content.
+//  2. `repetition`: an exact repeated cycle. First of the cuts, because it is
+//     the only rule that knows exactly where the failure began; every other
+//     anchor here is inferred. A cycle the decoder came back from is condemned
+//     whole rather than cut, since the cut would delete what it came back to say.
+//  3. `stall`: a mid-row hole. Condemned whole, before any tail rescue: a tail
+//     cut cannot remove a hole in the middle, and a rescue firing here would
+//     trim the tail and ship the hole under its own reason.
+//  4. `silence_tail`: the peak-anchored filler trim.
+//  5. `terminal_echo`, then `desperation`: the length-anchored one is the
+//     bluntest, and it applies to *ended* rows too, because a model that babbles
+//     past its sentence and only then samples a stop token has forfeited the
+//     trust that stopping implies.
+//  6. `ended_tail_trim`: only when nothing above fired.
 func Inspect(tokens []int, req Request, silence []int, cfg Config) Inspection {
 	if cfg.Mode == ModeOff || len(tokens) == 0 {
 		return Inspection{Keep: len(tokens), Reason: ReasonClean}
@@ -597,10 +906,11 @@ func Inspect(tokens []int, req Request, silence []int, cfg Config) Inspection {
 		floor = 10
 	}
 	cut, reason := -1, ReasonClean
+	starved := false
 
 	// Terminal chunks only, like its three siblings. IsTerminal means a
 	// continuation chunk's stop peak is meaningless and its pauses are rhythm
-	// rather than dead air — and this rule reads exactly those two signals, so
+	// rather than dead air, and this rule reads exactly those two signals, so
 	// it was trimming mid-passage chunks on evidence the contract says is not
 	// evidence. Changed in all five implementations together; postprocess is a
 	// bit-parity surface.
@@ -619,8 +929,24 @@ func Inspect(tokens []int, req Request, silence []int, cfg Config) Inspection {
 	// Then repetition, because it is the only rule that knows *exactly* where
 	// the failure began. Every other anchor here is inferred from a signal that
 	// might mean something else; an exactly repeated cycle is not.
-	if looped := RepetitionCut(tokens, silence, cfg); looped >= 0 {
+	looped, resumedLoop := loopCandidate(tokens, silence, cfg)
+	if looped >= 0 && resumedLoop && cfg.RepetitionResume == RepetitionResumeCondemn {
+		// The decoder came back after the repeating region, so it was never
+		// locked, and the cut would delete whatever it came back to say,
+		// the en0023 defect exactly, on any checkpoint whose silence family
+		// cannot name the pause the region actually was. Condemned like
+		// stall, whole: unlike a starved desperation cut there is no trim
+		// worth keeping as a fallback, because the trim is the defect.
+		return Inspection{Keep: len(tokens), Reason: ReasonRepetition, Suspect: true}
+	}
+	if looped >= 0 {
 		cut, reason = looped, ReasonRepetition
+	} else if IsStalled(tokens, req.HitCeiling, silence, cfg) {
+		// Condemned, never cut, before any tail rescue can run: a mid-row hole
+		// is not removable by a tail cut, and a rescue that fired here would
+		// trim the tail and ship the hole under its own reason. Routed like
+		// dropout: reported whole, suspect, into the retry ladder.
+		return Inspection{Keep: len(tokens), Reason: ReasonStall, Suspect: true}
 	} else if fillerCut {
 		cut, reason = req.EosPeakAt, ReasonSilenceTail
 	} else if echo := TerminalEchoCut(len(tokens), req.EosPeakAt, req.EosPeakProb,
@@ -629,6 +955,17 @@ func Inspect(tokens []int, req Request, silence []int, cfg Config) Inspection {
 	} else if desperate := DesperationCut(tokens, req.TextTokenCount, req.MinTokens,
 		req.EosPeakAt, silence, cfg, req.IsTerminal); desperate >= 0 {
 		cut, reason = desperate, ReasonDesperation
+		// The starved rescue. On a cap-hit row the trim has no stop token
+		// corroborating it, and a cut keeping fewer than
+		// DesperationMinKeepPerTextToken speech tokens per text token kept
+		// less than any full read of the text. The kept audio can be
+		// near-silence through ids no census lists (da0028: 33 of the 36
+		// kept tokens, a mute chunk shipped as fixed), so the keep's
+		// *length* is the only evidence there is. Condemned like stall, but
+		// the cut stands: if the retry ladder exhausts, the trim ships
+		// today's audio, flagged suspect, rather than the untrimmed babble.
+		starved = req.HitCeiling &&
+			float64(desperate) < float64(req.TextTokenCount)*cfg.DesperationMinKeepPerTextToken
 	}
 
 	if cut < 0 && req.Ended {
@@ -642,10 +979,9 @@ func Inspect(tokens []int, req Request, silence []int, cfg Config) Inspection {
 		keep = cut
 	}
 	// A condemned row that dodged every token anchor. Reported, never cut: no
-	// rule could say where, and cutting at a guess is how the rescue truncated
-	// whole sentences before the corroboration rules were added.
-	suspect := cut < 0 &&
+	// rule can say where, and a cut at a guess truncates whole sentences.
+	suspect := starved || (cut < 0 &&
 		req.TextTokenCount >= cfg.DesperationMinTextTokens &&
-		float64(len(tokens)) >= float64(req.TextTokenCount)*cfg.DesperationSpeechPerTextToken
+		float64(len(tokens)) >= float64(req.TextTokenCount)*cfg.DesperationSpeechPerTextToken)
 	return Inspection{Keep: keep, Reason: reason, Suspect: suspect}
 }

@@ -21,7 +21,7 @@ a real screen reader:
 * **The reply and event codes are the protocol's**, not approximations.
   ``SPEAK`` answers ``202 OK RECEIVE DATA``; the events are ``701 BEGIN``,
   ``702 END`` and ``703 STOP``. Emitting ``702`` for BEGIN makes Speech
-  Dispatcher read the start of an utterance as its end and the end as a stop —
+  Dispatcher read the start of an utterance as its end and the end as a stop:
   its queue and its idea of what is speaking are wrong from the first word.
 * **BEGIN is sent before the first samples**, not after the last. It is the
   event a reader uses to know speech has started.
@@ -36,8 +36,8 @@ a real screen reader:
 Rate rides the engine's own ``speed`` control when it can. A rate that maps
 into the engine's 0.5–2.0 range is sent as the ``speed`` field of the
 synthesis request, so faster speech keeps its pitch (WSOLA, applied
-server-side). Only a rate below 0.5 — Speech Dispatcher's scale reaches down
-to 0.0, the engine's does not — falls back to rewriting the WAV header's
+server-side). Only a rate below 0.5 (Speech Dispatcher's scale reaches down
+to 0.0, the engine's does not) falls back to rewriting the WAV header's
 sample rate, which is a genuine speed change that also shifts pitch, exactly
 like ``sox speed``. The fallback is kept rather than clamped away because a
 module that accepts ``SET SELF RATE`` and quietly renders a different rate
@@ -82,12 +82,11 @@ message says the actual limit instead of a status code.
 MAX_IN_FLIGHT = 2
 """How many renders may be running at once.
 
-Every SPEAK used to start a thread with nothing bounding how many, and a client
-that sends SPEAK faster than the engine renders — key-repeat on a screen
-reader's "read next line" is exactly that — opened one socket and one thread
-per keystroke. Two, not one, because a render already in flight is usually
-about to be superseded and there should be room for its replacement to start
-before it finishes.
+Unbounded, a client that sends SPEAK faster than the engine renders (key-repeat
+on a screen reader's "read next line" is exactly that) opens one socket and one
+thread per keystroke. Two, not one, because a render already in flight is
+usually about to be superseded and there should be room for its replacement to
+start before it finishes.
 
 The work is not lost by refusing: only the newest generation is ever played, so
 a render started behind a burst was going to be discarded anyway.
@@ -125,7 +124,7 @@ class Config:
     """``AddVoice`` entries: (language, symbolic name, loudkit profile).
 
     Without a table, ``LIST VOICES`` answers bare ``200 OK`` and ``SET SELF
-    VOICE`` has nothing to select from — the voice is whatever ``LoudkitVoice``
+    VOICE`` has nothing to select from: the voice is whatever ``LoudkitVoice``
     says, permanently, and a screen-reader user has no way to change it.
     Empty means "no table": the configured voice is the only one.
     """
@@ -134,11 +133,11 @@ class Config:
 def load_config(path: str | None) -> Config:
     """Read the ``loudkit.conf`` speech-dispatcher hands us as argv[1].
 
-    The shipped conf defined ``LoudkitServer``/``LoudkitVoice``/``LoudkitPlayer``
-    and this module read only the environment, so editing the official
-    configuration file changed nothing: the module still talked to the default
-    server, in the default voice, through the default player. Environment
-    variables still win, because that is how the file documented itself.
+    The keys are the ones the shipped conf documents: ``LoudkitServer``,
+    ``LoudkitVoice``, ``LoudkitPlayer``, ``LoudkitToken`` and ``AddVoice``. A
+    module that reads only the environment leaves the official configuration
+    file inert, which is a file the user edits and nothing acts on. Environment
+    variables win over it, because that is how the file documents itself.
     """
     settings = {
         "LoudkitServer": Config.server,
@@ -156,7 +155,7 @@ def load_config(path: str | None) -> Config:
             if key in settings:
                 settings[key] = value.strip().strip('"')
             elif key == "AddVoice":
-                # `AddVoice "en" "MALE1" "en_clarke_holmes"` — language, the symbolic
+                # `AddVoice "en" "MALE1" "en_clarke_holmes"`: language, the symbolic
                 # name a client asks for, and the loudkit profile to speak it
                 # with. A malformed line is skipped rather than fatal: one bad
                 # entry should not stop the module loading.
@@ -180,8 +179,8 @@ def _resample_header(wav: bytes, rate: float) -> bytes:
     (below ``MIN_SPEED``): changing the declared rate is a genuine speed
     change that also shifts pitch, which is what ``sox speed`` does and what
     this module documents. Returned unchanged when the rate is 1.0 or the
-    header is not the canonical 44-byte PCM one — guessing at an unexpected
-    layout would corrupt the audio.
+    header is not the canonical 44-byte PCM one, because guessing at an
+    unexpected layout would corrupt the audio.
     """
     if abs(rate - 1.0) < 1e-6 or len(wav) < 44 or wav[:4] != b"RIFF" or wav[8:12] != b"WAVE":
         return wav
@@ -197,10 +196,44 @@ def _resample_header(wav: bytes, rate: float) -> bytes:
     return bytes(out)
 
 
+PLAYER_EXIT_SECONDS = 2.0
+"""How long a stopped player has to exit before it is killed.
+
+Long enough for a player that traps the signal to close its device, short
+enough that a player which ignores it does not outlive the utterance a user is
+waiting to replace. This module speaks one utterance at a time, so the wait is
+the whole cost of stopping.
+"""
+
+
+def _reap(proc: subprocess.Popen[bytes]) -> None:
+    """Stop a player and see it gone.
+
+    ``terminate`` sends a signal and returns, which leaves two things undone.
+    The child is not waited for, so it stays a zombie until some later
+    ``Popen`` happens to reap it; and its stdin pipe stays open until the
+    handle is collected, so a player blocked reading input never sees the end
+    of it and the signal is the only thing that can stop it -- which is
+    exactly what a player that traps SIGTERM to flush its device will not let
+    happen. Close the pipe, signal, wait, and kill what does not go.
+    """
+    if proc.stdin is not None:
+        with contextlib.suppress(OSError):
+            proc.stdin.close()
+    if proc.poll() is None:
+        proc.terminate()
+    try:
+        proc.wait(timeout=PLAYER_EXIT_SECONDS)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=PLAYER_EXIT_SECONDS)
+
+
 class Module:
     """One utterance at a time, cancellable while it is still being made.
 
-    Speech Dispatcher expects STOP to take effect promptly — a screen reader
+    Speech Dispatcher expects STOP to take effect promptly: a screen reader
     that keeps talking after the user has moved on is worse than one that is
     slow. "Promptly" has to include the synthesis: an utterance spends most of
     its life inside the HTTP request, and a stop that only kills the player
@@ -214,8 +247,8 @@ class Module:
         self._rate = 1.0
         # The profile currently selected, which starts as the configured one
         # and moves when a client picks a symbolic name from the AddVoice
-        # table. Before this the table was dropped at load and the voice could
-        # never change.
+        # table. A table dropped at load leaves the voice fixed for the life of
+        # the process, whatever a client selects.
         self._voice = self.config.voice
         # The generation an utterance belongs to. `stop()` bumps it; a worker
         # whose generation is stale produces no sound and no events.
@@ -232,19 +265,31 @@ class Module:
                 "the pieces."
             )
             return
-        with self._lock:
-            self._generation += 1
-            generation = self._generation
-        self._kill_player()
+        # The slot first, and only then the two operations that end what is
+        # speaking: bumping the generation stale-marks every render in flight
+        # and `_kill_player` silences the current utterance, so doing either
+        # before the refusal leaves the user with nothing playing and nothing
+        # about to play, having been told to try again.
+        #
         # Bounded, and non-blocking about it: a SPEAK arriving while two
         # renders are already running is answered rather than queued, because
-        # the queue is what turned a key-repeat into a thread per keystroke.
+        # a queue turns a key-repeat into a thread per keystroke.
         if not self._renders.acquire(blocking=False):
             _reply(f"{ERR} still rendering the previous utterance; try again")
             return
-        threading.Thread(
-            target=self._render_and_play, args=(text, generation), daemon=True
-        ).start()
+        try:
+            with self._lock:
+                self._generation += 1
+                generation = self._generation
+            self._kill_player()
+            threading.Thread(
+                target=self._render_and_play, args=(text, generation), daemon=True
+            ).start()
+        except BaseException:
+            # The worker never ran, so nothing else will give the slot back,
+            # and a slot never given back refuses every SPEAK after it.
+            self._renders.release()
+            raise
 
     def cancel(self) -> None:
         """Abandon the current utterance without announcing anything.
@@ -262,8 +307,8 @@ class Module:
         """Cancel and report it, which is what a STOP command means.
 
         Separate from :meth:`cancel` so that shutting down does not emit a
-        stray ``703 STOP`` for an utterance nobody was listening to — the
-        server would take it as an event about speech that never existed.
+        stray ``703 STOP`` for an utterance nobody was listening to, which the
+        server takes as an event about speech that never existed.
         """
         self.cancel()
         _reply(EVENT_STOP)
@@ -276,8 +321,9 @@ class Module:
         """Select a voice by the symbolic name an ``AddVoice`` line gave it.
 
         Returns False for a name the table does not carry, so the caller can
-        answer 300 rather than silently keeping the old voice — which is what
-        happened to every ``SET SELF VOICE`` before this: a 203 OK and no change.
+        answer 300 rather than silently keeping the old voice: a ``SET SELF
+        VOICE`` answered 203 OK with no change tells a client it got what it
+        asked for.
         """
         wanted = symbolic.strip().upper()
         for _language, name, profile in self.config.voices:
@@ -294,21 +340,38 @@ class Module:
         """
         if self.config.voices:
             return [(name, language, "none") for language, name, _ in self.config.voices]
-        # The fallback used to advertise `self.config.voice` under the name the
-        # conf gives it, which `set_voice` then refused because it is not in the
-        # (empty) table: a client read the list, chose the only entry, and was
-        # told no. Advertising nothing is the honest answer to "what tables do
-        # you have" when there are none — the configured voice is still what
-        # every synthesis uses.
+        # Nothing, rather than `self.config.voice` under the name the conf gives
+        # it: `set_voice` refuses that name because it is not in the (empty)
+        # table, so advertising it means a client reads the list, chooses the
+        # only entry and is told no. Nothing is the honest answer to "what
+        # tables do you have" when there are none, and the configured voice is
+        # still what every synthesis uses.
         return []
 
     # -- internals ---------------------------------------------------------
 
     def _kill_player(self) -> None:
+        # The handle is taken and cleared under the lock, and reaped outside
+        # it: `_reap` waits, and holding the lock across a wait would stall
+        # every SSIP command behind a player that is slow to die.
         with self._lock:
-            if self._proc and self._proc.poll() is None:
-                self._proc.terminate()
-            self._proc = None
+            proc, self._proc = self._proc, None
+        if proc is not None:
+            _reap(proc)
+
+    def _claim_player(self, proc: subprocess.Popen[bytes], generation: int) -> bool:
+        """Record ``proc`` as the current player, or reap it and say no.
+
+        A player launched for an utterance that was cancelled while it was
+        being launched belongs to nobody: nothing in this process looks at it
+        again, so it is stopped here rather than left for the interpreter.
+        """
+        with self._lock:
+            if generation == self._generation:
+                self._proc = proc
+                return True
+        _reap(proc)  # outside the lock: `_reap` waits
+        return False
 
     def _current(self, generation: int) -> bool:
         with self._lock:
@@ -323,17 +386,18 @@ class Module:
     def _render_and_play_inner(self, text: str, generation: int) -> None:
         # Read once, so the request and the fallback see the same rate even if
         # a SET lands mid-render. In range, the engine renders the rate itself
-        # (pitch preserved); below MIN_SPEED — speech-dispatcher's scale goes
-        # to 0.0, the engine's stops at 0.5 — the header fallback still works.
+        # (pitch preserved); below MIN_SPEED (speech-dispatcher's scale goes to
+        # 0.0, the engine's stops at 0.5) the header fallback still works.
         rate = self._rate
         engine_renders_rate = MIN_SPEED <= rate <= MAX_SPEED
         try:
             wav = self._render(text, speed=rate if engine_renders_rate else 1.0)
         except urllib.error.HTTPError as exc:
-            # The server answered. "Unreachable" was the message for a 400 about
-            # the request, a 404 for a voice that is not there and a 429 for
-            # going too fast — three fixable things reported as a network
-            # outage, which is the one explanation that suggests doing nothing.
+            # The server answered, so the reply says what it answered. A 400
+            # about the request, a 404 for a voice that is not there and a 429
+            # for going too fast are three fixable things, and calling them a
+            # network outage names the one explanation that suggests doing
+            # nothing.
             if self._current(generation):
                 detail = ""
                 with contextlib.suppress(Exception):
@@ -356,21 +420,18 @@ class Module:
         if not engine_renders_rate:
             wav = _resample_header(wav, rate)
         try:
-            proc = subprocess.Popen(  # noqa: S603 - configured argv, no shell
+            proc = subprocess.Popen(  # configured argv, no shell
                 [self.config.player], stdin=subprocess.PIPE
             )
         except FileNotFoundError:
             if self._current(generation):
                 _reply(f"{ERR} audio player {self.config.player!r} not found")
             return
-        with self._lock:
-            if generation != self._generation:
-                proc.terminate()
-                return
-            self._proc = proc
+        if not self._claim_player(proc, generation):
+            return
 
         # BEGIN before the first samples: it is the event a reader uses to know
-        # speech has started, and it used to be sent after playback finished.
+        # speech has started, so sending it after playback says nothing.
         _reply(EVENT_BEGIN)
         if proc.stdin:
             try:
@@ -378,7 +439,11 @@ class Module:
                 proc.stdin.close()
                 proc.wait()
             except BrokenPipeError:
-                pass  # stopped mid-utterance, which is normal
+                # Stopped mid-utterance, which is normal -- but the pipe is
+                # still open and the child still unwaited, so this path leaked
+                # both until the handle was collected. `_kill_player` has
+                # usually signalled it already; `_reap` is idempotent.
+                _reap(proc)
         # A stopped utterance already reported 703 STOP; only a natural
         # ending is an END.
         if self._current(generation):
@@ -397,16 +462,16 @@ class Module:
         headers = {"Content-Type": "application/json"}
         if self.config.token:
             headers["Authorization"] = f"Bearer {self.config.token}"
-        req = urllib.request.Request(  # noqa: S310 - configured URL, no user input
+        req = urllib.request.Request(  # configured URL, no user input
             # /v1: the server's API is versioned, /health is not. `server` is
             # the origin, so the version belongs here rather than in the
-            # configured value — otherwise every loudkit.conf on every machine
-            # has to be edited to follow a version bump.
+            # configured value. In the configured value, every loudkit.conf on
+            # every machine has to be edited to follow a version bump.
             f"{self.config.server}/v1/synthesize",
             data=body,
             headers=headers,
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=120) as resp:
             return bytes(resp.read())
 
 
@@ -419,8 +484,9 @@ def _parse_setting(lines: list[str], module: Module) -> None:
     """Apply the settings in a ``SET`` block. Unknown keys are ignored.
 
     A module that errors on an unknown SET makes the whole voice unavailable,
-    and most of them are cosmetic — but RATE is not, and it used to be ignored
-    along with the rest.
+    and most of them are cosmetic. RATE is not: it is the one setting here that
+    changes what the user hears, so it is read rather than ignored with the
+    rest.
     """
     for line in lines:
         key, _, value = line.partition("=")
@@ -448,10 +514,10 @@ def run_loop(module: Module) -> int:  # noqa: PLR0912, PLR0915 - one branch per 
     sound card and a screen reader.
     """
     # The protocol's multi-line commands (SPEAK, SET, AUDIO, LOGLEVEL) all end
-    # with a lone ".", and a leading ".." in the body is an escaped ".". Only
-    # SPEAK used to be collected this way, so the lines of a SET block were
-    # each parsed as commands and answered individually — which is how a
-    # "settings received" handshake turns into five stray 200s.
+    # with a lone ".", and a leading ".." in the body is an escaped ".". All
+    # four are collected, not SPEAK alone: the lines of a SET block read as
+    # commands are answered one by one, which is how a "settings received"
+    # handshake turns into five stray 200s.
     block: list[str] = []
     block_chars = 0
     collecting: str | None = None
@@ -480,9 +546,14 @@ def run_loop(module: Module) -> int:  # noqa: PLR0912, PLR0915 - one branch per 
                 # sending a gigabyte inside one SPEAK block had all of it in
                 # memory before anything looked at the length. The line is
                 # dropped rather than the connection closed, because SSIP has no
-                # way to refuse mid-block — the reply comes when the terminator
+                # way to refuse mid-block: the reply comes when the terminator
                 # does, and `speak` says the same sentence about the same cap.
-                if collecting == "SPEAK" and block_chars > MAX_TEXT_CHARS:
+                #
+                # Every block, not only SPEAK. SET, AUDIO and LOGLEVEL carry a
+                # handful of `KEY=value` lines and have no downstream cap at
+                # all, so the one bound on what a block may hold in memory is
+                # this one; measured, a 200000-line SET accumulated all 1.4 MB.
+                if block_chars > MAX_TEXT_CHARS:
                     continue
                 block.append(line[1:] if line.startswith("..") else line)
                 block_chars += len(block[-1]) + 1
@@ -497,6 +568,7 @@ def run_loop(module: Module) -> int:  # noqa: PLR0912, PLR0915 - one branch per 
         elif cmd in {"SET", "AUDIO", "LOGLEVEL"}:
             collecting = cmd
             block = []
+            block_chars = 0
             _reply(RECEIVE_DATA)
         elif cmd in {"STOP", "CANCEL"}:
             # No reply: the protocol forbids one here. The 703 STOP that
@@ -512,17 +584,17 @@ def run_loop(module: Module) -> int:  # noqa: PLR0912, PLR0915 - one branch per 
                 module.set_rate(int(line.split()[-1]))
             _reply(DONE)
         elif cmd in {"LIST VOICES", "LIST SYNTHESIS_VOICES"}:
-            # Answered, not swallowed by the `else` below. A client that asks
-            # what voices exist got a bare `200 OK` with no list, so the
-            # AddVoice lines in loudkit.conf were unreachable from every
-            # client — the voice was whatever LoudkitVoice said, permanently.
+            # Answered, not swallowed by the `else` below. A bare `200 OK` with
+            # no list leaves the AddVoice lines in loudkit.conf unreachable from
+            # every client, and the voice is then whatever LoudkitVoice says,
+            # permanently.
             voices = module.voice_list()
             body = "\r\n".join(f"200-{n}\t{lang}\t{var}" for n, lang, var in voices)
             _reply(f"{body}\r\n200 OK VOICE LIST SENT" if body else "200 OK VOICE LIST SENT")
         elif cmd.startswith(("SET SELF VOICE", "SET SELF SYNTHESIS_VOICE")):
             name = line.split()[-1]
             if module.set_voice(name):
-                # 203, the code for a setting that was accepted — the same one
+                # 203, the code for a setting that was accepted, the same one
                 # the multi-line SET block answers with.
                 _reply(SETTINGS_RECEIVED)
             else:

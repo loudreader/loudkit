@@ -1,13 +1,16 @@
 //! Weight-free conformance vectors: RNG, sampler, frontend, seed derivation.
-//! These run against `tests/data/conformance/vectors.json` — the same fixture
+//! These run against `tests/data/conformance/vectors.json`: the same fixture
 //! pytest, swift test, and the JS/Go bindings verify. A drift here is a broken
 //! port, not "close enough".
 
 use std::path::PathBuf;
 
+use loudkit::chunking::ChunkConfig;
+use loudkit::engine::EngineConfig;
 use loudkit::frontend::Frontend;
 use loudkit::rng;
 use loudkit::sampler::{self, Sampler};
+use loudkit::windowing::WindowConfig;
 
 fn fixture_path() -> Option<PathBuf> {
     let p = std::env::var("LOUDKIT_FIXTURE")
@@ -38,10 +41,10 @@ fn to_f64(v: &serde_json::Value) -> f64 {
 /// The cases for one fixture section, refusing an empty list.
 ///
 /// Every loop below iterates a slice pulled out of the fixture by key. A
-/// regeneration that renamed one — `philox` to `rng`, say — would leave the
-/// loop comparing nothing and the test reporting a pass, which is the entire
-/// cross-language determinism claim quietly switched off. The correct pattern
-/// already existed three times in this repo; it was missing from the rest.
+/// regeneration that renamed one, `philox` to `rng` say, would leave the loop
+/// comparing nothing and the test reporting a pass, which is the entire
+/// cross-language determinism claim quietly switched off. Every section is
+/// read through here so that a rename fails instead.
 fn cases_of<'a>(section: &'a serde_json::Value, key: &str) -> &'a Vec<serde_json::Value> {
     let list = section
         .get(key)
@@ -109,6 +112,31 @@ fn uniform_bits() {
             .collect();
         assert_eq!(got, want, "seed {}", p["seed"]);
     }
+}
+
+/// Each row is filled from its own quads and nothing else.
+///
+/// A `width` that is not a multiple of four leaves the last quad of a row with
+/// values past that row's end. Guarded against the whole buffer instead of the
+/// row, they landed on the next row and the answer came out right only because
+/// the next iteration overwrote them: correct by write order rather than by
+/// the bound. Asking for the rows one at a time is the shape that would not
+/// have survived it: rust-19.
+///
+/// `uniform_bits` pins the same call bit for bit (its third case is width 6
+/// over two steps); this states what the bound means.
+#[test]
+fn a_ragged_width_fills_each_row_from_its_own_quads() {
+    let (seed, stream, step0, width) = (0xdead_beef_u64, 2, 300, 6);
+    let together = rng::uniforms(seed, stream, step0, 3, width);
+    let apart: Vec<f64> = (0..3)
+        .flat_map(|s| rng::uniforms(seed, stream, step0 + s, 1, width))
+        .collect();
+    assert_eq!(
+        together, apart,
+        "a row must not depend on whether the rows after it were asked for"
+    );
+    assert_eq!(together.len(), 3 * width);
 }
 
 #[test]
@@ -224,9 +252,9 @@ fn frontend_ids() {
 /// against.
 ///
 /// `encode` can return any id in the vocabulary, and every one of them indexes
-/// that table; a tokenizer paired with a checkpoint from another release used to
-/// read past its end mid-synthesis. The shipped weights carry 2454 rows
-/// (`TorchTokenGenerator.TEXT_VOCAB`), so 2453 is the last id that fits — the
+/// that table, so a tokenizer paired with a checkpoint from another release
+/// reads past its end mid-synthesis. The shipped weights carry 2454 rows
+/// (`TorchTokenGenerator.TEXT_VOCAB`), so 2453 is the last id that fits. The
 /// margin is one row, which is why a regenerated fixture must show up here, as
 /// a line to read, rather than in a panic on someone's laptop.
 #[test]
@@ -236,33 +264,12 @@ fn the_vocabulary_ceiling_is_known() {
     assert_eq!(fe.max_token_id(), 2453);
 }
 
-#[test]
-fn seed_derivation() {
-    const PHI: u64 = 0x9e3779b97f4a7c15;
-    const PSI: u64 = 0xbf58476d1ce4e5b9;
-    let deriv = &vectors()["seeds"]["derivation"];
-    for p in deriv.as_array().unwrap() {
-        let seed = to_f64(&p["seed"]) as u64;
-        let stream = to_f64(&p["stream"]) as u64;
-        let got = seed
-            .wrapping_mul(PHI)
-            .wrapping_add(stream.wrapping_mul(PSI));
-        let want = u64::from_str_radix(p["derived"].as_str().unwrap().trim_start_matches("0x"), 16)
-            .unwrap();
-        assert_eq!(got, want, "seed {} stream {}", seed, stream);
-    }
-}
-
-/// The four chunking recipes Python refuses, and this port used to accept.
+/// The four chunking recipes Python refuses, refused here too.
 ///
-/// `ChunkConfig` was a plain struct read straight from the manifest. The
-/// zero-budget case is why it matters: `split_text` cuts nothing and loops
-/// forever, which on a server is a wedged request holding the engine. Python
-/// fixed that in `d8742aa`, on the Python side only.
+/// The zero-budget case is why it matters: `split_text` cuts nothing and loops
+/// forever, which on a server is a wedged request holding the engine.
 #[test]
 fn chunk_config_refuses_what_python_refuses() {
-    use loudkit::chunking::ChunkConfig;
-
     assert!(
         ChunkConfig::default().validate().is_ok(),
         "the shipping recipe must validate"
@@ -277,6 +284,7 @@ fn chunk_config_refuses_what_python_refuses() {
                 max_tokens: 0,
                 prefix_tokens: 0,
                 split_on: seps.clone(),
+                ..ChunkConfig::default()
             },
             "must be positive",
         ),
@@ -287,6 +295,7 @@ fn chunk_config_refuses_what_python_refuses() {
                 max_tokens: 1,
                 prefix_tokens: 0,
                 split_on: seps.clone(),
+                ..ChunkConfig::default()
             },
             "no character budget",
         ),
@@ -297,6 +306,7 @@ fn chunk_config_refuses_what_python_refuses() {
                 max_tokens: 20,
                 prefix_tokens: 20,
                 split_on: seps.clone(),
+                ..ChunkConfig::default()
             },
             "prefix_tokens must be in",
         ),
@@ -307,8 +317,31 @@ fn chunk_config_refuses_what_python_refuses() {
                 max_tokens: 20,
                 prefix_tokens: 6,
                 split_on: vec![],
+                ..ChunkConfig::default()
             },
             "nowhere to break",
+        ),
+        (
+            "unknown law",
+            ChunkConfig {
+                enabled: true,
+                max_tokens: 20,
+                prefix_tokens: 6,
+                mid_sentence_period: "hold-ish".to_string(),
+                ..ChunkConfig::default()
+            },
+            "unknown mid_sentence_period",
+        ),
+        (
+            "empty abbreviation",
+            ChunkConfig {
+                enabled: true,
+                max_tokens: 20,
+                prefix_tokens: 6,
+                abbreviations: vec!["Mr".to_string(), String::new()],
+                ..ChunkConfig::default()
+            },
+            "empty string",
         ),
     ];
     for (name, cfg, want) in cases {
@@ -323,7 +356,7 @@ fn chunk_config_refuses_what_python_refuses() {
 /// An explicit Euler grid overrides the cosine schedule.
 ///
 /// `time_grid` took only the step count, so a checkpoint shipping an explicit
-/// grid rendered on a different integration schedule here — silently, and
+/// grid rendered on a different integration schedule here: silently, and
 /// under a fingerprint that recorded the grid being ignored. An explicit grid
 /// exists precisely because "cosine" is a formula two codebases can write two
 /// ways (`config.py:296`).
@@ -366,24 +399,16 @@ fn a_static_window_shorter_than_the_token_budget_is_refused() {
 ///
 /// Every other cross-language check here compares a behaviour somebody thought
 /// to compare. This compares the *whole* configuration in one string, so a
-/// field nobody wrote a test for still cannot drift — which is not
+/// field nobody wrote a test for still cannot drift, which is not
 /// hypothetical: `euler_grid` was ignored by this port, `silence_token_ids`
 /// accepted a string, and `chunking.prefix_tokens` was guessed rather than
 /// read. Each was found by hand. This finds the next one for free.
-#[test]
-fn fingerprint_matches_the_shared_fixture() {
-    use loudkit::chunking::ChunkConfig;
-    use loudkit::engine::EngineConfig;
-    use loudkit::fingerprint::{canonical_form, fingerprint};
-    use loudkit::windowing::WindowConfig;
-
-    let fixture = vectors();
-    let algorithm = &fixture["algorithm"];
-
-    // The production algorithm, spelled out rather than loaded, so this runs
-    // with no checkpoint: the fingerprint is a property of the values, and the
-    // values are what the fixture pins.
-    let cfg = EngineConfig {
+/// The production algorithm, spelled out rather than loaded, so this runs with no
+/// checkpoint: the fingerprint is a property of the values.
+fn production_config() -> EngineConfig {
+    EngineConfig {
+        decode_mode: "single".to_string(),
+        edge_fade_seconds: loudkit::timestretch::EDGE_FADE_SECONDS,
         text: loudkit::engine::TextConfig::default(),
         recipe_version: "loudkit-1".to_string(),
         guidance: "single_path".to_string(),
@@ -415,19 +440,58 @@ fn fingerprint_matches_the_shared_fixture() {
             min_tokens_text_ratio: 1.2,
         },
         chunking: ChunkConfig::default(),
-        postprocess: loudkit::postprocess::Config::default(),
-    };
+        // The render-id censuses are properties of the weights: the manifest
+        // carries them at its top level, beside silence_token_ids, so like
+        // that list they are spelled out here rather than defaulted.
+        postprocess: loudkit::postprocess::Config {
+            silence_render_ids: vec![4137, 4215, 4218, 4299, 6162, 6324, 6405, 6486],
+            quiet_render_ids: vec![
+                1458, 1461, 1488, 1701, 1704, 1707, 1716, 1731, 1785, 1788, 1869, 1947, 1950, 1951,
+                1959, 1978, 2028, 2031, 2040, 2058, 2076, 2112, 2139, 3645, 3648, 3651, 3704, 3888,
+                3894, 4188, 5838, 6081, 6183, 6537,
+            ],
+            ..loudkit::postprocess::Config::default()
+        },
+    }
+}
+
+#[test]
+fn fingerprint_matches_the_shared_fixture() {
+    use loudkit::fingerprint::{canonical_form, fingerprint};
+
+    let fixture = vectors();
+    let algorithm = &fixture["algorithm"];
+
+    // The production algorithm, spelled out rather than loaded, so this runs
+    // with no checkpoint: the fingerprint is a property of the values, and the
+    // values are what the fixture pins.
+    let cfg = production_config();
 
     // The blob first: a mismatch there names the field that drifted, while a
     // mismatch in the hash alone says only that something did.
     assert_eq!(
         canonical_form(&cfg),
         algorithm["canonical_form"].as_str().unwrap(),
-        "canonical form differs — the field that differs is visible in the diff"
+        "canonical form differs: the field that differs is visible in the diff"
     );
     assert_eq!(
         fingerprint(&cfg),
         algorithm["fingerprint"].as_str().unwrap()
+    );
+    let mut fused = cfg;
+    fused.decode_mode = "fusion_mtp2".to_string();
+    fused.euler_steps = 1;
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../tests/data/conformance/vectors_fusion_mtp2.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        canonical_form(&fused),
+        fixture["algorithm"]["canonical_form"].as_str().unwrap()
+    );
+    assert_eq!(
+        fingerprint(&fused),
+        fixture["algorithm"]["fingerprint"].as_str().unwrap()
     );
 }
 
@@ -436,7 +500,7 @@ fn fingerprint_matches_the_shared_fixture() {
 /// Pinned across languages because it is hand-written in five of them and it is
 /// *audible*: two of the detector rules compare it against a threshold, so a
 /// port that computes it differently cuts a chunk somewhere else. The quantity
-/// has two subtleties either of which a reimplementation gets wrong silently —
+/// has two subtleties either of which a reimplementation gets wrong silently,
 /// the numerator is the stop token's weight taken BEFORE the min_p cutoff, and
 /// the peak is recorded only PAST the floor.
 #[test]

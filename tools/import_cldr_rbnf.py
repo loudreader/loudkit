@@ -5,7 +5,7 @@ Why this exists
 
 Our own numbers fixture is 100 hand-written cases. CLDR ships **thousands** of
 expected spellouts for exactly our languages, maintained by Unicode under a
-permissive licence — a differential-testing corpus two orders of magnitude
+permissive licence, a differential-testing corpus two orders of magnitude
 larger than ours, written by people who were not looking at our code. Where we
 disagree with CLDR, one of us is wrong, and finding out which is the point.
 
@@ -32,8 +32,8 @@ Run: python tools/import_cldr_rbnf.py <dir-with-ssv-files>
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from collections import Counter
 from pathlib import Path
 
@@ -46,7 +46,7 @@ MAPPINGS: dict[str, dict[str, str | None]] = {
     # language's own grammar. Where CLDR's gendered cardinal apocopates (Spanish
     # "ciento un", Italian "ventun") and ours does not, the citation is
     # `%spellout-numbering`, which CLDR defines as the form used for reading a
-    # number out on its own — exactly what `cardinal` returns.
+    # number out on its own, exactly what `cardinal` returns.
     "en": {"%spellout-cardinal-verbose": None},  # ours says "one hundred and one"
     "pl": {
         "%spellout-numbering": None,
@@ -61,7 +61,7 @@ MAPPINGS: dict[str, dict[str, str | None]] = {
     "pt_PT": {"%spellout-numbering": None, "%spellout-cardinal-feminine": "f"},
     "nl": {"%spellout-cardinal": None},
     "da": {"%spellout-cardinal-common": None, "%spellout-cardinal-neuter": "neuter"},
-    # No grammars yet — imported now so the corpus is waiting when they land.
+    # No grammars yet, imported now so the corpus is waiting when they land.
     "fi": {"%spellout-cardinal": None},
     "no": {"%spellout-cardinal-masculine": None, "%spellout-cardinal-neuter": "neuter"},
     "sv": {"%spellout-cardinal-neuter": None, "%spellout-cardinal-reale": "common"},
@@ -133,7 +133,19 @@ def main(source: Path) -> None:
     skipped: Counter[str] = Counter()
     unmapped: dict[str, list[str]] = {}
 
-    for ssv in sorted(source.glob("*.ssv")):
+    # Abort empty imports before writing fixtures.
+    #
+    # `Path.glob` on a path that is not a directory yields nothing rather than
+    # raising, so without this check a mistyped source reaches the write below
+    # with zero cases and replaces the checked-in corpus with an empty one.
+    sources = sorted(source.glob("*.ssv"))
+    if not sources:
+        raise SystemExit(
+            f"{source}: no .ssv files here, so there is nothing to import. "
+            f"Point this at a checkout of CLDR's common/testData/rbnf."
+        )
+
+    for ssv in sources:
         lang = ssv.stem
         if lang not in MAPPINGS:
             continue
@@ -193,12 +205,38 @@ def main(source: Path) -> None:
         "cases": out,
     }
     dest = REPO / "tests" / "data" / "conformance" / "numbers_cldr.json"
-    dest.write_text(json.dumps(fixture, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    if not out:
+        raise SystemExit(
+            f"{source}: {len(sources)} .ssv file(s), none for a language this "
+            f"imports, so no case survived the mapping. Leaving "
+            f"{dest.relative_to(REPO)} alone."
+        )
+    dest.write_text(
+        json.dumps(fixture, indent=1, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     total = sum(len(v) for v in out.values())
     print(f"wrote {dest.name}: {total} cases across {len(out)} languages")
     for lang_key, cases_list in sorted(out.items()):
         print(f"  {lang_key}: {len(cases_list)}")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "source",
+        type=Path,
+        help="a directory of CLDR .ssv files, normally common/testData/rbnf",
+    )
+    args = parser.parse_args()
+    if not args.source.is_dir():
+        parser.error(f"{args.source}: not a directory")
+    return args
+
+
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main(parse_args().source)

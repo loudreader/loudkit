@@ -25,7 +25,8 @@ Chatterbox TTS
     weights they load could not exist without it.
 
     Voice profiles
-    The shipped voice profiles — twenty enrollments across ten languages,
+    The shipped voice profiles — twenty-eight enrollments across ten
+    languages,
     distributed on the Hugging Face repository under voices/profiles/ —
     are enrolled from the recordings catalogued in
     `docs/voices/roster/provenance.json`, which records donor or speaker,
@@ -57,6 +58,16 @@ Chatterbox TTS
         https://huggingface.co/kyutai/tts-voices
         henri, colette (fr).
 
+    Kyutai Voice Donations — CC0-1.0
+        https://huggingface.co/kyutai/tts-voices, under voice-donations/
+        clara, emma, henry, lucy, miles, oliver, oscar, sophie (en).
+        Donations to the Unmute Voice Donation Project, whose terms
+        expressly cover speech synthesis, voice embeddings and commercial
+        use:
+        https://kyutai.org/legal/Terms%20of%20Use%20-%20Unmute%20Voice%20Donation%20Project%20v1.pdf
+        The names above are product aliases, not donor identities; the
+        roster records each donation's speaker id, revision and sha256.
+
     CML-TTS — CC-BY-4.0
         https://huggingface.co/datasets/ylacombe/cml-tts
         carmen (es), ines (pt). LibriVox-derived recordings; the dataset's
@@ -75,8 +86,10 @@ Voice encoder (`ve.safetensors`)
     MIT terms.
 
     `docs/PROVENANCE-voice-encoder.md` records the artefact's size and sha256,
-    its tensors, the upstream repository and licence, and the fact that the
-    upstream revision is not recorded in the artefact metadata.
+    its tensors, the upstream repository and licence, and an exact tensor match
+    with ResembleAI/chatterbox revision
+    5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18. The original export's checkout
+    revision was not recorded.
 
     MIT License text:
 
@@ -183,14 +196,14 @@ Unicode CLDR
     Licensed under the Unicode License v3 — https://www.unicode.org/license.txt
 
     `tests/data/cldr/*.ssv` are CLDR's own RBNF spellout test data, imported
-    verbatim with their copyright header intact, and `numbers_cldr.json` is the
+    verbatim with their copyright header intact, and `tests/data/conformance/numbers_cldr.json` is the
     subset mapped onto rulesets this project implements. Test corpus only: none
     of it is read at runtime and none of it ships in the wheel or the sdist. It
     is a differential test corpus, independent of this implementation.
 
 NST pronunciation lexicons
     The Swedish, Danish and Norwegian NST lexicons that
-    `tools/fetch_nst_lexicons.py` downloads are public domain (CC0), from
+    `research/fetch_nst_lexicons.py` downloads are public domain (CC0), from
     Språkbanken Tal. They are fetched on demand and never vendored, so nothing
     of theirs is redistributed here.
 

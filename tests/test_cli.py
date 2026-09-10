@@ -25,80 +25,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from loudkit.config import AlgorithmConfig
-from loudkit.contracts import Mel, Sampler, SpeechTokens, Waveform
 from loudkit.engine import Engine
+from loudkit.errors import UnsupportedLanguageError
 from loudkit.voice import VoiceProfile
 
 from .assets import asset, requires_modules
+from .conftest import fake_engine, fake_voice
 
 CKPT = asset("checkpoint")
-
-
-def _voice() -> VoiceProfile:
-    return VoiceProfile(
-        name="fake",
-        speaker_embedding=np.full(256, 0.0625, np.float32),
-        flow_embedding=np.full(192, 0.0625, np.float32),
-        prompt_tokens=np.zeros(8, np.int64),
-        prompt_mel=np.zeros((80, 16), np.float32),
-        cond_prompt_tokens=np.zeros(8, np.int64),
-    )
-
-
-class _FakeFrontend:
-    def encode(self, text: str, language: str = "en") -> np.ndarray:
-        return np.arange(len(text.split()), dtype=np.int64)
-
-
-class _FakeGenerator:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def generate(
-        self,
-        text_tokens: np.ndarray,
-        voice: VoiceProfile,
-        *,
-        sampler: Sampler,
-        max_new_tokens: int | None = None,
-        prefix: SpeechTokens = (),
-        should_cancel=None,
-    ) -> SpeechTokens:
-        n = max(1, len(text_tokens))
-        return [*range(n), self.config.stop_speech_token]
-
-    def teacher_forced_logits(
-        self, text_tokens: np.ndarray, voice: VoiceProfile, forced: SpeechTokens
-    ) -> np.ndarray:
-        return np.zeros((len(forced) + 1, self.config.speech_vocab_size), np.float32)
-
-
-class _FakeMelDecoder:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def decode(self, tokens: SpeechTokens, voice: VoiceProfile, *, seed: int) -> Mel:
-        return np.full((80, max(1, len(tokens)) * 2), float(seed % 97), np.float32)
-
-
-class _FakeVocoder:
-    def __init__(self, config: AlgorithmConfig) -> None:
-        self.config = config
-
-    def synthesize(self, mel: Mel, voice: VoiceProfile, *, seed: int) -> Waveform:
-        return np.zeros(mel.shape[1] * 256, np.float32)
-
-
-def _engine() -> Engine:
-    algo = AlgorithmConfig()
-    return Engine(
-        frontend=_FakeFrontend(),
-        token_generator=_FakeGenerator(algo),
-        mel_decoder=_FakeMelDecoder(algo),
-        vocoder=_FakeVocoder(algo),
-        algorithm=algo,
-    )
 
 
 @pytest.fixture
@@ -112,44 +46,33 @@ def fake_ckpt(tmp_path) -> object:
 
 @pytest.fixture
 def fake_voice_file(tmp_path) -> object:
-    voice = _voice()
+    voice = fake_voice()
     voice.save(tmp_path / "fake.safetensors")
     return tmp_path / "fake.safetensors"
 
 
 def _fake_load_engine(*args, **kwargs) -> Engine:
     del args, kwargs
-    return _engine()
+    return fake_engine()
 
 
 def _fake_load_voice(path: object) -> VoiceProfile:
     del path
-    return _voice()
+    return fake_voice()
 
 
 # ------------------------------------------------------------------ grammar
 
 
 class TestParserGrammar:
+    COMMANDS = {"speak", "text", "clone", "doctor", "download", "voices", "verify", "serve"}
+
     def test_subcommands_exist(self) -> None:
         from loudkit.cli import build_parser
 
         parser = build_parser()
-        sub = parser._subparsers._group_actions[0].choices  # type: ignore[attr-defined]
-        assert set(sub) == {
-            "speak",
-            "clone",
-            "doctor",
-            "download",
-            "voices",
-            "verify",
-            "describe",
-            "serve",
-            "mcp",
-            "grpc",
-            "bench",
-            "profile",
-        }
+        sub = parser._subparsers._group_actions[0].choices
+        assert set(sub) == self.COMMANDS
 
     @pytest.mark.parametrize(
         "device", ["cpu", "cuda", "cuda:0", "cuda:1", "mps", "coreml", "onnx"]
@@ -157,38 +80,81 @@ class TestParserGrammar:
     def test_device_choices(self, device: str) -> None:
         from loudkit.cli import build_parser
 
-        parser = build_parser()
-        args = parser.parse_args(["describe", "--checkpoint", "x", "--device", device])
+        args = build_parser().parse_args(["doctor", "--device", device])
         assert args.device == device
+
+    def test_the_device_roster_is_the_literal_and_is_written_once(self) -> None:
+        """`--device` is derived from `Device`, not restated beside it.
+
+        A backend added to the Literal used to need a second edit in the CLI's
+        own tuple and a third in each `--device` help line, and the tuple and
+        the Literal had already drifted into different orders. Asserting the
+        joined roster, not the membership, is what catches a fourth copy: a
+        restatement that happens to hold the same names passes a membership
+        check and fails this one.
+        """
+        import argparse
+        from typing import get_args
+
+        from loudkit.cli import _device_arg, build_parser
+        from loudkit.execution import Device
+
+        roster = ", ".join(get_args(Device))
+        for name in get_args(Device):
+            assert build_parser().parse_args(["doctor", "--device", name]).device == name
+        with pytest.raises(argparse.ArgumentTypeError, match=roster):
+            _device_arg("tpu")
+
+    def test_the_device_help_spells_the_roster_the_refusal_spells(self) -> None:
+        """Both `--device` help lines come off the same tuple, so neither can
+        name a backend the parser refuses or omit one it takes."""
+        from typing import get_args
+
+        from loudkit.cli import build_parser
+        from loudkit.execution import Device
+
+        roster = ", ".join(get_args(Device))
+        commands = build_parser()._subparsers._group_actions[0].choices
+        for command in ("speak", "clone"):
+            (action,) = [
+                a for a in commands[command]._actions if "--device" in a.option_strings
+            ]
+            assert roster in action.help
 
     def test_indexed_cuda_any_gpu_index(self) -> None:
         """Multi-GPU boxes must be reachable from the CLI, not just the API:
         the registry splits on ':' and torch.device('cuda:N') is valid."""
         from loudkit.cli import build_parser
 
-        args = build_parser().parse_args(
-            ["bench", "--checkpoint", "x", "--voice", "y", "--device", "cuda:3"]
-        )
+        args = build_parser().parse_args(["speak", "--voice", "y", "--device", "cuda:3", "hi"])
         assert args.device == "cuda:3"
 
     def test_unknown_device_rejected(self) -> None:
         from loudkit.cli import build_parser
 
         with pytest.raises(SystemExit):
-            build_parser().parse_args(["describe", "--checkpoint", "x", "--device", "tpu"])
+            build_parser().parse_args(["doctor", "--device", "tpu"])
 
     def test_indexed_cuda_must_be_numeric(self) -> None:
         """cuda:<index> requires a numeric index; 'cuda:abc' is garbage."""
         from loudkit.cli import build_parser
 
         with pytest.raises(SystemExit):
-            build_parser().parse_args(["describe", "--checkpoint", "x", "--device", "cuda:abc"])
+            build_parser().parse_args(["doctor", "--device", "cuda:abc"])
 
-    def test_checkpoint_is_required(self) -> None:
-        from loudkit.cli import build_parser
+    def test_checkpoint_defaults_to_the_release(self) -> None:
+        """`--checkpoint` is not required every time: the release is the default,
+        and `$LOUDKIT_CHECKPOINT` overrides it."""
+        from loudkit.cli import DEFAULT_CHECKPOINT, build_parser
 
-        with pytest.raises(SystemExit):
-            build_parser().parse_args(["describe"])
+        for argv in (
+            ["speak", "--voice", "v", "hi"],
+            ["clone", "me.wav", "--name", "n", "--language", "en"],
+            ["serve"],
+            ["doctor"],
+        ):
+            assert build_parser().parse_args(argv).checkpoint == DEFAULT_CHECKPOINT
+        assert build_parser().parse_args(["voices"]).repo == DEFAULT_CHECKPOINT
 
     def test_speak_requires_voice_and_text(self) -> None:
         from loudkit.cli import build_parser
@@ -197,14 +163,6 @@ class TestParserGrammar:
             build_parser().parse_args(["speak", "--checkpoint", "x"])
         with pytest.raises(SystemExit):
             build_parser().parse_args(["speak", "--checkpoint", "x", "--voice", "v"])
-
-    def test_bench_and_profile_require_voice(self) -> None:
-        from loudkit.cli import build_parser
-
-        with pytest.raises(SystemExit):
-            build_parser().parse_args(["bench", "--checkpoint", "x"])
-        with pytest.raises(SystemExit):
-            build_parser().parse_args(["profile", "--checkpoint", "x", "text"])
 
     def test_defaults(self) -> None:
         from loudkit.cli import build_parser
@@ -221,9 +179,7 @@ class TestParserGrammar:
         # 1.0, not None: the default is documented as an exact bypass, and a
         # sentinel here would put the decision in two places.
         assert args.speed == 1.0
-
-        b = build_parser().parse_args(["bench", "--checkpoint", "x", "--voice", "v"])
-        assert b.seed == 7
+        assert args.verbose is False
 
     def test_no_command_prints_help(self, capsys) -> None:
         from loudkit.cli import main
@@ -250,9 +206,62 @@ class TestDispatch:
     def test_missing_checkpoint_is_named(self, tmp_path, capsys) -> None:
         from loudkit.cli import main
 
-        rc = main(["describe", "--checkpoint", str(tmp_path / "nope.safetensors")])
+        rc = main(
+            ["speak", "--checkpoint", str(tmp_path / "nope.safetensors"), "--voice", "v", "hi"]
+        )
         assert rc == 1
         assert "checkpoint not found" in capsys.readouterr().err
+
+    def test_oversized_stdin_is_refused_before_the_checkpoint_is_read(
+        self, fake_ckpt, fake_voice_file, monkeypatch
+    ) -> None:
+        """The free refusals come first, or the user waits for one of them.
+
+        Reading the checkpoint is 747 MB off disk, or a download for a repo id.
+        `speak` used to load it, then the voice, then stdin, so a paste over the
+        cap was answered minutes after the command was typed, by which time the
+        answer was worth nothing. `loudkit.load` here fails the test if it is
+        reached at all, which is the assertion that keeps the order from
+        drifting back.
+        """
+        import io
+
+        import loudkit
+        from loudkit.cli import _MAX_STDIN_CHARS, main
+
+        def refuse_to_load(*_a, **_k):
+            raise AssertionError("the engine loaded before stdin was read")
+
+        monkeypatch.setattr(loudkit, "load", refuse_to_load)
+        monkeypatch.setattr("sys.stdin", io.StringIO("x" * (_MAX_STDIN_CHARS + 1)))
+        with pytest.raises(SystemExit, match="stdin is over"):
+            main(
+                [
+                    "speak",
+                    "--checkpoint",
+                    str(fake_ckpt),
+                    "--voice",
+                    str(fake_voice_file),
+                    "-",
+                ]
+            )
+
+    def test_an_unreadable_voice_is_refused_before_the_checkpoint_is_read(
+        self, fake_ckpt, tmp_path, monkeypatch, capsys
+    ) -> None:
+        """The second free refusal, same reason: a voice file that is not a
+        voice costs one open to discover and used to cost a whole model load
+        first."""
+        import loudkit
+        from loudkit.cli import main
+
+        def refuse_to_load(*_a, **_k):
+            raise AssertionError("the engine loaded before the voice was read")
+
+        voice = tmp_path / "not-a-voice.safetensors"
+        voice.write_bytes(b"not a voice profile either")
+        monkeypatch.setattr(loudkit, "load", refuse_to_load)
+        assert main(["speak", "--checkpoint", str(fake_ckpt), "--voice", str(voice), "hi"]) == 1
 
     def test_missing_voice_is_named(self, tmp_path, capsys) -> None:
         from loudkit.cli import main
@@ -291,10 +300,10 @@ class TestDispatch:
         import loudkit.hub as hub_mod
 
         profile = tmp_path / "kathleen.safetensors"
-        _voice().save(profile)
+        fake_voice().save(profile)
         asked: list[tuple[str, str | None]] = []
 
-        def fake_resolve(ref, *, repo=None, revision=None):  # type: ignore[no-untyped-def]
+        def fake_resolve(ref, *, repo=None, revision=None):
             asked.append((ref, repo))
             return profile
 
@@ -330,7 +339,7 @@ class TestDispatch:
         release = tmp_path / "loudr-1"
         (release / "voices").mkdir(parents=True)
         (release / "loudr-1.safetensors").write_bytes(b"unused")
-        _voice().save(release / "voices" / "kathleen.safetensors")
+        fake_voice().save(release / "voices" / "kathleen.safetensors")
 
         monkeypatch.setattr(loudkit, "load", _fake_load_engine)
         from loudkit.cli import main
@@ -364,7 +373,7 @@ class TestDispatch:
         (release / "voices").mkdir(parents=True)
         checkpoint = release / "loudr-1.safetensors"
         checkpoint.write_bytes(b"unused")
-        _voice().save(release / "voices" / "kathleen.safetensors")
+        fake_voice().save(release / "voices" / "kathleen.safetensors")
 
         monkeypatch.setattr(loudkit, "load", _fake_load_engine)
         from loudkit.cli import main
@@ -405,16 +414,34 @@ class TestDispatch:
         assert rc == 1
         assert "checkpoint not found" in capsys.readouterr().err
 
-    def test_describe_prints_the_engine(self, fake_ckpt, capsys, monkeypatch) -> None:
+    def test_doctor_describe_prints_the_engine(self, fake_ckpt, capsys, monkeypatch) -> None:
+        """The fingerprint left `speak`'s default output; `doctor --describe` and
+        `speak --verbose` are where it is printed."""
         import loudkit
 
         monkeypatch.setattr(loudkit, "load", _fake_load_engine)
         from loudkit.cli import main
 
-        assert main(["describe", "--checkpoint", str(fake_ckpt)]) == 0
+        assert main(["doctor", "--describe", "--checkpoint", str(fake_ckpt)]) == 0
         out = capsys.readouterr().out
         assert "algo[" in out
         assert "single_path" in out
+
+    def test_speak_is_quiet_about_the_fingerprint_unless_asked(
+        self, fake_ckpt, fake_voice_file, tmp_path, capsys, monkeypatch
+    ) -> None:
+        import loudkit
+
+        monkeypatch.setattr(loudkit, "load", _fake_load_engine)
+        monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice, raising=False)
+        from loudkit.cli import main
+
+        argv = ["speak", "--checkpoint", str(fake_ckpt), "--voice", str(fake_voice_file)]
+        argv += ["-o", str(tmp_path / "a.wav"), "hello"]
+        assert main(argv) == 0
+        assert "algo[" not in capsys.readouterr().err
+        assert main(["--debug", *argv, "--verbose"]) == 0
+        assert "algo[" in capsys.readouterr().err
 
     def test_speak_writes_a_wav(
         self, fake_ckpt, fake_voice_file, tmp_path, capsys, monkeypatch
@@ -480,24 +507,64 @@ class TestDispatch:
         assert player in err
         assert str(out) in err.split("hear it:")[1]
 
-    def test_speak_splits_a_paragraph_instead_of_refusing(
-        self, fake_ckpt, fake_voice_file, tmp_path, capsys, monkeypatch
+    @pytest.mark.parametrize(
+        ("system", "shape"),
+        [
+            ("Darwin", "afplay '{path}'"),
+            ("Windows", 'Start-Process "{path}"'),
+            ("Linux", "aplay '{path}'"),
+        ],
+    )
+    def test_the_hint_is_a_command_that_runs_for_a_path_with_a_space(
+        self, system, shape, monkeypatch
     ) -> None:
-        """The first interface most people try must not refuse a paragraph:
-        over-window text falls through to synthesize_long, and says so."""
+        """A hint the reader has to repair is not a hint.
+
+        Asserted on the whole line rather than on the path being somewhere in
+        it, which is true of a hint that names two arguments where the shell
+        needs one.
+
+        The path is rendered rather than spelled. `Path` prints with the
+        running platform's separator, so a literal `/tmp/my recordings` asks
+        Windows for a string it will never produce, and the test failed there
+        over the one thing it is not about.
+        """
+        import platform
+
+        from loudkit.cli import _play_hint
+
+        monkeypatch.setattr(platform, "system", lambda: system)
+        path = Path("/tmp/my recordings/out.wav")
+        assert _play_hint(path) == shape.format(path=path)
+
+    def test_speak_splits_a_paragraph_instead_of_refusing(
+        self, fake_ckpt, fake_voice_file, tmp_path, monkeypatch
+    ) -> None:
+        """The first interface most people try must not drop a paragraph.
+
+        It did, twice over: `speak` chose between two engine methods, first by
+        catching an exception that could not reach it, then by asking
+        `needs_long_form` and re-reading on a cap hit. Now it calls
+        `synthesize` once and the splitting is the engine's, so there is no
+        routing left in the CLI to get wrong. The assertion is that the
+        paragraph came back as more than one chunk — a CLI that quietly asked
+        for a single window would return one, and would refuse.
+        """
         import loudkit
-        from loudkit.engine import Engine
-        from loudkit.errors import WindowOverflowError
 
         monkeypatch.setattr(loudkit, "load", _fake_load_engine)
         monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice, raising=False)
-        # The suite's fake engine runs a ragged window, which never overflows;
-        # what is under test is the CLI's fallback, so the refusal is injected.
 
-        def refuse(self, text, voice, **kw):  # type: ignore[no-untyped-def]
-            raise WindowOverflowError("too long", n_tokens=999, window=255)
+        seen: list[object] = []
+        real = loudkit.Engine.synthesize
 
-        monkeypatch.setattr(Engine, "synthesize", refuse)
+        def record(self, text, voice, **kw):
+            assert not kw.get("single_window"), "speak must not ask for one window"
+            result = real(self, text, voice, **kw)
+            seen.append(result)
+            return result
+
+        monkeypatch.setattr(loudkit.Engine, "synthesize", record)
 
         from loudkit.cli import main
 
@@ -518,131 +585,98 @@ class TestDispatch:
         assert rc == 0
         assert out.exists()
         assert out.stat().st_size > 0
-        assert "splitting at sentence boundaries" in capsys.readouterr().err
+        assert len(seen) == 1, "speak must call synthesize once and nothing else"
+        assert len(seen[0].chunks) > 1, "the paragraph was not split"
 
-    def test_bench_runs_and_writes_json(
+    def test_a_sentence_takes_the_same_path_as_a_paragraph(
         self, fake_ckpt, fake_voice_file, tmp_path, monkeypatch
     ) -> None:
+        """One path, whatever the length.
+
+        The old CLI routed by length, so `speak` on a sentence and `speak` on a
+        paragraph could diverge in ways nothing here would notice. A single
+        call with no `single_window` is the whole contract now.
+        """
         import loudkit
 
         monkeypatch.setattr(loudkit, "load", _fake_load_engine)
         monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice, raising=False)
 
+        calls: list[dict] = []
+        real = loudkit.Engine.synthesize
+
+        def record(self, text, voice, **kw):
+            calls.append(kw)
+            return real(self, text, voice, **kw)
+
+        monkeypatch.setattr(loudkit.Engine, "synthesize", record)
+
         from loudkit.cli import main
 
-        row = tmp_path / "row.json"
         rc = main(
             [
-                "bench",
+                "speak",
                 "--checkpoint",
                 str(fake_ckpt),
                 "--voice",
                 str(fake_voice_file),
-                "--texts",
-                "one two",
-                "--json",
-                str(row),
+                "-o",
+                str(tmp_path / "short.wav"),
+                "One sentence here.",
             ]
         )
         assert rc == 0
-        blob = json.loads(row.read_text(encoding="utf-8"))
-        assert blob["fingerprint"] == _engine().algorithm.fingerprint()
+        assert len(calls) == 1
+        assert "single_window" not in calls[0]
 
-    def test_bench_graphs_flag_reaches_execution(
-        self, fake_ckpt, fake_voice_file, monkeypatch
+    def test_speak_never_warms_the_engine(
+        self, fake_ckpt, fake_voice_file, tmp_path, monkeypatch
     ) -> None:
-        """--cuda-graphs must translate into an ExecutionConfig, not a silent
-        no-op — the flag is the whole point of the bench row."""
-        import loudkit
+        """A warm-up moves the first render's extra cost somewhere nobody waits.
+        A command that renders and exits has no such place: the whole run is the
+        wait, and a warm-up only adds a second render to it.
 
-        captured = {}
-
-        def capture_load(*args, **kwargs):
-            captured["execution"] = kwargs.get("execution")
-            return _engine()
-
-        monkeypatch.setattr(loudkit, "load", capture_load)
-        monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice, raising=False)
-
-        from loudkit.cli import main
-
-        assert (
-            main(
-                [
-                    "bench",
-                    "--checkpoint",
-                    str(fake_ckpt),
-                    "--voice",
-                    str(fake_voice_file),
-                    "--cuda-graphs",
-                    "--seed",
-                    "7",
-                ]
-            )
-            == 0
-        )
-        assert captured["execution"] is not None
-        assert captured["execution"].cuda_graphs is True
-        assert captured["execution"].compile_model is False
-
-    def test_bench_indexed_cuda_reaches_load(
-        self, fake_ckpt, fake_voice_file, monkeypatch
-    ) -> None:
-        """--device cuda:1 must reach load as-is; the registry splits on ':'
-        and torch.device('cuda:1') is valid, so the CLI must not stand between
-        a multi-GPU user and their second card."""
-        import loudkit
-
-        captured = {}
-
-        def capture_load(*args, **kwargs):
-            captured["device"] = kwargs.get("device")
-            return _engine()
-
-        monkeypatch.setattr(loudkit, "load", capture_load)
-        monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice, raising=False)
-
-        from loudkit.cli import main
-
-        assert (
-            main(
-                [
-                    "bench",
-                    "--checkpoint",
-                    str(fake_ckpt),
-                    "--voice",
-                    str(fake_voice_file),
-                    "--device",
-                    "cuda:1",
-                    "--seed",
-                    "7",
-                ]
-            )
-            == 0
-        )
-        assert captured["device"] == "cuda:1"
-
-    def test_profile_returns_zero(self, fake_ckpt, fake_voice_file, monkeypatch) -> None:
+        Measured on this machine's CPU, `speak` on a two-window passage: 51.6s
+        and 52.2s without, 73.6s with a warm-up that cost 22.7s and took
+        nothing off the render (mel 42.3s against 42.4s). Re-measured on a
+        three-chunk passage: 79.4s without, 24.8s of warm-up plus 76.3s of
+        render with. On MPS the same passage takes 6.7s either way, so the
+        best case for warming a command that exits is that it changes nothing.
+        The servers warm, because startup is a place nobody waits; this does
+        not. See ``docs/design/transports.md``.
+        """
         import loudkit
 
         monkeypatch.setattr(loudkit, "load", _fake_load_engine)
         monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice, raising=False)
 
+        # Recorded, not raised: `warm_engine` swallows what a warm-up throws,
+        # so a sentinel that raises would be caught and the test would pass on
+        # a `speak` that warms.
+        warmed: list[str] = []
+        monkeypatch.setattr(loudkit.Engine, "warm", lambda _s, voice: warmed.append(voice.name))
+
         from loudkit.cli import main
 
-        rc = main(
-            [
-                "profile",
-                "--checkpoint",
-                str(fake_ckpt),
-                "--voice",
-                str(fake_voice_file),
-                "--runs",
-                "2",
-                "hello world",
-            ]
-        )
-        assert rc == 0
+        for text in ("One sentence here.", "One sentence here. " * 60):
+            out = tmp_path / "spoken.wav"
+            assert (
+                main(
+                    [
+                        "speak",
+                        "--checkpoint",
+                        str(fake_ckpt),
+                        "--voice",
+                        str(fake_voice_file),
+                        "-o",
+                        str(out),
+                        text,
+                    ]
+                )
+                == 0
+            )
+            assert out.stat().st_size > 0
+            assert warmed == [], "speak warmed the engine"
 
     def test_serve_starts_with_engine(self, fake_ckpt, monkeypatch) -> None:
         """serve must hand the constructed engine to the server, not construct
@@ -736,7 +770,7 @@ class TestDispatch:
 
         from loudkit.cli import main
 
-        assert main(["mcp", "--checkpoint", str(fake_ckpt)]) == 0
+        assert main(["serve", "--mcp", "--checkpoint", str(fake_ckpt)]) == 0
         # A str, not a Path: `--checkpoint` may name a repo id, which only a
         # string can be asked about.
         assert called == {"ckpt": str(fake_ckpt), "device": None}
@@ -744,7 +778,7 @@ class TestDispatch:
     def test_mcp_device_reaches_the_server(self, fake_ckpt, monkeypatch) -> None:
         """`--device` is parsed for every subcommand and this one dropped it.
 
-        `loudkit mcp --device cuda:3` was accepted and ignored, so the agent
+        `loudkit serve --mcp --device cuda:3` was accepted and ignored, so the agent
         host got a different device, memory profile and speed from the one the
         operator asked for, with nothing said about it.
         """
@@ -759,8 +793,110 @@ class TestDispatch:
 
         from loudkit.cli import main
 
-        assert main(["mcp", "--checkpoint", str(fake_ckpt), "--device", "cuda:3"]) == 0
+        assert (
+            main(["serve", "--mcp", "--checkpoint", str(fake_ckpt), "--device", "cuda:3"]) == 0
+        )
         assert seen == {"device": "cuda:3"}
+
+    @pytest.mark.parametrize(
+        ("transport", "flag", "value"),
+        [
+            ("--mcp", "--host", "127.0.0.2"),
+            ("--mcp", "--port", "9000"),
+            ("--mcp", "--allow-public", None),
+            ("--mcp", "--token", "sekrit"),
+            ("--mcp", "--first-chunk-tokens", "8"),
+            ("--grpc", "--allow-public", None),
+            ("--grpc", "--token", "sekrit"),
+        ],
+    )
+    def test_serve_refuses_a_flag_the_transport_would_drop(
+        self, fake_ckpt, monkeypatch, capsys, transport, flag, value
+    ) -> None:
+        """The same defect `--device` had, on five flags and two doors.
+
+        Each of these parsed and evaporated: the server came up, said nothing,
+        and ran without a setting the operator believes is in force. That is
+        worse than either honouring it or refusing it, because the operator
+        has no way to find out. `--token` was the dangerous one, since the
+        person passing it thinks the port is authenticated.
+
+        Exit 2, argparse's own code for a command line that cannot be run, and
+        the flag is named in the sentence: `serve --mcp cannot honour` alone
+        would leave the reader to guess which of the eight they typed is
+        wrong.
+        """
+        import loudkit.transports.grpc as grpc_mod
+        import loudkit.transports.mcp as mcp_mod
+        from loudkit.cli import main
+
+        def _unreachable(*_a: object, **_kw: object) -> None:
+            raise AssertionError("the transport was started for a refused command line")
+
+        monkeypatch.setattr(mcp_mod, "run_stdio", _unreachable)
+        monkeypatch.setattr(grpc_mod, "serve", _unreachable)
+
+        argv = ["serve", transport, "--checkpoint", str(fake_ckpt), flag]
+        if value is not None:
+            argv.append(value)
+        assert main(argv) == 2
+        err = capsys.readouterr().err
+        assert flag in err, err
+        assert transport in err, err
+
+    def test_a_flag_the_transport_reads_is_not_refused(self, fake_ckpt, monkeypatch) -> None:
+        """The other half of the claim: gRPC keeps the two MCP cannot take.
+
+        A refusal table is only useful if it is a table and not a blanket, so
+        the flags gRPC honours must still reach it.
+        """
+        import loudkit.transports.grpc as grpc_mod
+        from loudkit.cli import main
+
+        seen: dict[str, object] = {}
+        monkeypatch.setattr(
+            grpc_mod, "serve", lambda _ckpt, _voices, **kwargs: seen.update(kwargs)
+        )
+        argv = [
+            "serve",
+            "--grpc",
+            "--checkpoint",
+            str(fake_ckpt),
+            "--host",
+            "127.0.0.2",
+            "--port",
+            "7003",
+            "--first-chunk-tokens",
+            "8",
+        ]
+        assert main(argv) == 0
+        assert seen["host"] == "127.0.0.2"
+        assert seen["port"] == 7003
+        assert seen["first_chunk_tokens"] == 8
+
+    def test_an_unmentioned_host_is_left_to_the_transport(self, fake_ckpt, monkeypatch) -> None:
+        """`--host` states no default of its own any more.
+
+        It had one, `"127.0.0.1"`, which is also both transports' signature
+        default -- three copies of one number, and the copy in the CLI is what
+        made "did the operator ask for a host" unanswerable, since a dropped
+        `--host` and an absent one looked the same.
+        """
+        import inspect
+
+        import loudkit.transports.http as http_mod
+        from loudkit.cli import main
+
+        assert inspect.signature(http_mod.serve).parameters["host"].default == "127.0.0.1"
+
+        seen: dict[str, object] = {}
+        monkeypatch.setattr(http_mod, "serve", lambda _ckpt, **kwargs: seen.update(kwargs))
+        assert main(["serve", "--checkpoint", str(fake_ckpt)]) == 0
+        assert "host" not in seen
+
+        seen.clear()
+        assert main(["serve", "--checkpoint", str(fake_ckpt), "--host", "127.0.0.2"]) == 0
+        assert seen["host"] == "127.0.0.2"
 
 
 # ---------------------------------------------------------------- error paths
@@ -817,6 +953,51 @@ class TestErrorPaths:
                 ]
             )
 
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            ModuleNotFoundError("No module named 'soundfile'", name="soundfile"),
+            FileNotFoundError(2, "No such file or directory", "/nowhere/loudr-1.safetensors"),
+            UnsupportedLanguageError("kl", language="kl", supported=("en",)),
+            NotImplementedError("no such path on this backend"),
+            RuntimeError("backend exploded"),
+            OSError("the file is present but could not be read"),
+        ],
+        ids=lambda failure: type(failure).__name__,
+    )
+    def test_debug_keeps_the_traceback_whichever_clause_would_have_caught_it(
+        self, failure, fake_ckpt, fake_voice_file, monkeypatch
+    ) -> None:
+        """One case per clause of the ladder, because the flag is one rule.
+
+        ``--debug`` is documented as re-raising, and a reader who passes it to
+        diagnose a missing extra or a missing file has to get the traceback
+        that names which import or which path. A guard written per clause is a
+        guard a clause can be written without, so every clause is asserted.
+        """
+        import loudkit
+
+        def explode(*_a, **_k):
+            raise failure
+
+        monkeypatch.setattr(loudkit, "load", explode)
+
+        from loudkit.cli import main
+
+        with pytest.raises(BaseException) as caught:  # the identity is the assertion
+            main(
+                [
+                    "--debug",
+                    "speak",
+                    "--checkpoint",
+                    str(fake_ckpt),
+                    "--voice",
+                    str(fake_voice_file),
+                    "hi",
+                ]
+            )
+        assert caught.value is failure
+
     def _speak_raising(self, exc, fake_ckpt, fake_voice_file, monkeypatch, capsys) -> str:
         """Run `speak` against a `loudkit.load` that raises, return stderr."""
         import loudkit
@@ -835,6 +1016,76 @@ class TestErrorPaths:
             == 1
         )
         return capsys.readouterr().err
+
+    def test_clone_refuses_a_language_this_build_cannot_read(self, tmp_path, capsys) -> None:
+        """Before the ten seconds and before the file, not after both.
+
+        `--language` is what the engine reads text as whenever a call names
+        none, so a value with no grammar behind it makes the profile unusable
+        at its own default. The refusal used to arrive at `speak` time: one
+        enrollment and one saved voice too late.
+        """
+        import loudkit
+        from loudkit.cli import main
+
+        audio = tmp_path / "a.wav"
+        audio.write_bytes(b"")
+        # Present but never opened: the refusal has to land before anything
+        # reads the checkpoint, which is the whole point of it landing early.
+        checkpoint = tmp_path / "loudr-1.safetensors"
+        checkpoint.write_bytes(b"")
+        assert (
+            main(
+                [
+                    "clone",
+                    str(audio),
+                    "--checkpoint",
+                    str(checkpoint),
+                    "--name",
+                    "v",
+                    "--language",
+                    "klingon",
+                ]
+            )
+            == 1
+        )
+        err = capsys.readouterr().err
+        assert "klingon" in err
+        # The roster, not just a refusal: the reader has to be told what to
+        # pass instead.
+        for language in loudkit.languages():
+            assert language in err
+
+    def test_clone_refuses_a_language_the_way_text_does(self, tmp_path) -> None:
+        """One refusal, one implementation.
+
+        `clone` used to print its own `unsupported: ...` sentence and return 1,
+        re-spelling by hand what `text` gets by raising the error class the
+        dispatcher already prints. Two implementations of one refusal drift;
+        this pins that `clone` raises the class rather than imitating it.
+        """
+        from loudkit.cli import main
+        from loudkit.errors import UnsupportedLanguageError
+
+        audio = tmp_path / "a.wav"
+        audio.write_bytes(b"")
+        checkpoint = tmp_path / "loudr-1.safetensors"
+        checkpoint.write_bytes(b"")
+        with pytest.raises(UnsupportedLanguageError) as caught:
+            main(
+                [
+                    "--debug",
+                    "clone",
+                    str(audio),
+                    "--checkpoint",
+                    str(checkpoint),
+                    "--name",
+                    "v",
+                    "--language",
+                    "klingon",
+                ]
+            )
+        assert caught.value.language == "klingon"
 
     def test_unsupported_language_is_a_message_not_a_traceback(
         self, fake_ckpt, fake_voice_file, monkeypatch, capsys
@@ -947,9 +1198,10 @@ class TestErrorPaths:
 
 
 class TestDoctor:
-    def test_doctor_runs_and_exits_zero(self, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_doctor_runs_and_exits_zero(self, capsys) -> None:
         """A diagnosis is not a failure: doctor reads state, changes nothing,
-        and exits 0 whatever it finds."""
+        and exits 0 whatever it finds on disk. A ``--checkpoint`` that is not
+        there is refused before dispatch, like every other command's."""
         from loudkit.cli import main
 
         assert main(["doctor"]) == 0
@@ -957,18 +1209,69 @@ class TestDoctor:
         assert "backends:" in out
         assert "loudkit" in out
 
-
-class TestVerify:
-    def test_a_valid_voice_profile_verifies(self, tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_doctor_looks_where_checkpoint_points(
+        self, fake_voice_file, capsys, monkeypatch, tmp_path
+    ) -> None:
+        """``--checkpoint`` is documented as a release directory; doctor scans
+        it, not the working directory it was run from."""
         from loudkit.cli import main
 
-        path = _voice().save(tmp_path / "v.safetensors")
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        assert main(["doctor", "--checkpoint", str(fake_voice_file.parent)]) == 0
+        out = capsys.readouterr().out
+        assert f"{fake_voice_file}  (voice)" in out
+        assert "under the current directory" not in out
+
+    def test_a_device_this_machine_lacks_is_one_line(
+        self, fake_ckpt, tmp_path, capsys, monkeypatch
+    ) -> None:
+        """``--device cuda`` on a box without CUDA is a diagnosis, not a torch
+        traceback; the check runs before the checkpoint is opened.
+
+        The voice is a real profile file so that the device refusal is the
+        first thing here that can fail: `speak` reads the text and the voice
+        before it reads the checkpoint, and a voice that is not there would
+        answer first.
+        """
+        import torch
+
+        from loudkit.cli import main
+
+        voice = fake_voice().save(tmp_path / "device-test-voice.safetensors")
+        monkeypatch.setattr(torch.cuda, "device_count", lambda: 0)
+        assert (
+            main(
+                [
+                    "speak",
+                    "--checkpoint",
+                    str(fake_ckpt),
+                    "--voice",
+                    str(voice),
+                    "--device",
+                    "cuda",
+                    "hi",
+                ]
+            )
+            == 1
+        )
+        err = capsys.readouterr().err
+        assert "error: device 'cuda' is not available on this machine" in err
+        assert "Traceback" not in err
+
+
+class TestVerify:
+    def test_a_valid_voice_profile_verifies(self, tmp_path, capsys) -> None:
+        from loudkit.cli import main
+
+        path = fake_voice().save(tmp_path / "v.safetensors")
         assert main(["verify", str(path)]) == 0
         out = capsys.readouterr().out
         assert "a voice profile, and a valid one" in out
         assert "sha256:" in out
 
-    def test_a_wav_without_provenance_says_so(self, tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_a_wav_without_provenance_says_so(self, tmp_path, capsys) -> None:
         import numpy as np
         import soundfile as sf
 
@@ -979,11 +1282,11 @@ class TestVerify:
         assert main(["verify", str(wav)]) == 1
         assert "no provenance" in capsys.readouterr().out
 
-    def test_a_provenanced_wav_verifies_and_prints_its_identity(self, tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_a_provenanced_wav_verifies_and_prints_its_identity(self, tmp_path, capsys) -> None:
         import numpy as np
 
         from loudkit.cli import main
-        from loudkit.engine import Result, StageTimings
+        from loudkit.engine import Provenance, Result, StageTimings
 
         result = Result(
             audio=np.zeros(2400, dtype=np.float32),
@@ -992,11 +1295,13 @@ class TestVerify:
             seed=1,
             sample_rate=24_000,
             timings=StageTimings(0.0, 0.0, 0.0),
-            algorithm_fingerprint="ab" * 8,
-            recipe_version="loudkit-1",
-            voice_name="kathleen",
-            checkpoint_sha256="dd" * 32,
-            backend="torch",
+            provenance=Provenance(
+                algorithm_fingerprint="ab" * 8,
+                recipe_version="loudkit-1",
+                voice="kathleen",
+                checkpoint_sha256="dd" * 32,
+                backend="torch",
+            ),
         )
         wav = tmp_path / "prov.wav"
         result.save(str(wav))
@@ -1005,7 +1310,7 @@ class TestVerify:
         assert "provenance verified" in out
         assert "dd" * 32 in out
 
-    def test_an_unrelated_safetensors_is_named_not_guessed(self, tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_an_unrelated_safetensors_is_named_not_guessed(self, tmp_path, capsys) -> None:
         import numpy as np
         from safetensors.numpy import save_file
 
@@ -1018,23 +1323,29 @@ class TestVerify:
 
 
 class TestVoicesCommand:
-    def test_lists_a_local_release_tree(self, tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_lists_a_local_release_tree(self, tmp_path, capsys) -> None:
         from loudkit.cli import main
 
         (tmp_path / "voices").mkdir()
-        _voice().save(tmp_path / "voices" / "kathleen.safetensors")
-        _voice().save(tmp_path / "voices" / "gosia.safetensors")
+        fake_voice().save(tmp_path / "voices" / "kathleen.safetensors")
+        fake_voice().save(tmp_path / "voices" / "gosia.safetensors")
         assert main(["voices", str(tmp_path)]) == 0
         assert capsys.readouterr().out.splitlines() == ["gosia", "kathleen"]
 
-    def test_an_empty_release_is_an_error_not_silence(self, tmp_path, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_an_empty_release_is_an_error_not_silence(self, tmp_path, capsys) -> None:
         from loudkit.cli import main
 
         (tmp_path / "voices").mkdir()
         assert main(["voices", str(tmp_path)]) == 1
-        assert "no voices" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        # The message has to name what was looked for. "no voices" was true and
+        # unusable: a mistyped repo id, a release built without its voice
+        # directory and a revision that predates one all produced it.
+        assert "voices/" in err
+        assert ".safetensors" in err
+        assert str(tmp_path) in err
 
-    def test_a_name_the_console_cannot_spell_still_prints(self, tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def test_a_name_the_console_cannot_spell_still_prints(self, tmp_path, monkeypatch) -> None:
         """A voice name outside the locale's encoding must not kill the listing.
 
         Nine languages ship voices and cp1252 — a Windows console's default —
@@ -1050,8 +1361,8 @@ class TestVoicesCommand:
         from loudkit.cli import main
 
         (tmp_path / "voices").mkdir()
-        _voice().save(tmp_path / "voices" / "kathleen.safetensors")
-        _voice().save(tmp_path / "voices" / "pl_gałczyński.safetensors")
+        fake_voice().save(tmp_path / "voices" / "kathleen.safetensors")
+        fake_voice().save(tmp_path / "voices" / "pl_gałczyński.safetensors")
 
         raw = io.BytesIO()
         monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="cp1252"))
@@ -1069,9 +1380,9 @@ class TestVoicesCommand:
 
 class TestProviderFlag:
     """``--provider`` names the onnxruntime execution provider, in the same
-    five spellings the Rust and Go CLIs take. It reaches the engine as an
-    ``ExecutionOverrides``, so a run can be asked for one provider and can
-    never answer on another."""
+    five spellings the Rust and Go CLIs take. It reaches the engine as the one
+    named field of an ``ExecutionConfig``, so a run can be asked for one
+    provider and can never answer on another."""
 
     @pytest.mark.parametrize("provider", ["auto", "cpu", "cuda", "coreml", "directml"])
     def test_the_five_spellings_are_accepted(self, provider: str) -> None:
@@ -1101,15 +1412,13 @@ class TestProviderFlag:
         for name in ("auto", "cpu", "cuda", "coreml", "directml"):
             assert name in err
 
-    @pytest.mark.parametrize("command", ["speak", "bench", "profile", "describe"])
+    @pytest.mark.parametrize("command", ["speak", "doctor", "serve"])
     def test_every_engine_building_command_takes_it(self, command: str) -> None:
         from loudkit.cli import build_parser
 
         argv = ["--checkpoint", "x", "--device", "onnx", "--provider", "cuda"]
-        if command in ("speak", "profile"):
-            argv.append("hi")
-        if command in ("speak", "bench", "profile"):
-            argv += ["--voice", "v"]
+        if command == "speak":
+            argv += ["hi", "--voice", "v"]
         assert build_parser().parse_args([command, *argv]).provider == "cuda"
 
     def test_provider_reaches_execution(self, fake_ckpt, fake_voice_file, monkeypatch) -> None:
@@ -1122,7 +1431,7 @@ class TestProviderFlag:
 
         def capture_load(*args, **kwargs):
             captured["execution"] = kwargs.get("execution")
-            return _engine()
+            return fake_engine()
 
         monkeypatch.setattr(loudkit, "load", capture_load)
         monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice, raising=False)
@@ -1146,15 +1455,19 @@ class TestProviderFlag:
             ]
         )
         assert rc == 0
-        assert captured["execution"].onnx_provider == "cuda"
+        execution = captured["execution"]
+        assert execution.onnx_provider == "cuda"
         # Only the provider is named: --provider is not a request for graphs,
         # for a compile, or for a device the user did not type.
-        assert captured["execution"].describe() == "overrides[onnx_provider='cuda']"
+        from dataclasses import fields
+
+        named = {f.name for f in fields(execution) if getattr(execution, f.name) is not None}
+        assert named == {"onnx_provider"}
 
     def test_override_lands_on_the_config(self) -> None:
         """The override the CLI builds must produce that provider on a real
         ExecutionConfig, which is what the ONNX backend reads."""
-        from loudkit.cli import _execution_overrides, build_parser
+        from loudkit.cli import _execution, build_parser
         from loudkit.config import ExecutionConfig
 
         args = build_parser().parse_args(
@@ -1171,9 +1484,9 @@ class TestProviderFlag:
                 "hi",
             ]
         )
-        overrides = _execution_overrides(args)
-        assert overrides is not None
-        assert overrides.applied_to(ExecutionConfig(device="onnx")).onnx_provider == "coreml"
+        execution = _execution(args)
+        assert execution is not None
+        assert execution.resolved(ExecutionConfig(device="onnx")).onnx_provider == "coreml"
 
     @pytest.mark.parametrize("device", [None, "cpu", "cuda", "mps", "coreml"])
     def test_provider_without_the_onnx_backend_is_refused(
@@ -1205,27 +1518,6 @@ class TestProviderFlag:
         err = capsys.readouterr().err
         assert "--provider cuda needs --device onnx" in err
 
-    def test_bench_command_line_names_the_provider(self) -> None:
-        """Every benchmark number carries the command that reproduced it, and a
-        row taken on cuda that prints a command without the provider is a row
-        nobody can reproduce."""
-        from loudkit.cli import _bench_command, build_parser
-
-        args = build_parser().parse_args(
-            [
-                "bench",
-                "--checkpoint",
-                "x",
-                "--voice",
-                "v",
-                "--device",
-                "onnx",
-                "--provider",
-                "cuda",
-            ]
-        )
-        assert "--provider cuda" in _bench_command(args)
-
 
 # ------------------------------------------------------------------ pinning
 
@@ -1241,17 +1533,15 @@ class TestRevisionFlag:
     weights would actually speak — had no spelling for it.
     """
 
-    ENGINE_COMMANDS = ("speak", "describe", "serve", "mcp", "grpc", "bench", "profile")
+    ENGINE_COMMANDS = ("speak", "doctor", "serve")
 
     @pytest.mark.parametrize("command", ENGINE_COMMANDS)
     def test_every_subcommand_that_takes_a_repo_id_takes_a_revision(self, command: str) -> None:
         from loudkit.cli import build_parser
 
         argv = [command, "--checkpoint", "loudreader/loudr-1", "--revision", "a1b2c3d"]
-        if command in ("speak", "profile"):
-            argv.append("hi")
-        if command in ("speak", "bench", "profile"):
-            argv += ["--voice", "v"]
+        if command == "speak":
+            argv += ["hi", "--voice", "v"]
         assert build_parser().parse_args(argv).revision == "a1b2c3d"
 
     @pytest.mark.parametrize("command", ENGINE_COMMANDS)
@@ -1260,7 +1550,7 @@ class TestRevisionFlag:
         for how. A flag that parses but is undocumented is not reachable."""
         from loudkit.cli import build_parser
 
-        sub = build_parser()._subparsers._group_actions[0].choices  # type: ignore[attr-defined]
+        sub = build_parser()._subparsers._group_actions[0].choices
         assert "--revision" in sub[command].format_help()
 
     @pytest.mark.parametrize("command", ENGINE_COMMANDS)
@@ -1268,10 +1558,8 @@ class TestRevisionFlag:
         from loudkit.cli import build_parser
 
         argv = [command, "--checkpoint", "loudreader/loudr-1"]
-        if command in ("speak", "profile"):
-            argv.append("hi")
-        if command in ("speak", "bench", "profile"):
-            argv += ["--voice", "v"]
+        if command == "speak":
+            argv += ["hi", "--voice", "v"]
         assert build_parser().parse_args(argv).revision is None
 
     def test_speak_pins_both_the_checkpoint_and_the_voice(self, monkeypatch, tmp_path) -> None:
@@ -1284,7 +1572,7 @@ class TestRevisionFlag:
 
         def capture_load(checkpoint, **kwargs):
             seen["checkpoint_revision"] = kwargs.get("revision")
-            return _engine()
+            return fake_engine()
 
         def capture_voice(name, *, repo=None, revision=None):
             seen["voice_repo"] = repo
@@ -1393,7 +1681,7 @@ class TestDoctorReportsOnlyLoudkitArtefacts:
         ours.mkdir(parents=True)
         theirs.mkdir(parents=True)
         _pack_checkpoint(ours / "loudr-1.safetensors")
-        _voice().save(theirs / "model.safetensors")
+        fake_voice().save(theirs / "model.safetensors")
 
         monkeypatch.setattr("huggingface_hub.constants.HF_HUB_CACHE", str(cache), raising=False)
         monkeypatch.chdir(tmp_path)
@@ -1411,7 +1699,7 @@ class TestDoctorReportsOnlyLoudkitArtefacts:
         report on."""
         from loudkit.cli import main
 
-        _voice().save(tmp_path / "kathleen.safetensors")
+        fake_voice().save(tmp_path / "kathleen.safetensors")
         _pack_checkpoint(tmp_path / "loudr-1.safetensors")
         _write_foreign_safetensors(tmp_path / "someones-lora.safetensors")
 
@@ -1421,6 +1709,52 @@ class TestDoctorReportsOnlyLoudkitArtefacts:
         assert "kathleen.safetensors  (voice)" in out
         assert "loudr-1.safetensors  (checkpoint)" in out
         assert "someones-lora" not in out
+
+    def test_a_truncated_checkpoint_is_named_rather_than_dropped(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
+        """The one file `doctor` most needed to mention was the one it hid.
+
+        A header that will not parse and a file belonging to another library
+        were given the same answer: not ours, do not mention. So a download
+        that died halfway left a 700 MB file with the right name in the working
+        directory and `doctor` reported "no loudkit checkpoint or voice under
+        the current directory".
+        """
+        from loudkit.cli import main
+
+        (tmp_path / "loudr-1.safetensors").write_bytes(b"\x00" * 64)
+        monkeypatch.chdir(tmp_path)
+        assert main(["doctor"]) == 0
+        out = capsys.readouterr().out
+        assert "loudr-1.safetensors  (unreadable)" in out
+
+    def test_the_listing_says_how_many_it_left_out(self, tmp_path, monkeypatch, capsys) -> None:
+        """A silent cap is a listing that lies by omission.
+
+        Both sections stopped at a bare `[:8]`, and eight entries is what a
+        directory holding exactly eight also prints — so a ninth voice, quite
+        possibly the one being asked about, vanished from a diagnostic without
+        a word.
+        """
+        from loudkit.cli import _DOCTOR_LISTING_CAP, main
+
+        for i in range(_DOCTOR_LISTING_CAP + 3):
+            fake_voice().save(tmp_path / f"v{i:02d}.safetensors")
+        monkeypatch.chdir(tmp_path)
+        assert main(["doctor"]) == 0
+        out = capsys.readouterr().out
+        assert f"and 3 more (listing stops at {_DOCTOR_LISTING_CAP})" in out
+
+    def test_a_listing_inside_the_cap_says_nothing_about_it(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
+        from loudkit.cli import main
+
+        fake_voice().save(tmp_path / "kathleen.safetensors")
+        monkeypatch.chdir(tmp_path)
+        assert main(["doctor"]) == 0
+        assert "listing stops at" not in capsys.readouterr().out
 
     def test_a_bare_machine_says_so_rather_than_listing_nothing(
         self, tmp_path, monkeypatch, capsys
@@ -1440,85 +1774,107 @@ class TestDoctorReportsOnlyLoudkitArtefacts:
 
 
 class TestTopLevelSurface:
-    """``loudkit --help`` lists eight commands and no more.
+    """``loudkit --help`` lists the supported commands.
 
-    The eight are the whole path from a bare machine to a cloned voice
-    speaking. ``describe``, ``bench`` and ``profile`` are repo tools and
-    ``mcp`` is a preview transport: all four stay registered and stay runnable,
-    because anyone who knows their names keeps them, but a top-level listing
-    that reads as twelve peers tells a stranger nothing about where to start.
+    These cover the path from a bare machine to a cloned voice
+    speaking. Repo tooling (bench, profile) lives in ``tools/``, and the other
+    two transports are flags on ``serve``.
     """
 
-    EIGHT = ["speak", "clone", "voices", "download", "serve", "verify", "doctor", "grpc"]
-    HIDDEN = ["describe", "mcp", "bench", "profile"]
+    COMMANDS = ["speak", "text", "clone", "voices", "download", "serve", "verify", "doctor"]
 
-    def test_help_lists_exactly_the_eight(self, capsys) -> None:
-        from loudkit.cli import main
+    def test_help_lists_exactly_the_commands(self, capsys) -> None:
+        from loudkit.cli import COMMANDS, main
 
+        assert list(COMMANDS) == self.COMMANDS
         assert main([]) == 1
         out = capsys.readouterr().out
-        # The listing is the indented block of `name  description` lines under
-        # the subparsers action. A hidden subcommand has no such line at all.
         listed = [
             line.strip().split()[0]
             for line in out.splitlines()
             if line.startswith("    ") and not line.startswith("     ") and line.strip()
         ]
-        assert listed == self.EIGHT
+        assert listed == self.COMMANDS
 
-    def test_the_usage_line_names_only_the_eight(self, capsys) -> None:
-        """argparse prints the choice set twice.
-
-        Omitting ``help=`` hides a subcommand from the listing but not from the
-        usage line, which is built from a metavar that otherwise joins every
-        registered choice. Both have to be asserted or the second one leaks the
-        four back.
-        """
+    def test_the_usage_line_names_only_the_commands(self, capsys) -> None:
         from loudkit.cli import main
 
         assert main([]) == 1
         usage = capsys.readouterr().out.split("\n\n")[0]
-        assert "{" + ",".join(self.EIGHT) + "}" in usage
-        for name in self.HIDDEN:
+        assert "{" + ",".join(self.COMMANDS) + "}" in usage
+        for name in ("bench", "profile", "describe", "mcp", "grpc"):
             assert name not in usage
 
-    def test_hidden_commands_are_absent_from_the_listing(self, capsys) -> None:
-        from loudkit.cli import main
-
-        assert main([]) == 1
-        out = capsys.readouterr().out
-        for name in self.HIDDEN:
-            assert f"\n    {name} " not in out
-
-    @pytest.mark.parametrize("name", HIDDEN)
-    def test_hidden_commands_still_parse_and_dispatch(self, name: str) -> None:
-        """Hidden is not removed: each still resolves to its own handler."""
+    def test_the_other_transports_are_flags_on_serve(self) -> None:
         from loudkit.cli import build_parser
 
-        argv = [name, "--checkpoint", "x"]
-        if name in ("bench", "profile"):
-            argv += ["--voice", "v"]
-        if name == "profile":
-            argv += ["text"]
-        args = build_parser().parse_args(argv)
-        assert args.command == name
-        assert args.func.__name__ == f"_cmd_{name}"
+        sub = build_parser()._subparsers._group_actions[0].choices
+        help_text = sub["serve"].format_help()
+        assert "--grpc" in help_text
+        assert "--mcp" in help_text
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["serve", "--grpc", "--mcp"])
 
-    def test_a_hidden_command_runs(self, fake_ckpt, monkeypatch, capsys) -> None:
-        """The strongest form of "still there": one of them executes."""
-        import loudkit
+    def test_serve_grpc_hands_the_engine_to_the_grpc_transport(
+        self, fake_ckpt, monkeypatch
+    ) -> None:
+        """Without ``--port`` the CLI states no port at all.
+
+        The number belongs to the transport's own signature, and the CLI
+        repeating it is how the two drift apart. What is asserted here is
+        therefore the absence of the argument plus the default it falls to.
+        """
+        import inspect
+
+        import loudkit.transports.grpc as grpc_mod
         from loudkit.cli import main
 
-        monkeypatch.setattr(loudkit, "load", _fake_load_engine)
-        assert main(["describe", "--checkpoint", str(fake_ckpt)]) == 0
-        assert "algo[" in capsys.readouterr().out
+        assert inspect.signature(grpc_mod.serve).parameters["port"].default == 50051
 
-    def test_grpc_is_advertised(self, capsys) -> None:
-        """gRPC is one of the eight, not a footnote."""
+        seen: dict[str, object] = {}
+
+        def fake_serve(ckpt, voices, **kwargs):
+            seen.update(ckpt=ckpt, **kwargs)
+
+        monkeypatch.setattr(grpc_mod, "serve", fake_serve)
+        assert main(["serve", "--grpc", "--checkpoint", str(fake_ckpt)]) == 0
+        assert seen["ckpt"] == str(fake_ckpt)
+        assert "port" not in seen
+
+    def test_serve_grpc_passes_the_port_it_was_given(self, fake_ckpt, monkeypatch) -> None:
+        import loudkit.transports.grpc as grpc_mod
         from loudkit.cli import main
 
-        assert main([]) == 1
-        assert "\n    grpc " in capsys.readouterr().out
+        seen: dict[str, object] = {}
+
+        def fake_serve(ckpt, voices, **kwargs):
+            seen.update(kwargs)
+
+        monkeypatch.setattr(grpc_mod, "serve", fake_serve)
+        assert main(["serve", "--grpc", "--checkpoint", str(fake_ckpt), "--port", "7001"]) == 0
+        assert seen["port"] == 7001
+
+    def test_serve_http_leaves_its_port_to_the_transport(self, fake_ckpt, monkeypatch) -> None:
+        """The HTTP half of the same rule, and the default it falls to."""
+        import inspect
+
+        import loudkit.transports.http as http_mod
+        from loudkit.cli import main
+
+        assert inspect.signature(http_mod.serve).parameters["port"].default == 8765
+
+        seen: dict[str, object] = {}
+
+        def fake_serve(ckpt, **kwargs):
+            seen.update(kwargs)
+
+        monkeypatch.setattr(http_mod, "serve", fake_serve)
+        assert main(["serve", "--checkpoint", str(fake_ckpt)]) == 0
+        assert "port" not in seen
+
+        seen.clear()
+        assert main(["serve", "--checkpoint", str(fake_ckpt), "--port", "7002"]) == 0
+        assert seen["port"] == 7002
 
 
 def _fake_enroll(monkeypatch, seen: dict) -> None:
@@ -1537,7 +1893,7 @@ def _fake_enroll(monkeypatch, seen: dict) -> None:
         seen["checkpoint"] = checkpoint
         seen.update(kwargs)
         return dataclasses.replace(
-            _voice(), name=kwargs.get("name", ""), language=kwargs.get("language", "en")
+            fake_voice(), name=kwargs.get("name", ""), language=kwargs.get("language", "en")
         )
 
     monkeypatch.setattr(loudkit, "enroll", enroll)
@@ -1583,12 +1939,12 @@ class TestCloneGrammar:
         assert args.device == "cuda:1"
         assert args.force is True
 
-    def test_audio_checkpoint_name_and_language_are_all_required(self) -> None:
-        """Nothing here is guessed: the four that identify the clone are explicit."""
+    def test_audio_name_and_language_are_all_required(self) -> None:
+        """The three that identify the clone are explicit; the checkpoint defaults."""
         from loudkit.cli import build_parser
 
         base = ["clone", "me.wav", "--checkpoint", "c", "--name", "n", "--language", "en"]
-        for drop in ("--checkpoint", "--name", "--language"):
+        for drop in ("--name", "--language"):
             argv = list(base)
             i = argv.index(drop)
             del argv[i : i + 2]
@@ -1608,8 +1964,10 @@ class TestCloneGrammar:
         assert args.device is None
         assert args.force is False
 
-    @pytest.mark.parametrize("device", ["cpu", "cuda", "cuda:0", "cuda:3", "mps"])
-    def test_torch_devices_are_accepted(self, device: str) -> None:
+    @pytest.mark.parametrize(
+        "device", ["cpu", "cuda", "cuda:0", "cuda:3", "mps", "onnx", "coreml"]
+    )
+    def test_enrollment_devices_are_accepted(self, device: str) -> None:
         from loudkit.cli import build_parser
 
         args = build_parser().parse_args(
@@ -1628,10 +1986,8 @@ class TestCloneGrammar:
         )
         assert args.device == device
 
-    @pytest.mark.parametrize("device", ["onnx", "coreml", "tpu", "cuda:x"])
-    def test_non_torch_devices_are_refused(self, device: str) -> None:
-        """Enrollment has no ONNX or CoreML graph, so those names would take a
-        flag and answer it somewhere else."""
+    @pytest.mark.parametrize("device", ["tpu", "cuda:x"])
+    def test_unknown_devices_are_refused(self, device: str) -> None:
         from loudkit.cli import build_parser
 
         with pytest.raises(SystemExit):
@@ -1688,7 +2044,74 @@ class TestCloneCommand:
         assert seen["device"] == "cpu"
         assert seen["revision"] == "v1"
         # The relative path the user gets back is the one they can hand to `speak`.
-        assert "voices/mine.safetensors" in capsys.readouterr().out
+        # Built, not spelled: the CLI prints the path it wrote, and that
+        # is `voices\\mine.safetensors` on Windows.
+        assert str(Path("voices/mine.safetensors")) in capsys.readouterr().out
+
+    def test_the_language_tag_is_read_in_either_case(
+        self, recording, fake_ckpt, tmp_path, monkeypatch
+    ) -> None:
+        """``--language EN`` is the same request as ``--language en``.
+
+        `text` lower-cases the tag before it looks it up, so a tag refused
+        here while `text` accepts it is one release answering the same request
+        two ways. The normalised tag is what reaches `enroll`, so the profile
+        records the tag the engine looks up.
+        """
+        from loudkit.cli import main
+
+        seen: dict = {}
+        _fake_enroll(monkeypatch, seen)
+        monkeypatch.chdir(tmp_path)
+
+        code = main(
+            [
+                "clone",
+                str(recording),
+                "--checkpoint",
+                str(fake_ckpt),
+                "--name",
+                "mine",
+                "--language",
+                "EN",
+            ]
+        )
+        assert code == 0
+        assert seen["language"] == "en"
+
+    @pytest.mark.parametrize("flag", [[], ["--no-end-in-silence"]])
+    def test_the_pause_cut_is_the_default_and_the_flag_turns_it_off(
+        self, recording, fake_ckpt, tmp_path, monkeypatch, flag
+    ) -> None:
+        """The command's default is the library's ``end_in_silence=True``.
+
+        A shipped voice speaks from the edge of silence because its prompt was
+        cut at a pause and padded; a clone made at the command line gets the
+        same treatment unless the user asks for the clip as given.
+        """
+        from loudkit.cli import main
+
+        seen: dict = {}
+        _fake_enroll(monkeypatch, seen)
+        monkeypatch.chdir(tmp_path)
+
+        code = main(
+            [
+                "clone",
+                str(recording),
+                "--checkpoint",
+                str(fake_ckpt),
+                "--name",
+                "mine",
+                "--language",
+                "en",
+                "--device",
+                "cpu",
+                *flag,
+            ]
+        )
+        assert code == 0
+        assert seen["end_in_silence"] is (flag == [])
 
     def test_the_profile_it_writes_reads_back(
         self, recording, fake_ckpt, tmp_path, monkeypatch
@@ -2006,7 +2429,7 @@ class TestCloneCommand:
         def clone(payload: bytes) -> None:
             try:
                 _save_voice_atomically(_Profile(payload), out)
-            except BaseException as exc:  # noqa: BLE001 — reported by the assert below
+            except BaseException as exc:  # the defect, reported by the assert below
                 failures.append(exc)
                 both_written.abort()
 
@@ -2023,6 +2446,67 @@ class TestCloneCommand:
         assert out.read_bytes() in payloads
         assert sorted(p.name for p in out.parent.iterdir()) == ["mine.safetensors"]
 
+    def test_a_replace_windows_refuses_is_retried_rather_than_reported(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """A contended rename is a wait on Windows, not a failure.
+
+        POSIX ``rename`` onto an existing path cannot fail because somebody
+        else is renaming onto the same path. Windows ``MoveFileEx`` opens the
+        destination, so the second of two writers is refused with
+        ``ERROR_ACCESS_DENIED`` and the test above sees a ``PermissionError``
+        that names nothing a user did wrong.
+
+        Driven by a stub rather than by two threads, because the real refusal
+        is a race and a race is not a test: this asserts that the retry runs
+        and that the bytes land, on every platform.
+        """
+        from loudkit import cli
+
+        refusals = [PermissionError(13, "Access is denied")] * 2
+        replace = os.replace
+
+        def refuse_twice(src, dst):
+            if refusals:
+                raise refusals.pop()
+            replace(src, dst)
+
+        monkeypatch.setattr(cli.os, "replace", refuse_twice)
+        out = tmp_path / "voices" / "mine.safetensors"
+
+        class _Profile:
+            def save(self, path) -> None:
+                path.write_bytes(b"published")
+
+        cli._save_voice_atomically(_Profile(), out)
+        assert out.read_bytes() == b"published"
+        assert refusals == []
+        assert sorted(p.name for p in out.parent.iterdir()) == ["mine.safetensors"]
+
+    def test_a_replace_that_keeps_being_refused_still_raises(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """The retry has a deadline, so a directory the user cannot write to
+        is still reported rather than waited on."""
+        from loudkit import cli
+
+        monkeypatch.setattr(cli, "_PUBLISH_RETRY_SECONDS", 0.05)
+
+        def always_refuse(src, dst):
+            raise PermissionError(13, "Access is denied")
+
+        monkeypatch.setattr(cli.os, "replace", always_refuse)
+        out = tmp_path / "voices" / "mine.safetensors"
+
+        class _Profile:
+            def save(self, path) -> None:
+                path.write_bytes(b"published")
+
+        with pytest.raises(PermissionError):
+            cli._save_voice_atomically(_Profile(), out)
+        # The temp is cleaned up on the way out, as on any other failure.
+        assert list(out.parent.iterdir()) == []
+
 
 class TestTheMcpServerResolvesARepoId:
     """`build_server` computed the voice directory beside the raw argument.
@@ -2036,6 +2520,7 @@ class TestTheMcpServerResolvesARepoId:
         from pathlib import Path
 
         import loudkit.transports.mcp as mcp_mod
+        import loudkit.transports.resolve as resolve_mod
 
         snapshot = tmp_path / "snap"
         (snapshot / "voices").mkdir(parents=True)
@@ -2052,7 +2537,8 @@ class TestTheMcpServerResolvesARepoId:
             def names(self):
                 return []
 
-        monkeypatch.setattr(mcp_mod, "VoiceLibrary", _Library)
+        # On the shared resolver, which is where all three doors build one now.
+        monkeypatch.setattr(resolve_mod, "VoiceLibrary", _Library)
         monkeypatch.setattr(mcp_mod, "_load_mcp", lambda: _StubMcp)
 
         def _resolved(_ref: str, **_kw: object) -> Path:
@@ -2484,7 +2970,6 @@ def _pack_checkpoint(path, *, enrollment: bool = False, role: str | None = None)
     The absence of the claim is what marks a pre-split file, so the default is
     to make none.
     """
-    import json
 
     from safetensors.numpy import save_file
 
@@ -2506,7 +2991,6 @@ def _pack_enrollment(path) -> None:
     the file what it is gets an answer, and ``doctor`` still recognises it by
     the name it sits under beside the checkpoint.
     """
-    import json
 
     from safetensors.numpy import save_file
 
@@ -2547,6 +3031,22 @@ class _FakeHubClient:
         self.root = root
         self.calls: list[dict] = []
 
+    def list_repo_files(self, **kwargs):
+        from pathlib import Path
+
+        root = Path(self.root)
+        return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+
+    def hf_hub_download(self, *, filename: str, **kwargs):
+        from pathlib import Path
+
+        from huggingface_hub.errors import EntryNotFoundError
+
+        path = Path(self.root) / filename
+        if not path.is_file():
+            raise EntryNotFoundError(f"404 {filename}")
+        return str(path)
+
     def snapshot_download(self, **kwargs):
         self.calls.append(kwargs)
         return str(self.root)
@@ -2572,6 +3072,12 @@ _ONNX_SYNTH_PATTERNS = [
     "onnx/flow_encoder.onnx",
     "onnx/flow_estimator.onnx",
     "onnx/vocoder.onnx",
+    # The record that says the six came from one export. Fetched with them:
+    # a record shipped and not downloaded leaves the backend's mixed-set check
+    # dead for everyone who got their assets the ordinary way.
+    "onnx/export.json",
+    "onnx/t3_pair_step.onnx",
+    "onnx/t3_head2.onnx",
 ]
 _ONNX_ENROLL_PATTERNS = [
     "onnx/s3_tokenizer.onnx",
@@ -2582,6 +3088,8 @@ _COREML_SYNTH_PATTERNS = [
     "coreml/flow_encoder.mlpackage/*",
     "coreml/flow_estimator.mlpackage/*",
     "coreml/vocoder.mlpackage/*",
+    "coreml/export.json",  # see the ONNX list
+    "coreml/t3_*.mlpackage/*",
 ]
 _COREML_ENROLL_PATTERNS = [
     "coreml/s3_tokenizer.mlpackage/*",
@@ -2662,6 +3170,10 @@ class TestDownloadCommand:
         monkeypatch.setattr(
             hub_mod, "_verify_sha256sums", lambda r, *, repo=None: verified.append((r, repo))
         )
+        # These tests are about the patterns handed to the snapshot; the
+        # judgement that runs before it (release.json, the listing) is
+        # pinned in tests/test_hub.py and stubbed here like the checksum pass.
+        monkeypatch.setattr(hub_mod, "_refuse_before_fetching", lambda *_a, **_k: None)
         rc = main(argv)
         return rc, client, verified
 
@@ -2858,7 +3370,7 @@ class TestDownloadCommand:
 
         with pytest.raises(SystemExit):
             build_parser().parse_args(["download", "loudreader/loudr-1", "--voice", "kathleen"])
-        sub = build_parser()._subparsers._group_actions[0].choices  # type: ignore[attr-defined]
+        sub = build_parser()._subparsers._group_actions[0].choices
         help_text = sub["download"].format_help()
         assert "--voice" not in help_text
         for flag in ("--for", "--with-cloning", "--revision", "--local-dir"):
@@ -2947,7 +3459,7 @@ class TestServedCheckpoint:
         monkeypatch.setattr(
             mcp_mod, "run_stdio", lambda ckpt, *_a, **_k: seen.update(ckpt=ckpt)
         )
-        assert main(["mcp", "--checkpoint", wanted]) == 0
+        assert main(["serve", "--mcp", "--checkpoint", wanted]) == 0
         assert seen["ckpt"] == wanted
 
     def test_a_pin_is_still_resolved_here(self, monkeypatch, tmp_path) -> None:
@@ -2962,5 +3474,188 @@ class TestServedCheckpoint:
         monkeypatch.setattr(
             mcp_mod, "run_stdio", lambda ckpt, *_a, **_k: seen.update(ckpt=ckpt)
         )
-        main(["mcp", "--checkpoint", "loudreader/loudr-1", "--revision", "abc"])
+        main(["serve", "--mcp", "--checkpoint", "loudreader/loudr-1", "--revision", "abc"])
         assert seen["ckpt"] == str(snapshot)
+
+
+class TestTextPreview:
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Dr. Smith paid $12 on 2024-01-02. [12]",
+            "Hello",
+            "",
+            "[12]",
+            "Cześć, 42!",
+            pytest.param("hello " * 2000 + "12", id="repeated-words"),
+        ],
+    )
+    def test_preview_uses_the_funnel_without_loading(self, text, capsys, monkeypatch):
+        import loudkit
+        from loudkit.cli import main
+        from loudkit.frontend.speechtext import speech_text
+
+        monkeypatch.setattr(loudkit, "load", lambda *_a, **_k: pytest.fail("model loaded"))
+        assert main(["text", text, "--language", "en"]) == 0
+        captured = capsys.readouterr()
+        assert captured.out == speech_text(text, "en") + "\n"
+        if text == "Hello":
+            assert captured.err == ""
+        if text == "[12]":
+            assert "removed '[12]'" in captured.err
+        if "Smith" in text:
+            assert "replaced" in captured.err
+            assert "twelve" in captured.err
+
+    def test_stdin_and_language(self, capsys, monkeypatch):
+        import io
+
+        from loudkit.cli import main
+        from loudkit.frontend.speechtext import speech_text
+
+        monkeypatch.setattr("sys.stdin", io.StringIO("Mam 12 kotów."))
+        assert main(["text", "-", "--language", "PL"]) == 0
+        assert capsys.readouterr().out == speech_text("Mam 12 kotów.", "pl") + "\n"
+
+    def test_unknown_language(self, capsys):
+        from loudkit.cli import main
+
+        assert main(["text", "hello", "--language", "xx"]) == 1
+        assert "unsupported" in capsys.readouterr().err
+
+
+class TestPlayback:
+    @pytest.mark.parametrize(
+        ("system", "available", "expected"),
+        [
+            ("Darwin", {"afplay"}, "afplay"),
+            ("Linux", {"paplay"}, "paplay"),
+            ("Linux", {"aplay", "paplay"}, "aplay"),
+            ("Windows", {"powershell"}, "powershell"),
+        ],
+    )
+    def test_platform_player_receives_path_as_data(
+        self, system, available, expected, tmp_path, monkeypatch
+    ):
+        from loudkit.cli import _play_audio
+
+        path = tmp_path / "quote' $(touch unsafe); audio.wav"
+        monkeypatch.setattr("platform.system", lambda: system)
+        monkeypatch.setattr(
+            "shutil.which", lambda name: f"/bin/{name}" if name in available else None
+        )
+        calls = []
+        monkeypatch.setattr("subprocess.run", lambda argv, **kw: calls.append((argv, kw)))
+        _play_audio(path)
+        argv, kwargs = calls[0]
+        assert argv[0] == f"/bin/{expected}"
+        assert kwargs["check"] is True
+        assert not kwargs.get("shell")
+        if system == "Windows":
+            assert str(path) not in argv[-1]
+            assert kwargs["env"]["LOUDKIT_PLAY_WAV"] == str(path.resolve())
+        else:
+            assert argv[1:] == [str(path.resolve())]
+
+    def test_missing_player_is_actionable(self, tmp_path, monkeypatch):
+        from loudkit.cli import _play_audio
+
+        monkeypatch.setattr("platform.system", lambda: "Linux")
+        monkeypatch.setattr("shutil.which", lambda _name: None)
+        with pytest.raises(RuntimeError, match="install alsa-utils or pulseaudio-utils"):
+            _play_audio(tmp_path / "out.wav")
+
+    def test_player_failure_names_saved_file(self, tmp_path, monkeypatch):
+        import subprocess
+
+        from loudkit.cli import _play_audio
+
+        monkeypatch.setattr("platform.system", lambda: "Darwin")
+        monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/afplay")
+
+        def fail(argv, **kwargs):
+            raise subprocess.CalledProcessError(1, argv)
+
+        monkeypatch.setattr("subprocess.run", fail)
+        with pytest.raises(RuntimeError, match="playback failed with afplay; WAV saved at"):
+            _play_audio(tmp_path / "out.wav")
+
+    @pytest.mark.parametrize("play", [False, True])
+    def test_speak_saves_before_optional_playback(
+        self, play, fake_ckpt, fake_voice_file, tmp_path, capsys, monkeypatch
+    ):
+        import loudkit
+        from loudkit.cli import main
+
+        monkeypatch.setattr(loudkit, "load", _fake_load_engine)
+        monkeypatch.setattr(loudkit.VoiceProfile, "load", _fake_load_voice)
+        calls = []
+
+        def record(path):
+            assert path.is_file()
+            calls.append(path)
+
+        monkeypatch.setattr("loudkit.cli._play_audio", record)
+        output = tmp_path / "out.wav"
+        argv = [
+            "speak",
+            "--checkpoint",
+            str(fake_ckpt),
+            "--voice",
+            str(fake_voice_file),
+            "hello",
+            "-o",
+            str(output),
+        ]
+        if play:
+            argv.append("--play")
+        assert main(argv) == 0
+        assert calls == ([output] if play else [])
+        assert ("hear it:" in capsys.readouterr().err) is not play
+
+
+@pytest.mark.parametrize("device", ["onnx", "coreml"])
+def test_graph_clone_does_not_require_torch(
+    device, recording, fake_ckpt, tmp_path, monkeypatch
+):
+    import importlib.util
+
+    import loudkit
+    from loudkit.cli import main
+
+    def available(name):
+        assert name not in ("torch", "torchaudio", "librosa")
+        return object()
+
+    monkeypatch.setattr(importlib.util, "find_spec", available)
+    monkeypatch.setattr(
+        "loudkit.hub.resolve_enrollment_checkpoint",
+        lambda *_a, **_k: pytest.fail("torch enrollment preflight"),
+    )
+    seen = []
+
+    def enroll(*_args, **kwargs):
+        seen.append(kwargs["device"])
+        return fake_voice()
+
+    monkeypatch.setattr(loudkit, "enroll", enroll)
+    assert (
+        main(
+            [
+                "clone",
+                str(recording),
+                "--checkpoint",
+                str(fake_ckpt),
+                "--device",
+                device,
+                "--name",
+                "mine",
+                "--language",
+                "en",
+                "-o",
+                str(tmp_path / "mine.safetensors"),
+            ]
+        )
+        == 0
+    )
+    assert seen == [device]

@@ -13,3 +13,6 @@ public/voices/
 dist/
 .astro/
 node_modules/
+
+# Project icon copied from the canonical branding asset.
+public/loudkit.png

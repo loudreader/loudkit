@@ -13,7 +13,8 @@ final class PostprocessConformanceTests: XCTestCase {
         let url = Fixture.conformanceDir.appendingPathComponent("postprocess.json")
         let data = try Data(contentsOf: url)
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw XCTSkip("postprocess.json is not an object")
+            XCTFail("postprocess.json is not an object; nothing can be compared")
+            throw XCTSkip("unreadable fixture")
         }
         return json
     }
@@ -47,9 +48,36 @@ final class PostprocessConformanceTests: XCTestCase {
                 for _ in 0..<repeats { out.append(contentsOf: cycle) }
                 continue
             }
-            for i in 0..<count {
-                out.append(kind == "speech" ? 20 + i % 60 : i % 8)
+            if kind == "cycle_dead" {
+                // The stutter with its pause on a census-only id.
+                let repeats = (segment[2] as? NSNumber)?.intValue ?? 0
+                let half = count / 2
+                let cycle = (0..<(count - half)).map { 20 + $0 }
+                    + [Int](repeating: 12, count: half)
+                for _ in 0..<repeats { out.append(contentsOf: cycle) }
+                continue
             }
+            let value: (Int) -> Int
+            switch kind {
+            case "speech": value = { 20 + $0 % 60 }
+            case "quiet": value = { $0 % 8 }
+            // True digital silence in the stall section's two-class scheme.
+            case "sil": value = { $0 % 4 }
+            // The contextually-quiet family: extends a dead-air run without
+            // counting toward its gate.
+            case "breath": value = { 4 + $0 % 4 }
+            // True silence only the render census knows (the 6405 class):
+            // outside the fixture's sampler list, inside its silence census.
+            case "dead": value = { _ in 12 }
+            // Breath only the quiet census knows.
+            case "sigh": value = { _ in 13 }
+            default:
+                // Refused loudly: an unknown kind silently built as something
+                // else is a fixture section this port only appears to run.
+                XCTFail("unknown segment kind \(kind)")
+                continue
+            }
+            for i in 0..<count { out.append(value(i)) }
         }
         return out
     }
@@ -60,10 +88,13 @@ final class PostprocessConformanceTests: XCTestCase {
 
     /// Build the detector config out of the fixture, so the numbers these tests
     /// run on are the ones the fixture declares rather than this port's own
-    /// defaults — which is the whole point of a shared file.
+    /// defaults, which is the whole point of a shared file.
     private func config(_ fx: [String: Any], mode: String? = nil) throws -> PostprocessConfig {
         guard let c = fx["config"] as? [String: Any] else {
-            throw XCTSkip("fixture has no config block")
+            // Without this block every case below would run on this port's own
+            // defaults, which is the one thing a shared fixture exists to stop.
+            XCTFail("postprocess.json has no config block; the port would test its own defaults")
+            throw XCTSkip("no config block")
         }
         func d(_ key: String) -> Double { (c[key] as! NSNumber).doubleValue }
         func i(_ key: String) -> Int { (c[key] as! NSNumber).intValue }
@@ -95,6 +126,41 @@ final class PostprocessConformanceTests: XCTestCase {
         cfg.retryMaxAttempts = i("retry_max_attempts")
         cfg.pacingTolerance = d("pacing_tolerance")
         return cfg
+    }
+
+    /// `config(_:)` plus the stall section's render-id censuses. The fallback
+    /// arm (`renderIds` false) runs without them, a checkpoint packed before
+    /// the census, where only the run trigger fires.
+    private func stallConfig(_ fx: [String: Any], renderIds: Bool) throws -> PostprocessConfig {
+        var cfg = try config(fx)
+        if renderIds {
+            let section = fx["stall"] as! [String: Any]
+            cfg.silenceRenderIds =
+                (section["silence_render_ids"] as! [NSNumber]).map(\.intValue)
+            cfg.quietRenderIds = (section["quiet_render_ids"] as! [NSNumber]).map(\.intValue)
+        }
+        return cfg
+    }
+
+    /// `config(_:)` plus the repetition_silence section's render-id censuses,
+    /// the ids only the censuses know, which the loop exemption must union
+    /// in under the acoustic family.
+    private func repSilenceConfig(_ fx: [String: Any]) throws -> PostprocessConfig {
+        var cfg = try config(fx)
+        let section = fx["repetition_silence"] as! [String: Any]
+        cfg.silenceRenderIds = (section["silence_render_ids"] as! [NSNumber]).map(\.intValue)
+        cfg.quietRenderIds = (section["quiet_render_ids"] as! [NSNumber]).map(\.intValue)
+        return cfg
+    }
+
+    /// A fixture section shaped `{"cases": [...]}` rather than a bare list.
+    private func sectionCases(_ fx: [String: Any], _ key: String) throws -> [[String: Any]] {
+        guard let section = fx[key] as? [String: Any],
+              let list = section["cases"] as? [[String: Any]], !list.isEmpty else {
+            XCTFail("fixture section \(key) is missing or empty; nothing was compared")
+            throw XCTSkip("no cases")
+        }
+        return list
     }
 
     /// The fixture's nullable `expect`, as this port's optional.
@@ -222,7 +288,7 @@ final class PostprocessConformanceTests: XCTestCase {
         }
     }
 
-    /// Early truncation — the failure a listener cannot hear.
+    /// Early truncation, the failure a listener cannot hear.
     ///
     /// Every other rule says the end of the row is wrong. This one says the row
     /// is incomplete, which is why it reports rather than cuts.
@@ -266,6 +332,322 @@ final class PostprocessConformanceTests: XCTestCase {
         // A mid-sequence cut is the most destructive thing this layer can do,
         // so the cases that must NOT fire carry more weight than those that must.
         XCTAssertGreaterThanOrEqual(negatives, 6, "too few negative cases for a mid-row cut")
+    }
+
+    /// The loop exemption keys on acoustic silence, not the sampler list.
+    ///
+    /// The specimen: kathleen/en0023 seed 1234 parked a mid-chunk pause on
+    /// ids 6486 (x7) then 6405 (x24), both render true silence, both in the
+    /// manifest's `silence_render_ids`, neither in the sampler's list the
+    /// exemption used to read. The period-1 run fired as a loop and the cut
+    /// deleted the pause plus two whole sentences of correctly-read speech
+    /// behind it, verdict repetition, not suspect, audibly fluent. Six of the
+    /// checkpoint's eight truly-silent ids sit outside the sampler list, so
+    /// the exemption was blind on most real pauses. The law now unions the
+    /// sampler list with both render censuses for this one rule; the tail
+    /// rules keep the list they were calibrated against.
+    func testRepetitionSilenceMatchesTheFixture() throws {
+        let fx = try fixture()
+        let sil = silence(fx)
+        let cfg = try repSilenceConfig(fx)
+        for kase in try sectionCases(fx, "repetition_silence") {
+            let got = Postprocess.repetitionCut(
+                build(kase["shape"] as! [[Any]]), silence: sil, config: cfg)
+            XCTAssertEqual(got, want(kase["loop"]), "\(kase["name"]!): \(kase["why"]!)")
+        }
+    }
+
+    /// The cascade is part of the contract: a declined loop falls through to
+    /// stall, which condemns the specimen's pause into the retry ladder
+    /// instead of shipping the cut.
+    func testRepetitionSilenceResolverMatchesTheFixture() throws {
+        let fx = try fixture()
+        let sil = silence(fx)
+        let cfg = try repSilenceConfig(fx)
+        for kase in try sectionCases(fx, "repetition_silence") {
+            let request = Postprocess.Request(
+                textTokenCount: (kase["text_tokens"] as! NSNumber).intValue,
+                minTokens: (kase["min_tokens"] as! NSNumber).intValue,
+                eosPeakAt: (kase["eos_peak_at"] as! NSNumber).intValue,
+                eosPeakProb: (kase["eos_peak_prob"] as! NSNumber).doubleValue,
+                ended: kase["ended"] as! Bool,
+                isTerminal: kase["is_terminal"] as! Bool,
+                hitCeiling: kase["hit_ceiling"] as! Bool)
+            let got = Postprocess.inspect(
+                build(kase["shape"] as! [[Any]]),
+                request: request, silence: sil, config: cfg)
+            let expect = kase["expect"] as! [String: Any]
+            let why = "\(kase["name"]!): \(kase["why"]!)"
+            XCTAssertEqual(got.keep, (expect["keep"] as! NSNumber).intValue, why)
+            XCTAssertEqual(got.reason.rawValue, expect["reason"] as! String, why)
+            XCTAssertEqual(got.suspect, expect["suspect"] as! Bool, why)
+        }
+    }
+
+    func testSamplingNamesTheOldLaw() throws {
+        // The pre-amendment behaviour stays nameable, a checkpoint measured
+        // under it can declare what it measured, and this is what it did:
+        // cut at the pause and delete everything behind it.
+        let fx = try fixture()
+        var cfg = try repSilenceConfig(fx)
+        cfg.repetitionSilence = .sampling
+        let kase = try sectionCases(fx, "repetition_silence")[0]
+        let got = Postprocess.repetitionCut(
+            build(kase["shape"] as! [[Any]]), silence: silence(fx), config: cfg)
+        XCTAssertEqual(got, 31, "the old law cut one token past the pause's start")
+    }
+
+    func testWithoutCensusesTheUnionIsTheSamplerList() throws {
+        // A checkpoint packed before the censuses changes nothing: nothing on
+        // such a build knows id 12 is silent, so the run still reads as a
+        // loop there, under either field value.
+        let fx = try fixture()
+        let kase = try sectionCases(fx, "repetition_silence")[0]
+        let got = Postprocess.repetitionCut(
+            build(kase["shape"] as! [[Any]]), silence: silence(fx), config: try config(fx))
+        XCTAssertEqual(got, 31)
+    }
+
+    private func resumeRequest(_ kase: [String: Any]) -> Postprocess.Request {
+        Postprocess.Request(
+            textTokenCount: (kase["text_tokens"] as! NSNumber).intValue,
+            minTokens: (kase["min_tokens"] as! NSNumber).intValue,
+            eosPeakAt: (kase["eos_peak_at"] as! NSNumber).intValue,
+            eosPeakProb: (kase["eos_peak_prob"] as! NSNumber).doubleValue,
+            ended: kase["ended"] as! Bool,
+            isTerminal: kase["is_terminal"] as! Bool,
+            hitCeiling: kase["hit_ceiling"] as! Bool)
+    }
+
+    /// A loop the decoder resumed from is condemned, never cut.
+    ///
+    /// The census fix (`repetitionSilence`) needs a manifest that names the
+    /// silent ids, and the published pack has none: on it the en0023 pause
+    /// fired again as a period-1 loop and the cut kept 52 of 206 tokens,
+    /// deleting two sentences of correctly-read speech, verdict repetition,
+    /// no retry. The guard here needs no silence knowledge at all: a genuine
+    /// lock-up runs its cycle to the end of the row (a ceiling truncates at
+    /// most one incomplete copy, `period - 1` tokens), so a qualifying loop
+    /// followed by a full period or more of other content is a decoder that
+    /// resumed, and a decoder that resumed was never locked. Such a row is
+    /// handed back whole, suspect, into the retry ladder. The section
+    /// configures no censuses on purpose: it is the arm `repetitionSilence`
+    /// cannot reach.
+    func testRepetitionResumeMatchesTheFixture() throws {
+        // The bare rule still reports the loop; the law lives in the resolver.
+        let fx = try fixture()
+        let sil = silence(fx)
+        let cfg = try config(fx)
+        for kase in try sectionCases(fx, "repetition_resume") {
+            let got = Postprocess.repetitionCut(
+                build(kase["shape"] as! [[Any]]), silence: sil, config: cfg)
+            XCTAssertEqual(got, want(kase["loop"]), "\(kase["name"]!): \(kase["why"]!)")
+        }
+    }
+
+    func testRepetitionResumeResolverMatchesTheFixture() throws {
+        let fx = try fixture()
+        let sil = silence(fx)
+        let cfg = try config(fx)
+        for kase in try sectionCases(fx, "repetition_resume") {
+            let got = Postprocess.inspect(
+                build(kase["shape"] as! [[Any]]),
+                request: resumeRequest(kase), silence: sil, config: cfg)
+            let expect = kase["expect"] as! [String: Any]
+            let why = "\(kase["name"]!): \(kase["why"]!)"
+            XCTAssertEqual(got.keep, (expect["keep"] as! NSNumber).intValue, why)
+            XCTAssertEqual(got.reason.rawValue, expect["reason"] as! String, why)
+            XCTAssertEqual(got.suspect, expect["suspect"] as! Bool, why)
+        }
+    }
+
+    func testCutNamesTheOldLaw() throws {
+        // The pre-amendment behaviour stays nameable, a checkpoint measured
+        // under it can declare what it measured, and this is what it did:
+        // cut at the pause and delete everything behind it.
+        let fx = try fixture()
+        var cfg = try config(fx)
+        cfg.repetitionResume = .cut
+        let kase = try sectionCases(fx, "repetition_resume")[0]
+        let got = Postprocess.inspect(
+            build(kase["shape"] as! [[Any]]),
+            request: resumeRequest(kase), silence: silence(fx), config: cfg)
+        XCTAssertEqual(got.reason, .repetition)
+        XCTAssertEqual(got.keep, want(kase["loop"]), "the old law shipped the specimen's cut")
+        XCTAssertFalse(got.suspect)
+    }
+
+    func testTheCensusArmIsUntouched() throws {
+        // With the censuses configured the specimen's pause is exempt from
+        // the loop rule entirely and stall condemns it, the
+        // repetition_silence contract, byte for byte, guard or no guard.
+        let fx = try fixture()
+        let cfg = try repSilenceConfig(fx)
+        let kase = try sectionCases(fx, "repetition_silence")[0]
+        let got = Postprocess.inspect(
+            build(kase["shape"] as! [[Any]]),
+            request: resumeRequest(kase), silence: silence(fx), config: cfg)
+        let expect = kase["expect"] as! [String: Any]
+        XCTAssertEqual(got.reason, .stall)
+        XCTAssertEqual(got.keep, (expect["keep"] as! NSNumber).intValue)
+    }
+
+    /// The decoder trapped in silence, the failure no tail rule can see.
+    ///
+    /// Every mute chunk and every mid-row hole in the interior-stall study
+    /// shipped as clean, because all six other rules anchor on the tail. The
+    /// stall rule condemns instead of cutting: the failure is a hole, and the
+    /// fix is the retry ladder. Detection is two-class (a true-silence gate, a
+    /// quiet-family continuation), which the fixture pins because single-set
+    /// counting was measured broken.
+    func testStallMatchesTheFixture() throws {
+        let fx = try fixture()
+        let sil = silence(fx)
+        for kase in try sectionCases(fx, "stall") {
+            let cfg = try stallConfig(fx, renderIds: kase["render_ids"] as! Bool)
+            let got = Postprocess.isStalled(
+                build(kase["shape"] as! [[Any]]),
+                hitCeiling: kase["hit_ceiling"] as! Bool,
+                silence: sil, config: cfg)
+            XCTAssertEqual(got, kase["stalled"] as! Bool, "\(kase["name"]!): \(kase["why"]!)")
+        }
+    }
+
+    /// The wiring is part of the contract: after repetition, before every tail
+    /// rescue, condemned like dropout.
+    func testStallResolverMatchesTheFixture() throws {
+        let fx = try fixture()
+        let sil = silence(fx)
+        for kase in try sectionCases(fx, "stall") {
+            let cfg = try stallConfig(fx, renderIds: kase["render_ids"] as! Bool)
+            let request = Postprocess.Request(
+                textTokenCount: (kase["text_tokens"] as! NSNumber).intValue,
+                minTokens: (kase["min_tokens"] as! NSNumber).intValue,
+                eosPeakAt: (kase["eos_peak_at"] as! NSNumber).intValue,
+                eosPeakProb: (kase["eos_peak_prob"] as! NSNumber).doubleValue,
+                ended: kase["ended"] as! Bool,
+                isTerminal: kase["is_terminal"] as! Bool,
+                hitCeiling: kase["hit_ceiling"] as! Bool)
+            let got = Postprocess.inspect(
+                build(kase["shape"] as! [[Any]]),
+                request: request, silence: sil, config: cfg)
+            let expect = kase["expect"] as! [String: Any]
+            let why = "\(kase["name"]!): \(kase["why"]!)"
+            XCTAssertEqual(got.keep, (expect["keep"] as! NSNumber).intValue, why)
+            XCTAssertEqual(got.reason.rawValue, expect["reason"] as! String, why)
+            XCTAssertEqual(got.suspect, expect["suspect"] as! Bool, why)
+        }
+    }
+
+    func testStallNeverCuts() throws {
+        let fx = try fixture()
+        let cfg = try stallConfig(fx, renderIds: true)
+        let row = build([["speech", 30], ["sil", 30], ["speech", 30]])
+        let got = Postprocess.inspect(
+            row,
+            request: Postprocess.Request(
+                textTokenCount: 40, minTokens: 48, eosPeakAt: -1, eosPeakProb: 0.0,
+                ended: true, isTerminal: true, hitCeiling: false),
+            silence: silence(fx), config: cfg)
+        XCTAssertEqual(got.reason, .stall)
+        XCTAssertEqual(
+            got.keep, row.count,
+            "a stalled row must be handed back whole; the hole is mid-row and no "
+            + "cut can remove it")
+        XCTAssertTrue(got.suspect, "the caller has to be told, since nothing was changed")
+    }
+
+    /// A row that both loops and stalls answers to the loop: an exactly
+    /// repeated cycle pins where the failure began. Here the decoder resumed
+    /// after the region, so the loop condemns rather than cuts, but it still
+    /// outranks the stall's condemnation, and the verdict names the anchor
+    /// that was found.
+    func testRepetitionOutranksStall() throws {
+        let fx = try fixture()
+        let cfg = try stallConfig(fx, renderIds: true)
+        let row = build([["cycle", 4, 8], ["sil", 30], ["speech", 20]])
+        let got = Postprocess.inspect(
+            row,
+            request: Postprocess.Request(
+                textTokenCount: 40, minTokens: 48, eosPeakAt: -1, eosPeakProb: 0.0,
+                ended: true, isTerminal: true, hitCeiling: false),
+            silence: silence(fx), config: cfg)
+        XCTAssertEqual(got.reason, .repetition, "the exact anchor outranks the condemnation")
+    }
+
+    /// A cap-hit desperation cut that keeps less than any full read.
+    ///
+    /// The one row that survived the stall fix: soren/da0028 chunk 4 burned
+    /// 132 tokens to the ceiling and the seam cut kept 36, 1.44 s in which 33
+    /// of the 36 kept tokens render near-silent through ids outside both
+    /// manifest censuses, invisible to every set-membership rule. The keep's
+    /// *length* is the only evidence there is: a keep under
+    /// `desperationMinKeepPerTextToken` per text token cannot hold a full
+    /// read, so the verdict is condemned into the retry ladder. The cut stands
+    /// as the keep, an exhausted ladder ships the trim, flagged, rather than
+    /// the untrimmed babble. No censuses configured here on purpose: the
+    /// trigger is a length test and must fire identically on a checkpoint
+    /// packed before them.
+    func testStarvedRescueMatchesTheFixture() throws {
+        let fx = try fixture()
+        let cfg = try config(fx)
+        let sil = silence(fx)
+        for kase in try sectionCases(fx, "starved_rescue") {
+            let request = Postprocess.Request(
+                textTokenCount: (kase["text_tokens"] as! NSNumber).intValue,
+                minTokens: (kase["min_tokens"] as! NSNumber).intValue,
+                eosPeakAt: (kase["eos_peak_at"] as! NSNumber).intValue,
+                eosPeakProb: (kase["eos_peak_prob"] as! NSNumber).doubleValue,
+                ended: kase["ended"] as! Bool,
+                isTerminal: kase["is_terminal"] as! Bool,
+                hitCeiling: kase["hit_ceiling"] as! Bool)
+            let got = Postprocess.inspect(
+                build(kase["shape"] as! [[Any]]),
+                request: request, silence: sil, config: cfg)
+            let expect = kase["expect"] as! [String: Any]
+            let why = "\(kase["name"]!): \(kase["why"]!)"
+            XCTAssertEqual(got.keep, (expect["keep"] as! NSNumber).intValue, why)
+            XCTAssertEqual(got.reason.rawValue, expect["reason"] as! String, why)
+            XCTAssertEqual(got.suspect, expect["suspect"] as! Bool, why)
+        }
+    }
+
+    func testStarvedRescueFloorIsExclusive() throws {
+        // keep == floor ships: `<`, not `<=`, so the pinned law has no
+        // ambiguity at the boundary for a port to resolve differently. Text 20
+        // puts the floor at exactly 34.0.
+        let fx = try fixture()
+        let cfg = try config(fx)
+        let row = build([["speech", 34], ["sil", 12], ["speech", 90]])
+        let got = Postprocess.inspect(
+            row,
+            request: Postprocess.Request(
+                textTokenCount: 20, minTokens: 24, eosPeakAt: -1, eosPeakProb: 0.0,
+                ended: false, isTerminal: true, hitCeiling: true),
+            silence: silence(fx), config: cfg)
+        XCTAssertEqual(got.reason, .desperation)
+        XCTAssertEqual(got.keep, 34)
+        XCTAssertFalse(got.suspect, "a keep exactly at the floor is not under it")
+    }
+
+    func testStarvedRescueZeroDisablesTheTrigger() throws {
+        let fx = try fixture()
+        var cfg = try config(fx)
+        cfg.desperationMinKeepPerTextToken = 0.0
+        let kase = try sectionCases(fx, "starved_rescue")[0]
+        let got = Postprocess.inspect(
+            build(kase["shape"] as! [[Any]]),
+            request: Postprocess.Request(
+                textTokenCount: (kase["text_tokens"] as! NSNumber).intValue,
+                minTokens: (kase["min_tokens"] as! NSNumber).intValue,
+                eosPeakAt: (kase["eos_peak_at"] as! NSNumber).intValue,
+                eosPeakProb: (kase["eos_peak_prob"] as! NSNumber).doubleValue,
+                ended: kase["ended"] as! Bool,
+                isTerminal: kase["is_terminal"] as! Bool,
+                hitCeiling: kase["hit_ceiling"] as! Bool),
+            silence: silence(fx), config: cfg)
+        XCTAssertEqual(got.reason, .desperation)
+        XCTAssertFalse(got.suspect, "zero must disable the trigger")
     }
 }
 
@@ -328,6 +710,63 @@ final class PostprocessManifestTests: XCTestCase {
         XCTAssertThrowsError(
             try AlgorithmConfig.fromManifest(amended(["postprocess": ["mode": "shave"]])))
     }
+
+    /// A law this port does not implement must be refused, not defaulted:
+    /// the resolver would cut where the manifest said to condemn. `cut`
+    /// names the pre-amendment law and is read.
+    func testUnknownRepetitionResumeIsRefused() throws {
+        XCTAssertThrowsError(
+            try AlgorithmConfig.fromManifest(
+                amended(["postprocess": ["repetition_resume": "maybe"]])))
+        let cfg = try AlgorithmConfig.fromManifest(
+            amended(["postprocess": ["repetition_resume": "cut"]]))
+        XCTAssertEqual(cfg.postprocess.repetitionResume, .cut)
+    }
+
+    /// A family this port does not implement must be refused, not defaulted:
+    /// the loop exemption would read one silence list under a manifest
+    /// declaring another. `sampling` names the pre-amendment law and is read.
+    func testUnknownRepetitionSilenceIsRefused() throws {
+        XCTAssertThrowsError(
+            try AlgorithmConfig.fromManifest(
+                amended(["postprocess": ["repetition_silence": "both"]])))
+        let cfg = try AlgorithmConfig.fromManifest(
+            amended(["postprocess": ["repetition_silence": "sampling"]]))
+        XCTAssertEqual(cfg.postprocess.repetitionSilence, .sampling)
+    }
+
+    /// The render censuses ride the manifest top level, beside
+    /// `silence_token_ids`; declaring them inside the postprocess block would
+    /// give one value two homes in one file, so it is refused by name, the
+    /// same way Python's block reader refuses it.
+    func testRenderIdsInsideTheBlockAreRefused() {
+        for key in ["silence_render_ids", "quiet_render_ids"] {
+            XCTAssertThrowsError(
+                try AlgorithmConfig.fromManifest(
+                    amended(["postprocess": [key: [1, 2, 3]]]))
+            ) { error in
+                XCTAssertTrue("\(error)".contains(key), "error must name the key: \(error)")
+            }
+        }
+    }
+
+    /// The top-level censuses reach the detectors, with or without a
+    /// postprocess block, a manifest with no detector overrides still
+    /// carries the properties of its weights.
+    func testTopLevelCensusesAreRead() throws {
+        let cfg = try AlgorithmConfig.fromManifest(
+            amended(["silence_render_ids": [7, 8], "quiet_render_ids": [9]]))
+        XCTAssertEqual(cfg.postprocess.silenceRenderIds, [7, 8])
+        XCTAssertEqual(cfg.postprocess.quietRenderIds, [9])
+
+        let withBlock = try AlgorithmConfig.fromManifest(
+            amended([
+                "silence_render_ids": [7, 8],
+                "postprocess": ["stall_run_tokens": 30],
+            ]))
+        XCTAssertEqual(withBlock.postprocess.silenceRenderIds, [7, 8])
+        XCTAssertEqual(withBlock.postprocess.stallRunTokens, 30)
+    }
 }
 
 /// The stop-token observation the postprocess layer reads.
@@ -335,7 +774,7 @@ final class PostprocessManifestTests: XCTestCase {
 /// Pinned across languages because it is hand-written in five of them and it is
 /// *audible*: two of the detector rules compare it against a threshold, so a
 /// port that computes it differently cuts a chunk somewhere else. The quantity
-/// has two subtleties either of which a reimplementation gets wrong silently —
+/// has two subtleties either of which a reimplementation gets wrong silently,
 /// the numerator is the stop token's weight taken BEFORE the min_p cutoff, and
 /// the peak is recorded only PAST the floor.
 final class EOSPeakConformanceTests: XCTestCase {
@@ -390,7 +829,7 @@ final class EOSPeakConformanceTests: XCTestCase {
 /// The ceiling was settled on English traces; nine languages ship.
 ///
 /// Speech tokens per *text* token is a property of the orthography, so a
-/// constant tuned on one language is an assumption everywhere else — and the
+/// constant tuned on one language is an assumption everywhere else, and the
 /// expensive direction of that assumption is a guard that truncates correct
 /// speech in a language nobody measured. Measured with one voice held constant
 /// across nine language tags, because the voice-to-voice spread on a single

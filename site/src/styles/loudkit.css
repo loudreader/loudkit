@@ -1172,10 +1172,12 @@ site-search button[data-open-modal]:hover {
 
 .lk-voice-body {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
 }
+
 
 .lk-voice-body strong {
   font-family: var(--sl-font-mono);
@@ -1325,4 +1327,79 @@ site-search button[data-open-modal]:hover {
   line-height: 1.7;
   color: var(--sl-color-gray-3);
   max-width: 44rem;
+}
+
+/* Voice gallery: one set of filters and one shared audio player. */
+.lk-voice-tools { display:flex; flex-wrap:wrap; gap:1rem; align-items:end; margin:1rem 0; }
+.lk-voice-tools label { display:grid; gap:.3rem; font-size:.8rem; }
+.lk-voice-tools input, .lk-voice-tools select { font:inherit; color:var(--lk-ink); background:var(--lk-surface); border:1px solid var(--lk-border); border-radius:.4rem; padding:.55rem; }
+.lk-voice-count { font-size:.8rem; padding:.5rem 0; }
+.lk-voices .lk-voice { align-items:flex-start; }
+.lk-voice-description { font-size:.8rem; line-height:1.5; margin:.5rem 0; }
+.lk-voice-body details { font-size:.75rem; margin-top:.6rem; }
+.lk-voice-body summary { cursor:pointer; }
+.lk-voice-body details p { margin:.6rem 0; }
+.lk-voice-code { display:block; overflow-wrap:anywhere; white-space:normal; }
+.lk-voice-copy, .lk-voices .lk-voice-text-button { display:inline-block; width:auto; height:auto; padding:.35rem .5rem; margin:.3rem 0; font:inherit; font-size:.75rem; border:1px solid var(--lk-border); border-radius:.35rem; color:var(--lk-ink); background:var(--lk-surface); cursor:pointer; }
+.lk-voice-copy:focus-visible, .lk-voice-tools :focus-visible { outline:2px solid var(--sl-color-text-accent); outline-offset:3px; }
+
+header a.site-title {
+  gap: calc(var(--sl-nav-gap) / 2);
+}
+
+.lk-voice-texts { margin:1rem 0; font-size:.85rem; }
+.lk-voice-texts summary { cursor:pointer; }
+
+/* --- Hero players -------------------------------------------------- */
+
+/* The first screen has a play button on it. Beside the copy where there is
+   room, under the actions where there is not. */
+.hero.lk-hero {
+  gap: 2rem;
+}
+
+@media (min-width: 60rem) {
+  .hero.lk-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(19rem, 24rem) !important;
+    column-gap: clamp(2rem, 5vw, 5rem);
+  }
+}
+
+.lk-hero-players {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.25rem;
+  border: 1px solid var(--lk-border);
+  border-radius: var(--lk-radius);
+  background: var(--lk-surface);
+}
+
+.lk-hero-players .lk-eyebrow {
+  margin: 0 0 0.25rem;
+}
+
+.lk-hero-players .lk-sample {
+  margin: 0;
+}
+
+.lk-hero-players-foot {
+  margin: 0.35rem 0 0;
+  font-size: var(--sl-text-xs);
+  line-height: 1.6;
+  color: var(--sl-color-gray-3);
+}
+
+.lk-hero-players-foot a {
+  color: var(--sl-color-gray-2);
+}
+
+/* The pill row on a phone: the second pill is three items long and must
+   wrap instead of running off both edges of the screen. */
+.lk-hero-meta .lk-pill {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 0.15rem;
 }

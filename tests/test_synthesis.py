@@ -9,15 +9,22 @@ file, and the stamp (mtime, size) is what makes that safe.
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal, cast
 
 import numpy as np
 import pytest
 
 from loudkit import synthesis
+from loudkit.config import AlgorithmConfig, ChunkConfig
 from loudkit.errors import VoiceNotFoundError
 from loudkit.synthesis import VoiceLibrary
 from loudkit.voice import VoiceProfile
+from loudkit.window import carry_from
+
+if TYPE_CHECKING:  # pragma: no cover - annotations only
+    from loudkit.engine import Engine
 
 
 def _voice(name: str = "fake", mel_frames: int = 16) -> VoiceProfile:
@@ -154,15 +161,22 @@ def test_eviction_survives_a_concurrent_insert(
 
     walking = threading.Event()
     inserted = threading.Event()
-    real_n_bytes = VoiceProfile.n_bytes.fget
+    parked_once = threading.Event()
+    # Through the class dict: the attribute itself resolves to the getter,
+    # and what has to be restored is the property.
+    real_n_bytes = VoiceProfile.__dict__["n_bytes"].fget
     assert real_n_bytes is not None
 
     def parked(profile: VoiceProfile) -> int:
         # Only the eviction walk parks, and only once: every other reader of
         # this property (the profile's own repr, the loads above) must not
-        # wait on a thread that is not coming.
-        if walking.is_set() and not inserted.is_set():
-            inserted.wait(timeout=2.0)
+        # wait on a thread that is not coming. The latch is what makes "once"
+        # true. Gating on "has the insert landed yet" instead would never open,
+        # because the lock that insert is waiting on is the one under test, so
+        # every entry in the walk would pay the full timeout.
+        if walking.is_set() and not parked_once.is_set():
+            parked_once.set()
+            inserted.wait(timeout=0.2)
         return int(real_n_bytes(profile))
 
     monkeypatch.setattr(VoiceProfile, "n_bytes", property(parked))
@@ -173,14 +187,14 @@ def test_eviction_survives_a_concurrent_insert(
         walking.set()
         try:
             library.load("three")
-        except BaseException as exc:  # noqa: BLE001 - the defect, reported below
+        except BaseException as exc:  # the defect, reported below
             failures.append(exc)
 
     def inserter() -> None:
         walking.wait(timeout=2.0)
         try:
             library.load("four")
-        except BaseException as exc:  # noqa: BLE001 - the defect, reported below
+        except BaseException as exc:  # the defect, reported below
             failures.append(exc)
         finally:
             inserted.set()
@@ -195,3 +209,36 @@ def test_eviction_survives_a_concurrent_insert(
     assert not failures, failures
     assert library.load("three") is not None
     assert library.load("four") is not None
+
+
+class _CarryEngine:
+    """Only the attribute ``_continuation`` reads off an engine."""
+
+    def __init__(self, algorithm: AlgorithmConfig) -> None:
+        self.algorithm = algorithm
+
+
+@pytest.mark.parametrize("n_tokens", [3, 5, 6, 7, 63, 64, 199, 200, 201])
+@pytest.mark.parametrize("decode_mode", ["single", "fusion_mtp2"])
+def test_the_continuation_is_the_carry_the_engine_would_take(
+    decode_mode: Literal["single", "fusion_mtp2"], n_tokens: int
+) -> None:
+    """A client that hands the header back continues from the same context an
+    in-process join would, which is the only reason the header exists.
+
+    Under ``fusion_mtp2`` the generator re-pairs a prefix from its own start,
+    so the tail has to begin where a pair does; a trailing slice can begin on
+    the second half of one and fuse the right tokens with the wrong partners.
+    """
+    algorithm = replace(AlgorithmConfig(), decode_mode=decode_mode)
+    tokens = list(range(100, 100 + n_tokens))
+    header = synthesis._continuation(cast("Engine", _CarryEngine(algorithm)), tokens)
+    assert header == tuple(carry_from(algorithm, tokens))
+
+
+def test_a_zero_prefix_carries_nothing() -> None:
+    """``prefix_tokens: 0`` is a checkpoint saying joins take no context, and
+    an empty header is what says so on the wire."""
+    algorithm = replace(AlgorithmConfig(), chunking=ChunkConfig(prefix_tokens=0))
+    engine = cast("Engine", _CarryEngine(algorithm))
+    assert synthesis._continuation(engine, list(range(50))) == ()

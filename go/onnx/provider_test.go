@@ -67,7 +67,7 @@ func TestResolveWithoutEnvironmentSaysSo(t *testing.T) {
 }
 
 // "auto" is a question. It must never reach session options as if it were an
-// answer — six graphs opened on an unresolved request could land on two
+// answer: six graphs opened on an unresolved request could land on two
 // devices.
 func TestApplyProviderRefusesAuto(t *testing.T) {
 	err := applyProvider(nil, config.ProviderAuto, "vocoder.onnx")

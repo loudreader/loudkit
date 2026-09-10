@@ -4,21 +4,22 @@ categories = ["multimedia::audio"]
 name = "loudkit"
 # Kept in lockstep with the Python and npm packages. The release-coherence gate
 # normalises each ecosystem's version syntax before comparing them.
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-# The floor `ort` and `ort-sys` 2.0.0-rc.13 declare; nothing here can be built
-# on less. This crate's own use is well below it (`LazyLock` wants 1.80,
-# `is_none_or` 1.82, `usize::is_multiple_of` 1.87), and so is every other
-# dependency — `sha2` 0.11 at 1.85 is the next highest. Stated so a crates.io
-# consumer learns the floor from the metadata rather than from a build error
-# inside a transitive dependency.
+# The floor `ort` and `ort-sys` 2.0.0-rc.13 declare, and this crate's own:
+# `slice::as_chunks` is stable at 1.88, which is the highest of the features
+# used here (`LazyLock` wants 1.80, `is_none_or` 1.82, `usize::is_multiple_of`
+# 1.87). Every other dependency is below it: `sha2` 0.11 and `ureq` 3.4, both
+# at 1.85, are the next highest. Stated so a crates.io consumer learns the
+# floor from the metadata rather than from a build error inside a transitive
+# dependency.
 #
 # The `rust-msrv` job in .github/workflows/ci.yml builds this crate with
 # exactly this toolchain, so the number is checked rather than asserted, and it
 # refuses to run if the two ever disagree. Raising this line means raising the
 # toolchain there in the same commit.
 rust-version = "1.88"
-description = "loudkit text-to-speech over ONNX Runtime — the same engine, the same sampling law, no torch."
+description = "loudkit text-to-speech over ONNX Runtime: the same engine, the same sampling law, no torch."
 repository = "https://github.com/loudreader/loudkit"
 license = "Apache-2.0"
 readme = "README.md"
@@ -31,6 +32,7 @@ readme = "README.md"
 # crate.
 include = [
     "src/**",
+    "examples/**",
     "Cargo.toml",
     "README.md",
     "LICENSE",
@@ -41,23 +43,40 @@ include = [
 name = "loudkit"
 path = "src/main.rs"
 
+# The quickstart starts with a fetch, so it needs the feature that does one.
+# Named here rather than left to fail at `cargo build --all-targets
+# --no-default-features` with an unresolved import.
+[[example]]
+name = "hello"
+required-features = ["download"]
+
 # No GPU provider is on by default, and the default build must keep working
 # with nothing but a plain `libonnxruntime`. `ort` puts each provider's
 # registration code behind its own feature, so a feature left off is not a
-# slower path — the provider cannot be registered at all, which is what
+# slower path: the provider cannot be registered at all, which is what
 # `execution::OnnxProvider::is_compiled` reports and what the refusal names.
 #
 # Turning one on is necessary and not sufficient: the `libonnxruntime` at
 # ORT_DYLIB_PATH still has to carry the provider, because `load-dynamic` makes
 # the provider set a property of the library the user supplies at runtime.
+#
+# `download` is the exception to "off by default": it is what makes
+# `cargo add loudkit` enough to reach audio, so a user who does nothing gets
+# it. It pulls `ureq` and rustls, which is the whole of the crate's TLS
+# surface; a consumer who fetches releases some other way turns it off with
+# `default-features = false` and keeps `hub::Bundle`, which needs no network.
 [features]
-default = []
+default = ["download"]
+download = ["dep:ureq"]
 cuda = ["ort/cuda"]
 coreml = ["ort/coreml"]
 directml = ["ort/directml"]
 
 [dependencies]
-ort = { version = "2.0.0-rc.13", features = ["load-dynamic"] }
+libm = "0.2"
+# The caller supplies ORT_DYLIB_PATH. Do not pull the unused binary downloader
+# and its native OpenSSL build dependency into a dynamically loaded runtime.
+ort = { version = "2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray", "api-27", "tracing"] }
 ndarray = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -65,3 +84,4 @@ unicode-normalization = "0.1"
 unicode-general-category = "1"
 regex = "1"
 sha2 = "0.11.0"
+ureq = { version = "3.4.0", default-features = false, features = ["rustls"], optional = true }

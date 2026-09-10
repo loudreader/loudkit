@@ -1,4 +1,4 @@
-// Package safetensors reads the loudkit checkpoint and voice files — enough
+// Package safetensors reads the loudkit checkpoint and voice files: enough
 // of the format to pull the embedding tables and the manifest. 8-byte
 // little-endian header length, a JSON header naming each tensor with its
 // dtype, shape and byte offsets, then the raw tensors.
@@ -88,7 +88,7 @@ func Open(path string) (*File, error) {
 		// The shape must account for exactly the bytes claimed.
 		//
 		// The range check above stops a slice panic, but callers read Shape to
-		// size their work — a header declaring [256] over four bytes of payload
+		// size their work: a header declaring [256] over four bytes of payload
 		// is not a bad tensor, it is a reader that computes with a length the
 		// data does not have. The typed accessors below also divided by the
 		// element width and silently dropped a partial tail; with this check a
@@ -110,7 +110,7 @@ func Open(path string) (*File, error) {
 		}
 		if declared := elements * int64(width); declared != int64(end-begin) {
 			return nil, fmt.Errorf(
-				"%s: tensor %q declares shape %v of %s (%d bytes) but occupies %d bytes — "+
+				"%s: tensor %q declares shape %v of %s (%d bytes) but occupies %d bytes: "+
 					"the header does not describe the payload",
 				path, name, shape, dtype, declared, end-begin)
 		}

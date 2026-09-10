@@ -2,16 +2,17 @@ import Foundation
 
 /// The render window, and what happens when a passage does not fit it.
 ///
-/// One definition, shared by every caller — `Engine.stripSpecials` and
+/// One definition, shared by every caller, `Engine.stripSpecials` and
 /// `MelDecoder.decode` included. A passage longer than the window is refused,
 /// not sliced: `.prefix(maxSpeechTokens)` leaves the end of a passage
 /// nonexistent while the audio still sounds perfectly fine, which is silent
-/// data loss — noticed only by a listener who knows the text. Python
-/// (`engine.py:466`), Rust (`windowing.rs:97`), Go (`windowing.go:79`) and JS
-/// (`windowing.ts:71`) all refuse it the same way.
+/// data loss, noticed only by a listener who knows the text. Python
+/// (`window.strip_specials`), Rust (`windowing::require_fits`), Go
+/// (`windowing.RequireFits`) and JS (`requireFits` in `windowing.ts`) all
+/// refuse it the same way, with this sentence.
 ///
 /// It matters more here than anywhere else: this module has no
-/// `synthesizeLong`, so without the refusal a caller handing it a paragraph
+/// `synthesize`, so without the refusal a caller handing it a paragraph
 /// gets clipped audio and no error from any layer.
 enum Windowing {
     /// Throw unless `count` speech tokens fit `maxSpeechTokens`.

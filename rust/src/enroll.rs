@@ -1,4 +1,4 @@
-//! Enrollment: reference audio to a [`voice::Profile`] — a bit-parity port of
+//! Enrollment: reference audio to a [`voice::Profile`]. A bit-parity port of
 //! `loudkit.models.enroll` over the exported enrollment ONNX graphs.
 //!
 //! The DSP (resampler, filterbanks, trim) is implemented here and held to the
@@ -7,8 +7,8 @@
 //! embedded as the same float32 data every port loads.
 //!
 //! `needless_range_loop` is allowed for this module, and only this one. In
-//! signal processing the index *is* a physical quantity — a filter phase, a
-//! frame number, a frequency bin — and several loops here read a second buffer
+//! signal processing the index *is* a physical quantity, a filter phase, a
+//! frame number, a frequency bin, and several loops here read a second buffer
 //! at an offset (`padded[start + i]`), which iterator form expresses worse than
 //! it expresses the arithmetic. This file's job is to be checkable line by line
 //! against `loudkit.models.enroll` and torchaudio's kernel; keeping the indices
@@ -17,12 +17,13 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use ndarray::Array3;
 use ort::session::Session;
 use ort::value::{DynValue, Value};
 
-use crate::execution::{Execution, ExecutionConfig};
+use crate::execution::{ort_err, Execution, ExecutionConfig};
 use crate::voice;
 
 const MEL_SR: usize = 24_000;
@@ -38,6 +39,98 @@ const MATCHA_HOP: usize = 480;
 
 const PARTIAL_FRAMES: usize = 160;
 const PARTIAL_STEP: usize = 77;
+
+// ---------------------------------------------------- reference recording
+
+/// Shortest clip a speaker can be estimated from. The utterance encoder's
+/// first partial alone covers 1.6 s and is zero-padded under it, so a
+/// sub-second clip enrolls mostly padding.
+const MIN_ENROLL_SECONDS: f64 = 1.0;
+
+/// Longest clip the input contract stays honest over. The prompt uses the
+/// first 10 s and the speaker embedding reads the whole clip, so a five-minute
+/// recording produces a voice mostly shaped by audio the docs say is ignored.
+/// Refused rather than truncated: the user picked that recording for a reason,
+/// and silently using a different slice of it is worse than asking them to
+/// choose.
+const MAX_ENROLL_SECONDS: f64 = 30.0;
+
+/// A clip whose loudest sample is under this is silence at any playback level;
+/// there is no voice in it to enroll.
+const SILENCE_PEAK: f64 = 1e-4;
+
+const GOOD_INPUT: &str = "A good input is 5 to 10 seconds of one person speaking, clean, \
+                          without music or a second voice.";
+
+/// `%.1e` as the reference prints it: one decimal and a signed exponent of at
+/// least two digits. Rust's own `{:.1e}` writes `5.0e-5` where the reference
+/// writes `5.0e-05`, and the peak is inside a sentence the ports are matched
+/// on word for word.
+fn exponent_1(value: f64) -> String {
+    let text = format!("{value:.1e}");
+    let (mantissa, exponent) = text.split_once('e').unwrap_or((text.as_str(), "0"));
+    let exponent: i32 = exponent.parse().unwrap_or(0);
+    let sign = if exponent < 0 { '-' } else { '+' };
+    format!("{mantissa}e{sign}{:02}", exponent.abs())
+}
+
+/// Refuse a recording the enrollment contract cannot honour.
+///
+/// The whole preflight, before any DSP runs, with the same five sentences as
+/// `loudkit.models.enrollment_audio.validate_reference_audio`. Without it a
+/// clip shorter than 721 samples indexes past the end of the reflect padding
+/// in [`matcha_mel`] and panics, a sub-second clip enrolls padding, and NaN
+/// samples poison every statistic downstream.
+///
+/// See `docs/design/models-notes.md`.
+///
+/// # Errors
+///
+/// The sentence naming whichever of the five conditions the clip meets.
+pub fn validate_reference_audio(audio: &[f32], sample_rate: usize) -> Result<(), String> {
+    // A non-positive rate reaches the resampler as a division by zero. Callers
+    // and tests in every port match on this one message, so it stays word for
+    // word.
+    if sample_rate == 0 {
+        return Err("sample rate must be positive, got 0".to_string());
+    }
+    // Finiteness before anything arithmetic: one NaN poisons every statistic
+    // below and every tensor downstream.
+    if audio.iter().any(|v| !v.is_finite()) {
+        return Err(format!(
+            "the recording contains NaN or Inf samples, so no voice can be derived \
+             from it. Re-export the file. {GOOD_INPUT}"
+        ));
+    }
+    let seconds = audio.len() as f64 / sample_rate as f64;
+    if seconds < MIN_ENROLL_SECONDS {
+        return Err(format!(
+            "the recording is {seconds:.2} s: too short to enroll a speaker from \
+             (minimum {MIN_ENROLL_SECONDS} s). {GOOD_INPUT}"
+        ));
+    }
+    if seconds > MAX_ENROLL_SECONDS {
+        return Err(format!(
+            "the recording is {seconds:.1} s. Only the first 10 s become the voice \
+             prompt, and the whole clip shapes the speaker embedding, so a long \
+             recording enrolls something the prompt does not carry. Trim it to the \
+             best 5 to 10 seconds (at most {MAX_ENROLL_SECONDS} s). {GOOD_INPUT}"
+        ));
+    }
+    // The peak is taken in f64 off f32 samples, as the reference takes it, so
+    // the floor is the same number on both sides of the comparison.
+    let peak = audio
+        .iter()
+        .fold(0.0f64, |acc, &v| acc.max(f64::from(v).abs()));
+    if peak < SILENCE_PEAK {
+        return Err(format!(
+            "the recording is silent (peak {}); there is no voice in it to enroll. \
+             {GOOD_INPUT}",
+            exponent_1(peak)
+        ));
+    }
+    Ok(())
+}
 
 // ------------------------------------------------------------------ tables
 
@@ -124,7 +217,22 @@ fn gcd(a: usize, b: usize) -> usize {
 
 // ------------------------------------------------------------------ filterbanks
 
-fn load_basis(nfft: usize) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
+/// The cosine and sine rows of a DFT of one size, `[bin][sample]`.
+type Basis = (Vec<Vec<f64>>, Vec<Vec<f64>>);
+
+/// The bases already built, one per `nfft`.
+///
+/// A basis is a pure function of `nfft`, so building it again always answers
+/// the same values; three mel functions asked for one per call, and the
+/// `MATCHA_NFFT` basis alone is about 29 MB of trig. The trade is that each
+/// size stays resident for the life of the process rather than for the length
+/// of one mel, which is worth stating on a small device: three sizes are
+/// reachable here, 400 from both `centred_power_spectra` callers, `KALDI_FFT`
+/// and `MATCHA_NFFT`.
+static BASES: LazyLock<Mutex<HashMap<usize, Arc<Basis>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn build_basis(nfft: usize) -> Basis {
     let bins = nfft / 2 + 1;
     let mut cos = vec![vec![0.0f64; nfft]; bins];
     let mut sin = vec![vec![0.0f64; nfft]; bins];
@@ -138,7 +246,25 @@ fn load_basis(nfft: usize) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
     (cos, sin)
 }
 
-fn power_spectrum(frame: &[f64], nfft: usize, basis: &(Vec<Vec<f64>>, Vec<Vec<f64>>)) -> Vec<f64> {
+fn load_basis(nfft: usize) -> Arc<Basis> {
+    // A poisoned lock is taken rather than propagated: the map is a cache of a
+    // pure function, so the worst a panic mid-insert leaves behind is a
+    // missing entry, and refusing to enroll over it would be the larger fault.
+    if let Some(hit) = BASES.lock().unwrap_or_else(|e| e.into_inner()).get(&nfft) {
+        return Arc::clone(hit);
+    }
+    // Built outside the lock. Two threads meeting a cold size both build it
+    // and the second insert wins, which costs one discarded basis and never a
+    // thread stalled behind someone else's 29 MB of cosines.
+    let built = Arc::new(build_basis(nfft));
+    BASES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(nfft, Arc::clone(&built));
+    built
+}
+
+fn power_spectrum(frame: &[f64], nfft: usize, basis: &Basis) -> Vec<f64> {
     let (cos, sin) = basis;
     let bins = nfft / 2 + 1;
     let mut out = vec![0.0f64; bins];
@@ -461,15 +587,30 @@ impl Enroller {
         self.execution
     }
 
+    /// An enrolled voice from a WAV file: 16-bit PCM or 32-bit float, any
+    /// rate, any channel count.
+    ///
+    /// The clip is resampled by [`enroll`](Enroller::enroll), which is the one
+    /// resampler every port agrees to the bit; nothing here rewrites the
+    /// samples first.
+    ///
+    /// # Errors
+    ///
+    /// Everything [`crate::wav::Audio::read_wav`] and
+    /// [`enroll`](Enroller::enroll) return.
+    pub fn enroll_wav(&mut self, path: impl AsRef<Path>) -> Result<Enrolled, String> {
+        let clip = crate::wav::Audio::read_wav(path)?;
+        self.enroll(&clip.samples, clip.sample_rate as usize)
+    }
+
     /// An enrolled voice, before wrapping in a [`voice::Profile`].
+    ///
+    /// # Errors
+    ///
+    /// Everything [`validate_reference_audio`] refuses, and whatever the three
+    /// graphs return.
     pub fn enroll(&mut self, audio: &[f32], sample_rate: usize) -> Result<Enrolled, String> {
-        // A non-positive rate reaches the resampler as a division by zero, which
-        // traps here and kills the process. Go refused it at this point, Python raised
-        // from inside a kernel calculation, and this and Rust died. Same sentence as
-        // Go's, at the same place.
-        if sample_rate == 0 {
-            return Err("sample rate must be positive, got 0".to_string());
-        }
+        validate_reference_audio(audio, sample_rate)?;
         let wav: Vec<f64> = audio.iter().map(|&v| v as f64).collect();
         let wav24_full = if sample_rate == MEL_SR {
             wav
@@ -516,6 +657,7 @@ impl Enroller {
             prompt_mel,
             prompt_mel_frames: 2 * n_tok,
             cond_prompt_tokens: cond_tokens,
+            source_sample_rate: sample_rate,
         })
     }
 
@@ -640,32 +782,33 @@ pub struct Enrolled {
     pub prompt_mel: Vec<f32>,
     pub prompt_mel_frames: usize,
     pub cond_prompt_tokens: Vec<i64>,
+    /// The recording's own rate, recorded for provenance.
+    pub source_sample_rate: usize,
 }
 
 impl Enrolled {
-    pub fn profile(&self, name: &str) -> voice::Profile {
+    /// Wrap in a [`voice::Profile`]. `language` is what the voice reads in by
+    /// default; `""` means `"en"`.
+    #[must_use]
+    pub fn profile(&self, name: &str, language: &str) -> voice::Profile {
         voice::Profile {
+            enrolment: "first-10s".to_string(),
             name: name.to_string(),
             speaker_embedding: self.speaker_embedding.clone(),
             flow_embedding: self.flow_embedding.clone(),
             prompt_tokens: self.prompt_tokens.clone(),
             prompt_mel: self.prompt_mel.clone(),
             cond_prompt_tokens: self.cond_prompt_tokens.clone(),
-            // Matches Go's enroll.Result.Profile and Python's VoiceProfile
-            // default: an enroller is not told what language the recording was
-            // in, so it records the same thing a profile with no header key
-            // reads back as.
-            language: "en".to_string(),
+            source_sample_rate: self.source_sample_rate,
+            language: if language.is_empty() {
+                "en".to_string()
+            } else {
+                language.to_string()
+            },
         }
     }
 }
 
 fn to_f32(x: &[f64]) -> Vec<f32> {
     x.iter().map(|&v| v as f32).collect()
-}
-
-/// Generic over the recovery type, because a builder call hands back the
-/// builder it failed on rather than a bare error.
-fn ort_err<R>(e: ort::Error<R>) -> String {
-    e.to_string()
 }

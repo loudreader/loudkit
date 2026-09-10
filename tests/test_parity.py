@@ -1,7 +1,7 @@
 """Parity against the reference implementation. The deliverable, as tests.
 
 The reference data in ``tests/data/reference`` was produced by
-``tools/dump_reference.py`` running inside the chatterbox-apple venv: the
+``research/dump_reference.py`` running inside the chatterbox-apple venv: the
 original training artifacts driven through the *production* algorithm (static
 windows, silence padding, K=2 cosine single-path Euler, injected Philox
 noise). Two comparison classes:
@@ -36,6 +36,7 @@ import pytest
 from loudkit.voice import VoiceProfile
 
 from .assets import asset, needs_module, requires, skip_or_fail
+from .conftest import assert_amplitude
 
 CKPT = asset("checkpoint")
 VE_WEIGHTS = asset("voice_encoder")
@@ -60,6 +61,13 @@ MEL_CORR_GATE = 0.999  # EXP-011 band; measured 0.99999+ on all sentences
 # GPU generation's reduction order as the product contract.
 MPS_MEL_CORR_GATE = 0.98
 WAVE_CORR_GATE = 0.98  # loose on purpose: phase, not spectrum (see module doc)
+# Correlation is invariant to scale and offset, so it cannot see a render at
+# half volume, at twenty times volume, or with a DC offset. Level is what that
+# normalisation throws away, and it is tight where phase is not: the widest
+# spread measured between rendering paths on this reference and the CoreML
+# conformance one is 0.007 dB. The band is fourteen times that, and still
+# 1.2% of amplitude.
+WAVE_RMS_DB_GATE = 0.1
 
 
 @pytest.fixture(scope="module")
@@ -74,14 +82,14 @@ def reference() -> dict[str, dict]:
 
 
 @pytest.fixture(scope="module")
-def cpu_engine():  # type: ignore[no-untyped-def]
+def cpu_engine():
     import loudkit
 
     return loudkit.load(str(CKPT), device="cpu")
 
 
 class TestGeneratorParity:
-    def test_teacher_forced_gates(self, cpu_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_teacher_forced_gates(self, cpu_engine, voice, reference) -> None:
         import torch
 
         agree, steps, kls = 0, 0, []
@@ -108,9 +116,14 @@ class TestGeneratorParity:
         assert top1 >= TF_TOP1_GATE, f"aggregate top-1 {top1:.4f} ({agree}/{steps})"
         assert max(kls) < TF_KL_GATE, f"teacher-forced KL medians {kls}"
 
-    def test_free_run_tokens_identical(self, cpu_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
-        """Same law, same seed, logits within the fp16 band: observed exact
-        agreement on all 450 measured tokens. A mismatch is a logit shift."""
+    def test_free_run_tokens_identical(self, cpu_engine, voice, reference) -> None:
+        """Same law, same seed: exact agreement on every measured token. A
+        mismatch is a logit shift. Against the original dumps this measured
+        exact agreement on all 450 tokens; the streams were re-based in place
+        when the repetition penalty was extended to silence ids (see
+        meta.json's free_run_note), so today this pins generator + sampler
+        stability rather than teacher parity — the teacher-forced KL gate
+        above still carries that."""
         from loudkit.sampler import LRSamplerV1
 
         for i in ("0", "1", "2"):
@@ -125,7 +138,7 @@ class TestGeneratorParity:
 
 
 class TestRendererParity:
-    def test_fixed_token_mel_and_wave(self, cpu_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_fixed_token_mel_and_wave(self, cpu_engine, voice, reference) -> None:
         for i in ("0", "1", "2"):
             rec = reference[i]
             result = cpu_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
@@ -137,8 +150,9 @@ class TestRendererParity:
             wave_corr = np.corrcoef(result.audio[:n], ref_wav[:n])[0, 1]
             assert mel_corr >= MEL_CORR_GATE, f"s{i} mel corr {mel_corr:.6f}"
             assert wave_corr >= WAVE_CORR_GATE, f"s{i} wave corr {wave_corr:.4f}"
+            assert_amplitude(f"s{i}", WAVE_RMS_DB_GATE, result.audio, ref_wav[:n])
 
-    def test_rerender_is_bit_identical(self, cpu_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_rerender_is_bit_identical(self, cpu_engine, voice, reference) -> None:
         """I-2: same seed, same build, bit-identical waveform. The vocoder's
         conv stack drifts without pinned cudnn — pinning is the backend's job
         and this is the test that notices if it stops doing it."""
@@ -147,7 +161,7 @@ class TestRendererParity:
         b = cpu_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
         assert np.array_equal(a.audio, b.audio)
 
-    def test_hit_token_cap_flag(self, cpu_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_hit_token_cap_flag(self, cpu_engine, voice, reference) -> None:
         rec = reference["0"]
         result = cpu_engine.synthesize(rec["text"], voice, seed=rec["seed"])
         assert not result.hit_token_cap
@@ -164,7 +178,7 @@ class TestMPS:
     # removes the instance-method form outright.
     @pytest.fixture(scope="class")
     @staticmethod
-    def mps_engine():  # type: ignore[no-untyped-def]
+    def mps_engine():
         import torch
 
         if not torch.backends.mps.is_available():
@@ -173,14 +187,14 @@ class TestMPS:
 
         return loudkit.load(str(CKPT), device="mps")
 
-    def test_tokens_match_cpu_reference(self, mps_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_tokens_match_cpu_reference(self, mps_engine, voice, reference) -> None:
         """Cross-device token identity: the sampler is counter-based and the
         logits stay inside the sampling decision boundary."""
         rec = reference["0"]
         result = mps_engine.synthesize(rec["text"], voice, seed=rec["seed"])
         assert list(result.tokens) == rec["speech_tokens"]
 
-    def test_fixed_token_render(self, mps_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_fixed_token_render(self, mps_engine, voice, reference) -> None:
         correlations: dict[str, float] = {}
         for i in ("0", "2"):
             rec = reference[i]
@@ -191,7 +205,7 @@ class TestMPS:
             f"MPS cross-hardware mel correlations {correlations}"
         )
 
-    def test_rerender_is_bit_identical(self, mps_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_rerender_is_bit_identical(self, mps_engine, voice, reference) -> None:
         rec = reference["0"]
         a = mps_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
         b = mps_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
@@ -207,7 +221,7 @@ class TestCuda:
 
     @pytest.fixture(scope="class")
     @staticmethod
-    def cuda_engine():  # type: ignore[no-untyped-def]
+    def cuda_engine():
         import torch
 
         if not torch.cuda.is_available():
@@ -216,7 +230,7 @@ class TestCuda:
 
         return loudkit.load(str(CKPT), device="cuda")
 
-    def test_free_run_same_seed_same_result(self, cuda_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_free_run_same_seed_same_result(self, cuda_engine, voice, reference) -> None:
         """I-2 on CUDA: the full pipeline (sampling + render) twice with the same
         seed produces identical tokens and a bit-identical waveform."""
         rec = reference["0"]
@@ -225,14 +239,14 @@ class TestCuda:
         assert list(a.tokens) == list(b.tokens)
         np.testing.assert_array_equal(a.audio, b.audio)
 
-    def test_tokens_match_cpu_reference(self, cuda_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_tokens_match_cpu_reference(self, cuda_engine, voice, reference) -> None:
         """Cross-device token identity: sampling stays inside the fp16 logit
         band regardless of the GPU's kernel selection."""
         rec = reference["0"]
         result = cuda_engine.synthesize(rec["text"], voice, seed=rec["seed"])
         assert list(result.tokens) == rec["speech_tokens"]
 
-    def test_rerender_is_bit_identical(self, cuda_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_rerender_is_bit_identical(self, cuda_engine, voice, reference) -> None:
         rec = reference["0"]
         a = cuda_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
         b = cuda_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
@@ -245,7 +259,7 @@ class TestCoreML:
 
     @pytest.fixture(scope="class")
     @staticmethod
-    def coreml_engine():  # type: ignore[no-untyped-def]
+    def coreml_engine():
         needs_module("coremltools")
         import loudkit
         from loudkit.backends.coreml_backend import _assets_dir
@@ -257,7 +271,7 @@ class TestCoreML:
             skip_or_fail(str(e))
         return loudkit.load(str(CKPT), device="coreml")
 
-    def test_fixed_token_render(self, coreml_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_fixed_token_render(self, coreml_engine, voice, reference) -> None:
         for i in ("0", "1", "2"):
             rec = reference[i]
             result = coreml_engine.synthesize_tokens(
@@ -267,7 +281,7 @@ class TestCoreML:
             mel_corr = np.corrcoef(result.mel.ravel(), ref_mel.ravel())[0, 1]
             assert mel_corr >= MEL_CORR_GATE, f"s{i} mel corr {mel_corr:.6f}"
 
-    def test_rerender_is_bit_identical(self, coreml_engine, voice, reference) -> None:  # type: ignore[no-untyped-def]
+    def test_rerender_is_bit_identical(self, coreml_engine, voice, reference) -> None:
         rec = reference["0"]
         a = coreml_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
         b = coreml_engine.synthesize_tokens(rec["speech_tokens"], voice, seed=rec["seed"])
@@ -284,7 +298,7 @@ def _enrollment_audio() -> np.ndarray:
 
 @requires("voice_encoder")
 class TestEnrollmentParity:
-    def test_enrolled_profile_matches_reference(self, voice) -> None:  # type: ignore[no-untyped-def]
+    def test_enrolled_profile_matches_reference(self, voice) -> None:
         needs_module("torchaudio")
         import loudkit
 
@@ -295,6 +309,41 @@ class TestEnrollmentParity:
             voice_encoder_weights=str(VE_WEIGHTS),
         )
 
+        np.testing.assert_array_equal(mine.prompt_tokens, voice.prompt_tokens)
+        np.testing.assert_array_equal(mine.cond_prompt_tokens, voice.cond_prompt_tokens)
+        np.testing.assert_allclose(mine.prompt_mel, voice.prompt_mel, atol=1e-5)
+
+        def cos(a: np.ndarray, b: np.ndarray) -> float:
+            return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+        assert cos(mine.flow_embedding, voice.flow_embedding) > 0.9999
+        assert cos(mine.speaker_embedding, voice.speaker_embedding) > 0.9999
+
+    def test_enrolling_the_wav_file_matches_reference(self, voice, tmp_path) -> None:
+        """The same clip as a file: `lk.enroll("en_reader1.wav", ...)`.
+
+        Every parity case above hands the enroller the raw float fixture, so
+        the reader (`_read_audio`: native rate, channel mean) is on no parity
+        path. This one goes through it. The file is the release assets'
+        `en_reader1.wav` where that is present; otherwise the fixture written
+        out as the 16-bit mono WAV it was read from, which is the same bytes.
+        """
+        needs_module("torchaudio")
+        sf = needs_module("soundfile")
+        import loudkit
+
+        clip = _enrollment_audio()
+        path = CKPT.parent / "en_reader1.wav"
+        if not path.is_file():
+            path = tmp_path / "en_reader1.wav"
+            sf.write(str(path), clip, 24_000, subtype="PCM_16")
+        read, rate = sf.read(str(path), dtype="float32")
+        assert rate == 24_000
+        np.testing.assert_array_equal(read, clip, "the WAV is not the fixture clip")
+
+        mine = loudkit.enroll(
+            str(path), str(CKPT), name="en_reader1", voice_encoder_weights=str(VE_WEIGHTS)
+        )
         np.testing.assert_array_equal(mine.prompt_tokens, voice.prompt_tokens)
         np.testing.assert_array_equal(mine.cond_prompt_tokens, voice.cond_prompt_tokens)
         np.testing.assert_allclose(mine.prompt_mel, voice.prompt_mel, atol=1e-5)
@@ -316,7 +365,7 @@ class TestEnrollmentRoundTrip:
     """
 
     @requires("voice_encoder")
-    def test_enroll_save_load_speak_round_trip(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_enroll_save_load_speak_round_trip(self, tmp_path) -> None:
         needs_module("torchaudio")
         import loudkit
 

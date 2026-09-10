@@ -1,80 +1,63 @@
 """Backend registry: one algorithm, several ways to execute it.
 
-A backend is a function that turns ``(checkpoint, ExecutionConfig,
-AlgorithmConfig)`` into an :class:`~loudkit.engine.Engine`. Backends declare
-execution choices — dtype maps, kernels, device placement — and inherit every
-algorithm value unchanged; a backend that *decides* an algorithm value is the
-bug class this library exists to end.
-
-Amended checkpoints (``tools/amend_manifest.py``) carry the static window
-recipe and the EOS floor in their manifest, and the manifest is the authority.
-The constants below exist only as the fallback for checkpoints packed before
-the amendment — the values are the same ones, stated once more so an old pack
-still runs the shipped algorithm rather than a ragged-window guess.
+A backend turns ``(checkpoint, ExecutionConfig, AlgorithmConfig)`` into an
+:class:`~loudkit.engine.Engine`. It declares execution choices and inherits
+every algorithm value; a backend that decides an algorithm value is the bug
+class this library exists to end.
 """
 
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
+from pathlib import Path
 
-from ..checkpoint import Checkpoint
-from ..config import (
-    AlgorithmConfig,
-    ExecutionConfig,
-    ExecutionOverrides,
-    PostprocessConfig,
-    Precision,
-    WindowConfig,
-)
+from ..checkpoint import Checkpoint, require_decode_support
+from ..config import AlgorithmConfig, DecodeMode, ExecutionConfig, Precision, WindowConfig
 from ..engine import Engine
+from ..postprocess import PostprocessConfig
+from ..release import EXPORT_RECORD
 
 __all__ = [
     "build_engine",
     "register_backend",
     "production_algorithm",
+    "check_export_record",
     "PRODUCTION_WINDOW",
     "PRODUCTION_EOS_FLOOR",
     "PRODUCTION_EOS_TEXT_RATIO",
 ]
 
 PRODUCTION_WINDOW = WindowConfig(
-    max_speech_tokens=255,  # one static window is 10.2 s; longer text chunks upstream
+    max_speech_tokens=255,
     static_length=255,
-    pad_token_id=4254,  # a silence unit; padding with token 0 bleeds +3 dB HF into the tail
+    pad_token_id=4254,  # a silence unit; token 0 bleeds into the tail
     static_prompt_tokens=238,
 )
-"""The shipped static-window recipe (ChatterboxMelSynthesizer.swift)."""
+"""The shipped static-window recipe, for a checkpoint packed before its manifest carried one."""
 
 PRODUCTION_EOS_FLOOR = 10
 PRODUCTION_EOS_TEXT_RATIO = 1.2
-"""The shipped EOS floor (ChatterboxT3Runner: ``max(10, textIds * 6/5)``)."""
+"""The shipped EOS floor, ``max(10, textIds * 6/5)``, for the same checkpoints."""
 
 
 def production_algorithm(checkpoint: Checkpoint) -> AlgorithmConfig:
-    """The shipping algorithm for this checkpoint.
-
-    ``AlgorithmConfig.from_manifest`` reads everything an amended checkpoint
-    carries — including the window recipe and the EOS floor. For a checkpoint
-    packed before the amendment, the production constants above fill exactly
-    those two gaps and nothing else. Guidance stays whatever the manifest
-    declares (``single_path`` for the packed student — EXP-016).
-    """
+    """The manifest's algorithm; the production constants fill what an old pack omits."""
     base = AlgorithmConfig.from_manifest(checkpoint.manifest)
     manifest = checkpoint.manifest
     if "window" not in manifest:
         base = base.with_(window=PRODUCTION_WINDOW)
     if "postprocess" not in manifest:
-        # The artifact detectors are a shipping default rather than a manifest
-        # field. A manifest that does not mention them still gets them, because
-        # they are part of the one recipe this library has.
-        base = base.with_(postprocess=PostprocessConfig())
+        # replace(), so the render censuses read from the top level survive.
+        base = base.with_(
+            postprocess=replace(
+                PostprocessConfig(),
+                silence_render_ids=base.postprocess.silence_render_ids,
+                quiet_render_ids=base.postprocess.quiet_render_ids,
+            )
+        )
     if "eos_floor" not in manifest:
-        from dataclasses import replace
-
-        # replace() rather than a hand-written reconstruction: a new field on
-        # SamplingConfig must not silently reset to its default for every
-        # non-amended checkpoint. The EOS floor is the only override here.
         base = base.with_(
             sampling=replace(
                 base.sampling,
@@ -90,12 +73,7 @@ _REGISTRY: dict[str, _Builder] = {}
 
 
 def register_backend(*devices: str) -> Callable[[_Builder], _Builder]:
-    """Class of decorator that claims device names for a builder.
-
-    Kept trivially small on purpose: the registry exists so that a future
-    ONNX or CoreML backend is an entry here rather than a fork of
-    ``Engine.from_checkpoint``.
-    """
+    """Decorator claiming device names for a builder."""
 
     def deco(fn: _Builder) -> _Builder:
         for device in devices:
@@ -106,30 +84,15 @@ def register_backend(*devices: str) -> Callable[[_Builder], _Builder]:
 
 
 def require_backend(device: str) -> None:
-    """Raise unless some backend claims ``device``.
-
-    Split out of :func:`build_engine` so a caller can ask the cheap question
-    first. ``loudkit.load`` does: a typo\'d device is answerable from a dict,
-    while resolving the checkpoint may mean downloading 747 MB — and a call that
-    could never have worked should not cost that.
-
-    Raises:
-        ValueError: naming the device and listing the ones that exist.
-    """
+    """Raise unless some backend claims ``device``. Cheap, so it runs before any download."""
     base = device.split(":", 1)[0]
-
-    # Optional graph backends register themselves when their runtime is
-    # present: onnxruntime + exported graphs, coremltools + exported packages.
     with contextlib.suppress(ImportError):
         from . import onnx_backend  # noqa: F401
     with contextlib.suppress(ImportError):
         from . import coreml_backend  # noqa: F401
-
-    # The torch backend is registered lazily and only when asked for: a
-    # ``loudkit[onnx]`` install synthesises with no torch in the process.
+    # torch is registered only when asked for, so an onnx-only install never imports it.
     if base in ("cpu", "cuda", "mps"):
         from . import torch_backend  # noqa: F401
-
     if base not in _REGISTRY:
         raise ValueError(f"no backend for device {device!r}; known: {sorted(_REGISTRY)}")
 
@@ -137,49 +100,45 @@ def require_backend(device: str) -> None:
 def build_engine(
     path: str,
     *,
-    device: str = "cpu",
-    execution: ExecutionConfig | ExecutionOverrides | None = None,
+    device: str | None = None,
+    execution: ExecutionConfig | None = None,
     algorithm: AlgorithmConfig | None = None,
 ) -> Engine:
-    """Build an engine from a packed checkpoint (``Engine.from_checkpoint``'s
-    implementation).
+    """``Engine.from_checkpoint``'s implementation.
 
-    Args:
-        path: packed ``.safetensors`` checkpoint.
-        device: which backend runs it. ``cpu`` / ``cuda`` / ``mps`` select the
-            torch backend on that device; ``onnx`` and ``coreml`` (when their
-            exported assets are present) select the graph backends.
-        execution: ``None`` for the manifest's shipping dtype map on the chosen
-            device, an :class:`~loudkit.config.ExecutionOverrides` to change
-            named fields and inherit the rest, or a full
-            :class:`~loudkit.config.ExecutionConfig` to specify everything.
-            See :func:`_resolve_execution` for why those last two are separate
-            types rather than one.
-        algorithm: algorithm override. Defaults to the checkpoint's shipping
-            algorithm; a different value is a deliberately different engine
-            and its fingerprint will say so.
+    ``execution`` names the fields to change; unset fields take the manifest's
+    defaults for ``device``. ``algorithm`` overrides the manifest's, and its
+    fingerprint says so.
     """
+    device = _agreed_device(device, execution) or "cpu"
     require_backend(device)
     base = device.split(":", 1)[0]
-
     ckpt = Checkpoint.open(path)
     algo = algorithm or production_algorithm(ckpt)
-    defaults = _default_execution(ckpt, device)
-    execu = _resolve_execution(defaults, execution)
+    require_decode_support(algo.decode, device, name=str(ckpt.manifest.get("name", "")))
+    defaults = _default_execution(ckpt, device, decode=algo.decode)
+    execu = defaults if execution is None else execution.resolved(defaults)
     _warn_if_static_cache(execu)
     return _REGISTRY[base](ckpt, execu, algo)
 
 
-def _warn_if_static_cache(execution: ExecutionConfig) -> None:
-    """Warn when the static KV cache is active.
+def _agreed_device(device: str | None, execution: ExecutionConfig | None) -> str | None:
+    """The one device from two places that can each name one; ``None`` when neither does."""
+    named = getattr(execution, "device", None)
+    if device is None:
+        return named
+    if named is not None and named != device:
+        raise ValueError(
+            f"device={device!r} and execution.device={named!r} disagree. The "
+            f"first chooses the backend (and, through loudkit.load, the "
+            f"snapshot that is fetched); the second places the tensors. Name "
+            f"one of them."
+        )
+    return device
 
-    The static cache (``cuda_graphs`` / ``compile_model``) runs the decode over
-    a padded buffer that switches the cuBLAS kernel at large widths; measured
-    logit drift ~2e-4/layer at a 750-token prefill flips a sampled token on long
-    windows. The identity contract classifies it as ``equivalent`` — same
-    distribution, not the same stream — and the user deserves to know they are
-    off the bit-identical path before the output differs from eager.
-    """
+
+def _warn_if_static_cache(execution: ExecutionConfig) -> None:
+    """The static KV cache is the identity contract's ``equivalent`` class, not bit-exact."""
     if execution.cuda_graphs or execution.compile_model:
         import warnings
 
@@ -193,74 +152,25 @@ def _warn_if_static_cache(execution: ExecutionConfig) -> None:
         )
 
 
-def _resolve_execution(
-    defaults: ExecutionConfig, execution: ExecutionConfig | ExecutionOverrides | None
-) -> ExecutionConfig:
-    """Decide the execution config from the caller's request and the manifest.
+def _default_execution(ckpt: Checkpoint, device: str, *, decode: DecodeMode) -> ExecutionConfig:
+    """The manifest's shipping dtype map on ``device``, every field resolved.
 
-    Three cases, and the distinction between the last two is the whole point:
+    Graph backends use their exported precision rather than checkpoint storage
+    dtypes. On MPS the generator stays on the CPU so the two stages overlap.
 
-    * ``None`` — the manifest's shipping map on the requested device.
-    * :class:`~loudkit.config.ExecutionOverrides` — a patch. Named fields win,
-      everything else inherits, ``precision`` merges per module. This is what a
-      caller means by "the shipping engine plus CUDA graphs".
-    * :class:`~loudkit.config.ExecutionConfig` — a complete configuration, used
-      verbatim. This is what a caller means by "run exactly this", and it is
-      the case the old merge could not express: it compared each field against
-      the dataclass default and dropped anything that matched, so an explicit
-      all-fp32 map was silently replaced by the manifest's fp16 one and a
-      conformance run measured a precision it had not asked for.
+    ``decode`` is passed in rather than read here: the caller already resolved
+    it, and re-reading the manifest would parse it twice and would ignore an
+    ``algorithm=`` override for this one choice.
     """
-    if execution is None:
-        return defaults
-    if isinstance(execution, ExecutionOverrides):
-        return execution.applied_to(defaults)
-    return execution
-
-
-def _default_execution(ckpt: Checkpoint, device: str) -> ExecutionConfig:
-    """The manifest's shipping dtype map, on the requested device.
-
-    fp16 where it is measured safe (the generator: median KL 1.3e-06; the flow
-    estimator: mel corr 0.999999), fp32 where it is measured fatal (the flow
-    encoder, the vocoder). The same map on every device — precision is an
-    execution choice, but a *declared* one, and the default should be the
-    configuration the parity tables were measured in.
-
-    **The onnx device is the exception, and it is a hard one.** The exported
-    graphs are fp32 (EXP-015: fp16 not worth a second artifact; int8 blocked),
-    so an ONNX engine *cannot* run the manifest's fp16 map — the graphs do not
-    exist in fp16. The default is therefore all-fp32, which is also the gate's
-    measurement configuration.
-    """
-    if device.split(":", 1)[0] == "onnx":
-        return ExecutionConfig(
-            device=device,  # type: ignore[arg-type]
-            precision={
-                "token_generator": "fp32",
-                "mel_decoder.estimator": "fp32",
-                "mel_decoder.encoder": "fp32",
-                "vocoder": "fp32",
-            },
-        )
-    # On Apple silicon the two stages live on different hardware, and since the
-    # streaming pipeline the reason is parallelism, not per-stage speed: the
-    # renderer renders window k on the GPU while the generator computes window
-    # k+1 on the CPU, and the two genuinely overlap. Putting both on MPS makes
-    # them contend for one device — measured on an M3 Pro (torch 2.13), a
-    # six-window passage runs at RTF 3.37 split against 2.15 all-MPS, with the
-    # all-MPS generator slowed ~40% by the renderer sharing its queue. (For a
-    # single window there is no pipeline and all-MPS is mildly faster, 3.07
-    # against 2.45; the default favours the multi-window paths, which are the
-    # ones a reader or a server actually runs hot.)
+    if device.split(":", 1)[0] in ("onnx", "coreml"):
+        precision: dict[str, Precision] = {}
+        if device.split(":", 1)[0] == "coreml" and decode == "single":
+            precision["mel_decoder.estimator"] = "fp16"
+        return ExecutionConfig(device=device, precision=precision).resolved()  # type: ignore[arg-type]
     generator_device: str | None = "cpu" if device.startswith("mps") else None
-
     dtype_map: Mapping[str, str] = ckpt.dtype_map
-    # storage-dtype names (safetensors) -> ExecutionConfig's Precision literals
     to_prec: dict[str, Precision] = {"float16": "fp16", "float32": "fp32"}
     return ExecutionConfig(
-        # str, not Device: callers pass forms like "cuda:0"/"coreml" that the
-        # Literal does not cover; the registry lookup above already vetted it
         device=device,  # type: ignore[arg-type]
         generator_device=generator_device,  # type: ignore[arg-type]
         precision={
@@ -271,4 +181,109 @@ def _default_execution(ckpt: Checkpoint, device: str) -> ExecutionConfig:
             "mel_decoder.encoder": "fp32",
             "vocoder": "fp32",
         },
-    )
+    ).resolved()
+
+
+def _packed_estimator_digest(ckpt: Checkpoint) -> str | None:
+    """The sha256 of the estimator the checkpoint was packed from, if ``sources`` says."""
+    sources = ckpt.manifest.get("sources")
+    if not isinstance(sources, dict):
+        return None
+    for entry in sources.values():
+        if isinstance(entry, dict) and entry.get("role") == "estimator":
+            digest = entry.get("sha256")
+            return digest if isinstance(digest, str) else None
+    return None
+
+
+_RECORD_KEYS = ("checkpoint_sha256", "algorithm_fingerprint", "euler_steps", "estimator_sha256")
+
+
+def check_export_record(
+    assets: Path,
+    ckpt: Checkpoint,
+    algorithm: AlgorithmConfig,
+    *,
+    block: str,
+    members: Sequence[str],
+    tool: str,
+) -> None:
+    """Refuse an exported set whose members did not come from one export of this checkpoint.
+
+    ``export.json`` beside the graphs records, per member, the checkpoint
+    digest, the fingerprint, the step count and the estimator digest. Every
+    member must agree with the others and with the checkpoint being loaded.
+    Absent is a warning, because sets exported before the record exist.
+    """
+    import json
+    import warnings
+
+    path = assets / EXPORT_RECORD
+    if not path.is_file():
+        warnings.warn(
+            f"{assets} carries no {EXPORT_RECORD}, so nothing says its {len(members)} "
+            f"{block} came from one export of one checkpoint. Re-export with "
+            f"{tool} to record it.",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8"))[block]
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError) as exc:
+        raise ValueError(f"{path}: unreadable export record ({exc})") from None
+
+    def well_formed(entry: object) -> bool:
+        if not isinstance(entry, dict):
+            return False
+        return all(
+            isinstance(entry.get(key), (str, int, type(None)))
+            and not isinstance(entry.get(key), bool)
+            for key in _RECORD_KEYS
+        )
+
+    if not isinstance(entries, dict) or not all(well_formed(e) for e in entries.values()):
+        raise ValueError(
+            f"{path}: the {block!r} block is not a mapping of name to its export "
+            f"record. Re-export the set with {tool}."
+        )
+    seen = {name: tuple(entry.get(k) for k in _RECORD_KEYS) for name, entry in entries.items()}
+    for name in members:
+        if name not in seen:
+            raise ValueError(
+                f"{path} does not record {name}, so it came from some other run "
+                f"than the ones it does record. Re-export the set."
+            )
+    distinct = set(seen.values())
+    if len(distinct) > 1:
+        rows = "\n".join(
+            f"  {n}: {dict(zip(_RECORD_KEYS, v, strict=True))}" for n, v in sorted(seen.items())
+        )
+        raise ValueError(
+            f"{assets} is a mixed {block[:-1]} set: its members were exported from "
+            f"different inputs:\n{rows}\nRe-export every stage together."
+        )
+    agreed = dict(zip(_RECORD_KEYS, distinct.pop(), strict=True))
+    engine_keys = ("checkpoint_sha256", "algorithm_fingerprint", "euler_steps")
+    got = tuple(agreed[k] for k in engine_keys)
+    want = (ckpt.file_digest, algorithm.fingerprint(), algorithm.euler_steps)
+    if got != want:
+        raise ValueError(
+            f"{assets} was exported from a different engine than the one loading "
+            f"it:\n  {block}: {dict(zip(engine_keys, got, strict=True))}\n"
+            f"  checkpoint: {dict(zip(engine_keys, want, strict=True))}\n"
+            f"Re-export against {ckpt.path.name}."
+        )
+    # A set traced from a swapped-in estimator agrees with itself and
+    # describes a renderer the checkpoint does not; compared only when both
+    # sides record one.
+    recorded = agreed["estimator_sha256"]
+    packed = _packed_estimator_digest(ckpt)
+    if recorded is not None and packed is not None and recorded != packed:
+        raise ValueError(
+            f"{assets} was traced with an estimator the checkpoint was not "
+            f"packed from:\n  traced:  {recorded}\n  packed:  {packed}\n"
+            f"That is a different renderer than {ckpt.path.name} describes, and "
+            f"its fingerprint does not cover the difference. Re-export without "
+            f"--estimator-ckpt, or pack the estimator you traced."
+        )

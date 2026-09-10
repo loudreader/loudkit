@@ -75,9 +75,9 @@ final class NumbersTests: XCTestCase {
     ///
     /// Every row is a string at least one of the five ports read differently
     /// from the other four, so every row is a rule that was decided rather than
-    /// observed. The rule is `docs/reference/preprocess.md`: a maximal run of
+    /// observed. The rule is `docs/design/preprocess.md`: a maximal run of
     /// digits and separators that does not reduce to a single readable number is
-    /// left written — never half-spoken, never welded to a word.
+    /// left written, never half-spoken, never welded to a word.
     ///
     /// Swift was not in the fuzzer's `--ports` list when these were found; it is
     /// architecturally closest to Python, and shares exactly one of the eight
@@ -87,7 +87,7 @@ final class NumbersTests: XCTestCase {
             // A ragged run that reaches a letter is one token, and the token is
             // left written. The backtracking engines match a bare `1` here,
             // where Go and Rust bind `1 002` and walk into the `R` from inside
-            // the digits; reading the `1` alone said "en 0023R" — half the run
+            // the digits; reading the `1` alone said "en 0023R", half the run
             // spoken and the rest welded to a word.
             ("ragged run into a letter", "1 0023R", "da", "1 0023R"),
             ("same, with an exponent behind it", "200 0001e-3", "en", "200 0001e-3"),
@@ -129,7 +129,7 @@ final class NumbersTests: XCTestCase {
             ("non-ASCII letter in front", "é2", "en", "é2"),
             ("non-ASCII letter behind", "1 234 567.é", "de", "1 234 567.é"),
             // A grouped run that cannot reach a boundary drops back to being one
-            // number per segment — the shape `+1 202 555 0199` arrives in when
+            // number per segment, the shape `+1 202 555 0199` arrives in when
             // the phone pass has already declined it for want of a plus.
             (
                 "grouped run, no boundary", "1 202 555 0199", "en",
@@ -152,7 +152,7 @@ final class NumbersTests: XCTestCase {
 
     /// A day past the last of the month is not a date. Go's guards passed the
     /// regex class `\d.,:/-` to a literal rune test, so no digit ever matched
-    /// one and `42.3.2026` was read as *4zweite März …* — a day invented out of
+    /// one and `42.3.2026` was read as *4zweite März …*, a day invented out of
     /// the second digit of a number that was never a date.
     func testAnImpossibleDayIsLeftWritten() {
         XCTAssertEqual(SpeechText.prepared("42.3.2026", languageId: "de"), "42.3.2026")
@@ -188,5 +188,109 @@ final class NumbersTests: XCTestCase {
         // Eleven of the twelve grammars carry an empty infix: nothing to consume.
         XCTAssertEqual(
             Numbers.expandTimes("at 14:30 sharp", language: "en"), "at fourteen thirty sharp")
+        // The word needs no space in front of it.
+        XCTAssertEqual(
+            Numbers.expandTimes("um 14:30Uhr", language: "de"), "um vierzehn Uhr dreißig")
+        XCTAssertEqual(
+            Numbers.expandTimes("Termin um 14.30Uhr.", language: "de"),
+            "Termin um vierzehn Uhr dreißig.")
+    }
+
+    /// Both spellings in both cases, plus the dotted forms, which are letters too.
+    private static let meridiems = ["am", "pm", "AM", "PM", "Am", "pM", "a.m.", "p.m."]
+
+    /// A spoken time is not written against a letter.
+    ///
+    /// `3:45pm` read *three forty-fivepm*, one word to a listener, where
+    /// `3:45 pm` read correctly: a space in the source was deciding whether the
+    /// meridiem was a word at all, and nothing in any of the five suites asked.
+    func testASpokenTimeIsNotWrittenAgainstALetter() {
+        for meridiem in Self.meridiems {
+            let text = "Call at 3:45\(meridiem)."
+            XCTAssertEqual(
+                Numbers.expandTimes(text, language: "en"),
+                "Call at three forty-five \(meridiem).", text)
+        }
+    }
+
+    /// Every hour and minute of the clock, in every language: the glued form
+    /// reads exactly as the spaced one. The separator is the one the language
+    /// treats as a time, and the hour is written both bare and zero-padded, two
+    /// matches.
+    func testTheSpaceInTheSourceDecidesNothing() {
+        for lang in Numbers.supportedLanguages {
+            let separator = Numbers.decimalSeparator(lang) == "." ? ":" : "."
+            for meridiem in ["pm", "a.m."] {
+                for hour in 0...24 {
+                    for writtenHour in ["\(hour)", String(format: "%02d", hour)] {
+                        for minute in 0..<60 {
+                            let written = writtenHour + separator + String(format: "%02d", minute)
+                            let glued = Numbers.expandTimes(
+                                "at \(written)\(meridiem) sharp", language: lang)
+                            let spaced = Numbers.expandTimes(
+                                "at \(written) \(meridiem) sharp", language: lang)
+                            if Numbers.expandTimes(written, language: lang) == written {
+                                // Not a clock time here, `24:01` being the whole
+                                // set: both forms keep every character.
+                                XCTAssertEqual(
+                                    glued, "at \(written)\(meridiem) sharp", "\(lang) \(written)")
+                                continue
+                            }
+                            XCTAssertEqual(glued, spaced, "\(lang) \(written)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A letter is the only thing the rule reads: what a following digit or
+    /// separator refused, it still refuses, and a letter in front of the time is
+    /// a different question the shared fixture answers.
+    func testOnlyALetterSeparatesASpokenTime() {
+        for lang in Numbers.supportedLanguages {
+            // A seconds field is two digits and the last of them: `10:30:45:60`
+            // is a separator run, not a clock, and the refusal that reads the
+            // character after the time is what says so.
+            for literal in ["12.03.2026", "1.2.3", "24:30", "10:30:45:60"] {
+                XCTAssertEqual(
+                    Numbers.expandTimes(literal, language: lang), literal, "\(lang): \(literal)")
+            }
+            for text in ["at 14:30", "at 14:30.", "at 14:30, yes", "at 14:30!"] {
+                let said = Numbers.expandTimes(text, language: lang)
+                XCTAssertFalse(said.contains("  "), "\(lang): \(said)")
+                XCTAssertEqual(String(said.reversed().drop(while: { $0 == " " }).reversed()), said)
+            }
+        }
+        XCTAssertEqual(
+            Numbers.expandTimes("Meet at a14:30.", language: "en"), "Meet at afourteen thirty.")
+    }
+
+    /// A clock time carries its seconds, and a zero seconds field says nothing
+    /// the hour and the minute have not already said.
+    ///
+    /// The two forms are compared with each other rather than with twelve
+    /// spellings of the reading, because agreeing is the whole rule. The dotted
+    /// form is left out on purpose: `10.30.45` is a version string as readily
+    /// as a timestamp.
+    func testZeroSecondsReadAsNoSecondsAtAll() {
+        for lang in Numbers.supportedLanguages {
+            for (with, without) in [
+                ("10:30:00", "10:30"), ("3:45:00pm", "3:45pm"), ("24:00:00", "24:00"),
+            ] {
+                XCTAssertEqual(
+                    Numbers.expandTimes(with, language: lang),
+                    Numbers.expandTimes(without, language: lang), "\(lang): \(with)")
+            }
+            // A dotted time takes no seconds anywhere, whatever the language
+            // does with the dot between an hour and its minutes.
+            XCTAssertEqual(Numbers.expandTimes("10.30.45", language: lang), "10.30.45", lang)
+            XCTAssertNotEqual(Numbers.expandTimes("10:30:45", language: lang), "10:30:45", lang)
+        }
+        // A zero minute is dropped from `10:30` and kept in `10:00:45`, where
+        // dropping it would move the seconds into the minutes' place.
+        XCTAssertEqual(
+            Numbers.expandTimes("10:00:45 and 10:30:00", language: "en"),
+            "ten zero forty-five and ten thirty")
     }
 }
