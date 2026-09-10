@@ -70,8 +70,9 @@ with sf.SoundFile(
 ```
 
 The bytes are the same bytes: `stream` and `synthesize` render the same
-chunks with the same seeds. What you give up is the Content Credentials box,
-which `Result.save` writes and which needs the whole render to describe it.
+chunks with the same seeds. What you give up is the note on how the audio was
+made, which `Result.save` writes and which needs the whole render to describe
+it.
 
 ## Where the splits fall
 

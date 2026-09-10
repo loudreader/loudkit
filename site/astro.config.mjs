@@ -96,7 +96,7 @@ export default defineConfig({
             { slug: 'reference/errors', label: 'Errors' },
             { slug: 'reference/timestamps', label: 'Timestamps' },
             { slug: 'reference/speed', label: 'Speed' },
-            { slug: 'reference/provenance', label: 'Content Credentials' },
+            { slug: 'reference/provenance', label: 'Provenance' },
             { slug: 'reference/identity-contract', label: 'Identity contract' },
             { slug: 'provenance-voice-encoder', label: 'Voice encoder licence chain' },
           ],

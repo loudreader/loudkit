@@ -24,7 +24,8 @@ breaking change. Promoting something into it is not.
   [docs/reference/IDENTITY-CONTRACT.md](docs/reference/IDENTITY-CONTRACT.md).
 - **Python as the reference implementation**, with the full API: `synthesize`
   at any length, streaming with token-level cancellation, `previous_tokens`
-  continuation, speed control, WAVs that carry Content Credentials.
+  continuation, speed control, and WAVs that record which model, voice and
+  seed made them.
 - **Backends:** torch (CPU, CUDA, MPS) as the reference execution, ONNX
   Runtime as the portable no-torch deployment, CoreML for Apple. Execution
   may differ in speed per backend, never in what is computed.

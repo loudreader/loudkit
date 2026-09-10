@@ -210,7 +210,7 @@ loudkit is an inference toolbox, not a hosted speech platform. It does not
 provide accounts, billing, multi-tenancy, model training or an emotion control.
 The local server expects you to provide any public-facing authentication, rate
 limits and TLS. It will not help with undisclosed impersonation, bypassing voice
-authentication or stripping Content Credentials from generated audio.
+authentication or stripping the machine-readable note from generated audio.
 [SUPPORTED.md](https://github.com/loudreader/loudkit/blob/main/SUPPORTED.md)
 states the boundary.
 

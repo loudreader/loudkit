@@ -39,7 +39,8 @@ Beside them: [Voices](../VOICES.md), [What 0.1 supports](../SUPPORTED.md) and
 - [Errors](reference/errors.md): what each implementation raises.
 - [Timestamps](reference/timestamps.md) and [speed](reference/speed.md):
   what a result carries and how playback speed works.
-- [Content Credentials](reference/provenance.md): what a saved WAV records.
+- [What a saved WAV records](reference/provenance.md): the unsigned note on how
+  it was made.
 - [Identity contract](reference/IDENTITY-CONTRACT.md): what "same input, same
   audio" means across backends, and what it does not.
 - [Voice encoder licence chain](PROVENANCE-voice-encoder.md).
