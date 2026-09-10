@@ -12,6 +12,7 @@
 [![Model](https://img.shields.io/badge/Model-loudr--1--turbo-FFD21E?logo=huggingface&logoColor=white)](https://huggingface.co/loudreader/loudr-1-turbo)
 [![Spaces](https://img.shields.io/badge/Spaces-Try%20it-FFD21E?logo=huggingface&logoColor=white)](https://huggingface.co/spaces/jer3mi/loudkit)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/loudreader/loudkit/blob/main/notebooks/loudkit_quickstart.ipynb)
+[![loudkit MCP server score on Glama](https://glama.ai/mcp/servers/loudreader/loudkit/badges/score.svg)](https://glama.ai/mcp/servers/loudreader/loudkit)
 
 Twenty-eight voices in ten languages, voice cloning from about ten seconds of
 audio, and native SDKs for Python, Swift, Go, Rust and TypeScript. Download the
