@@ -58,7 +58,21 @@ export default defineConfig({
         './src/styles/loudkit.css',
       ],
       favicon: '/loudkit.png',
-      head: [{ tag: 'meta', attrs: { name: 'theme-color', content: '#f7f5f2' } }],
+      head: [
+        { tag: 'meta', attrs: { name: 'theme-color', content: '#f7f5f2' } },
+        // Ownership of the Search Console property for
+        // https://loudreader.github.io/loudkit/. The site is a Pages *project*
+        // site, so the host root belongs to the organisation and the file
+        // method cannot reach it; the tag travels with every page instead.
+        // Removing it un-verifies the property.
+        {
+          tag: 'meta',
+          attrs: {
+            name: 'google-site-verification',
+            content: 'gKH1wStrtc3YRJp93zMWxLBzLHnJuDDpR2I9CYis47E',
+          },
+        },
+      ],
       sidebar: [
         {
           label: 'Start',
