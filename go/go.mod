@@ -1,8 +1,8 @@
 module github.com/loudreader/loudkit/go
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/yalue/onnxruntime_go v1.32.0
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.42.0
 )
