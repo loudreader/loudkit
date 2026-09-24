@@ -31,7 +31,9 @@ const audio = preview
   ? `${base}/voices/preview/${preview.sample.short.audio}`
   : `${base}/voices/${roster.find((v) => v.name === wanted)!.sample.audio.split('/').pop()}`;
 const displayName = preview?.display_name ?? entry.name;
-const gender = entry.gender === 'F' ? 'female' : 'male';
+// The roster's `gender` field is the perceived presentation of the voice; the
+// gallery shows the same words.
+const presentation = entry.gender === 'F' ? 'feminine' : 'masculine';
 
 // "Alice's Adventures in Wonderland (Lewis Carroll) — public domain" is the
 // roster's shape. The page wants the title alone.
@@ -51,7 +53,7 @@ const work = preview ? '' : roster.find((v) => v.name === wanted)!.sample.work.s
   <div class="lk-sample-body">
     <strong>{displayName}</strong>
     <span class="lk-sample-meta">
-      {entry.language} <i>&middot;</i> {gender}
+      {entry.language} <i>&middot;</i> {presentation}
     </span>
     {line && !preview && <p class="lk-sample-line">Reads a public-domain sentence from {work}.</p>}
   </div>

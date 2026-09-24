@@ -1,60 +1,68 @@
 # Provenance
 
-**Every WAV `Result.save()` writes carries a loudkit provenance manifest, by
-default.** If you copied the three-line example from the README, your file has
-one. This page says what is in it, how it is verified, and how to switch it off.
+`Result.save()` adds a loudkit provenance manifest to every WAV by default.
+Pass `include_provenance=False` to leave it out.
 
-**It is not [C2PA](https://c2pa.org).** A C2PA manifest is a signed manifest
-store, and this is one JSON assertion in boxes that borrow JUMBF's shape and
-nothing else. C2PA tools do not read it, and it does not sit in the `C2PA` chunk
-they look in, so they pass over the file rather than reporting a broken
-manifest. `loudkit verify` is what reads it.
+The manifest is not [C2PA](https://c2pa.org). A C2PA manifest is a signed
+manifest store. The loudkit manifest is one unsigned JSON document in boxes
+with the JUMBF layout, in a RIFF chunk that C2PA tools do not read. C2PA tools
+skip the file. `loudkit verify` reads it.
 
 ## What it is
 
-A JSON document in JUMBF-shaped boxes, carried in a RIFF chunk named `LKPV`
-after the audio. A player walks the chunks it knows and ignores the one it does
-not, so the audio plays unchanged, and **the `data` chunk is byte-identical to
-the same synthesis saved without a manifest**: adding provenance appends a chunk
-and grows the size the RIFF header declares, and touches nothing else.
+The JSON document is in JUMBF-shaped boxes, in a RIFF chunk named `LKPV` after
+the audio. A player skips a chunk it does not know, so the audio plays as
+usual. The `data` chunk is byte-identical to the same synthesis saved without a
+manifest. Adding the manifest appends the chunk and updates the size in the
+RIFF header. Nothing else in the file changes.
 
 ```python
-r = engine.synthesize("Hello from loudkit.", narrator, seed=7)
+import loudkit as lk
+
+engine = lk.load("loudreader/loudr-1")
+voice = engine.voice("joe")
+
+r = engine.synthesize("Hello from loudkit.", voice, seed=7)
 r.save("hello.wav")  # manifest included
 r.save("bare.wav", include_provenance=False)  # audio only
 ```
 
+WAV audio from the server carries the same boxes after the `data` chunk,
+outside the RIFF chunks. This is also the layout of files that loudkit 0.1.0
+saved. `read_provenance` reads both layouts.
+
 ## What it says
 
-Two assertions. The first follows the shape C2PA uses for `c2pa.actions`, and
-carries IPTC's `digitalSourceType` term for media a model made: this audio was
-*created* by software, naming loudkit and its version, with a timestamp. The
-shape is borrowed so that a future move to real Content Credentials is
-mechanical; it is not a claim that this file is one. The second is loudkit's
-own:
+The document holds two assertions. The first uses the field layout of the C2PA
+`c2pa.actions` assertion. It carries the IPTC `digitalSourceType` value for
+media made by a model, the name and version of loudkit, and a timestamp. These
+field names do not make the file a C2PA file. The second assertion is
+loudkit's own:
 
-| field | what it pins |
+| field | content |
 | --- | --- |
-| `algorithm_fingerprint` | which algorithm produced it: the same 16 hex digits the engine reports and the five implementations agree on |
+| `algorithm_fingerprint` | the algorithm that made the audio: the 16 hex digits the engine reports, on which the five implementations agree |
 | `recipe_version` | the checkpoint's recipe |
-| `seed` | the seed, so the render is repeatable |
-| `sample_rate`, `speed` | how it was rendered |
+| `seed` | the seed |
+| `sample_rate`, `speed` | how the audio was rendered |
 | `voice`, `language` | labels, when the caller passed them |
-| `checkpoint_sha256` | which weights spoke: the digest a release's `SHA256SUMS` lists. The fingerprint pins the algorithm; two checkpoints can share one, so the manifest names the file |
-| `voice_profile_sha256` | which profile bytes voiced it. A voice *name* is a label anyone can reuse; the digest is not. Empty when the profile never touched disk |
-| `backend`, `execution` | the datapath: `torch`/`onnx`/`coreml`, device placement and per-module precision. Execution never changes what is computed, but reduced precision perturbs it within measured bands |
-| `audio_sha256` | the audio the manifest is bound to |
-| `text_sha256` | a **hash** of the text, never the text itself |
+| `checkpoint_sha256` | the weights: the digest that the release's `SHA256SUMS` lists. Two checkpoints can have the same fingerprint, so the manifest also names the file |
+| `voice_profile_sha256` | the digest of the voice profile file. The voice name is only a label. Empty when no file digest is known for the profile |
+| `backend`, `execution` | the backend (`torch`, `onnx` or `coreml`), the device placement and the precision per module. Execution settings can change the output; see [the identity contract](IDENTITY-CONTRACT.md) |
+| `audio_sha256` | the SHA-256 of the audio the manifest is bound to |
+| `text_sha256` | the SHA-256 of the text. The text itself is not stored |
 
-Together with the identity contract, that makes a saved file self-describing.
-Given the same checkpoint, profile, fingerprint, seed and backend you can
-reproduce the audio and check `audio_sha256` yourself. No hosted service can
-offer that property.
+With the identity contract, the manifest describes how a file was made. To
+reproduce the audio and check `audio_sha256`, you need all of these:
 
-**On `text_sha256`.** The text is hashed, not stored, so sharing a file does not
-disclose what you typed. A hash still confirms a guess. For a short or
-predictable utterance, someone with a candidate list can test it. If that matters
-for your use, pass `include_provenance=False`.
+- the same checkpoint, voice profile, fingerprint, seed and backend
+- the original text, because the manifest stores only its hash
+- the same build, device and execution configuration
+
+`text_sha256` is a hash of the text, and the text is not stored in the
+manifest. A hash can still confirm a guess: for a short or predictable
+utterance, someone with a list of candidates can test each one. If that
+matters for your use, pass `include_provenance=False`.
 
 ## Reading it back
 
@@ -65,23 +73,22 @@ info = read_provenance("hello.wav")  # the manifest, or None
 manifest, ok = verify_provenance("hello.wav")  # does audio_sha256 still match?
 ```
 
-`verify_provenance` re-hashes the audio and compares. It catches a manifest
-transplanted onto different audio. Re-encoding changes the samples, so it fails
-verification too.
+`verify_provenance` hashes the audio in the `data` chunk again and compares the
+result with `audio_sha256`. It detects a manifest moved onto different audio.
+Re-encoding usually changes the samples, so it fails verification, or it
+removes the manifest.
 
 ## Trust model
 
-**It is unsigned.** C2PA signs a manifest with a certificate, so a verifier can
-tell who made the claim and that nobody edited it. This one carries no
-signature, which is most of why it is not C2PA: anyone can write, alter, or
-strip it. Treat it as **disclosure, not
-proof**. It tells an honest downstream tool where a file came from, and it stops
-nobody who does not want to be told on.
+The manifest is unsigned. C2PA signs a manifest with a certificate, so a
+verifier can tell who made the claim and that nobody changed it. This manifest
+has no signature, so anyone can write, change or remove it. Use it as a
+disclosure only. It is not proof of origin.
 
-It is also fragile in the ordinary sense: converting to MP3, editing in an audio
-tool, or re-uploading through a service that rewrites containers will usually
-drop the box. Metadata travels with a file, not with the sound.
+Converting to MP3, editing in an audio tool, or uploading through a service
+that rewrites containers usually removes the manifest. The manifest is file
+metadata. It is not a mark in the audio signal.
 
-The server attaches the same manifest to its replies (`X-Loudkit-Provenance`, and
-the box itself on the audio body). See
+A one-shot HTTP reply from the server carries the manifest JSON in the
+`X-Loudkit-Provenance` header. See
 [the server guide](../guides/04-server-and-agents.md).

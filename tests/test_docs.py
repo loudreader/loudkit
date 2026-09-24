@@ -827,8 +827,8 @@ def test_the_production_fingerprint_is_pinned_in_one_value_everywhere() -> None:
         REPO
         / "docs"
         / "reference"
-        / "COMPATIBILITY.md": r"moves `[0-9a-f]{16}` to\s+`([0-9a-f]{16})`",
-        REPO / "docs" / "platforms" / "apple.md": r"independently and agree: `([0-9a-f]{16})`",
+        / "COMPATIBILITY.md": r"loudr-1 fingerprint is\s+`([0-9a-f]{16})`",
+        REPO / "docs" / "platforms" / "apple.md": r"the same fingerprint, `([0-9a-f]{16})`",
         # The release note that tells a reader their audio changed. It names
         # the value they are moving *to*, so only the second of the pair is
         # checked here; the first is 0.1.0's and is deliberately historical.
@@ -951,15 +951,17 @@ _SPEED_SECTIONS: dict[str, dict[str, str]] = {
         "what to expect": r"## What to expect[\s\S]*?(?=\n## |\Z)",
     },
     "docs/platforms/apple.md": {
-        "the Swift port against the Python engine": r"The port is measured.*?\n\n",
+        "the Swift port against the Python engine": (
+            r"the Swift package runs the third benchmark passage.*?\n\n"
+        ),
     },
     "docs/guides/10-swift.md": {
         "the Swift port against the Python engine": (
             r"whole pipeline runs the third benchmark passage.*?\n\n"
         ),
     },
-    "docs/guides/08-go.md": {"the CUDA provider": r"CUDA measured.*?\n\n"},
-    "docs/guides/09-rust.md": {"the CUDA provider": r"CUDA measured.*?\n\n"},
+    "docs/guides/08-go.md": {"the CUDA provider": r"On an RTX 3090, measured on.*?\n\n"},
+    "docs/guides/09-rust.md": {"the CUDA provider": r"On an RTX 3090, measured on.*?\n\n"},
     "site/src/handwritten/index.mdx": {
         # The whole section: the cards carry the figures and the foot carries
         # the epoch, so matching only the foot checked a passage with no

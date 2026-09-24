@@ -1,25 +1,24 @@
 # 4. Server, streaming API and MCP
 
-The model is 747 MB and takes a few seconds to load, so for anything interactive
-you load it once and answer requests. loudkit ships four ways to reach one warm
-engine:
+The loudr-1 checkpoint is 747 MB and takes a few seconds to load. For
+interactive use, load it once in a server process and send it requests.
+loudkit has four ways to reach a loaded engine:
 
-- an **HTTP server** (`loudkit serve`) with two API surfaces on the same
-  process: loudkit's own REST routes, and OpenAI's
-  `POST /v1/audio/speech`;
-- a **gRPC service**
+- an HTTP server (`loudkit serve`) with two APIs in one process: loudkit's own
+  REST routes and OpenAI's `POST /v1/audio/speech`;
+- a gRPC service
   ([`proto/loudkit.proto`](../../proto/loudkit.proto), `loudkit serve --grpc`);
-- an **MCP server** for agents (`loudkit serve --mcp`);
-- a **Speech Dispatcher module**
-  ([`integrations/speech-dispatcher/`](../../integrations/speech-dispatcher/)),
-  which forwards to a running `loudkit serve` and makes loudkit a voice for
-  every Linux application that speaks: Orca, Firefox, `spd-say`.
+- an MCP server for agents (`loudkit serve --mcp`);
+- a Speech Dispatcher module
+  ([`integrations/speech-dispatcher/`](../../integrations/speech-dispatcher/)).
+  It forwards to a running `loudkit serve`, so applications that use Speech
+  Dispatcher, such as Orca, Firefox and `spd-say`, can speak with loudkit.
 
-One command starts any of the first three: `loudkit serve` speaks HTTP, and
-`--grpc` or `--mcp` picks the other transport. HTTP, gRPC and Speech Dispatcher
-are supported; MCP is a preview.
-None of them holds **a synthesis path of its own**. Each builds an `Engine` and
-calls it, so a request cannot reach code the library tests do not cover.
+`loudkit serve` starts the HTTP server, and `--grpc` or `--mcp` selects another
+transport. HTTP, gRPC and Speech Dispatcher are supported; MCP is a preview.
+The HTTP, gRPC and MCP servers call the same `Engine` through one shared
+synthesis path. The test suite checks that the server returns the same bytes
+as a direct engine call.
 
 ```bash
 pip install "loudkit[server,hub]"    # REST, and the OpenAI-compatible route with it
@@ -29,37 +28,36 @@ pip install "loudkit[grpc,hub]"      # gRPC
 
 ## Scope
 
-**It is a working example, not a production deployment.** It keeps a model warm
-on your own machine for a script, an editor, or an agent. Read both lists below
-before you put it anywhere else.
+The server keeps a model loaded on your own machine for a script, an editor or
+an agent. It is not hardened for a public deployment. Read both lists below
+before you run it anywhere else.
 
 What it has:
 
-* **Binds `127.0.0.1` by default.** `--host` changes that, and changing it is a
-  decision.
-* **A request body limit.** 10 000 characters of text, plus a byte ceiling
-  computed from it, enforced before the body is buffered.
-* **A bounded queue.** The engine is single-flight, so requests serialise. At
-  most 32 may wait; past that the answer is `503`.
-* **Errors that distinguish your mistake from ours.** `4xx` for the request,
-  `5xx` for a defect, and `error_kind` on the streaming route, where a status
-  code cannot be sent late.
+* It binds `127.0.0.1` by default. `--host` changes the address.
+* A request size limit: 10 000 characters of text, and a byte limit on the body.
+  A body over the byte limit is refused before it is read in full.
+* A bounded queue in front of the engine, which renders one request at a time.
+* Status codes that separate the two kinds of error: `4xx` for a problem in the
+  request, `5xx` for a server fault. The streaming route reports late failures
+  in `error_kind`, because its status code is already sent.
 
-What it does not have, at all, on the default loopback bind:
+What it does not have on the default loopback bind:
 
-* **No authentication on loopback.** Any local process can synthesize. Your OS
-  account is the boundary. A non-loopback bind refuses to start without
-  `--allow-public` and a bearer token.
-* **No per-caller rate limiting or quotas.** The queue bound protects the
-  process, not fairness between callers. One client can fill it.
-* **No TLS.** Text and audio cross the wire in the clear.
-* **No multi-tenancy, no isolation, no accounting, no abuse controls.** One
-  engine, one voice library, no notion of who is asking.
+* Authentication. Any process on this machine can synthesize, including the
+  processes of other users. A non-loopback bind needs `--allow-public` and then
+  requires a bearer token.
+* Per-caller rate limits or quotas. The queue bound protects the process. It
+  does not share capacity fairly between callers, and one client can fill it.
+* TLS. Text and audio cross the connection unencrypted.
+* Multi-tenancy, isolation, usage accounting or abuse controls. There is one
+  engine and one voice library, and the server does not identify callers.
 
-Do not expose this server to a network you do not control. Anyone who reaches the
-port can spend your GPU, read every voice you loaded, and see every request in
-transit. A public endpoint with no auth is also a compute faucet. Put it behind
-something that authenticates and terminates TLS, or keep it on loopback.
+Do not expose this server to a network you do not control. Anyone who reaches
+the port can synthesize in every loaded voice on your hardware. On plain HTTP,
+anyone on the network path can also read the requests. Keep the server on
+loopback, or put it behind a proxy that authenticates callers and terminates
+TLS.
 
 ## The REST server
 
@@ -67,49 +65,58 @@ something that authenticates and terminates TLS, or keep it on loopback.
 loudkit serve --checkpoint loudreader/loudr-1 --port 8765
 ```
 
-Binds to localhost and uses the included voices. Pass `--voices <directory>`
-to use a directory of your own profiles. Requests select a voice **by name**. Anyone who reaches the port can speak in any voice on
-disk, but cannot read arbitrary files.
+The server binds to localhost and uses the voices in the release. Pass
+`--voices <directory>` to use a directory of your own profiles. A request names
+a voice, and the server looks the name up in that library. It does not accept
+file paths.
 
 The API is under `/v1`: `/v1/voices`, `/v1/synthesize`, `/v1/synthesize/stream`.
-A later change of shape can then be served beside this one. `GET /health` is
-**not** versioned, because a load balancer should not be reconfigured when the
-synthesis payload gains a field.
+`GET /health` is not versioned.
 
-Three bounds are enforced rather than described:
+The server enforces these limits:
 
-* A **non-loopback bind needs `--allow-public` and a bearer token.** Supply one
-  with `--token`, or let the server generate and print it. Every request then
-  carries `Authorization: Bearer <token>`. There is no "trusted network" mode: an
-  authless server on a network lets anyone who reaches the port speak in every
-  voice on the machine.
+* A non-loopback bind needs `--allow-public`. Every request must then carry
+  `Authorization: Bearer <token>`. Put the token in the `LOUDKIT_TOKEN`
+  environment variable. `--token` also works, but other accounts on the host
+  can read a process's command line. If you give no token, the server generates
+  one and prints it to stderr. A token must be at least 16 printable ASCII
+  characters. There is no public mode without a token.
 
-  **This server speaks plain HTTP.** It takes no `--ssl-certfile`, so on a public
-  bind the token and the audio both cross the network in clear. Anyone who can
-  see the traffic reads the credential once and uses it thereafter. A bearer
-  token over cleartext looks like security and is not. Terminate TLS in front of
-  it, with Caddy, nginx, a cloud load balancer or an SSH tunnel, and keep this
-  process on loopback behind that. Built-in TLS would bring its own certificate
-  handling, renewal and cipher configuration.
-* **Request bodies are refused before they are read.** The 10 000 character text
-  cap is a pydantic check, which runs only after the whole body is buffered, so
-  it protects the engine and not the process. The byte bound is derived from the
-  character cap at its worst encoding, twelve bytes per character: `json.dumps`
-  defaults to `ensure_ascii=True`, and an astral character becomes two `\uXXXX`
-  escapes. No request that passes the documented cap can be refused for its size.
-* **At most 32 requests queue for the engine**, which is single-flight. Past that
-  the answer is `503` with `Retry-After`. An unbounded queue turns a slow engine
-  into unbounded memory, with every client still holding a connection.
+  On a public bind, each client address can send 12 synthesis requests in a
+  burst, then one every two seconds. Past that the answer is `429`. Behind a
+  reverse proxy, all clients share the proxy's address and one budget.
 
-Before it reports ready the server renders once in the first voice it finds and
-throws the audio away, so the first real request does not pay for it. The line
-`warm: first-use costs paid on voice '<name>'` goes to stderr and says it
-happened and how long it took. `--grpc` and `--mcp` do the same.
+  The server speaks plain HTTP and has no TLS option. On a public bind the token
+  and the audio cross the network unencrypted, and anyone who sees the traffic
+  can read the token and reuse it. Terminate TLS in front of the server, with
+  Caddy, nginx, a cloud load balancer or an SSH tunnel. Keep the server on
+  loopback behind it.
 
-Put `LOUDKIT_NO_WARM` in the environment to skip it and start sooner. It is a
-switch, not a boolean: any value counts, `LOUDKIT_NO_WARM=0` included, so
-unset it rather than setting it to zero when you want the warm-up back. A
-warm-up that fails prints why and the server starts anyway.
+  On loopback the server ignores any token and has no rate limit, so
+  authenticate and rate limit at the proxy. It also accepts only a `Host`
+  header that names this machine: `localhost`, `127.0.0.1` or `::1`, with any
+  port. Any other `Host` gets `403` with the code `bad_host`. Configure the
+  proxy to send a loopback `Host`, for example `127.0.0.1:8765`. nginx does
+  this by default. Caddy and most cloud load balancers forward the client's
+  `Host`. In Caddy, add `header_up Host {upstream_hostport}` to the
+  `reverse_proxy` block.
+* Text is capped at 10 000 characters, and a longer text gets `422`. The body
+  also has a byte limit, sized so that text at the character cap fits in its
+  longest standard JSON encoding. A larger body gets `413`.
+  [Transports](../design/transports.md) has the arithmetic.
+* The engine renders one request at a time. At most 32 requests are in flight
+  or waiting, the one rendering included. Past that the answer is `503` with
+  `Retry-After`.
+
+Before it reports ready, the server renders once in the first voice of its
+library and discards the audio. This moves the extra cost of the first render
+to startup. The stderr line `warm: first-use costs paid on voice '<name>'`
+gives the voice and the time it took. `--grpc` and `--mcp` warm up the same way.
+
+To skip the warm-up and start sooner, set `LOUDKIT_NO_WARM` to any non-empty
+value. `LOUDKIT_NO_WARM=0` also skips it. To warm up again, unset the variable
+or set it to an empty value. If the warm-up fails, the server prints the reason
+and starts anyway.
 
 ### One-shot synthesis
 
@@ -129,172 +136,152 @@ X-Loudkit-Truncated     false
 X-Loudkit-Continuation  312,4088,77,1901,55,640
 ```
 
-Same text, voice and seed give the same samples every time, over HTTP too, and
-the same bytes in every format but `ogg` and `opus`, whose Ogg container carries a
-random stream serial.
+On one server, the same text, voice and seed give the same samples every time.
+The bytes are also identical in every format except `ogg` and `opus`, whose Ogg
+container carries a random stream serial. Another build, device or execution
+setting can give different samples. See the
+[identity contract](../reference/IDENTITY-CONTRACT.md).
 
 **Check `X-Loudkit-Truncated`.** `true` means generation stopped at the token cap
 instead of at a stop token, so the audio is cut off mid-sentence. The reply is
-still a 200 and the WAV is still real, because truncation is not a transport
-error. A client that ignores the header reads a severed utterance as a finished
-one.
+still a `200` with a valid WAV, so only the header tells you.
 
-**`speed` is playback speed**, `0.5` to `2.0`, pitch preserved. Outside that
-range the request is refused rather than clamped. `1.0` is the default and an
-exact bypass: the same bytes this route has always returned. See
+**`speed` is playback speed**, `0.5` to `2.0`, pitch preserved. A value outside
+that range gets `422`. The default, `1.0`, leaves the audio unchanged. See
 [speed.md](../reference/speed.md).
 
 **`format` picks the encoding**, one of:
 
 | `format` | `Content-Type` | notes |
 |---|---|---|
-| `wav` (default) | `audio/wav` | 16-bit PCM. Byte-identical to what this route has always returned. |
+| `wav` (default) | `audio/wav` | 16-bit PCM. |
 | `pcm16` | `application/octet-stream` | Header-less 16-bit frames, **little-endian**, at `X-Loudkit-Sample-Rate`. For feeding a device or a socket directly. |
-| `flac` | `audio/flac` | Lossless, about a quarter the size of the WAV. |
-| `ogg` | `audio/ogg` | Vorbis. Lossy: same frame count, not the same numbers. |
-| `mp3` | `audio/mpeg` | Lossy and small. What OpenAI clients ask for by default. |
-| `opus` | `audio/ogg; codecs=opus` | Ogg Opus, what chat voice notes carry. Not the `ogg` above, which is Vorbis. |
+| `flac` | `audio/flac` | Lossless, about half the size of the WAV. |
+| `ogg` | `audio/ogg` | Vorbis, lossy. The same number of samples, with different values. |
+| `mp3` | `audio/mpeg` | Lossy and small. The default of OpenAI clients. |
+| `opus` | `audio/ogg; codecs=opus` | Ogg Opus, the format of chat voice notes. The `ogg` format above is Vorbis. |
 
-Anything else is a `422` naming the six. `mp3` and `opus` come from the MPEG and
-Opus codecs of the libsndfile that `soundfile` loads, which its wheels bundle. A
-server whose libsndfile was built without them refuses those two by name, before
-the engine runs, rather than failing inside the encoder.
+Any other name gets `422` listing the six. `mp3` and `opus` need the MPEG and
+Opus codecs of the libsndfile that `soundfile` loads, and the `soundfile` wheels
+include them. If the local libsndfile lacks them, the server refuses `mp3` and
+`opus` by name before synthesis starts.
 
-`pcm16` is not labelled `audio/L16;rate=24000`. RFC 2586 defines L16 as
-**big**-endian and these frames are little-endian, so the label would be a lie a
-conforming client would act on, and a header-less payload cannot be inspected for
-byte order.
+The `pcm16` media type is `application/octet-stream`. `audio/L16` does not fit:
+RFC 2586 defines L16 as big-endian, and these frames are little-endian.
 
-**`previous_tokens` continues a previous request.** Send back the
-`X-Loudkit-Continuation` value from the reply before this one. The first chunk is
-then conditioned on that tail, exactly as chunks inside one passage are, so a
-chapter read paragraph by paragraph does not restart its pitch contour at every
-request. It travels as a header rather than a body field because the body is a
-WAV. Longer histories are accepted up to 4096 ids, and only the tail is used.
-Past that, `422`. Full contract in
+**`previous_tokens` continues a previous request.** Send the
+`X-Loudkit-Continuation` value of the previous reply as a JSON array of
+integers. The engine conditions the first chunk on that tail, the same way it
+joins the chunks of one passage. The reply carries the tail in a header because
+the body is audio. Up to 4096 ids are accepted, and only the tail is used. More
+ids get `422`. The full contract is in
 [02-streaming-and-long-form.md](02-streaming-and-long-form.md#carrying-that-join-across-two-calls).
 
-**Omit `language` and the voice decides.** Left out, the request is read in the
-language the voice was enrolled in, falling back to `en` for a profile that
-carries none. The chain is
-[the same everywhere](../design/preprocess.md#which-language-this-layer-runs-as), and
-the server does not have a copy of it. Name a `language` only for cross-lingual
-synthesis, such as an English voice reading Polish text.
+**Omit `language` to use the voice's language.** The request is then read in
+the language the voice was enrolled in, or in `en` if the profile records none.
+The rule is
+[the same everywhere](../design/preprocess.md#which-language-this-layer-runs-as).
+Set `language` only for cross-lingual synthesis, such as an English voice
+reading Polish text.
 
-`400` means the request asked for something this build cannot do, most often a
-`language` off the twelve-id roster the text layer is written for. The body names
-both the refused id and the twelve, so a client can retry into one that works.
-The same refusal reaches the MCP tool and the CLI as `unsupported: ...`.
+`400` means this build cannot do what the request asks. Most often the
+`language` is not one of the twelve ids the text layer supports. The body names
+the refused id and the twelve supported ids. The CLI prints the same refusal as
+`unsupported: ...`. The MCP tool returns it as `error`, with
+`"code": "unsupported_language"` and the `supported` list.
 
 ### Streaming synthesis (Server-Sent Events)
 
-The same synthesis, delivered chunk by chunk, so a client can start playing the
-first sentence while the rest is still being rendered:
+The streaming route delivers the same synthesis chunk by chunk, so a client can
+start playing before the rest is rendered:
 
 ```bash
 curl -N -X POST localhost:8765/v1/synthesize/stream -H 'Content-Type: application/json' \
   -d '{"text":"A longer passage with several sentences.","voice":"joe"}'
 ```
 
-Each event is a JSON object with the chunk's audio in base64 plus its
+Each event is a JSON object with the chunk's audio in base64, plus its
 `media_type`, duration, token count, `truncated`, `sample_rate` and
-`fingerprint`. The rate rides on every chunk, and on the response as
-`X-Loudkit-Sample-Rate`, because raw `pcm16` frames state it nowhere
-themselves. The final event is
-`{"done": true, ...}` and carries the aggregate `truncated` across every chunk,
-so a client that reads only the terminal event still learns that something was
-cut off. Streaming is delivery, not a second synthesis: it is the engine's
-`stream()` under the hood.
+`fingerprint`. The response also carries the rate in `X-Loudkit-Sample-Rate`,
+because raw `pcm16` frames do not state it. The final event is
+`{"done": true, ...}`. Its `truncated` is true if any chunk was cut off. The
+route uses the engine's `stream()`.
 
 `speed` and `previous_tokens` work here too. The `done` event carries
-`continuation`, the tail of the whole passage rather than the tail of each piece
-of it, which is what a chaining client wants.
+`continuation`, the tail of the whole passage, to send as `previous_tokens` in
+the next request.
 
-**`format` on this route is `wav`, `pcm16` or `flac`.** Every event must be
-complete and playable on its own. Ogg, the container of both `ogg` and `opus`,
-has a seek table and a stream serial number that belong to one continuous stream,
-not to one payload per chunk, and each MP3 chunk carries its own encoder delay
-into the join, so asking for any of the three is a `422` naming the three that
-work. Raw `pcm16`
-frames concatenate with `+`, which is why they stream.
+**`format` on this route is `wav`, `pcm16` or `flac`.** Each event is a
+complete file in that format, playable on its own. `ogg`, `opus` and `mp3` get
+`422`; use `/v1/synthesize` for them. Raw `pcm16` frames from successive events
+concatenate directly.
 
-**Read until `done`, and check it for `error`.** Once the first chunk is out, the
-200 is spent: a synthesis that fails halfway through cannot become a status code.
-It arrives as `{"done": true, "error": "...", "error_kind": "..."}` instead. A
-stream that stops looks exactly like a passage that finished, so a client that
-treats "the connection closed" as success reads a truncated passage as a complete
-one. Errors that land before the response, such as an unknown voice or a full
-queue, are still ordinary status codes (404, 503).
+**Read until `done`, and check it for `error`.** Once the response has started,
+a failure cannot change its `200` status. The failure arrives as
+`{"done": true, "error": "...", "error_kind": "..."}` instead. Treat a stream
+that ends without a `done` event as incomplete. Errors found before the response
+starts, such as an unknown voice or a full queue, are ordinary status codes
+(404, 503).
 
-`error_kind` is the status code the stream could not send:
+`error_kind` classifies a failure after the response has started:
 
-| value | meaning | retry? |
+| value | meaning | what to do |
 |---|---|---|
-| `bad_request` | something about this call: a language off the roster, a chunk over the window. What `/v1/synthesize` would answer `400` or `422` for. | yes, with a different request |
-| `server_fault` | a defect in this build. What `/v1/synthesize` would answer `500` for. | not with the same build |
+| `bad_request` | A problem with this request, such as a language outside the supported ids or a chunk too long for the window. `/v1/synthesize` answers these with `400` or `422`. | Change the request before you retry. |
+| `server_fault` | A defect in this build. `/v1/synthesize` answers these with `500`. | Check the server log before you retry. |
 
-Without it, an agent cannot tell the two apart and retries the request that was
-never the problem.
+Closing the connection stops the synthesis. The server checks for a disconnect
+while the render runs and cancels the decode loop within one step. A voice
+agent can use this to interrupt speech: the engine stops within one decode
+step, before the end of the current chunk of about 10 s. A backend call that is
+already running finishes first. `/v1/synthesize` stops the same way when its
+client disconnects.
 
-Closing the connection stops the synthesis, not just the sending. The server
-polls for the disconnect while the forward pass runs and cancels the decode loop
-within one step. That is what makes barge-in possible for a voice agent:
-interrupt the speaker and the GPU is free within one decode step, not at the
-end of the current ~10 s chunk. A kernel already running is not interrupted.
-
-`/v1/synthesize` does the same. It has one response and no chunk boundary, so
-a client that hangs up used to be rendered for to the last token while everyone
-else waited on the engine. Both routes now stop within one decode step.
-
-A client that stays connected and stops *reading* is not a disconnect, and no
-poll can see it: the write blocks, the response never ends, and the engine slot
-is never released. Both the HTTP stream and the gRPC one are capped at ten
-minutes of wall clock from the moment they take the engine, which is far longer
-than any real passage.
+A client that stays connected but stops reading is not a disconnect, and the
+server cannot detect it. The write blocks and the response does not end. The
+HTTP and gRPC streams are capped at ten minutes of wall-clock time from the
+moment they take the engine. At the cap the render stops and the engine is
+released. The cap applies to every stream, so on a slow device split a long
+text across requests.
 
 ## The MCP server (preview)
 
-`loudkit serve --mcp` speaks the Model Context Protocol on stdio, so any
-MCP-aware agent (Claude Code, Cursor, Cline, and so on) can speak in a cloned
-voice:
+`loudkit serve --mcp` serves the Model Context Protocol on stdio, for MCP
+clients such as Claude Code, Cursor or Cline:
 
 ```bash
 loudkit serve --mcp --checkpoint loudreader/loudr-1
 ```
 
-Three tools ship: `list_voices`,
+It has three tools: `list_voices`,
 `synthesize(text, voice, seed, language, speed, previous_tokens, format)` and
 `describe()`. Everything after `voice` is optional, and an omitted `language`
 means the voice's own.
 
 `synthesize` returns the audio in base64, WAV by default, with `format`,
 `media_type`, `duration`, `tokens`, `sample_rate`, `fingerprint`, `truncated` and
-`continuation`. Use `format: "flac"` for the same samples at about a quarter the
-size, which matters more here than over HTTP because the reply lands in a model's
-context.
+`continuation`. `format: "flac"` gives the same samples at about half the size.
+This helps when the MCP host puts the reply into a model's context.
 
-`truncated` is the same cut-off signal the HTTP header carries, and the one an
-autonomous caller is least able to notice on its own. `continuation` is the tail
-to pass back as `previous_tokens` on the next call, so an agent reading a long
-text in pieces does not restart its prosody at every one. It is the tail rather
-than every token id, because a few hundred integers in a tool result is context
-the agent pays for and cannot act on. In a client:
+`truncated` is the same cut-off signal the HTTP header carries. `continuation`
+is the tail to pass back as `previous_tokens` on the next call, so that a long
+text read in several calls joins the way the chunks of one passage do. The
+reply carries only the tail the engine uses. A refusal comes back as `error`,
+with `error_kind` and `code`. In a client:
 
 ```
 # any MCP client
 synthesize: text="Deploy complete." voice="joe" seed=7
 ```
 
-`describe()` returns the resolved algorithm and execution config, the line every
-run should answer about itself. If a synthesis surprises you, ask the engine
-which mode was active before anything else.
+`describe()` returns the resolved algorithm and execution settings. When a
+synthesis sounds wrong, check it first to see which mode was active.
 
 ## The OpenAI-compatible route
 
-`POST /v1/audio/speech` answers OpenAI's speech API. A great deal of software
-already speaks that shape, so supporting it costs no adapter, no plugin and no
-code on either side. Point a client at this server's `/v1` as its base URL and it
-stops caring which engine is behind it.
+`POST /v1/audio/speech` implements OpenAI's speech API, with the differences
+listed below. Set a client's base URL to this server's `/v1`, and use a voice
+from this server's library.
 
 ```bash
 curl -s http://127.0.0.1:8765/v1/audio/speech \
@@ -303,7 +290,7 @@ curl -s http://127.0.0.1:8765/v1/audio/speech \
   -o out.wav
 ```
 
-Their own client, unmodified:
+With OpenAI's Python client:
 
 ```python
 from openai import OpenAI
@@ -314,25 +301,22 @@ speech.audio.speech.create(
 ).write_to_file("out.wav")
 ```
 
-The `api_key` is this server's bearer token when one is set, and is ignored when
-one is not. The guard that checks it is middleware over the whole app, so the API
-key a conforming client already sends *is* the authentication. There is no second
-mechanism to configure.
+On a public bind, set `api_key` to this server's bearer token. On loopback the
+server ignores it, so any value works.
 
 ### Connect your agent
 
-An agent that supports a custom OpenAI base URL needs configuration and nothing
-else. Whatever the agent:
+To connect an agent that accepts a custom OpenAI base URL:
 
 1. Start the server with `loudkit serve`. It listens on `127.0.0.1:8765`.
-2. Point the agent's OpenAI speech provider at `http://127.0.0.1:8765/v1`. It
-   will want an API key: any value works unless the server was started with a
-   token.
-3. Name a voice from this server's library, which `loudkit voices` lists. The
-   OpenAI names agents default to (`alloy`, `coral`) are not voices here.
+2. Point the agent's OpenAI speech provider at `http://127.0.0.1:8765/v1`. The
+   agent asks for an API key. On loopback any value works; on a public bind,
+   use the server's token.
+3. Set a voice from this server's library, which `GET /v1/voices` lists.
+   OpenAI's voice names (`alloy`, `coral`) do not exist here.
 
 The agent picks the format. Hermes Agent and OpenClaw ask for Opus when the
-reply is a voice note and for mp3 otherwise, and this server answers both.
+reply is a voice note and for mp3 otherwise. This server returns both.
 
 OpenClaw takes a `baseUrl` for its `openai` TTS provider:
 
@@ -358,25 +342,27 @@ tts:
 
 ### Where the two APIs disagree
 
-Every difference is decided in favour of saying so rather than guessing.
-
 | their field | here |
 |---|---|
-| `model` | accepted and ignored. This server has one engine, and `/health` names it. Refusing a request for naming a model would break every client that must send one. |
-| `voice` | a name in this server's library, which `/v1/voices` lists. OpenAI's own names (`alloy`, `coral` and the rest) are a `404`, not a silent substitute. |
-| `response_format`, unset | **`wav`**, where OpenAI defaults to mp3. This is the one deliberate deviation: wav is lossless and every client decodes it. The clients that want mp3 ask for it. |
-| `response_format: aac` | refused, `400`, naming the formats that do work. libsndfile has no AAC encoder. |
-| `speed` | their range is 0.25–4.0 and this engine's is 0.5–2.0. Outside it is a `400` quoting the range, not a silent clamp. A caller that asked for 4× and received 2× has been handed audio it did not ask for, with nothing in the reply saying so. |
-| `stream_format: "sse"` | not implemented. The field is ignored, so the whole utterance comes back in one response: correct audio, delivered less eagerly than asked. `/v1/synthesize/stream` is the route that streams, in this server's own envelope. |
+| `model` | Accepted and ignored. The server has one engine, and `/health` names it. |
+| `voice` | A name in this server's library, which `/v1/voices` lists. OpenAI's own names (`alloy`, `coral` and the others) get `404`. |
+| `response_format`, unset | `wav`. OpenAI's default is mp3. |
+| `response_format: aac` | `400`, naming the formats that work. libsndfile has no AAC encoder. |
+| `speed` | OpenAI's range is 0.25 to 4.0, and this engine's is 0.5 to 2.0. A value outside it gets `400` quoting the range. |
+| `stream_format: "sse"` | Ignored. The whole utterance comes back in one response. `/v1/synthesize/stream` streams, in this server's own event format. |
 
-`wav`, `flac`, `pcm`, `mp3` and `opus` work, and this server's own `pcm16` and
-`ogg` are accepted too, so a caller that knows what it is talking to need not
-translate.
+`wav`, `flac`, `pcm`, `mp3` and `opus` work. This server's own `pcm16` and
+`ogg` are accepted too.
 
-Errors come back in OpenAI's envelope, `{"error": {"message": …}}`, rather than
-FastAPI's `detail`. A conforming client reads `error.message` and would otherwise
-show its user a blank HTTP failure, with the useful part (which voices exist,
-which formats work) discarded.
+Errors from this route use OpenAI's format, `{"error": {"message": …}}`. Two
+kinds of error still use loudkit's `{"detail": …, "code": …}` format:
+
+* a body that fails validation (`422`), for example a missing `voice` or an
+  `input` over 10 000 characters;
+* the refusals checked before any route runs: `401`, `403`, `413`, `415` and
+  `429`.
+
+A client must handle both formats.
 
 ## The gRPC service
 
@@ -387,66 +373,48 @@ The same engine behind a typed schema, for clients generated from
 loudkit serve --grpc --checkpoint loudreader/loudr-1
 ```
 
-Four methods: `Synthesize`, `SynthesizeStream`, `Describe`, `ListVoices`.
-Loopback only. There is no auth on this transport at all, so a non-loopback
-bind is refused outright rather than made configurable.
+It listens on `127.0.0.1:50051` and has four methods: `Synthesize`,
+`SynthesizeStream`, `Describe`, `ListVoices`. The gRPC transport has no
+authentication, so it refuses a non-loopback bind.
 
 Every refusal the server decides carries `loudkit-error-code` in its trailing
-metadata, the same frozen vocabulary the HTTP bodies carry as `code`. One
-refusal is decided below the server: a request message over 256 KiB is refused
-by gRPC core itself, as `RESOURCE_EXHAUSTED` with core's own message and no
-`loudkit-error-code`. Core refuses before a servicer exists, so there is no
-frame left to attach the metadata from.
+metadata, with the same codes the HTTP bodies carry as `code`. One refusal comes
+from gRPC itself: a request message over 256 KiB gets `RESOURCE_EXHAUSTED` with
+gRPC's own message and no `loudkit-error-code`.
 
 The contract, in the order a request meets it:
 
-* **Admission respects your deadline.** The engine is single-flight and
-  callers queue for it, but the wait is capped at the request's own
-  `time_remaining()`. A caller whose deadline expires in the queue never takes
-  the engine, so the `DEADLINE_EXCEEDED` it receives is also the truth about
-  what the server spent.
-* **`Synthesize` refuses a reply your client cannot receive.** Default gRPC
-  clients cap a message at 4 MiB. The preflight estimates the reply from the
-  text as it will be spoken, after normalization, because the funnel expands:
-  a thousand characters of digits become about five thousand characters of
-  number words. It also reserves headroom for the WAV header, the Content
-  Credentials box and protobuf framing. The refusal names `SynthesizeStream`, which
-  has no such ceiling.
-* **Cancelling a call stops the work, on both RPCs.** A cancel and an expired
-  deadline both set the flag the engine polls on every token decode step.
-  Cancellation is cooperative, not preemptive: it cannot interrupt a backend
-  kernel that is already executing, so a mel decode, a vocoder pass or a
-  time-stretch inside its backend call runs to the end of that call first. A
-  cancel lands within one such step, never within zero.
-* **A stream is produced behind a bounded queue.** The render runs on its own
-  thread and hands chunks across a two-slot queue to the socket. A peer that
-  stays connected and stops reading stalls the queue, not the engine: at the
-  server's stream cap the render stops and the engine returns to the pool,
-  while only that peer's delivery stays stuck.
-* **Every reply names its `sample_rate`.** wav, flac, ogg, mp3 and opus also
-  record it in their headers; raw `pcm16` frames have no header, so the field is the only
-  place a `pcm16` caller can read the rate from.
-* **Chunk `continuation` is cumulative.** Each chunk carries the passage's
-  tail as of that chunk, so chaining from the last chunk you received always
-  hands the engine a full prefix, even when the closing sentence was shorter
-  than one. The final chunk's value equals `Synthesize`'s `continuation` for
-  the same request.
+* Waiting for the engine respects your deadline. Callers queue for the
+  single-flight engine, but no longer than the request's own
+  `time_remaining()`. A caller whose deadline expires in the queue gets
+  `DEADLINE_EXCEEDED` and never takes the engine.
+* `Synthesize` refuses a reply that a default client cannot receive. Default
+  gRPC clients accept messages up to 4 MiB. The server estimates the reply size
+  from the text after normalization, which can expand it: a thousand characters
+  of digits become about five thousand characters of number words. The estimate
+  reserves room for the WAV header, the
+  [machine-readable note](../reference/provenance.md) and protobuf framing. The
+  refusal names `SynthesizeStream`, which sends one message per chunk.
+* Cancelling a call stops the work, on both RPCs. A cancel and an expired
+  deadline both set the flag the engine checks on every token decode step. A
+  backend call that is already running (a mel decode, a vocoder pass or a
+  time-stretch) finishes first, and the stop takes effect after it returns.
+* A stalled reader blocks only its own stream. At the ten-minute stream cap the
+  render stops and the engine is released, even if delivery to that peer stays
+  blocked.
+* Every reply states its `sample_rate`. wav, flac, ogg, mp3 and opus also record
+  it in their headers. Raw `pcm16` frames have no header, so read the rate from
+  this field.
+* Chunk `continuation` is cumulative. Each chunk carries the passage's tail up
+  to that chunk. To continue after the last chunk you received, pass its value.
+  The final chunk's value equals the `continuation` of `Synthesize` for the same
+  request.
 
 Running the HTTP server and the gRPC server over one engine in one process is
-not supported: each transport holds its own single-flight lease, and nothing
-arbitrates between them. One engine per transport process.
-
-## Shared synthesis path
-
-A second path is a second thing to keep in agreement, and this library exists
-because two paths drifted once. The test suite asserts that the server's bytes
-are identical to calling the engine directly, and the MCP tool, the gRPC service
-and the OpenAI-compatible route all resolve through the same `render_bytes`. One
-engine, four transports, one path.
-
-> Behind a reverse proxy every client shares the proxy's address, so the
-> per-client rate limiter collapses into one global bucket. Give the proxy its
-> own per-client limit.
+not supported. Each transport holds its own single-flight lease, and nothing
+arbitrates between them. Run one transport per process.
+[Transports](../design/transports.md) describes how the servers share the
+synthesis path.
 
 ## Next
 

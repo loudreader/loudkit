@@ -1,55 +1,57 @@
 #!/usr/bin/env python3
-"""A speech-dispatcher module, so loudkit speaks wherever Linux speaks.
+"""A Speech Dispatcher module that speaks with loudkit.
 
-Speech Dispatcher is the layer that sits between applications and speech
-synthesisers on Linux. Firefox reads pages through it, Orca reads screens
-through it, and any application that calls ``spd-say`` reaches it. Registering
-here means loudkit becomes available to all of them at once, which is a wider
-audience than a Python API reaches.
+Speech Dispatcher sits between applications and speech synthesizers on Linux.
+Firefox and Orca use it, and so does ``spd-say``. Registered as a module,
+loudkit is available to all of them.
 
-It talks the ``ssip`` module protocol over stdin/stdout: the server writes
-commands, the module writes numeric responses, and audio goes out through the
-module itself.
+The module speaks the ``ssip`` module protocol over stdin and stdout: Speech
+Dispatcher writes commands, the module writes numeric replies, and the module
+plays the audio itself.
 
-**It does not synthesise.** It forwards to a running ``loudkit serve``, which
-holds the warm engine. A module that loaded a 747 MB checkpoint per utterance
-would make every menu item take six seconds.
+**It does not synthesize.** It forwards each utterance to a running
+``loudkit serve``, which holds the loaded engine. Loading the 747 MB checkpoint
+for each utterance would take about six seconds per menu item.
 
-Four things about this module are load-bearing, in ways that only show up in
-a real screen reader:
+A screen reader depends on four protocol details:
 
-* **The reply and event codes are the protocol's**, not approximations.
-  ``SPEAK`` answers ``202 OK RECEIVE DATA``; the events are ``701 BEGIN``,
-  ``702 END`` and ``703 STOP``. Emitting ``702`` for BEGIN makes Speech
-  Dispatcher read the start of an utterance as its end and the end as a stop:
-  its queue and its idea of what is speaking are wrong from the first word.
-* **BEGIN is sent before the first samples**, not after the last. It is the
-  event a reader uses to know speech has started.
-* **STOP is not answered.** The protocol forbids a reply to it; what it
-  requires is a later ``703 STOP`` once the utterance has actually stopped.
-* **STOP cancels the synthesis, not just the player.** A stop that only
-  reaches the player lands after the HTTP request returns, and the worker
-  starts playing an utterance the user has already moved on from. Every
-  utterance carries a generation number, and a worker whose generation is
-  stale plays nothing.
+* **The reply and event codes are the protocol's own.** ``SPEAK`` answers
+  ``202 OK RECEIVE DATA``; the events are ``701 BEGIN``, ``702 END`` and
+  ``703 STOP``. With ``702`` for BEGIN, Speech Dispatcher reads the start of an
+  utterance as its end and the end as a stop, and its queue is wrong from the
+  first word.
+* **BEGIN is sent before the first samples play.** A reader uses it to know
+  that speech has started.
+* **STOP gets no reply.** The protocol forbids one. It requires a later
+  ``703 STOP`` once the utterance has stopped.
+* **STOP cancels the synthesis as well as the player.** A stop that reached
+  only the player would come before the HTTP request returns, and the worker
+  would then play an utterance the user has moved past. Every utterance carries
+  a generation number, and a worker whose generation is stale plays nothing.
 
-Rate rides the engine's own ``speed`` control when it can. A rate that maps
-into the engine's 0.5–2.0 range is sent as the ``speed`` field of the
-synthesis request, so faster speech keeps its pitch (WSOLA, applied
-server-side). Only a rate below 0.5 (Speech Dispatcher's scale reaches down
-to 0.0, the engine's does not) falls back to rewriting the WAV header's
-sample rate, which is a genuine speed change that also shifts pitch, exactly
-like ``sox speed``. The fallback is kept rather than clamped away because a
-module that accepts ``SET SELF RATE`` and quietly renders a different rate
-leaves a user adjusting a slider that lies to them.
+Rate uses the engine's ``speed`` control when it can. A rate that maps into the
+engine's 0.5 to 2.0 range is sent as the ``speed`` field of the synthesis
+request, so faster speech keeps its pitch (WSOLA, on the server). Speech
+Dispatcher's scale goes down to 0.0. For a rate below 0.5, the module rewrites
+the sample rate in the WAV header instead, which changes the pitch as well as
+the speed, like ``sox speed``. The module does not clamp such a rate, so the
+rate a user sets is the rate they hear.
 
 Install:
 
     pip install "loudkit[server]"
     loudkit serve --checkpoint …/loudr-1.safetensors &
+    mkdir -p ~/.config/speech-dispatcher/modules ~/.local/bin
     cp integrations/speech-dispatcher/loudkit.conf ~/.config/speech-dispatcher/modules/
     cp integrations/speech-dispatcher/loudkit-speechd.py ~/.local/bin/
-    # then add `AddModule "loudkit" "loudkit-speechd.py" "loudkit.conf"` to speechd.conf
+    chmod +x ~/.local/bin/loudkit-speechd.py
+
+Then register the module in speechd.conf (/etc/speech-dispatcher/speechd.conf,
+or your own copy in ~/.config/speech-dispatcher/speechd.conf). Give the
+absolute path of the module, with your home directory in it. Speech Dispatcher
+looks up a relative path in its own module directory, not on PATH:
+
+    AddModule "loudkit" "/home/<you>/.local/bin/loudkit-speechd.py" "loudkit.conf"
 """
 
 from __future__ import annotations

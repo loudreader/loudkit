@@ -106,6 +106,7 @@ export default defineConfig({
         {
           label: 'Reference',
           items: [
+            { slug: 'reference/cli', label: 'Command line' },
             { slug: 'reference/compatibility', label: 'Compatibility' },
             { slug: 'reference/errors', label: 'Errors' },
             { slug: 'reference/timestamps', label: 'Timestamps' },

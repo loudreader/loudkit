@@ -1,10 +1,11 @@
 #!/bin/zsh
 # The environment every probe in this directory needs.
 #
-# Sourced, not copied into each command line: the two ONNX Runtime builds are
-# not interchangeable (the Rust `ort` build loads only 1.27.x, the Go binding
-# wants API 28, which is 1.29), and a probe that picked the wrong one would
-# fail in a way that looks like a port defect.
+# The runner scripts source this file, so the paths live in one place. The Go
+# binding needs ORT API 28, which is ONNX Runtime 1.28 or newer; the Rust `ort`
+# build refuses anything older than 1.27. The default Rust library below is
+# 1.27, so it does not work for Go. A probe that picked the wrong one would fail
+# in a way that looks like a port defect. The defaults below are macOS paths.
 #
 # Override any of these from the caller; each assignment keeps a value that is
 # already set.
@@ -18,7 +19,7 @@
 : ${LOUDKIT_ONNX_DIR:=$LOUDKIT_ASSET_ROOT/onnx}
 # Go and Python: the binding wants ORT API 28.
 : ${LOUDKIT_ONNXRUNTIME_LIB:=$LOUDKIT_REPO/.venv/lib/python3.12/site-packages/onnxruntime/capi/libonnxruntime.1.29.0.dylib}
-# Rust: `ort` feature api-27 loads only a 1.27.x dylib.
+# Rust: `ort` feature api-27 refuses a dylib older than 1.27.
 : ${ORT_DYLIB_PATH:=$LOUDKIT_REPO/js/node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.27.0.dylib}
 : ${LOUDKIT_TOKENIZER:=$LOUDKIT_ASSET_ROOT/tokenizer.json}
 : ${PYTHON:=$LOUDKIT_REPO/.venv/bin/python}

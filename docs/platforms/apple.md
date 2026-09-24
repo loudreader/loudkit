@@ -1,89 +1,109 @@
-# The Apple path: CoreML artefacts and the Swift package
+# Apple: CoreML packages and the Swift package
 
-**Requirements:** Apple Silicon, macOS 14+ (iOS 17+ for the package). The
-package declares `swift-tools-version: 5.9`.
-CoreML artefacts are exported with `coremltools` 9. Figures on
-this page were measured on an Apple Silicon laptop. Results depend on hardware.
+**Requirements:** macOS 14 or later. The Swift package also runs on iOS 17 or
+later and declares `swift-tools-version: 5.9`. The CoreML packages are
+exported with `coremltools` 9. All figures on this page come from one Apple
+Silicon laptop, an M3 Pro.
 
-Two deliverables, one gate:
+loudkit on Apple has two parts:
 
-- the CoreML renderer graphs, re-exported from the packed checkpoint;
-- a Swift package (`LoudKit`, at the repo root) that renders the same audio as
-  the Python engine. A conformance fixture that both languages read proves it.
+- the CoreML packages, exported from the checkpoint and loaded by the Python
+  `coreml` backend and the Swift package;
+- the Swift package, `LoudKit`, with its `Package.swift` at the repository
+  root.
 
-## The artefacts and how to rebuild them
+The Swift package and the Python engine read one shared conformance fixture.
+The tests compare their tokens, mel spectrograms and waveforms.
+[Conformance tests](#conformance-tests) lists the checks and the measured
+results.
 
-The exported packages are **not** in git (they are weights). The release ships
-them in a `coreml/` directory beside the checkpoint, and one fetch gets the
-whole working set:
+## The CoreML packages
+
+The exported packages are not in git. The release ships them in a `coreml/`
+directory beside the checkpoint. This command fetches everything the Swift
+package and the Python `coreml` backend need:
 
 ```bash
 loudkit download loudreader/loudr-1 --for coreml --with-cloning --local-dir loudr-1
 ```
 
-Drop `--with-cloning` for synthesis alone. For CoreML it adds the three
-enrollment packages, which Swift enrollment needs. It does not add the torch
-enrollment weights: those are the Python enroller's, and Swift never opens
-them.
+For synthesis only, leave out `--with-cloning`. With `--for coreml`,
+`--with-cloning` adds the three CoreML enrollment packages, which Swift
+enrollment needs. It does not add the PyTorch enrollment weights
+(`loudr-1-enrollment.safetensors`, `ve.safetensors`), which the Swift package
+does not use.
 
-Both the Python coreml backend and the Swift package look beside the
-checkpoint by default:
+The Python `coreml` backend and the Swift package look for `coreml/` beside
+the checkpoint by default:
 
 ```
-checkpoints/loudr-1/
+loudr-1/
   loudr-1.safetensors           # synthesis checkpoint, 747 MB
   manifest.json                 # human-readable mirror
   tokenizer.json
   voices/                       # all 28 profiles, always fetched
   coreml/
-    flow_encoder.mlpackage      # fp32, CPU; fp16 here is measured fatal
+    export.json                 # export record: source checkpoint, tool versions
+    flow_encoder.mlpackage      # fp32, CPU
     flow_estimator.mlpackage    # fp16, CPU+ANE
-    vocoder.mlpackage           # fp32, CPU; fp16 puts a tone at Nyquist
+    vocoder.mlpackage           # fp32, CPU
+    t3_cond.mlpackage           # token generator, Python coreml backend only
+    t3_prefill.mlpackage        # token generator, Python coreml backend only
+    t3_step.mlpackage           # token generator, Python coreml backend only
     s3_tokenizer.mlpackage      # enrollment, with --with-cloning
     camp.mlpackage              # enrollment, with --with-cloning
     voice_encoder.mlpackage     # enrollment, with --with-cloning
 ```
 
-Rebuild from the matching checkpoint. The historical base exports below used
-torch 2.6.0. The Wave T turbo estimator was successfully re-exported with torch
-2.13.0 and coremltools 9.0, then passed waveform conformance. That does not
-certify every exporter with that combination. New exports record installed
-tool versions in `export.json`; older entries without them are not
-retroactively assigned versions.
+The flow encoder and the vocoder stay fp32. In fp16, the encoder's mel
+correlation drops to 0.619, and the vocoder adds a tone at the Nyquist
+frequency. [execution-config.md](../design/execution-config.md) has the
+measurements.
+
+### Rebuild the packages
+
+Rebuild the packages from the matching checkpoint:
 
 ```bash
 python tools/export_coreml.py \
     --checkpoint /path/to/loudr-1.safetensors
 ```
 
-The script gates every stage against the torch modules loaded from the same
-checkpoint before a package is moved into place. This build's gates:
+The script checks every stage against the PyTorch module loaded from the same
+checkpoint before it moves a package into place. A stage that fails the check
+leaves the existing package unchanged. Results of the loudr-1 renderer export:
 
-| stage | vs torch (same weights) | note |
+| stage | against PyTorch (same weights) | note |
 |---|---|---|
-| flow_encoder | corr 1.0000000, max\|Δ\| 1.8e-06 | fp32 conversion, transparent |
-| flow_estimator | corr 0.9999590, max\|Δ\| 1.2e-01 | the fp16 pipeline band |
-| vocoder | corr 1.0000000, max\|Δ\| 3.8e-05 | conv-STFT rewrite proven at 8.8e-07 first |
+| flow_encoder | corr 1.0000000, max\|Δ\| 1.8e-06 | fp32 conversion |
+| flow_estimator | corr 0.9999590, max\|Δ\| 1.2e-01 | fp16, inside the fp16 tolerance |
+| vocoder | corr 1.0000000, max\|Δ\| 3.8e-05 | STFT rewritten as convolutions, 8.8e-07 from the original STFT before conversion |
 
-The graph geometry is the shipped app's (query 255 / prompt 238 → T986 mel,
-HiFT at 510 frames), and the weights trace to one file. All render randomness
-(flow prior, harmonic phases, excitation noise) is a graph *input*, drawn from
-loudkit's Philox streams on both sides.
+These loudr-1 exports used torch 2.6.0. The turbo estimator was exported with
+torch 2.13.0 and coremltools 9.0 and passed the waveform conformance test.
+That result does not cover every exporter with that combination. `export.json`
+records the installed tool versions of each new export in its `toolchain`
+field. Entries without that field have no recorded tool versions.
 
-The static window recipe and the EOS floor are manifest-borne, and the tensor
-payload is re-hashed unchanged before and after the manifest amendment.
-The Swift implementation carries **no fallback constants** for them: it refuses
-an un-amended checkpoint rather than re-guess the framing that was once the
-entire measured ANE-vs-torch deviation.
+The graphs are static: a query of 255 tokens and a prompt of 238 tokens give
+986 mel frames, and the vocoder (HiFT) runs at 510 frames. All weights come
+from the one checkpoint file. All render randomness (flow prior, harmonic
+phases, excitation noise) is a graph input, drawn from loudkit's Philox
+streams in both languages.
+
+The checkpoint manifest holds the static window (query length, prompt length,
+pad token) and the EOS floor. The Swift package reads them from the manifest
+and has no built-in window values. It refuses a checkpoint whose manifest does
+not declare the 255/238 static window. A manifest without an `eos_floor` block
+gets the shared default, no floor, as in the other implementations.
 
 ## The Swift package
 
-`Package.swift` sits at the repo root, sources in `swift/LoudKit`, tests in
-`tests/LoudKitTests`. The lowercase test path is deliberate: on the
-case-insensitive dev filesystem `Tests` and the Python `tests` directory are one
-directory, and the manifest must name the real one for case-sensitive checkouts.
+`Package.swift` is at the repository root. The sources are in `swift/LoudKit`
+and the tests are in `tests/LoudKitTests`. `LoudKit` chunks long text and
+streams (`Chunking.swift`, `Engine.stream`).
 
-The API mirrors the Python engine closely enough to show side by side:
+The Python and Swift APIs have the same shape:
 
 ```python
 import loudkit as lk
@@ -98,14 +118,31 @@ import LoudKit
 let engine = try Engine.load(checkpoint: checkpointURL)   // coreml/ found beside it
 let voice  = try VoiceProfile.load(url: voiceURL)
 let result = try engine.synthesize("Hello there.", voice: voice, seed: 7)
-try result.save(to: outURL)                                // audio, tokens, mel, timings
+try result.saveWav(to: outURL)                             // 16-bit PCM WAV
 ```
 
-The config split is mirrored too: `AlgorithmConfig` (built from the checkpoint
-manifest, fingerprint-compatible with Python, see below) and a per-device
-`ExecutionConfig` (compute units per CoreML stage, generator precision).
+Both split the configuration the same way:
 
-Execution layout, declared not implied:
+- `AlgorithmConfig` is built from the checkpoint manifest. Its fingerprint is
+  compatible with Python's; see [Conformance tests](#conformance-tests).
+- `ExecutionConfig` holds the per-device settings: the compute units of each
+  CoreML stage.
+
+| `ExecutionConfig` property | default | stage |
+|---|---|---|
+| `encoderComputeUnits` | `.cpuOnly` | flow encoder |
+| `estimatorComputeUnits` | `.cpuAndNeuralEngine` | flow estimator |
+| `vocoderComputeUnits` | `.cpuOnly` | vocoder |
+
+Each property takes `.cpuOnly`, `.cpuAndNeuralEngine` or `.all`. Pass the
+config to `Engine.load(checkpoint:coremlAssets:execution:)`,
+`Engine.load(bundle:execution:)` or `Engine.load(_:revision:execution:progress:)`.
+`engine.withExecution(_:)` rebuilds only the CoreML stages with a new config.
+`tokenGeneratorPrecision` is informational: the generator always computes in
+fp32. The defaults come from measurements on the M3 Pro. On other hardware,
+other settings can be faster.
+
+Where each stage runs by default:
 
 | stage | where | precision |
 |---|---|---|
@@ -114,57 +151,74 @@ Execution layout, declared not implied:
 | flow estimator | CoreML, CPU + Neural Engine | fp16 for loudr-1; fp32 for turbo |
 | vocoder | CoreML, CPU | fp32 |
 
-The generator is native rather than a CoreML graph for two reasons. The app's
-stateful T3 export has no validated cross-implementation harness (see "not
-covered" below). CPU is also the measured-right placement for the autoregressive
-stage on Apple silicon. fp32 is the declared conformance precision: token
-identity across implementations holds *at matched precision* (identity
-contract), and fp32-from-fp16-storage is what the Python conformance engine
-runs.
+The token generator is native Swift code. It does not use the
+`t3_*.mlpackage` graphs. On Apple silicon it measured faster on the CPU than
+on the GPU or the Neural Engine at batch one. It computes in fp32 from the
+fp16 weights in the checkpoint, the same precision the Python conformance
+engine runs. The fixture declares fp32,
+because token identity across implementations holds only at matched precision
+(see the [identity contract](../reference/IDENTITY-CONTRACT.md)). No
+conformance harness covers a stateful CoreML export of the generator; see
+[Limits](#limits).
 
-**The first synthesis after launch is the slow one, so an app should render
-one nobody hears.** CoreML specialises a loaded `.mlmodelc` for the device on
-first use, exactly as the torch MPS backend compiles a Metal pipeline on
-first use, and both caches live in the OS rather than in the process. The
-shipped vocoder graph measured here on an M3 Pro: 0.43 s to load and 0.39 s
-for the first prediction in a fresh process against 0.19 s for the ones
-after, then 0.12 s to load and 0.25 s for the first prediction in the next
-fresh process, the OS having kept the rest. Synthesise once on a background
-task at launch and throw the audio away; the seed rules in
-[the pipeline notes](../design/engine-pipeline.md) are what make that
-free of consequence. The servers do the same thing, see
-[transports](../design/transports.md).
+### The first synthesis
 
-## Conformance: the gate, and how it is checked
+The first synthesis after launch is slow. CoreML specializes a loaded
+`.mlmodelc` for the device on first use, as the PyTorch MPS backend compiles a
+Metal pipeline on first use. Both caches belong to the OS and outlive the
+process. Measured on the M3 Pro with the shipped vocoder graph:
+
+- first fresh process: 0.43 s to load, 0.39 s for the first prediction, 0.19 s
+  for each later prediction;
+- next fresh process: 0.12 s to load, 0.25 s for the first prediction.
+
+Run one synthesis in a background task at launch and discard the audio. Every
+stage draws its random numbers from the call's own seed (see
+[the pipeline notes](../design/engine-pipeline.md)), so this warm-up does not
+change the output of later calls. The server entry points can warm up the
+same way; see [transports](../design/transports.md).
+
+## Enrollment in the Swift package
+
+The Swift package enrolls a voice with the three exported CoreML graphs
+(`s3_tokenizer.mlpackage`, `camp.mlpackage`, `voice_encoder.mlpackage`). The
+same enrollment fixture checks it and the Python, Go, Rust and JS
+implementations. `camp.mlpackage` is exported at a fixed input of 998 frames,
+the length that the 10 s enrollment limit always produces, because
+coremltools converts `avg_pool1d(ceil_mode=True)` incorrectly under a dynamic
+dimension.
+
+## Speed of the Swift package
+
+On an M3 Pro (11-core CPU, 14-core GPU, 36 GB, macOS 26.1, Swift 6.2.1,
+release build), the Swift package runs the third benchmark passage at 2.49x
+real time with loudr-1 and 3.44x with loudr-1-turbo, measured on 0.1.1
+(2026-09-06) as medians of three warm streams. First audio arrives after
+1.93 s and 1.38 s. Engine load takes 11 s for loudr-1 and 4 s for turbo. On the
+same machine, passage, voice and seed, the Python engine with `--device mps`
+runs at 3.29x and 5.77x. The raw runs are in
+[2026-09-06-m3pro-both-models.json](../measurements/2026-09-06-m3pro-both-models.json).
+
+In these runs the token generator ran natively on the CPU in fp32, the flow
+estimator on `cpuAndNeuralEngine`, and the encoder and vocoder on `cpuOnly`.
+The renderer runs the same CoreML graphs as the Python `coreml` backend.
+
+## Conformance tests
 
 One fixture, `tests/data/conformance/`, generated by
-`tools/make_conformance.py` and read by **both** `pytest`
-(`tests/test_conformance.py`) and `swift test`. Layers:
+`tools/make_conformance.py`, is read by both `pytest`
+(`tests/test_conformance.py`) and `swift test`. It has these layers:
 
-- **Philox**: the three Random123 KAT vectors, raw uniform *bits* for fixed
-  `(seed, stream, step, index)` (exact, integer), and gumbel probes at 1e-12
-  (allowance for a foreign libm's last ulp).
-- **LR-SAMPLER-v1**: token choices for literal logits, a silence-exemption
-  case, and a full-vocab (8194) case whose logits are derived from Philox bits
-  so both languages regenerate the identical float32 input. The Swift sampler
-  is the third independent implementation of the law, and it matches choice for
-  choice.
-- **Text frontend**: token ids for trap sentences (punctuation, Polish
-  diacritics, doubled whitespace), with the tokenizer JSON in the fixture so
-  this layer needs no weights.
-- **Algorithm identity**: the production fingerprint *and* the exact canonical
-  form it hashes. Swift implements `canonicalForm()` against the same rules
-  (floats as shortest-round-trip `repr` strings, sorted keys, schema
-  envelope) rather than storing Python's output. Both languages compute the
-  fingerprint independently and agree: `7cd75498ad4e7531`.
-- **Seed derivation**: the per-stage splitting constants, as hex (a u64 does
-  not survive a JSON double).
-- **End to end**: two sentences, text + voice + seed → speech tokens (exact),
-  mel and waveform (banded), rendered by the Python coreml backend with the
-  generator declared fp32.
+| layer | what the tests check |
+|---|---|
+| Philox | The three Random123 known-answer vectors. The raw uniform bits for fixed `(seed, stream, step, index)`, exact as integers. Gumbel probes at a tolerance of 1e-12, for last-ulp differences between math libraries. |
+| LR-SAMPLER-v1 | Token choices for literal logits, a silence-exemption case, and a full-vocabulary case (8194 entries) whose logits come from Philox bits, so both languages build the same float32 input. The Swift sampler makes the same choice as the Python sampler in every case. |
+| Text frontend | Token ids for edge-case sentences (punctuation, Polish diacritics, doubled whitespace). The fixture holds the tokenizer JSON, so this layer needs no weights. |
+| Algorithm identity | The fingerprint and the exact canonical form it hashes. Swift builds `canonicalForm()` from the same rules (floats as shortest round-trip `repr` strings, sorted keys, schema envelope) and does not store Python's output. Both languages compute the same fingerprint, `7cd75498ad4e7531`. |
+| Seed derivation | The per-stage splitting constants, as hex strings, because a JSON double cannot hold every u64 exactly. |
+| End to end | Two sentences: text, voice and seed to speech tokens (exact), and to mel and waveform (within a tolerance band), rendered by the Python `coreml` backend with the generator declared fp32. |
 
-Measured on the reference Apple Silicon build. Results vary by hardware and OS
-version:
+Measured results:
 
 | comparison | s0 (79 tok) | s2 (157 tok) |
 |---|---|---|
@@ -173,147 +227,123 @@ version:
 | Swift waveform vs Python coreml waveform | **bit-identical** (max\|Δ\| 0) | **bit-identical** (max\|Δ\| 0) |
 | Python coreml (re-export) vs torch reference, fixed tokens¹ | mel 0.9999923 | mel 0.9999914 |
 
-¹ third row measured on the parity sentences s0/s1/s2 vs
-`tests/data/reference` (s1: 0.9999914; waveform 0.9973 / 0.9886 / 0.9717, since
-the vocoder's predicted-phase channel decorrelates the waveform while the
-spectrum stays put; mel is the quality gate recorded in
-[Parity, measured](../parity-measured.md)). The
-measured band (≥ 0.999) is the **gate** the tests assert. The bit-identity in
-rows 2 and 3 is what this machine *observed* (Swift consumes identical Philox
-bytes and drives the identical deterministic graphs) and is not promised across
-machines or ANE generations.
+¹ The fourth row was measured on the parity sentences s0, s1 and s2 against
+`tests/data/reference` (s1: 0.9999914). The waveform correlations are 0.9973,
+0.9886 and 0.9717: the vocoder's predicted-phase channel lowers the waveform
+correlation, while the spectrum does not change. Mel correlation is the
+quality check recorded in [Parity, measured](../parity-measured.md).
+
+The tests require a mel correlation of at least 0.999. The bit-identical
+results in rows 2 and 3 were measured on one machine. Swift reads the same
+Philox bytes and runs the same deterministic graphs, but bit identity is not
+promised on other machines or Neural Engine generations.
 
 Reproduce:
 
 ```bash
 .venv/bin/python -m pytest -q             # the Python suite
 swift test                                # same fixture, from Swift
-# regenerate the fixture only when the engine legitimately changes:
+# regenerate the fixture only after an intended change to the algorithm:
 .venv/bin/python tools/make_conformance.py --checkpoint …
 ```
 
-The weight-free vectors run on any machine. The algorithm-identity and
-end-to-end tests need the checkpoint (`LOUDKIT_CHECKPOINT`, or the dev default)
-and the exported packages. Without them they skip with a named reason.
-`LOUDKIT_REQUIRE_ASSETS=1` turns those skips into failures, same rule as the
-Python suite.
+The weight-free vectors need no model files. The algorithm-identity and
+end-to-end tests need the checkpoint and the exported packages. Set
+`LOUDKIT_CHECKPOINT` to the checkpoint file, or `LOUDKIT_ASSET_ROOT` to a
+directory that holds it. The default is the repository's `assets/` directory.
+Without the files, these tests skip and name the reason.
+`LOUDKIT_REQUIRE_ASSETS=1` turns those skips into failures, the same rule as
+the Python suite.
 
-## Not covered
+## Limits
 
-- **T3 on the Neural Engine is still not covered by either language.** The
-  app's stateful multi-function T3 export remains without a validated
-  cross-implementation harness. On the Python side torch's decode loop
-  segfaults after coremltools loads in the same process (hit again while
-  generating this fixture, worked around by a two-process split). The Swift
-  package runs the generator natively on CPU instead. A row synthesised from an
-  unvalidated export is worse than a missing row.
-- **fp16 generator tokens are not the conformance claim.** The fixture
-  declares fp32. On the two fixture sentences the shipping fp16 map produced
-  identical tokens: observed, not promised. fp16 flips ~1 token in a thousand,
-  and one flip re-routes everything after it.
-- **iPhone numbers are not from this pass.** Everything above was measured on
-  an Apple Silicon Mac. The package compiles for iOS 17+, but per this
-  project's own rule (measure on device) the A16 row in
-  [benchmarks](../benchmarks.md) keeps its provenance from the app's engine,
-  not from this package, until it is measured here.
-- **Enrollment is Swift-supported over CoreML.** The chunking, streaming and
-  long-form composition landed in `LoudKit` (`Chunking.swift`, `Engine.stream`).
-  Enrollment runs over the three exported CoreML graphs
-  (`s3_tokenizer.mlpackage`, `camp.mlpackage`, `voice_encoder.mlpackage`), held
-  to the same enrollment fixture as the Python, Go, Rust and JS ports. One
-  Apple-specific caveat: `camp.mlpackage` is exported at the fixed 998-frame
-  geometry the 10 s-capped enrollment always produces, because coremltools
-  lowers `avg_pool1d(ceil_mode=True)` wrong under a dynamic dimension.
-- **The port is measured, and it is slower than the Python engine.** On an
-  M3 Pro (11-core CPU, 14-core GPU, 36 GB, macOS 26.1, Swift 6.2.1, release
-  build) the whole pipeline runs the third benchmark passage at 2.49x real
-  time with loudr-1 and 3.44x with loudr-1-turbo, medians of three warm
-  streams; first audio arrives after 1.93 s and 1.38 s. Engine load takes
-  11 s, 4 s for turbo. The Python engine on `--device mps`, same machine, same
-  passage, same voice and seed, runs the same call at 3.29x and 5.77x. Every
-  figure here was measured on 0.1.1 (2026-09-06); the raw runs are in
-  `docs/measurements/`. The generator runs natively on the CPU in fp32,
-  because that is where the port puts it; the estimator ran on
-  `cpuAndNeuralEngine`, the encoder and vocoder on `cpuOnly`. The renderer,
-  which is the CoreML part, is the same graphs at the same speed on both
-  sides.
+- Neither language runs the token generator (T3) on the Neural Engine. No
+  validated cross-implementation harness exists for a stateful multi-function
+  CoreML export of T3. The Swift package runs its native generator on the CPU.
+  In Python, the PyTorch decode loop crashes (segfault) when coremltools is
+  loaded in the same process, so `tools/make_conformance.py` generates the
+  fixture tokens in a separate process.
+- fp16 generator tokens are not part of the conformance fixture, which
+  declares fp32. On the two fixture sentences, the shipped fp16 generator
+  produced the same tokens, but that is not promised. fp16 changes about 1
+  token in 1000, and each changed token changes every token after it.
+- The package builds for iOS 17 and later, but it has not been measured on an
+  iPhone.
 
-## The in-process crash, and why the backend is safe to embed
+## The Python `coreml` backend in a long-running process
 
-Until this was fixed, `loudkit.load(device="coreml")` killed its host about one
-second after a synthesis returned. The audio was correct; the process died
-afterwards, so a server, a notebook or any script that did a second thing was
-taken down by a call that had already succeeded.
+`loudkit.load(device="coreml")` can run in a server, a notebook or any process
+that continues after a synthesis. The backend guards against a coremltools 9.0
+bug that can crash such a process about one second after a synthesis returns
+correct audio
+([apple/coremltools#2827](https://github.com/apple/coremltools/issues/2827)).
 
-The mechanism is upstream, in coremltools, and it is still unfixed in 9.0
-(apple/coremltools#2827, open, no Apple response). coremltools wraps each
-prediction input without copying and keeps the Python array as an Objective-C
-ivar on the feature value. CoreML does not release that feature value when
-`predict` returns: the MLE5 execution stream lingers and resets itself about a
-second later on `com.apple.coreml.MLE5ExecutionStream.resetQueue`. The release
-therefore runs on a dispatch thread that holds no GIL. If the interpreter's own
-reference is gone by then, the release reaches `_PyObject_Free` and corrupts the
-allocator, and the fault lands in whatever the main thread is doing.
+coremltools wraps each prediction input without copying it. CoreML releases
+that input about one second after `predict` returns, on a dispatch thread that
+does not hold the GIL. If Python holds no other reference by then, the release
+corrupts the Python allocator, and the process crashes in whatever it does
+next.
 
-The backend now keeps a reference of its own. Each model owns one buffer per
-input for its lifetime and every predict copies into it, so CoreML's off-thread
-release only ever drops a count from two to one and the real free happens on a
-thread that holds the GIL. The exported graphs are static, so this is one buffer
-per input, allocated once. Measured on an M3 Pro, macOS 26.1, coremltools 9.0:
-waveform bit-identical to the unpinned path, wall time 2.09 s against 2.06 s on
-a 4.96 s sentence, median of four, which is inside run-to-run noise.
+The backend keeps its own reference to each input buffer for the life of the
+model, and every prediction copies into that buffer. The final release then
+happens on a thread that holds the GIL. A buffer grows when its input grows,
+for example the token generator's KV cache.
+[execution-config.md](../design/execution-config.md) describes the mechanism.
 
-`tests/test_coreml_lifetime.py` is the regression test. It renders in a child
-process and asserts the child's exit status after it has outlived the linger
-window, because a test that only checks the synthesis would pass while the
-process was already doomed.
+Measured on an M3 Pro, macOS 26.1, coremltools 9.0: the waveform is
+bit-identical to the path without the guard, and the wall time is 2.09 s
+against 2.06 s for a 4.96 s sentence (median of four), inside run-to-run noise.
 
-Two things this does **not** claim. It does not make coremltools safe for other
-callers: anything in this repo that calls `MLModel.predict` outside this backend
-carries the same hazard, which is why `tools/export_enroll_coreml.py`,
-`tools/make_conformance.py` and `tools/build_release.py` still isolate their
-CoreML work in subprocesses. And it is not known to be the same fault as the T3
-decode-loop segfault recorded above; that one was never traced to a stack.
+`tests/test_coreml_lifetime.py` renders in a child process and checks the
+child's exit status after the release delay.
 
-## Two doors to CoreML, and which one you are using
+The guard covers only predictions made through this backend. Other code that
+calls `MLModel.predict` directly has the same risk.
+`tools/export_enroll_coreml.py`, `tools/make_conformance.py` and the release
+tool (`tools/build_release.py`) run their CoreML predictions in subprocesses.
+It is not known whether the T3 decode-loop crash in [Limits](#limits) has the
+same cause.
 
-CoreML is reachable two ways, and they are different artefacts with different
-properties.
+## CoreML packages and the ONNX CoreML provider
 
-**The exported packages**, described above: `coreml/*.mlpackage`, built by
-`tools/export_coreml.py`. This is what the Swift package uses, and what the
-Python `coreml` backend uses. It is the Apple-native path.
+loudkit reaches CoreML in two ways, with different files:
 
-**The ONNX CoreML execution provider**, reached with `onnx_provider="coreml"`
-from the Python, Rust and Go ports, and from the command line with
-`--device onnx --provider coreml`. Here CoreML runs the same exported ONNX
-graphs the CPU provider runs. It is a *placement*, not a whole-engine switch:
-the three renderer graphs go to CoreML with `ModelFormat=MLProgram`, and the
-generator stays on the CPU. The generator has no winning CoreML configuration:
-`t3_step` runs once per speech token at 9.8 ms on CPU against 17.6 ms for the
-best CoreML variant, and `t3_prefill` and `t3_step` fail to compile under
-MLProgram at all.
+- The exported packages described above (`coreml/*.mlpackage`, built by
+  `tools/export_coreml.py`). The Swift package and the Python `coreml` backend
+  use them.
+- The ONNX CoreML execution provider: `onnx_provider="coreml"` in the Python
+  engine and the Rust and Go ports, or `--device onnx --provider coreml` on the
+  command line. CoreML then runs the same exported ONNX graphs that the CPU
+  provider runs.
 
-Because nothing that decides a token runs on CoreML, the speech tokens are
+The ONNX CoreML provider moves only the three renderer graphs to CoreML, with
+`ModelFormat=MLProgram`. The token generator stays on the CPU. `t3_step` runs
+once per speech token and takes 9.8 ms on the CPU against 17.6 ms for the
+fastest CoreML variant, and `t3_prefill` and `t3_step` do not compile under
+MLProgram. Because the generator runs on the CPU, the speech tokens are
 identical to a CPU run. The waveform is not bit-identical.
 
 The first run on a machine compiles the renderer graphs, which takes about two
-minutes. That is cached in `~/Library/Caches/loudkit/coreml`, about 1.6 GB, and
-later runs open in about 25 s against 3 s for the CPU provider.
-`$LOUDKIT_COREML_CACHE` moves the directory. `auto` never selects `coreml`,
-because a default may not spend two minutes and 1.6 GB without being asked.
+minutes. The result is cached in `~/Library/Caches/loudkit/coreml`, about
+1.6 GB, and later runs open in about 25 s against 2.5 s to 2.9 s for the CPU
+provider. These figures were measured before 0.1.0; see
+[benchmarks](../benchmarks.md).
+Set `LOUDKIT_COREML_CACHE` to use another directory. `auto` never selects
+`coreml`. Request it by name.
 
-**JS has no CoreML.** `onnxruntime-node` cannot name a cache directory, so every
-process would pay the compile again. The port refuses the provider rather than
-offering that. See [the JS guide](../guides/07-js-ts.md).
+The JS port refuses `coreml`. `onnxruntime-node` cannot set a cache directory,
+so every process would compile the graphs again. See
+[the JS guide](../guides/07-js-ts.md).
 
+## Python: native or PyTorch token generator
 
-## Python: native CoreML or the earlier mixed path
+By default, the Python `coreml` backend runs the native fp32 token generator
+from the `t3_*.mlpackage` packages and does not need PyTorch. It has fewer
+dependencies, but for loudr-1 it is not always the fastest choice. A loudr-1
+release that ships no generator packages uses the PyTorch generator on the CPU.
 
-New bundles default to native fp32 generation and need no PyTorch. This
-reduces dependencies, but is not always the fastest choice for the base model.
-The earlier fp16 PyTorch generator with CoreML rendering remains available
-through explicit CPU generator placement; precision only chooses its dtype:
+To use the fp16 PyTorch generator with the CoreML renderer, set
+`generator_device="cpu"`. The precision map then sets its dtype:
 
 ```python
 import loudkit as lk
@@ -326,13 +356,13 @@ engine = lk.load("loudreader/loudr-1", device="coreml",
                  }))
 ```
 
-This path requires the `torch` extra. For turbo, the CoreML estimator is fp32;
-set `mel_decoder.estimator` to `fp32` in that example. Different generator
-precisions need not sample identical tokens on arbitrary texts. Compare within
-one execution setup when testing repeatability. Swift keeps its native
-Accelerate generator and is unaffected by this Python choice.
+This path needs the `torch` extra. For turbo, the CoreML estimator is fp32:
+set `mel_decoder.estimator` to `fp32` in the example. The native generator
+requires fp32. With the native generator, `"token_generator": "fp16"` raises
+an error that asks for `generator_device="cpu"`.
 
-The native generator requires fp32. Selecting fp16 alone does not switch its
-implementation: use `generator_device="cpu"` explicitly for torch generation.
-Both paths implement the same sampling law, but different logits can change
-tokens; fp16 is not held to the native fp32 token fixture.
+Both generators implement the same sampling law, but different precisions can
+give different logits, and so different tokens on arbitrary text. The native
+fp32 token fixture does not cover fp16. Compare repeatability within one
+execution setup. Swift always uses its native Accelerate generator; this
+Python setting does not change it.

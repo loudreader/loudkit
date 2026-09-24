@@ -1,7 +1,8 @@
 # 10. Swift
 
-The same engine as a Swift package over CoreML, for macOS 14 and iOS 17. No
-Python, no torch, no ONNX Runtime: CoreML is already on the system.
+The Swift port of loudkit runs on CoreML, on macOS 14 or iOS 17 and later.
+CoreML is part of the operating system, so the package does not need Python,
+PyTorch or ONNX Runtime.
 
 ## Hello
 
@@ -33,8 +34,11 @@ let package = Package(
 )
 ```
 
-Two products: `LoudKit` is the engine, `LoudKitText` is the text funnel alone
-(numbers, dates, acronyms, twelve languages) with nothing to download.
+The package has two products:
+
+- `LoudKit`: speech synthesis.
+- `LoudKitText`: text normalization only (numbers, dates, acronyms) in twelve
+  languages. It needs no model download.
 
 ```swift
 import Foundation
@@ -46,18 +50,22 @@ try result.saveWav("hello.wav")
 ```
 
 The first run downloads the model files into
-`~/Library/Caches/loudkit/loudreader--loudr-1` (`$LOUDKIT_CACHE` moves it),
-the directory the Go, Rust and JS ports share, and checks every file against
-the release's own `SHA256SUMS`; later runs read what is there.
-`engine.voiceNames` names the 28 voices. The snippets need loudkit
-0.1.1; from a checkout, `swift run Hello`.
+`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS, or into the
+application's Caches directory on iOS. Set `LOUDKIT_CACHE` to use
+`$LOUDKIT_CACHE/loudreader--loudr-1` instead. The Go, Rust and JS ports use
+the same directory. Each downloaded file is checked against the release's
+`SHA256SUMS`. Later runs reuse the cache and fetch only the files that changed
+when the repo's `main` branch moves. `engine.voiceNames` lists the 28 voices.
 
-Both `loudr-1` and `loudr-1-turbo` use this API in 0.1.1. Change the model
-name to switch; keep the same voice profile. A local release directory works
-as well as a published model name.
+The examples on this page need loudkit 0.1.1. To run the example from a
+repository checkout, run `swift run Hello`.
+
+`loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
+model name. The same voice profiles work with both models. `Engine.load` also
+accepts a local release directory.
 
 
-## A directory of your own
+## Download to a local directory
 
 ```swift
 let dir = try await LoudKit.download(
@@ -65,19 +73,27 @@ let dir = try await LoudKit.download(
 let engine = try Engine.load(bundle: dir)
 ```
 
-`download` writes a receipt, `.loudkit-release.json`; a later call whose
-revision still resolves to the same commit fetches and hashes nothing, a moved
-revision keeps every file that still hashes to the new `SHA256SUMS` and fetches
-the rest, and an interrupted fetch resumes. Pass a `progress:` closure
-to draw a bar; without one, a line per file goes to stderr. Pin `revision:`
-for anything reproducible. Under `loudreader/`, `release.json` must say the
-bundle passed the builder's gate, and it is checked before any weight moves.
+`download` writes a receipt, `.loudkit-release.json`, into the directory. On
+a later call:
+
+- If the revision still resolves to the same commit, `download` fetches and
+  hashes no weight file.
+- If the revision moved, it keeps every file that matches the new
+  `SHA256SUMS` and fetches the rest.
+- An interrupted fetch resumes.
+
+Pass a `progress:` closure to show download progress. Without one, `download`
+writes one line per file to stderr. Pin `revision:` to a tag or commit for a
+reproducible build. For repos under `loudreader/`, `release.json` must show
+that the release passed its build checks. `download` reads it before it
+fetches any weight file.
 
 ## Synthesize
 
-`synthesize` takes text of any length: it splits at sentence boundaries,
-gives each chunk its own seed, carries the pitch contour across the joins and
-returns one `Result`. Every argument after the voice has a default.
+`synthesize` splits long text into chunks at sentence boundaries. It gives
+each chunk its own seed, conditions each chunk on the speech tokens at the end
+of the chunk before it, and returns one `Result` that holds all the audio.
+Every argument after the voice has a default.
 
 ```swift
 let result = try engine.synthesize(text, voice: voice,
@@ -93,8 +109,8 @@ try result.saveWav("hello.wav")     // 16-bit PCM
 ```
 
 `synthesizeWindow` renders exactly one model window and throws on longer
-text; it is for the conformance harness. `saveFloat32Wav(to:)` writes the
-same audio as float32, for the harness too.
+text. `saveFloat32Wav(to:)` writes the same audio as float32. The conformance
+tests use both.
 
 ## Streaming and barge-in
 
@@ -105,16 +121,16 @@ try engine.stream(text, voice: voice, seed: 7, shouldCancel: { stopped }) { chun
 }
 ```
 
-`stream` hands out chunks as they are made, so playback starts before the
-passage is finished. `shouldCancel` is polled on every decode step, and the
-chunk being generated is discarded. Your playback layer must also discard
-audio it has already queued.
+`stream` passes each chunk to the closure when it is ready, so playback can
+start before the passage is finished. `shouldCancel` is checked on every
+decode step. When it returns true, the chunk in progress is discarded. Your
+playback layer must also discard the audio it has already queued.
 
 ## Timestamps and speed
 
 `result.chunks` is exact at the chunk level and an estimate at the word
-level; read [timestamps.md](../reference/timestamps.md) before building on
-the word times. `speed` is refused outside `[0.5, 2.0]`; see
+level. Read [timestamps.md](../reference/timestamps.md) before you use the
+word times. `speed` outside `[0.5, 2.0]` is refused; see
 [speed.md](../reference/speed.md).
 
 ## Cloning a voice
@@ -124,44 +140,46 @@ let mine = try await engine.enroll(contentsOf: URL(fileURLWithPath: "me.m4a"), n
 try mine.save("mine.safetensors")
 ```
 
-The first `enroll` on an engine loaded by repo id fetches the three
-enrollment packages into the same cache directory,
-`~/Library/Caches/loudkit/loudreader--loudr-1`; later calls read them from
-there. An engine loaded from a directory of your own needs them fetched with
-`LoudKit.download(repo:to:cloning: true)`. Five to ten seconds of clean
-speech is the input this was tuned for. The reader takes anything
-AVFoundation opens: WAV, CAF, AIFF, m4a. `Enrollment.Enroller.enroll(_:sampleRate:)`
-takes samples, for audio that never was a file. `VoiceProfile.load(url:)`
-reads the profile back.
+On an engine loaded by repo id, the first `enroll` call fetches the three
+enrollment packages into the model's cache directory. Later calls use the
+cached packages. For an engine loaded from a local directory, fetch the
+packages first: call `LoudKit.download(repo:to:revision:cloning:progress:)`
+with `cloning: true`.
+
+Use five to ten seconds of clean speech. `enroll(contentsOf:)` reads any file
+that AVFoundation opens, such as WAV, CAF, AIFF or m4a. For samples in
+memory, get an enroller with `ModelBundle(directory:).enroller()` and call
+`enroll(_:sampleRate:)`. It returns an `EnrolledVoice`; make a profile from
+it with `VoiceProfile(_:name:language:)`. `VoiceProfile.load(url:)` loads a
+saved profile.
 
 ## Where the stages run
 
-Each CoreML stage can be pinned to a compute unit. The defaults are the
-measured optimum on Apple silicon; [platforms/apple.md](../platforms/apple.md)
-has the knobs for hardware where they are not.
+The token generator runs as native code on the CPU in fp32. The renderer has
+three CoreML stages. `ExecutionConfig` sets the compute units of each stage.
+By default the middle stage runs on the CPU and the Neural Engine, and the
+first and last stages run on the CPU. The defaults come from measurements on
+an M3 Pro. On other hardware, other settings can be faster.
+[platforms/apple.md](../platforms/apple.md) lists the `ExecutionConfig`
+properties, their defaults and the measurements.
 
-**This port is slower than the Python engine.** End to end on an M3 Pro, the
+This port is slower than the Python engine. On an M3 Pro, the
 whole pipeline runs the third benchmark passage at 2.49x real time with
-loudr-1 and 3.44x with loudr-1-turbo, medians of three warm streams. The
-Python engine on `--device mps`, same machine and same passage, runs the same
-call at 3.29x and 5.77x. Every figure in this paragraph was measured on 0.1.1.
-Its generator is
-a native fp32 implementation whose attention runs through BLAS. The renderer,
-which is the CoreML half, runs at the same speed here as anywhere. Use this
-package for an Apple target that cannot host Python; use the Python engine when
-speed decides. The figures are in [apple.md](../platforms/apple.md).
+loudr-1 and 3.44x with loudr-1-turbo, measured on 0.1.1 as medians of three
+warm streams. On the same machine and passage, the Python engine with
+`--device mps` runs at 3.29x and 5.77x.
 
-The token generator runs natively on the CPU in fp32, which is the measured
-placement for an autoregressive stage at batch one; the renderer's middle
-stage is the one worth putting on the Neural Engine. `ExecutionConfig`
-exposes the knob and holds no opinion; [apple.md](../platforms/apple.md)
-carries the measurements and the stage names.
+This port's token generator is a native fp32 implementation whose attention
+runs through BLAS. Its renderer runs the same CoreML graphs as the Python
+`coreml` backend. Use this package for an Apple target that cannot run
+Python. For the highest speed on a Mac, use the Python engine. The full
+figures are in [apple.md](../platforms/apple.md).
 
-## Your own layout
+## Explicit asset paths
 
-`Engine.load(checkpoint:coremlAssets:)` opens a checkpoint beside a directory
-of `.mlpackage` or precompiled `.mlmodelc` stages, and `ModelBundle(directory:)`
-reads a release's paths without loading it.
+`Engine.load(checkpoint:coremlAssets:)` loads a checkpoint and a directory of
+`.mlpackage` or precompiled `.mlmodelc` stages. `ModelBundle(directory:)`
+finds the paths in a release directory without loading the engine.
 
 ## Verify against the shared fixture
 
@@ -170,5 +188,6 @@ swift test                                                   # weight-free vecto
 LOUDKIT_ASSET_ROOT=/path/to/assets swift test                # + the engine, against the checkpoint
 ```
 
-The second needs the checkpoint and the CoreML packages, and holds
-`synthesize` and `synthesizeWindow` to the fixture's tokens, chunk by chunk.
+The second command needs the checkpoint and the CoreML packages. It compares
+the tokens from `synthesize` and `synthesizeWindow` with the fixture, chunk by
+chunk.

@@ -6,6 +6,7 @@ tags:
   - text-to-speech
   - voice-cloning
   - on-device
+  - coreml
 language:
   - en
   - es
@@ -20,34 +21,32 @@ language:
 ---
 
 <p align="center">
-  <img src="https://huggingface.co/loudreader/loudr-1-turbo/resolve/main/logo.png" alt="LoudKit" width="640">
+  <img src="https://huggingface.co/loudreader/loudr-1-turbo/resolve/main/logo.png" alt="loudkit" width="640">
 </p>
 
 # loudr-1-turbo
 
-**The faster of the two loudkit models. Same 28 voices, same ten
-languages, same API.**
+**The faster of the two loudkit models, with the same 28 voices, ten languages
+and API as loudr-1.**
 
-loudr-1-turbo is [loudr-1](https://huggingface.co/loudreader/loudr-1) with two
-changes to how the audio is produced, and no change to how it is used:
+loudr-1-turbo produces audio differently from
+[loudr-1](https://huggingface.co/loudreader/loudr-1):
 
-- the token generator writes **two speech tokens per forward** instead of one,
-  so a second of audio costs half as many;
-- the renderer turns those tokens into audio in **one** pass instead of
-  several.
+- a smaller token generator writes two speech tokens per forward pass instead
+  of one, so a second of audio needs half as many forward passes;
+- the renderer turns the tokens into audio in one step instead of two.
 
-Everything else is loudr-1: the same voices, the same text handling, the same
-sampling, the same seeds.
+The voices, the text handling, the sampling algorithm and the seeds work as in
+loudr-1. The weights differ, so the same input gives different audio.
 
 ## Which one to pick
 
-**loudr-1** is the default. Pick it when you want the reference quality.
+**loudr-1** is the default.
 
-**loudr-1-turbo** is faster on the same hardware, at a small cost in
-naturalness that is easiest to hear on long, quiet or heavily punctuated
-passages. Pick it for interactive reading, where latency is what the listener
-notices. Listen to both on your own text before choosing, and measure both on
-your own hardware; the
+**loudr-1-turbo** is faster on the same hardware. Its audio is slightly less
+natural, most audibly on long, quiet or heavily punctuated passages. Use it
+when time to first audio matters. Listen to both on your own text, and measure
+both on your own hardware. The
 [benchmark page](https://loudreader.github.io/loudkit/benchmarks/) has the
 commands.
 
@@ -66,7 +65,7 @@ voice = engine.voice("joe")
 engine.synthesize("Hello from loudkit.", voice, seed=7).save("hello.wav")
 ```
 
-That is the whole difference from loudr-1: one string. The same from a shell:
+Only the repo id differs from loudr-1. The same from a shell:
 
 ```bash
 loudkit speak --checkpoint loudreader/loudr-1-turbo --voice joe \
@@ -80,15 +79,13 @@ mine = lk.enroll("my-recording.wav", "loudreader/loudr-1-turbo", name="my-voice"
 mine.save("voices/my-voice.safetensors")
 ```
 
-A voice profile is interchangeable between the two models: a profile enrolled
-against loudr-1 loads against loudr-1-turbo and the other way round.
+A voice profile enrolled with either model works with both models.
 
 ## Backends
 
 Version 0.1.1 supports both models in Python, Swift, Go, Rust and TypeScript.
 Python offers PyTorch, ONNX Runtime and CoreML; Swift uses its native token
 generator with CoreML rendering, and Go, Rust and TypeScript use ONNX Runtime.
-Changing the model name keeps the same synthesis API and voice profile.
 
 ## Download
 
@@ -101,36 +98,52 @@ Choose `--for torch` or `--for coreml` for another backend. Add
 profile does not require enrollment assets. Prepare the chosen set once to
 use it offline.
 
+Approximate decimal download sizes for 0.1.1, with the backend weights
+included:
+
+| Model | Torch | Torch + cloning | ONNX | ONNX + cloning | CoreML | CoreML + cloning |
+|---|---:|---:|---:|---:|---:|---:|
+| loudr-1 | 0.75 GB | 1.28 GB | 2.60 GB | 3.13 GB | 2.46 GB | 2.99 GB |
+| loudr-1-turbo | 0.72 GB | 1.25 GB | 2.44 GB | 2.97 GB | 2.44 GB | 2.97 GB |
+
+Both models ship separate synthesis and enrollment checkpoints. The enrollment
+files come only with `--with-cloning`.
+
 ## What ships
 
 | artefact | used by |
 |---|---|
 | `loudr-1-turbo.safetensors` | synthesis |
-| `loudr-1-enrollment.safetensors` and `ve.safetensors` | shared PyTorch enrollment |
+| `loudr-1-enrollment.safetensors` and `ve.safetensors` | PyTorch enrollment |
 | `onnx/` | synthesis and enrollment through ONNX Runtime |
 | `coreml/` | synthesis and enrollment through CoreML |
 | `voices/` | 28 portable voice profiles |
 | `tokenizer.json` | text processing |
 | `samples/` | audio generated with this model |
 
-The bundle uses the same canonical enrollment weights and graphs as loudr-1.
-Clone once, then use the unchanged profile with either model. Exact file sizes
-and checksums are recorded in the bundle's `release.json` and `SHA256SUMS`.
+Each bundle carries its own enrollment checkpoint. Use the enrollment files
+from the same bundle as the synthesis checkpoint. Exact file sizes and
+checksums are in the bundle's `release.json` and `SHA256SUMS`.
 
 ## Listen
 
-These samples use this model, the named shipped voice and seed 7.
+These samples use this model and seed 7.
+
+**Joe**
 
 <audio controls src="https://huggingface.co/loudreader/loudr-1-turbo/resolve/main/samples/joe.opus"></audio>
+
+**Kathleen**
 
 <audio controls src="https://huggingface.co/loudreader/loudr-1-turbo/resolve/main/samples/kathleen.opus"></audio>
 
 ## Voices and consent
 
-The 28 profiles are the ones loudr-1 ships, unchanged: ten for English and
-two each for Spanish, French, German, Italian, Polish, Portuguese, Dutch, Swedish
-and Danish, built from recordings donated for speech technology or from CC0
-and CC-BY speech corpora. No scraped celebrity voices ship with the model.
+The 28 profiles are the same files loudr-1 ships: ten for English and two
+each for Spanish, French, German, Italian, Polish, Portuguese, Dutch, Swedish
+and Danish. They were built from recordings donated for speech technology or
+from CC0 and CC-BY speech corpora. No audio without a stated licence ships
+with the model.
 [The full roster](https://github.com/loudreader/loudkit/blob/main/VOICES.md)
 records the source, licence and consent basis for every profile.
 
@@ -138,10 +151,10 @@ records the source, licence and consent basis for every profile.
 
 loudr-1-turbo is derived from loudr-1, which is derived from
 [Chatterbox](https://github.com/resemble-ai/chatterbox), released by Resemble
-AI under the MIT licence. The token generator is a student of loudr-1's,
-trained to emit two tokens per forward; the renderer is loudr-1's, distilled
-to reach the same audio in one pass.
-The licence chain is loudr-1's, unchanged, and is recorded in
+AI under the MIT licence. The token generator is a smaller model, distilled
+from loudr-1's token generator to emit two tokens per forward pass. The
+renderer is loudr-1's renderer, distilled to run in one step. The licence
+chain is the same as loudr-1's and is recorded in
 [NOTICE](https://huggingface.co/loudreader/loudr-1-turbo/blob/main/NOTICE).
 
 How the two-token generator works is written up in
@@ -149,23 +162,26 @@ How the two-token generator works is written up in
 
 ## Reproducibility
 
-For a fixed build, device and backend, the same text, voice and seed produce
-the same waveform. loudr-1 and loudr-1-turbo are **different models**: the
-same text, voice and seed give different audio on each, and a saved WAV
-records which one spoke. The contract is in the
+For a fixed build, device, backend and execution configuration, the same text,
+voice and seed produce the same waveform. loudr-1 and loudr-1-turbo are
+different models: the same text, voice and seed give different audio on each.
+A WAV that Python saves records which model made it. The contract is in the
 [identity contract](https://github.com/loudreader/loudkit/blob/main/docs/reference/IDENTITY-CONTRACT.md).
 
 ## Before you ship
 
 - Long passages are rendered in windows of about ten seconds. Sentence joins
-  can occasionally be audible, and turbo joins a little more so than loudr-1.
+  can occasionally be audible, more often with turbo than with loudr-1.
 - Difficult punctuation, numbers and abbreviations can change pronunciation or
   prosody.
 - Voice cloning requires consent. A recording being public does not grant
   permission to clone the speaker.
-- Saved WAVs and server responses carry an unsigned, machine-readable note by
-  default, recording the model, voice, seed, backend and a checksum of the
-  audio. It is loudkit's own and is not C2PA Content Credentials.
+- By default, WAV files that Python's `Result.save()` writes and WAV replies
+  from the loudkit server carry an unsigned, machine-readable note. It records
+  the model, voice, seed, backend and a checksum of the audio. It is not C2PA.
+  The Swift, Go, Rust and TypeScript packages write WAV files without it.
+  [The format](https://github.com/loudreader/loudkit/blob/main/docs/reference/provenance.md)
+  has the details.
 
 Read [Responsible use](https://huggingface.co/loudreader/loudr-1-turbo/blob/main/RESPONSIBLE_USE.md)
 before exposing enrollment to other people.
@@ -188,14 +204,3 @@ the public roster.
 [Apache-2.0](https://huggingface.co/loudreader/loudr-1-turbo/blob/main/LICENSE).
 Upstream attributions and component licences are listed in
 [NOTICE](https://huggingface.co/loudreader/loudr-1-turbo/blob/main/NOTICE).
-
-## Download sizes for 0.1.1
-
-Approximate decimal sizes for the release files; backend weights are included.
-Cloning adds enrollment assets only when requested. Both models ship separate
-synthesis and enrollment checkpoints.
-
-| Model | Torch | Torch + cloning | ONNX | ONNX + cloning | CoreML | CoreML + cloning |
-|---|---:|---:|---:|---:|---:|---:|
-| loudr-1 | 0.75 GB | 1.28 GB | 2.60 GB | 3.13 GB | 2.46 GB | 2.99 GB |
-| loudr-1-turbo | 0.72 GB | 1.25 GB | 2.44 GB | 2.97 GB | 2.44 GB | 2.97 GB |

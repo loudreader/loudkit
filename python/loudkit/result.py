@@ -70,7 +70,7 @@ class Result:
     """What the postprocess detectors concluded, one entry per chunk."""
 
     speed: float = 1.0
-    """The time-stretch applied. ``1.0`` is the vocoder's own bytes."""
+    """The time-stretch applied. ``1.0`` skips the stretch; the edge fade still runs."""
 
     chunks: tuple[ChunkTiming, ...] = ()
     """Where each chunk lands in ``audio``, adjacent and exact; the word times

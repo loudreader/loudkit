@@ -1,10 +1,9 @@
 # Timestamps
 
-Highlighting the sentence being spoken, cutting on a boundary, seeking to a
-word: all of it starts at `Result.chunks`. It answers in **two tiers, one of
-which is a guess**. Keeping them apart is the whole design. A single "word
-timings" list that quietly mixed a measurement with an estimate would be worse
-than shipping neither.
+`Result.chunks` gives the timing of the audio in two tiers: exact chunk spans
+and estimated word spans. Use the chunk spans to highlight the sentence being
+spoken, to cut on a boundary or to seek. Use the word spans only where an
+estimate is enough.
 
 ```python
 result = engine.synthesize("One. Two. Three.", voice, seed=7)
@@ -17,35 +16,34 @@ for chunk in result.chunks:
 ## Tier 1: chunk spans are exact
 
 The engine renders each chunk to its own waveform and concatenates them, so it
-already knows every chunk's sample offset and sample length. `ChunkTiming.start`
-and `.end` are those offsets divided by the sample rate. Nothing is estimated.
+knows every chunk's sample offset and sample length. `ChunkTiming.start` and
+`.end` are those offsets divided by the sample rate. Nothing is estimated.
 
-Two properties hold and are tested:
+Two properties hold, and tests check them:
 
-- **Adjacent to the last bit.** Chunk *k*'s `end` is the same float as chunk
-  *k+1*'s `start`, because both are the same integer sample offset over the same
-  rate. Offsets accumulate in samples and are converted once. A highlight driven
-  by `time >= start` therefore cannot flicker in a gap or light two chunks at
-  once, a failure mode that a comparison with a tolerance would never catch.
-- **Complete.** The first `start` is `0.0`, the last `end` is `Result.duration`,
-  and the spans tile the audio with nothing left over.
+- Chunk *k*'s `end` is the same float as chunk *k+1*'s `start`, because both
+  come from the same integer sample offset over the same rate. Offsets
+  accumulate in samples and are converted once. A highlight that selects the
+  chunk with `start <= time < end` therefore lights exactly one chunk at any
+  time inside the audio.
+- The first `start` is `0.0`, the last `end` is `Result.duration`, and the
+  spans cover the audio with no gap and no overlap.
 
 A single-window `synthesize()` gets one entry covering the whole result.
 
 ## Tier 2: word times are an estimate
 
-The model emits speech tokens, not an alignment. **Nothing in this pipeline
-knows where a word begins.** `ChunkTiming.words` splits the chunk on whitespace
-and shares the chunk's real duration out in proportion to each word's length in
-characters. That is the entire algorithm.
+The model does not output a word alignment. `ChunkTiming.words` splits the
+chunk text on whitespace and divides the chunk's measured duration among the
+words in proportion to their length in characters.
 
-It is right often enough to drive a highlight at sentence scale, and wrong in
-the expected ways: a long word said fast, a short word held, a breath before a
-clause. **The error grows with the length of the chunk**, because one bad guess
-early shifts everything after it. A sentence is usually fine. A long paragraph
-rendered as a single chunk is not.
+The estimate is good enough to highlight words at sentence scale. It is wrong
+where the speech rate or the pauses vary: a long word said fast, a short word
+held, a breath before a clause. **The error grows with the length of the
+chunk**, because one early error shifts every later word. A long paragraph
+rendered as one chunk drifts more than a sentence.
 
-If you need real word boundaries, you need a forced aligner. This is not one.
+For measured word boundaries, use a forced aligner.
 
 What the estimate does guarantee, and what the tests pin:
 
@@ -54,28 +52,26 @@ What the estimate does guarantee, and what the tests pin:
 - complete: every whitespace-separated word appears, exactly once, in order.
 
 Punctuation stays attached to its word (`"world!"`), because the split is on
-whitespace. A caller lighting up the word wants the full stop lit with it, and a
-caller matching back against their own text needs the substring to be a
-substring.
+whitespace. Each word is therefore a substring of `chunk.text`.
 
-Word length is counted in **code points**, not bytes, so the same text weights
-the same way in all five implementations.
+Word length is counted in **code points**, not bytes, so the same text gets the
+same weights in all five implementations.
 
 ## The text is the post-funnel text
 
-`ChunkTiming.text` is what was tokenised, not what you passed in. The speech
-funnel runs first: numbers become words, abbreviations expand, and Polish
-respells embedded English. `"I have 3 apples."` comes back as `"I have three
-apples."`, because that is what the engine spoke and therefore what the timings
-describe. Matching a highlight against your original string will drift the moment
-a digit appears. Highlight against `chunk.text`, or map back yourself.
+`ChunkTiming.text` is the text that was tokenised, not the text you passed in.
+The speech funnel runs first: numbers become words, abbreviations expand, and
+Polish respells embedded English. `"I have 3 apples."` comes back as
+`"I have three apples."`. It is the model's input, not a transcript of the
+audio. A highlight matched against your original string drifts at the first
+digit. Highlight against `chunk.text`, or keep your own map back to the
+original.
 
 ## Streaming
 
-Each streamed `Result` is one chunk and carries one `ChunkTiming` **starting at
-zero**. A streamed chunk is its own result and cannot know what preceded it, so
-reporting anything else would be a guess about the caller's playback. Stitch the
-offsets as you go:
+Each streamed `Result` is one chunk and carries one `ChunkTiming` that starts
+at zero, relative to that result's own audio. Add the offsets as you play the
+chunks:
 
 ```python
 at = 0.0
@@ -85,8 +81,7 @@ for part in engine.stream(text, voice, seed=7):
     at += part.duration
 ```
 
-`synthesize()` does exactly this internally, in samples rather than
-seconds.
+`synthesize()` does the same internally, and counts in samples.
 
 ## Interaction with `speed`
 
@@ -98,6 +93,7 @@ double-count. See [speed.md](speed.md).
 ## The other four implementations
 
 Go, Rust, TypeScript and Swift compute the same two tiers with the same
-arithmetic: sample offsets accumulated as integers, words weighted by code-point
-count. The per-chunk type each port already had (`Chunk`) carries its own
-timing, and the long-form path returns the stitched timeline.
+arithmetic: sample offsets accumulated as integers, words weighted by
+code-point count. Each port's stream chunk type (`Chunk`, or `StreamChunk` in
+TypeScript) carries its own timing, and long-form synthesis returns the joined
+timeline.

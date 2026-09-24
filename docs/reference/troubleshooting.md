@@ -1,15 +1,14 @@
 # Troubleshooting
 
-Symptoms first, causes second, fixes third. Every entry links the page that
-carries the full behaviour. `loudkit doctor` is the first command for any of
-these: it reports what this machine can run and what to install to run more.
+Each entry gives a symptom, its cause and the fix. Run `loudkit doctor` first:
+it reports what this machine can run and what to install to run more.
 
 ## Install and first run
 
-### `ModuleNotFoundError: No module named 'torch'`
+### "loudkit is installed without a runtime"
 
-The core package ships without a runtime, so `load()` can read a checkpoint but
-not run one. Install the extras:
+The core package installs no runtime, so `lk.load` stops before it downloads
+anything. The CLI prints the same message. Install the extras:
 
 ```bash
 pip install "loudkit[torch,audio]"    # CPU, CUDA or Apple GPU: the usual choice
@@ -19,35 +18,43 @@ pip install "loudkit[onnx,audio]"     # no torch; needs exported graphs (below)
 `audio` writes WAVs. Add `hub` to load models by name, `enroll` to clone a
 voice, `server` for `loudkit serve`.
 
-### Reading an audio file raises "needs the 'enroll' extra"
+### "reading an audio file needs soundfile"
 
-Reading files goes through librosa. Install `loudkit[audio]` for graph-based
-cloning, or `loudkit[enroll]` for the PyTorch path. You can also pass mono samples
-in `[-1, 1]` directly.
+`lk.enroll` reads a file path with soundfile. Install `loudkit[audio]` for
+cloning with `device="onnx"` or `device="coreml"`, or `loudkit[enroll]` for the
+PyTorch path. Both bring soundfile. You can also pass mono samples in
+`[-1, 1]` with their `sample_rate`. `loudkit clone` checks its extras before it
+starts and names the missing packages.
 
 ### The first synthesis hangs on a download
 
 It is fetching the checkpoint and the assets required by the selected backend.
-See the [download sizes](../guides/01-getting-started.md) for both models. They land in the
-standard Hugging Face cache, so every later process on the machine, other
-projects and other virtualenvs included, reuses it. Pin a `revision=` in
-production so the same code cannot resolve to different weights later:
-[pinning a release](COMPATIBILITY.md#pinning-a-release).
+See the [download sizes](../guides/01-getting-started.md#download-sizes-for-011)
+for both models. The files go to the Hugging Face cache. Every process that
+uses the same cache reuses them, across projects and virtualenvs. Pin a
+`revision=` in production, so the same code cannot resolve to different
+weights later: [pinning a release](COMPATIBILITY.md#pinning-a-release).
 
 ## Speed and hardware
 
 ### Synthesis is slower than real time
 
-You are almost certainly on CPU, which renders at a fraction of real time by
-design. Check what the engine chose:
+The usual cause is PyTorch on CPU, which runs below real time (0.29x for
+loudr-1 on an M3 Pro, see [benchmarks](../benchmarks.md)). Check what this
+machine can run:
 
 ```bash
-loudkit doctor          # what this machine can run
-print(engine.describe())  # exec[...] shows the devices actually in use
+loudkit doctor
 ```
 
-On Apple silicon expect a split engine (`gen=cpu/render=mps`): that is the
-measured optimum, not a fallback.
+Then check what the engine chose. `exec[...]` shows the devices in use:
+
+```python
+print(engine.describe())
+```
+
+On Apple silicon the default is a split engine (`gen=cpu/render=mps`). It is
+the fastest Python setup measured on an M3 Pro.
 
 ### MPS or CoreML never activates inside Docker
 
@@ -55,25 +62,28 @@ On macOS a container is CPU-only, whatever the host: Apple does not pass Metal
 through. Install natively on a Mac.
 [Docker](../platforms/docker.md) carries the details and the arm64 CUDA caveat.
 
-### `device="onnx"` refuses to start
+### `device="onnx"` stops with "ONNX assets not found"
 
-The ONNX backend runs exported graphs. The release on the Hub carries all
-nine; what it does not do is send them to a caller who asked for torch, which
-is the default. Ask for them by backend:
+The ONNX backend runs exported graphs: six for loudr-1, seven for
+loudr-1-turbo. `lk.load` with a repo id fetches them. A local directory fetched
+with the default `--for torch` has none. Fetch the graphs by backend:
 
 ```bash
 loudkit download loudreader/loudr-1 --for onnx
 ```
 
-Add `--with-cloning` for the three enrollment graphs as well. To export them
-from a checkpoint instead:
+Add `--with-cloning` for the three enrollment graphs as well. To export the
+synthesis graphs from a checkpoint instead, use a checkout of the repository,
+because the exporter is not in the pip package. The exporter also needs the
+`onnx` package:
 
 ```bash
-pip install "loudkit[torch,onnx]"   # torch only to export
+pip install "loudkit[torch,onnx]" onnx   # torch only to export
 python tools/export_onnx.py --checkpoint loudr-1.safetensors
 ```
 
-See [benchmarks](../benchmarks.md#onnx) for what the export gates measure.
+The enrollment graphs come from `tools/export_enroll_onnx.py`. See
+[benchmarks](../benchmarks.md#onnx) for what the export gates measure.
 
 ### "exported from a different engine"
 
@@ -86,58 +96,54 @@ re-export the graphs from the exact checkpoint you intend to load. Keep the
 matching enrollment checkpoint beside it when cloning. Do not edit `export.json`
 to suppress the check.
 
-A set carrying no `export.json` warns instead of refusing, because releases
-exported before the record exist.
+A graph set without `export.json` loads with a warning.
 
 ### "CoreML assets not found: missing t3_*"
 
-The native generator needs the `t3_*` packages as well as the renderer. Download
-the complete bundle with `--for coreml`. An older renderer-only base bundle can
-use the PyTorch generator with `ExecutionConfig(device="coreml",
-generator_device="cpu")` and the `torch` extra. Turbo requires its matching
-generator exports.
+The native generator needs the `t3_*` packages beside the renderer packages.
+Download the complete bundle with `--for coreml`. loudkit refuses a partial set
+of `t3_*` packages, and loudr-1-turbo without its own generator packages.
 
-### The first `coreml` run takes about two minutes
+A loudr-1 CoreML bundle with no `t3_*` packages at all loads with the PyTorch
+generator on CPU, and needs the `torch` extra.
+`ExecutionConfig(device="coreml", generator_device="cpu")` selects that setup
+on any loudr-1 bundle.
 
-Not a hang. Asking for `onnx_provider="coreml"` makes CoreML compile the three
-renderer graphs, which takes roughly two minutes on an M3 Pro against three
-seconds for the CPU provider. Nothing is printed while it happens.
+### `onnx_provider="coreml"` takes about two minutes on the first run
 
-It is paid once per machine. The compiled models land in
-`~/Library/Caches/loudkit/coreml`, about 1.6 GB, and later runs open in about
-25 s. Set `$LOUDKIT_COREML_CACHE` to move the directory; delete it and the two
-minutes come back.
+With `onnx_provider="coreml"`, CoreML compiles the three renderer graphs on the
+first run. This takes about two minutes on an M3 Pro, against three seconds for
+the CPU provider. Nothing is printed during the compile.
 
-If two minutes at startup is not acceptable, use `cpu`. `auto` already does:
-it never selects `coreml`, for exactly this reason.
+The compiled models are cached in `~/Library/Caches/loudkit/coreml`, about
+1.6 GB, and later runs open in about 25 s. Set `$LOUDKIT_COREML_CACHE` to move
+the directory. If you delete it, the next run compiles again.
 
-In JS the provider is refused outright, because `onnxruntime-node` cannot name a
-cache directory and every process would pay the compile again.
+To avoid the compile, use the `cpu` provider. `auto` never selects `coreml`.
+
+The JS port does not accept `coreml`, because `onnxruntime-node` cannot set a
+cache directory and every process would compile again.
 
 ### The first call in a long-running process is much slower
 
-Kernel autotune, graph capture and allocator pools are paid once. Call
-`engine.warm(voice)` at startup; `loudkit serve`, gRPC and MCP already do,
-before they report ready. Set `LOUDKIT_NO_WARM` to any value to trade that
-back for a faster start. `loudkit speak` never warms: it renders once and
-exits, so there is nowhere to move the cost to.
+The first call pays for kernel autotune, graph capture and allocator pools.
+Call `engine.warm(voice)` at startup. `loudkit serve`, gRPC and MCP already
+do, before they report ready. To skip the warm-up for a faster start, set
+`LOUDKIT_NO_WARM` to any non-empty value. `loudkit speak` does not warm up,
+because it renders once and exits.
 
 ### Turbo cannot be downloaded or loaded
 
-Use loudkit 0.1.1 and a release containing graphs for your runtime. A repository
-or revision that is not published cannot be fetched by name: use a complete
-local release directory, or check the name and revision you requested.
+Use loudkit 0.1.1 and a release that contains the graphs for your runtime.
+loudkit cannot fetch a repository or revision that is not published. Check the
+repo id and the revision in the error, or load a complete local release
+directory.
 
-Do not mix a checkpoint from one bundle with graphs from another. Even if
-both say loudr-1, files from different bundles may not belong together.
-Point at one complete release directory. The error “exported from a different
-engine” means this consistency check worked; bypassing it is not a fix.
-
-Older renderer-only CoreML releases of loudr-1 still use a PyTorch generator
-in Python. Install the `torch` extra for those, or use a complete new CoreML
-release to run without PyTorch. Incomplete native generator sets are refused.
-
-See [choosing a model](../guides/11-choosing-a-model.md).
+Do not mix a checkpoint from one bundle with graphs from another, even when
+both say loudr-1. Point at one complete release directory. See
+["exported from a different engine"](#exported-from-a-different-engine) and the
+CoreML entry above, and [choosing a model](../guides/11-choosing-a-model.md)
+for where each model runs.
 
 ## Voices
 
@@ -157,16 +163,17 @@ checkpoint names the release.
 ### A cloned voice reads text in the wrong language
 
 Every profile carries a language, and `enroll` defaults it to `"en"`. Name it
-at enrollment: `lk.enroll(..., language="pl")`. The chain everywhere is the
-call's `language=`, then `voice.language`, then `"en"`; see
-[text normalization](../design/preprocess.md).
+at enrollment: `lk.enroll(..., language="pl")`. Every implementation picks the
+language in this order: the call's `language=`, then `voice.language`, then
+`"en"`. See [text normalization](../design/preprocess.md).
 
 ### The result ends with an odd word, or is flagged `SUSPECT`
 
-The engine reads back the tokens it produced and cuts hallucinated tails; a
-chunk that is detectably wrong but not localisable is reported instead of
-returned silently. What the flags mean:
-[postprocess](../design/postprocess.md).
+Detectors check the speech tokens of each chunk for known failure patterns.
+By default the engine trims a tail they flag. When a chunk is too long for its
+text and no detector can locate the fault, the engine returns the result
+marked `SUSPECT` (`result.suspect`). The detectors do not transcribe the audio.
+What the flags mean: [postprocess](../design/postprocess.md).
 
 ## Errors worth knowing by name
 
@@ -174,8 +181,8 @@ returned silently. What the flags mean:
 |---|---|---|
 | `WindowOverflowError` | a single window's generation did not fit | drop `single_window=True`; plain `synthesize` splits |
 | `UnsupportedLanguageError` | language off the twelve-id roster | pick a supported `language=`; `.supported` lists them |
-| speed outside 0.5 to 2.0 | refused, not clamped | clamp at the call site |
-| `NumberGrammarError` | a number that language's grammar cannot say | rephrase, or split the sentence |
+| speed outside 0.5 to 2.0 | refused, not clamped | pass a value from `lk.MIN_SPEED` to `lk.MAX_SPEED` |
+| `NumberGrammarError` | a number past the largest scale that language's grammar names | raised by the number helpers in `loudkit.frontend.numbers`; synthesis reads such a number digit by digit |
 
 The full catalog, per transport: [errors](errors.md).
 
@@ -183,10 +190,12 @@ The full catalog, per transport: [errors](errors.md).
 
 ### Same seed, different bytes on another machine
 
-Expected. Bit-identity holds per build, device and backend; across backends the
-waveform differs because floating-point summation differs. The portable layer
-is the **speech tokens**, identical across implementations at matched
-precision. The exact edges: [identity contract](IDENTITY-CONTRACT.md).
+This is expected. Audio is bit-identical only on the same build, device and
+backend. Across backends, floating-point sums differ, so the waveform differs.
+At matched precision the speech tokens usually match across backends: the
+English test sentences match token for token between PyTorch and ONNX. Polish
+text on ONNX can diverge within a few tokens. The exact edges:
+[identity contract](IDENTITY-CONTRACT.md).
 
 ### Streaming saves only the last chunk
 

@@ -45,7 +45,7 @@ def test_the_voice_format_version_on_the_page_is_the_one_in_the_code(page: str) 
 
 
 def test_the_error_catalog_on_the_page_is_the_whole_catalog(page: str) -> None:
-    section = page.split("The error-code catalog is frozen with them.", 1)
+    section = page.split("The error-code catalog follows the same rules.", 1)
     assert len(section) == 2, "the freeze declaration no longer names the catalog"
     # The codes are written as `code` spans in the paragraph that follows.
     documented = set(re.findall(r"`([a-z_]+)`", section[1].split("\n\n", 2)[0]))

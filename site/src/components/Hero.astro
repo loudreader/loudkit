@@ -7,6 +7,7 @@ import SamplePlayer from './SamplePlayer.astro';
 
 const { data } = Astro.locals.starlightRoute.entry;
 const { title = data.title, tagline, actions = [] } = data.hero || {};
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <div class="hero lk-hero">
@@ -34,7 +35,7 @@ const { title = data.title, tagline, actions = [] } = data.hero || {};
     <p class="lk-eyebrow">Hear it now</p>
     <SamplePlayer voice="oscar" line={false} />
     <SamplePlayer voice="sophie" line={false} />
-    <p class="lk-hero-players-foot">Same greeting, loudr-1, seed 7. <a href="#samples">Twenty-eight voices below.</a></p>
+    <p class="lk-hero-players-foot">Same greeting, loudr-1, seed 7. <a href={`${base}/demo/`}>All 28 voices in the gallery.</a></p>
   </aside>
 </div>
 

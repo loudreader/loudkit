@@ -7,7 +7,7 @@
     "language_id": "en",
     "gender": "M",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Lower mid register; 15.5-second delivery of the shared story.",
+    "description": "Lower mid register.",
     "f0_hz": 137,
     "status": "bundled",
     "sample": {
@@ -93,7 +93,7 @@
     "language_id": "en",
     "gender": "M",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Lower mid register; 16.8-second delivery of the shared story.",
+    "description": "Lower mid register.",
     "f0_hz": 140,
     "status": "bundled",
     "sample": {
@@ -179,7 +179,7 @@
     "language_id": "en",
     "gender": "M",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Mid register; 15.5-second delivery of the shared story.",
+    "description": "Mid register.",
     "f0_hz": 153,
     "status": "bundled",
     "sample": {
@@ -265,7 +265,7 @@
     "language_id": "en",
     "gender": "M",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Mid register; 16.2-second delivery of the shared story.",
+    "description": "Mid register.",
     "f0_hz": 148,
     "status": "bundled",
     "sample": {
@@ -351,7 +351,7 @@
     "language_id": "en",
     "gender": "F",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Higher register; 16.1-second delivery of the shared story.",
+    "description": "Higher register.",
     "f0_hz": 194,
     "status": "bundled",
     "sample": {
@@ -437,7 +437,7 @@
     "language_id": "en",
     "gender": "F",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Higher register; 14.9-second delivery of the shared story.",
+    "description": "Higher register.",
     "f0_hz": 190,
     "status": "bundled",
     "sample": {
@@ -523,7 +523,7 @@
     "language_id": "en",
     "gender": "F",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "High register; 14.4-second delivery of the shared story.",
+    "description": "High register.",
     "f0_hz": 217,
     "status": "bundled",
     "sample": {
@@ -609,7 +609,7 @@
     "language_id": "en",
     "gender": "F",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "High register; 15.4-second delivery of the shared story.",
+    "description": "High register.",
     "f0_hz": 216,
     "status": "bundled",
     "sample": {
@@ -695,7 +695,7 @@
     "language_id": "en",
     "gender": "M",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Low register; 14.6-second delivery of the shared story.",
+    "description": "Low register.",
     "f0_hz": 111,
     "status": "bundled",
     "sample": {
@@ -761,7 +761,7 @@
     "language_id": "en",
     "gender": "F",
     "gender_basis": "Perceived voice presentation selected by the listener; not verified donor gender.",
-    "description": "Mid register; 14.8-second delivery of the shared story.",
+    "description": "Mid register.",
     "f0_hz": 163,
     "status": "bundled",
     "sample": {

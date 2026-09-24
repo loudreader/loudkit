@@ -73,15 +73,6 @@ const EXCLUDE_DIRS = ['docs/design/'];
 const RENAME = new Map([['docs/README.md', 'overview']]);
 
 /**
- * Pages that get a site component spliced in above their own body.
- *
-  * The roster grid lives on the Demo page only. Splicing a second copy into
-  * VOICES.md duplicated the listening surface across two pages; the Voices
-  * page keeps the facts — sources, licences, hashes — and links to the Demo
-  * for the audio.
-  */
-
-/**
  * The voice audio the site plays, copied into the build.
  *
  * Two kinds live under this one directory and both are copied, because the

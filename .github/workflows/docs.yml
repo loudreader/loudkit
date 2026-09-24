@@ -1,6 +1,6 @@
 # Build and publish the documentation site to GitHub Pages.
 #
-# The site under site/ owns almost no prose: it renders docs/ and four
+# The site under site/ owns almost no prose: it renders docs/ and three
 # root-level markdown files directly, generating its Starlight content
 # collection at build time (site/scripts/sync-docs.mjs). That is why the path
 # filter below lists the documentation *and* the site — a change to either one

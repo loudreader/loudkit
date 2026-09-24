@@ -6,7 +6,11 @@ stage that takes the time. Published results are in
 
 ## Measure one runtime
 
+`tools/bench.py` does not create the directory for `--json`, so create it
+first:
+
 ```bash
+mkdir -p out
 python tools/bench.py \
   --checkpoint loudr-1/loudr-1.safetensors \
   --voice loudr-1/voices/joe.safetensors \
@@ -15,8 +19,8 @@ python tools/bench.py \
   --json out/bench.json
 ```
 
-Change `--device` to `cpu`, `mps` or `onnx` for another path. The command
-prints and saves:
+For another path, change `--device` to `cpu`, `mps` or `onnx` and remove
+`--cuda-graphs`, which is CUDA only. The command prints and saves:
 
 - real-time factor, or RTF;
 - time to first audio;
@@ -39,8 +43,8 @@ python tools/profile_stages.py \
   -- "The quick brown fox jumps over the lazy dog."
 ```
 
-`tools/profile_stages.py` reports warm-up and median stage times. Use it when a machine is
-slower than expected and you need to know whether generation or rendering is
+`tools/profile_stages.py` reports warm-up and median stage times. Use it when
+a machine is slower than expected, to find whether generation or rendering is
 the bottleneck.
 
 ## Measure batching
@@ -67,11 +71,14 @@ does not promise byte-identical audio on another.
 
 See also [embedding loudkit](embedding.md).
 
-## Local desktop comparison
+## M3 Pro comparison, 0.1.1
 
-The 0.1.1 comparison of both models on the eight local paths is on
-[the benchmarks page](../benchmarks.md). The raw runs are
-`docs/measurements/wave-t-2026-09-05.json` (the first pass, taken during the
-release build) and `docs/measurements/2026-09-06-m3pro-both-models.json` (the
-release candidate, one process at a time). `tools/bench_ports/README.md` and
-`tools/bench.py` reproduce them.
+[The benchmarks page](../benchmarks.md) compares both models on eight paths
+on an Apple M3 Pro. The raw runs are in two files:
+
+- [the 2026-09-05 run](../measurements/wave-t-2026-09-05.json), taken during
+  the release build;
+- [the 2026-09-06 run](../measurements/2026-09-06-m3pro-both-models.json),
+  the release candidate, one process at a time.
+
+`tools/bench_ports/README.md` and `tools/bench.py` reproduce them.

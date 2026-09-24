@@ -1,45 +1,47 @@
 # Voices
 
-**28 voices, 10 languages.** Every profile is enrolled by this project's own pipeline from a recording made or released for speech-technology use: personal donations recorded for TTS, and CC0 / CC-BY corpora whose terms allow it. The donor or source, the licence and a sample are named for every voice. The full chain lives in [docs/voices/roster/provenance.json](docs/voices/roster/provenance.json): consent basis, reference construction, SHA-256 of profile, reference and sample, and seed.
+loudkit ships 28 voices in 10 languages. Each profile is enrolled with loudkit's own pipeline from a recording made or released for speech-technology use: personal donations recorded for TTS, and CC0 or CC-BY corpora whose terms allow it. The table below names the source and licence of each voice. [docs/voices/roster/provenance.json](docs/voices/roster/provenance.json) records the rest: the donor, the consent basis, the reference construction, the SHA-256 of each profile, reference and sample, and the seed.
 
 [Open the voice gallery](https://loudreader.github.io/loudkit/demo/) and compare each generated sample with its enrollment reference.
 
-Profiles ship on the Hugging Face repository under `voices/`, versioned next to the checkpoint they enrol against.
+Profiles ship under `voices/` in each Hugging Face model repository, versioned with the checkpoint.
 
-The reference SHA-256 identifies the original WAV used for enrollment. Those source WAVs are not redistributed in the model repository; `reference.public_preview` names the Opus derivative played on the demo page, not the bytes that were enrolled.
+The reference SHA-256 identifies the original WAV used for enrollment. Those source WAVs are not redistributed in the model repository. `reference.public_preview` names the Opus derivative that the gallery plays; it is not the enrolled audio.
 
-We have evaluated **English** by ear. We do not speak the other nine languages well enough to judge their naturalness reliably. Feedback from native speakers is very welcome.
+Only English has been evaluated by ear. The other nine languages have no native-speaker review of their naturalness. Feedback from native speakers is welcome.
 
-| voice | language | gender | source | licence |
+The presentation column describes how a voice sounds, not the donor's gender.
+
+| voice | language | presentation | source | licence |
 |---|---|---|---|---|
-| `clara` | English | F | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `emma` | English | F | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `henry` | English | M | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `joe` | English | M | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `kathleen` | English | F | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `lucy` | English | F | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `miles` | English | M | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `oliver` | English | M | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `oscar` | English | M | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `sophie` | English | F | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
-| `carmen` | Spanish | F | [CML-TTS](https://huggingface.co/datasets/ylacombe/cml-tts) | CC-BY-4.0 |
-| `dave` | Spanish | M | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `colette` | French | F | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC-BY-4.0 |
-| `henri` | French | M | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC-BY-4.0 |
-| `kerstin` | German | F | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `thorsten` | German | M | [Thorsten-Voice](https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full) | CC0 |
-| `dante` | Italian | M | [MLS](https://huggingface.co/datasets/facebook/multilingual_librispeech) | CC-BY-4.0 |
-| `paola` | Italian | F | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `darkman` | Polish | M | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `gosia` | Polish | F | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `tugao` | Portuguese (European) | M | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `nathalie` | Dutch | F | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `pim` | Dutch | M | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
-| `nils` | Swedish | M | [NST Swedish](https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-17/) | CC0 |
-| `selma` | Swedish | F | [NST Swedish](https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-17/) | CC0 |
-| `freja` | Danish | F | [NST Danish](https://huggingface.co/datasets/alexandrainst/nst-da) | CC0 |
-| `soren` | Danish | M | [NST Danish](https://huggingface.co/datasets/alexandrainst/nst-da) | CC0 |
-| `ines` | Portuguese (Brazilian) | F | [CML-TTS](https://huggingface.co/datasets/ylacombe/cml-tts) | CC-BY-4.0 |
+| `clara` | English | feminine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `emma` | English | feminine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `henry` | English | masculine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `joe` | English | masculine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `kathleen` | English | feminine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `lucy` | English | feminine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `miles` | English | masculine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `oliver` | English | masculine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `oscar` | English | masculine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `sophie` | English | feminine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC0 |
+| `carmen` | Spanish | feminine | [CML-TTS](https://huggingface.co/datasets/ylacombe/cml-tts) | CC-BY-4.0 |
+| `dave` | Spanish | masculine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `colette` | French | feminine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC-BY-4.0 |
+| `henri` | French | masculine | [Kyutai tts-voices](https://huggingface.co/kyutai/tts-voices) | CC-BY-4.0 |
+| `kerstin` | German | feminine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `thorsten` | German | masculine | [Thorsten-Voice](https://huggingface.co/datasets/Thorsten-Voice/TV-44kHz-Full) | CC0 |
+| `dante` | Italian | masculine | [MLS](https://huggingface.co/datasets/facebook/multilingual_librispeech) | CC-BY-4.0 |
+| `paola` | Italian | feminine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `darkman` | Polish | masculine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `gosia` | Polish | feminine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `tugao` | Portuguese (European) | masculine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `ines` | Portuguese (Brazilian) | feminine | [CML-TTS](https://huggingface.co/datasets/ylacombe/cml-tts) | CC-BY-4.0 |
+| `nathalie` | Dutch | feminine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `pim` | Dutch | masculine | [OHF-Voice donations](https://github.com/NabuCasa/voice-datasets) | CC0 |
+| `nils` | Swedish | masculine | [NST Swedish](https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-17/) | CC0 |
+| `selma` | Swedish | feminine | [NST Swedish](https://www.nb.no/sprakbanken/en/resource-catalogue/oai-nb-no-sbr-17/) | CC0 |
+| `freja` | Danish | feminine | [NST Danish](https://huggingface.co/datasets/alexandrainst/nst-da) | CC0 |
+| `soren` | Danish | masculine | [NST Danish](https://huggingface.co/datasets/alexandrainst/nst-da) | CC0 |
 
 All 28 voices are included in both loudr-1 and loudr-1-turbo and load by name:
 
@@ -47,12 +49,12 @@ All 28 voices are included in both loudr-1 and loudr-1-turbo and load by name:
 voice = engine.voice("henry")
 ```
 
-The gallery compares the 10 English voices on the same story, with seed 7 and matched loudness.
+The gallery plays the 10 English voices on the same story in both models, with seed 7 and matched loudness.
 
 
 ## Enrol your own
 
-Ten seconds of clean audio is enough:
+Use five to ten seconds of clean audio from one speaker:
 
 ```python
 import loudkit as lk
@@ -61,4 +63,4 @@ mine = lk.enroll("my-recording.wav", "loudreader/loudr-1", name="my-voice")
 mine.save("voices/my-voice.safetensors")
 ```
 
-Consent is yours to obtain. See [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md).
+Get the speaker's consent before you clone a voice. See [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md).

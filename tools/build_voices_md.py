@@ -10,9 +10,8 @@ hashes for every profile, reference and sample.
 
     python tools/build_voices_md.py
 
-Every voice in the provenance record appears here. There is no downloadable
-filter any more: the roster exists precisely because each of these voices was
-cleared for shipment, source by source.
+Every voice in the provenance record appears here: each one was cleared for
+shipment, source by source.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ PROVENANCE = REPO / "docs" / "voices" / "roster" / "provenance.json"
 OUT = REPO / "VOICES.md"
 
 # The roster's display order: English, Spanish, French, German, Italian,
-# then the rest.
+# then the rest. The two Portuguese labels sit together.
 LANGUAGE_ORDER = [
     "English",
     "Spanish",
@@ -35,6 +34,7 @@ LANGUAGE_ORDER = [
     "Italian",
     "Polish",
     "Portuguese (European)",
+    "Portuguese (Brazilian)",
     "Dutch",
     "Swedish",
     "Danish",
@@ -61,6 +61,10 @@ SOURCE_LABELS = [
 
 LICENCE_LABELS = {"CC0-1.0": "CC0", "CC-BY-4.0": "CC-BY-4.0"}
 
+# The roster's `gender` field is the perceived presentation of the voice, the
+# same label the gallery shows. It is not the donor's gender.
+PRESENTATION_LABELS = {"F": "feminine", "M": "masculine"}
+
 
 def source_cell(source: dict) -> str:
     label, override = next(
@@ -83,50 +87,52 @@ def rows(voices: list[dict]) -> list[dict]:
 
 def render(voices: list[dict]) -> str:
     ordered = rows(voices)
-    # Counted by `language_id`, not by the display label. Two Portuguese
+    # Counted by `language_id`, not by the display label. The two Portuguese
     # voices carry two labels, European and Brazilian, and one `pt`, because
     # there is one Portuguese grammar and one language tag the frontend reads.
-    # Counting labels made this line say eleven while README, SUPPORTED,
-    # CHANGELOG and the model card all said ten, and ten is the number that
-    # matches what the library can be asked to read.
+    # Ten is the number of languages the library can be asked to read, and the
+    # number README, SUPPORTED, CHANGELOG and the model card state.
     language_count = len({v["language_id"] for v in voices})
     english_count = sum(1 for v in voices if v["language_id"] == "en")
 
     out = [
         "# Voices",
         "",
-        f"**{len(voices)} voices, {language_count} languages.** Every profile "
-        "is enrolled by this project's own pipeline from a recording made or "
-        "released for speech-technology use: personal donations recorded for "
-        "TTS, and CC0 / CC-BY corpora whose terms allow it. The donor or "
-        "source, the licence and a sample are named for every voice. The full "
-        "chain lives in "
-        "[docs/voices/roster/provenance.json](docs/voices/roster/provenance.json): "
-        "consent basis, reference construction, SHA-256 of profile, reference "
-        "and sample, and seed.",
+        f"loudkit ships {len(voices)} voices in {language_count} languages. "
+        "Each profile is enrolled with loudkit's own pipeline from a recording "
+        "made or released for speech-technology use: personal donations "
+        "recorded for TTS, and CC0 or CC-BY corpora whose terms allow it. The "
+        "table below names the source and licence of each voice. "
+        "[docs/voices/roster/provenance.json](docs/voices/roster/provenance.json) "
+        "records the rest: the donor, the consent basis, the reference "
+        "construction, the SHA-256 of each profile, reference and sample, and "
+        "the seed.",
         "",
         "[Open the voice gallery](https://loudreader.github.io/loudkit/demo/) "
         "and compare each generated sample with its enrollment reference.",
         "",
-        "Profiles ship on the Hugging Face repository under `voices/`, "
-        "versioned next to the checkpoint they enrol against.",
+        "Profiles ship under `voices/` in each Hugging Face model repository, "
+        "versioned with the checkpoint.",
         "",
         "The reference SHA-256 identifies the original WAV used for enrollment. "
-        "Those source WAVs are not redistributed in the model repository; "
-        "`reference.public_preview` names the Opus derivative played on the "
-        "demo page, not the bytes that were enrolled.",
+        "Those source WAVs are not redistributed in the model repository. "
+        "`reference.public_preview` names the Opus derivative that the gallery "
+        "plays; it is not the enrolled audio.",
         "",
-        "We have evaluated **English** by ear. We do not speak the other nine "
-        "languages well enough to judge their naturalness reliably. Feedback "
-        "from native speakers is very welcome.",
+        "Only English has been evaluated by ear. The other nine languages have "
+        "no native-speaker review of their naturalness. Feedback from native "
+        "speakers is welcome.",
         "",
-        "| voice | language | gender | source | licence |",
+        "The presentation column describes how a voice sounds, not the donor's gender.",
+        "",
+        "| voice | language | presentation | source | licence |",
         "|---|---|---|---|---|",
     ]
     for v in ordered:
         licence = LICENCE_LABELS.get(v["source"]["license"], v["source"]["license"])
+        presentation = PRESENTATION_LABELS.get(v["gender"], v["gender"])
         out.append(
-            f"| `{v['name']}` | {v['language']} | {v['gender']} "
+            f"| `{v['name']}` | {v['language']} | {presentation} "
             f"| {source_cell(v['source'])} | {licence} |"
         )
 
@@ -139,15 +145,15 @@ def render(voices: list[dict]) -> str:
         'voice = engine.voice("henry")',
         "```",
         "",
-        f"The gallery compares the {english_count} English voices on the same "
-        "story, with seed 7 and matched loudness.",
+        f"The gallery plays the {english_count} English voices on the same story "
+        "in both models, with seed 7 and matched loudness.",
     ]
     out += [
         "",
         "",
         "## Enrol your own",
         "",
-        "Ten seconds of clean audio is enough:",
+        "Use five to ten seconds of clean audio from one speaker:",
         "",
         "```python",
         "import loudkit as lk",
@@ -156,7 +162,8 @@ def render(voices: list[dict]) -> str:
         'mine.save("voices/my-voice.safetensors")',
         "```",
         "",
-        "Consent is yours to obtain. See [RESPONSIBLE_USE.md](RESPONSIBLE_USE.md).",
+        "Get the speaker's consent before you clone a voice. See "
+        "[RESPONSIBLE_USE.md](RESPONSIBLE_USE.md).",
         "",
     ]
     return "\n".join(out)

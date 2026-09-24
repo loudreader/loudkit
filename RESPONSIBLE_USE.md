@@ -1,8 +1,9 @@
 # Responsible use
 
-loudkit clones a voice from a few seconds of audio and reads arbitrary text in
-it, locally, with no account and no network. loudkit cannot verify who owns a
-voice sample. That is your responsibility, and it does not transfer to us.
+loudkit clones a voice from a few seconds of audio and reads any text in it. It
+runs locally, with no account and no network after the model download. loudkit
+cannot verify who owns a voice sample. You are responsible for having the right
+to use it.
 
 ## Allowed
 
@@ -16,9 +17,8 @@ voice sample. That is your responsibility, and it does not transfer to us.
   speech-technology use: personal donations recorded expressly for TTS (CC0),
   and CC0 / CC-BY corpora whose terms allow synthesis.
   [docs/voices/roster/provenance.json](docs/voices/roster/provenance.json)
-  names the donor or source, licence and consent basis per voice. No anonymous
-  scraped audio ships here, and no voice this project cloned from a private
-  individual ships either.
+  names the donor or source, licence and consent basis per voice. No audio
+  without a stated licence ships here.
 
 ## Prohibited
 
@@ -27,45 +27,50 @@ voice sample. That is your responsibility, and it does not transfer to us.
   labelled as synthetic.
 - Defeating voice authentication, or helping anyone do so.
 - Cloning a voice from a recording published for another purpose (a podcast, a
-  lecture, a video) without the speaker's consent. Public is not consenting.
-- Distributing a voice pack of an identifiable person who has not consented.
-  Publishing one clip is not the same act as publishing a file that reproduces
-  someone's voice on demand, for everyone who downloads it.
+  lecture, a video) without the speaker's consent. A public recording does not
+  give consent.
+- Distributing a voice profile of an identifiable person who has not consented.
+  Consent to publish one clip does not cover a profile that reproduces the
+  voice on demand for everyone who downloads it.
 
 ## Disclosure
 
 Label synthetic audio as synthetic, and cite the source recording when you
 publish a sample.
 
-On the law. The EU AI Act's transparency obligations for synthetic content sit
-in [Article 50](https://eur-lex.europa.eu/eli/reg/2024/1689/oj?locale=en). It
-requires providers of systems generating synthetic audio to mark the output in a
-machine-readable way. It does **not** name a format, and it does not name C2PA.
-The Commission's
+The EU AI Act's transparency obligations for synthetic content are in
+[Article 50](https://eur-lex.europa.eu/eli/reg/2024/1689/oj?locale=en). It
+requires providers of systems that generate synthetic audio to mark the output
+in a machine-readable format, so that it is detectable as artificially
+generated. The marking must be effective, interoperable, robust and reliable as
+far as this is technically feasible. The Article does **not** name a format,
+and it does not name C2PA. The Commission's
 [transparency guidelines](https://digital-strategy.ec.europa.eu/en/policies/guidelines-transparency-ai-generated-content)
 cover which obligations fall on whom, plus the exemptions and transitional
-arrangements. C2PA Content Credentials are a widely used way to satisfy a
-machine-readable-marking requirement. They are a choice this project made, not
-a compliance verdict it can hand you.
+arrangements. C2PA Content Credentials are one widely used format for
+machine-readable marking. loudkit does not use C2PA, and its own manifest
+(below) is not a compliance verdict.
 
-**None of this is legal advice, and shipping loudkit's manifest is not a
-finding that you comply.** Whether you are a provider or a deployer, and what
-that obliges, depends on facts about you. Ask someone qualified.
+**None of this is legal advice. Shipping loudkit's provenance manifest does not
+show that you comply.** Your obligations depend on whether you are a provider or
+a deployer, and on how you use loudkit. Get qualified legal advice.
 
-loudkit writes a marking by default. Every saved WAV (`Result.save`) and every
-server response carries an **unsigned loudkit provenance manifest** (JUMBF-shaped
-boxes in a private RIFF chunk, plus the `X-Loudkit-Provenance` header over HTTP)
-with the algorithm fingerprint, the seed, and the SHA-256 binding it to the audio
-bytes. **It is not C2PA.** A C2PA manifest is a signed manifest store; this is one
-assertion in boxes that borrow JUMBF's shape, and only `loudkit verify` reads it. See
-[`docs/reference/provenance.md`](docs/reference/provenance.md). It is unsigned,
-because signing needs a certificate and that is the deployer's choice. It says
-what made the file, not who vouches for it.
+loudkit writes a marking by default. Every WAV that `Result.save` writes, and
+every WAV the server returns, carries an **unsigned loudkit provenance
+manifest** in JUMBF-shaped boxes. [What a saved WAV records](docs/reference/provenance.md)
+gives where each writer puts it. One-shot HTTP replies also carry it in the
+`X-Loudkit-Provenance` header. It holds the algorithm
+fingerprint, the seed, and a SHA-256 that binds it to the audio bytes. WAVs from
+the Go, Rust, JS and Swift ports carry no manifest.
 
-This is the machine-readable marking loudkit provides by default. Deployers can
-add their own signing policy and disclosure around it.
+**It is not C2PA.** A C2PA manifest is a signed manifest store. This is one
+JSON document in boxes that borrow JUMBF's shape, and only loudkit's own tools
+(`loudkit verify`) read it. See
+[`docs/reference/provenance.md`](docs/reference/provenance.md). It is unsigned.
+It records what made the file, and it does not identify a publisher. Deployers
+can add their own signing and disclosure.
 
-## What we ship, and what we will not
+## What loudkit ships
 
 We ship 28 voice profiles enrolled from recordings donated for speech
 technology or released under terms that permit this use. Every profile has a
@@ -73,13 +78,14 @@ named source, licence and consent basis in the public roster. We do not ship
 profiles made from private recordings or recordings published for an unrelated
 purpose without the speaker's permission.
 
-The enrollment code is included so you can make your own profile from a voice
-you have the right to use.
+The enrollment code is included, for making a profile from a voice you have the
+right to use.
 
-Issues and pull requests asking for help with undisclosed impersonation, voice
-authentication bypass, or stripping provenance from generated audio will be
-closed.
+The maintainers close issues and pull requests that ask for help with
+undisclosed impersonation, voice authentication bypass, or stripping provenance
+from generated audio.
 
-The same consent and attribution requirements apply to graph-based cloning
-without PyTorch and to voice profiles created by Python, Swift, Go, Rust or
-TypeScript. A portable profile can reproduce a voice in either model.
+These consent and attribution requirements apply to every backend and SDK,
+including cloning on ONNX Runtime or CoreML without PyTorch, and to voice
+profiles made in Python, Swift, Go, Rust or TypeScript. A voice profile works
+with both models.
