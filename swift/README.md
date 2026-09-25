@@ -1,7 +1,7 @@
 # loudkit for Swift
 
-Text to speech on CoreML, on macOS 14 or iOS 17. No torch, no ONNX Runtime,
-no Python.
+Text to speech on CoreML, on macOS 14 or iOS 17 and later. It does not need
+Python, PyTorch or ONNX Runtime.
 
 ## Hello
 
@@ -11,8 +11,11 @@ no Python.
 .package(url: "https://github.com/loudreader/loudkit", from: "0.1.1")
 ```
 
-Two products: `LoudKit` is the engine, `LoudKitText` is the text funnel alone
-(numbers, dates, acronyms, twelve languages) with nothing to download.
+The package has two products:
+
+- `LoudKit`: speech synthesis.
+- `LoudKitText`: text normalization only (numbers, dates, acronyms) in twelve
+  languages. It needs no model download.
 
 `main.swift`:
 
@@ -27,30 +30,33 @@ print("hello.wav: \(String(format: "%.2f", result.duration))s")
 ```
 
 The first run downloads the model files into
-`~/Library/Caches/loudkit/loudreader--loudr-1` (`$LOUDKIT_CACHE` moves it),
-the directory the Go, Rust and JS ports share, and checks every file against
-the release's own `SHA256SUMS`; later runs read what is there.
-`engine.voiceNames` names the 28 voices.
+`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS, or into the
+application's Caches directory on iOS. Set `LOUDKIT_CACHE` to use
+`$LOUDKIT_CACHE/loudreader--loudr-1` instead. The Go, Rust and JS ports use
+the same directory. Each downloaded file is checked against the release's
+`SHA256SUMS`. `engine.voiceNames` lists the 28 voices.
 
-The snippets on this page need loudkit 0.1.1. From a checkout, `swift run
-Hello` runs `swift/Examples/Hello/main.swift`, which is this file.
+The examples on this page need loudkit 0.1.1. To run the example from a
+repository checkout, run `swift run Hello`. `swift/Examples/Hello/main.swift`
+is the program above.
 
-Both `loudr-1` and `loudr-1-turbo` use this API in 0.1.1. Change the model
-name to switch; keep the same voice profile. A local release directory works
-as well as a published model name.
+`loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
+model name. The same voice profiles work with both models. `Engine.load` also
+accepts a local release directory.
 
 
-## The rest of the front door
+## API overview
 
 ```swift
 import Foundation
 import LoudKit
 
 try await LoudKit.download(repo: "loudreader/loudr-1", to: URL(fileURLWithPath: "loudr-1"))
-try await LoudKit.download(repo:to:revision:cloning:progress:)   // pin a revision, add cloning
-try await Engine.load("loudr-1")                       // a directory or a repo id
-engine.voiceNames                                      // the names in the release
-try engine.voice(named: "joe")                         // one of them
+try await LoudKit.download(repo: "loudreader/loudr-1", to: URL(fileURLWithPath: "loudr-1"),
+                           revision: "v0.1.1", cloning: true)   // pin a revision, add cloning
+try await Engine.load("loudr-1")                       // a local directory or a repo id
+engine.voiceNames                                      // the voice names in the release
+try engine.voice(named: "joe")                         // load one voice by name
 try engine.synthesize(text, voice: voice, seed: 7, language: nil, speed: 1.0, previousTokens: nil)
 try engine.stream(text, voice: voice, seed: 7) { chunk in play(chunk.audio); return true }
 let mine = try await engine.enroll(contentsOf: URL(fileURLWithPath: "me.m4a"), name: "mine", language: "en")
@@ -59,22 +65,25 @@ try VoiceProfile.load(url: URL(fileURLWithPath: "mine.safetensors"))
 try result.saveWav("hello.wav")                        // 16-bit PCM
 ```
 
-`synthesize` takes text of any length: it splits at sentence boundaries and
-joins the audio. Every argument after the voice has a default: seed 0, the
-voice's own language, normal speed. `stream` hands out chunks as they are
-made; return `false` to stop, or pass `shouldCancel:` to stop within one
-decode step. `enroll` on an engine loaded by repo id fetches the enrollment
-packages once; a directory of your own needs `cloning: true`. The reader
-takes anything AVFoundation opens. `Engine.load(checkpoint:coremlAssets:)`
-opens a layout of your own.
+`synthesize` splits long text into chunks at sentence boundaries and joins
+the audio in memory. Every argument after the voice has a default: seed 0, the
+voice's own language, speed 1.0. `stream` passes each chunk to the closure
+when it is ready. Return `false` to stop, or pass `shouldCancel:`, which is
+checked on every decode step.
+
+On an engine loaded by repo id, the first `enroll` call fetches the enrollment
+packages. For a local directory, fetch them with `cloning: true`. `enroll`
+reads any audio file that AVFoundation opens.
+`Engine.load(checkpoint:coremlAssets:)` loads a checkpoint and CoreML
+packages from the paths you give.
 
 ## Where the stages run
 
-`ExecutionConfig` places each CoreML stage. The token generator runs natively
-on the CPU in fp32, which is the measured-right placement for an
-autoregressive stage at batch one; the renderer's middle stage is the one
-worth putting on the Neural Engine. `docs/platforms/apple.md` carries the
-measurements.
+The token generator runs as native code on the CPU in fp32. `ExecutionConfig`
+sets the compute units of the three CoreML stages of the renderer. By default
+the middle stage runs on the CPU and the Neural Engine, and the other two run
+on the CPU. `docs/platforms/apple.md` lists the properties, their defaults
+and the measurements.
 
 ## Build and test
 

@@ -578,16 +578,17 @@ def test_crates_release_bootstraps_once_then_uses_short_lived_oidc() -> None:
 def test_release_tags_name_the_isolated_public_branch_explicitly() -> None:
     """Running the release commands on a private branch must not expose it."""
     releasing = (REPO / "RELEASING.md").read_text(encoding="utf-8")
-    # Read from pyproject rather than written out: the literal needs bumping
-    # every release otherwise, and a test that fails only because the version
-    # moved teaches people to edit tests during a release.
-    version = (
-        _tomllib()
-        .loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        .split(".dev")[0]
-    )
-    assert f"git tag v{version} public-main" in releasing
-    assert f"git tag go/v{version} public-main" in releasing
+    # RELEASING.md writes the version as the placeholder `X.Y.Z`, so the
+    # commands need no edit per release. Both tags must be there, and every
+    # `git tag` command in the file must name `public-main` as its target.
+    assert "git tag vX.Y.Z public-main" in releasing
+    assert "git tag go/vX.Y.Z public-main" in releasing
+    tag_commands = [
+        line.strip() for line in releasing.splitlines() if line.strip().startswith("git tag ")
+    ]
+    assert tag_commands, "RELEASING.md has no git tag command"
+    for command in tag_commands:
+        assert command.split()[-1] == "public-main", command
 
 
 def test_turbo_parity_revision_is_pinned_or_explicitly_blocked() -> None:

@@ -1,555 +1,548 @@
 # Releasing loudkit
 
-The release workflow (`.github/workflows/release.yml`) builds and verifies the
-artefacts, attests their provenance, coordinates the first npm and crates.io
-bootstraps and, after a reviewer approves the `release` environment, publishes
-PyPI before creating the GitHub Release. The manual commands in §7 are the two
-first-package bootstraps, the fallback and the record of what the jobs do. This
-file is the whole procedure, in order.
+`.github/workflows/release.yml` builds and checks the packages, and attests the
+Python distributions and the npm tarball. After a reviewer approves the
+`release` environment, it publishes to npm, PyPI and crates.io, then creates
+the GitHub Release. §7 gives the manual fallback for each registry. Follow the
+sections in order.
 
-This procedure updates an existing public release. Preserve public history and
-existing registry packages; the one-time repository bootstrap is finished.
+Each release adds to the existing public history and to the existing registry
+packages. In this file, `X.Y.Z` is the version you release.
 
 ## 0. Preconditions
 
-- Verify that the existing `public` remote is `loudreader/loudkit` and fetch it.
-- Preserve its current `main` history. Never create another parentless root,
-  overwrite published tags, or force-push a release update.
-- Verify ownership and Trusted Publishing for the existing PyPI, npm and
-  crates.io packages. The names are already registered by this project.
-- Publish both verified model bundles and create their HF `v0.1.1` revisions
-  before the code tag. Record both immutable HF commit IDs in CI.
-- Obtain the release owner's listening and provenance acceptance (§4).
+- Verify that the `public` remote is `loudreader/loudkit`, and fetch it.
+- Keep its `main` history. Do not create another parentless root commit,
+  overwrite a published tag or force-push.
+- Confirm that this project owns `loudkit` on PyPI, npm and crates.io, and
+  that the trust settings in §7.0 are in place.
+- Confirm that the public repository answers without authentication:
+
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' https://api.github.com/repos/loudreader/loudkit   # 200
+  ```
+
+- Publish both verified model bundles and create their `vX.Y.Z` Hub tags
+  before the code tag (§5). Record both immutable Hub commit IDs in CI (§5.3).
+- Get the release owner's listening and provenance acceptance (§4).
 
 ## 1. Version sync
 
 Four files carry a version and must agree before tagging. Go and Swift take
 their version from the git tag and have nothing to edit.
 
-| file | field | pre-release value | release value |
-| --- | --- | --- | --- |
-| `pyproject.toml` | `version` | `0.1.1` | `0.1.1` |
-| `js/package.json` | `version` | `0.1.1` | `0.1.1` |
-| `rust/Cargo.toml` | `version` | `0.1.1` | `0.1.1` |
-| `python/loudkit/_version.py` | `__version__` | `0.1.1` | `0.1.1` |
+| file | field | value on `main` |
+| --- | --- | --- |
+| `pyproject.toml` | `version` | `0.1.1` |
+| `js/package.json` | `version` | `0.1.1` |
+| `rust/Cargo.toml` | `version` | `0.1.1` |
+| `python/loudkit/_version.py` | `__version__` | `0.1.1` |
 
-The release workflow refuses a tag that does not match `pyproject.toml`. A
-missed edit fails the build instead of shipping a mislabeled wheel. The other
-three are held to `pyproject.toml` by
-`tests/test_release.py::test_every_published_manifest_carries_the_same_version`,
-and the table above is held to all four by
-`test_the_release_table_names_the_versions_the_files_carry`. Edit the table in
-the same commit as the files, or the suite goes red.
+Set all four to `X.Y.Z`, and change the last column of this table in the same
+commit. `js/package-lock.json` carries the version twice; update it too.
 
-`tests/test_release.py` is the contract. Run it after the edit and before the
-tag:
+The release workflow refuses a tag that does not match `pyproject.toml`.
+`tests/test_release.py::test_every_published_manifest_carries_the_same_version`
+holds the other three files to `pyproject.toml`, and
+`test_the_release_table_names_the_versions_the_files_carry` holds this table to
+the files. `tests/test_release_coherence.py` also checks the lockfile. Run the
+tests after the edit and before the tag:
 
 ```bash
-pytest tests/test_release.py -q
+pytest tests/test_release.py tests/test_release_coherence.py -q
 ```
 
 ## 2. The release commit
 
-One commit, containing all of the following. They are grouped because each of
-them is a claim that stops being true at the moment of publication, and a
-release that ships half of them documents a state that does not exist.
+Put all of the following in one commit.
 
-- [ ] The four version fields from §1, and the §1 table itself.
-- [ ] Confirm that the `0.1.1` section in `CHANGELOG.md` carries the release date.
-- [ ] The two audio players go into the "Listen" section of
-      `docs/MODEL_CARD.md`. They point at `samples/` in the Hugging Face model
-      repository; the strict builder copies those bytes from the voice roster
-      and includes them in both manifests. This is the only place the card can
-      be written, because §5.5 freezes the tree and the card is a hashed member
-      of the bundle §5.1 builds. §5.1 confirms they answer.
+- [ ] The four version fields from §1, and the §1 table.
+- [ ] The `X.Y.Z` section of `CHANGELOG.md`, with the release date
+      (`YYYY-MM-DD`) on its heading.
+- [ ] The "Listen" section of `docs/MODEL_CARD.md` carries the two audio
+      players below. They point at `samples/` in the Hugging Face model
+      repository. The strict builder copies those files from the voice roster
+      and lists them in both manifests. Edit the card in this commit: it is a
+      hashed member of the bundle §5.1 builds, and §5.5 freezes the tree. §5.1
+      confirms that the players play.
 
           <audio controls src="https://huggingface.co/loudreader/loudr-1/resolve/main/samples/joe.opus"></audio>
           <audio controls src="https://huggingface.co/loudreader/loudr-1/resolve/main/samples/kathleen.opus"></audio>
 
-      Both read the same sentence. Their seeds differ and the card does not
-      pretend the voice is the only changed variable.
-      Nothing from `docs/voices/roster/audio/refs/`: those are compressed
-      previews of the human enrollment recordings, not model output, and they
-      are deliberately absent from the model repository. A player beside the
-      model name reads as a sample of the model.
-- [ ] Every banner in §9 comes off. `tests/test_release_coherence.py` refuses a
-      stable version while any of them stands, so this is the section that
-      unblocks the tag in §6.
-- [ ] The Hub commits of both bundles pinned in `.github/workflows/ci.yml`
-      (`LOUDKIT_HF_REVISION`, `LOUDKIT_TURBO_HF_REVISION`). They exist only
-      after §5.1 and §5.2, so the release commit is cut after the uploads;
-      §5.3 is that commit.
-- [ ] Decide whether this release is a patch, a minor or a major against the
-      promises in
+      Both read the same sentence at seed 7. Do not use files from
+      `docs/voices/roster/audio/refs/`. Those are compressed previews of the
+      human enrollment recordings, not model output, and the model repository
+      does not ship them.
+- [ ] No pre-release wording from §9 remains. `tests/test_release_coherence.py`
+      refuses a stable version while any §9 marker remains, so the tag in §6
+      depends on this item.
+- [ ] The Hub commits of both bundles are pinned in
+      `.github/workflows/ci.yml` (`LOUDKIT_HF_REVISION`,
+      `LOUDKIT_TURBO_HF_REVISION`). They exist only after §5.1 and §5.2, so
+      cut the release commit after the uploads. §5.3 is that commit.
+- [ ] Decide whether this release is a patch, a minor or a major against
       [docs/reference/COMPATIBILITY.md](docs/reference/COMPATIBILITY.md).
 
 ## 3. Local gates
 
-All of these must pass on the release commit, from the repo root:
+Run these on the release commit, from the repo root. They are the CI gates.
+Use the tool versions CI pins.
 
 ```bash
-pytest -m "not slow" -q
-mypy python/loudkit && mypy --config-file tools/mypy.ini tools/
-ruff check python tests tools integrations/speech-dispatcher
-ruff format --check python tests tools integrations/speech-dispatcher
-(cd rust && cargo clippy --all-targets -- -D warnings && cargo test)
-(cd go && go vet ./... && go test ./...)
-(cd js && npm test)
-swift test
+just check    # ruff check, ruff format --check and mypy, as CI's check job runs them
+just test     # pytest -m "not slow"
+(cd rust && cargo fmt --check \
+  && cargo clippy --all-targets -- -D warnings \
+  && cargo clippy --all-targets --no-default-features -- -D warnings \
+  && cargo test --no-default-features && cargo test)
+(cd go && test -z "$(gofmt -l .)" && go vet ./... && go test ./...)
+(cd js && npm ci && npm run lint && npm test)
+swiftlint lint --quiet
+swift build && swift test
 ```
 
-`cargo fmt --check` and `eslint` are not in that list only because
-`cargo clippy` and `npm test` do not cover them; CI runs both, so run them too:
+CI also runs the jobs below. Run the ones your host supports:
 
 ```bash
-(cd rust && cargo fmt --check)
-(cd js && npm run lint)
-```
-
-Every one of these is a CI gate. Run them locally with the pinned versions: a
-release branch that reaches this page red has already spent a review cycle on
-formatting.
-
-**The list above is not all of CI.** Five
-more jobs gate a merge, and each has caught something no test above would:
-
-```bash
-# The funnels fuzzed against each other. Gating in CI, and the cheapest of
-# the five to run: no weights, no network.
+# Funnel fuzzing across the ports. Needs no weights and no network.
 python tools/fuzz_parity.py --cases 300 --seed 1 --ports go,rust,js
 python tools/fuzz_parity.py --cases 300 --seed 2 --ports go,rust,js
+python tools/fuzz_parity.py --cases 300 --seed 1 --ports swift   # macOS
+python tools/fuzz_parity.py --cases 300 --seed 2 --ports swift   # macOS
 
-# The crate builds at its declared MSRV, and with the coreml feature on.
-(cd rust && cargo build --locked)
+# The crate at its MSRV, and with the coreml feature on (macOS only).
+(cd rust && cargo +1.88 build --locked)
 (cd rust && cargo clippy --all-targets --features coreml -- -D warnings && \
-            cargo test --features coreml)   # macOS only
+            cargo test --features coreml)
 
-# The wheel imports from a directory that is not the repo, and the sdist
-# carries only what the allowlist names.
+# The wheel and the sdist. This only builds them. CI's clean-install and
+# packaging jobs also import the wheel outside the repo and check the sdist
+# against its allowlist.
 python -m build --sdist --wheel --outdir /tmp/lk-dist
 ```
 
-The MSRV job needs a 1.88 toolchain and the coreml job needs macOS, so on the
-wrong host they are CI's to run rather than yours, but know which ones you are
-leaving to CI. `dependency audit` (pip-audit, `npm audit`, `govulncheck`,
-`cargo audit`) and `parity` (hosted macOS against the pinned public release)
-are CI's by design: the first wants a clean resolver environment, the second
-downloads the release.
+The MSRV check needs a Rust 1.88 toolchain and the coreml check needs macOS. On
+another host, leave them to CI and check their results there. Two more CI jobs
+run only in CI: `dependency audit` (`pip-audit`, `npm audit`, `govulncheck`,
+`cargo audit`) needs a clean resolver environment, and `parity` (hosted macOS)
+downloads the pinned public release. Confirm both in CI.
 
-## 3.5 Re-measure the speed table if the engine got faster
+## 3.5 Re-measure the speed tables if engine speed changed
 
-`docs/benchmarks.md` is the one page the published real-time factors are
-measured on; the README, the model card and the website quote it, and
-`tests/test_docs.py` holds them to it. What the test cannot know is whether the
-page is *current*, because the two machines that hold the record, an RTX 3090
-and a Jetson Orin Nano, are not in CI.
+`docs/benchmarks.md` holds the published real-time factors. The README, the
+port guides and the website quote it, and
+`tests/test_docs.py::test_the_headline_speed_figures_are_quoted_from_one_page`
+checks that the quotes agree with it. The test checks agreement, not whether
+the figures are current. The machines behind the page, an M3 Pro and six
+NVIDIA parts, are not in CI.
 
-So: if this release changed the speed of the engine, take the table again
-before tagging. Both boxes, `--cuda-graphs`, the same voice and seed the page
-declares:
+If this release changes engine speed, measure the affected tables again before
+tagging. Measure both models. Use the voice and seed the page declares (`joe`,
+seed 7). On NVIDIA, measure eager and with `--cuda-graphs`:
 
 ```bash
-python tools/bench.py --checkpoint <checkpoint> --voice <voice> \
-  --device cuda --cuda-graphs --seed 1234 --json out/bench.json
+python tools/bench.py --checkpoint <checkpoint> --voice joe --seed 7 \
+  --device cuda --cuda-graphs --json out/bench.json
 ```
 
-Then update `docs/benchmarks.md`, re-quote the four figures the test checks,
-and move the `measured on 0.1.0` markers to this release. If the numbers are
-*not* re-taken, leave those markers where they are: a stale figure that says
-which release it is remains true, and one that does not is a claim about today.
+The port table comes from `tools/bench_ports` and the batch table from
+`research/bench_batch.py`.
 
-Historical measurements are retained this way. On 0.1.1 every user-facing figure was
-re-measured on 2026-09-06 for both models; the one table still marked 0.1.0 is the
-ONNX-provider comparison on the RTX 3090 in `docs/benchmarks.md`.
+Then update `docs/benchmarks.md` and the quoted figures the test checks (six
+rows, both models). Set the release named under "Measured on which release"
+and in each table you measured again. Keep the release label of every table
+you did not measure again.
 
-## 4. Manual acceptance pass: use the library as a stranger would
+## 4. Manual acceptance
 
-Do this **before** tagging, on the tree you intend to tag. Each item is a
-role-play: no repo checkout knowledge, no cached state, only what a new user
-has. A failure here is a release blocker.
+Do this **before** tagging, on the tree you intend to tag. Work as a new user:
+a fresh environment, no cache and no knowledge from the checkout. A failure
+here blocks the release.
 
-The release operator can execute every command in §§4.1–4.6 and attach the
-output. The release owner does not need to retype those commands. These are the
-five decisions that still require a person's judgment rather than a green
-process exit:
+The release operator can run every command in §§4.1–4.9 and attach the output.
+The release owner does not need to repeat those commands. These five decisions
+need the release owner:
 
-- [ ] **GitHub first minute.** Open the rendered README in a private window.
-      Without diving into the technical proof, can you say what loudkit is,
-      who it is for, how to make the first WAV and where to go for your
-      runtime? Reject it if the page feels like an internal specification.
-- [ ] **Hugging Face first minute.** Both native players render and play. The
-      card answers in this order: how it sounds, how to try it, what gets
-      downloaded, and what the quality boundary is. Reject it if internals
-      dominate before the first successful synthesis.
-- [ ] **Listening.** Hear all 28 roster samples from start to finish, then
-      a fresh English, Polish and Spanish render. Reject dropouts, repetitions,
-      bad tails, wrong-language number reading or a sample you would be
-      uncomfortable presenting as the model's first impression.
-- [ ] **Cloning.** Enroll one recording for which you have explicit permission,
-      listen to at least two sentences, and decide whether identity and
-      intelligibility are good enough for the v0.1 claim. A passing cosine or
-      successful API call cannot make that decision.
-- [ ] **Claims and responsibility.** Read the top half of the model card,
-      `VOICES.md` and `RESPONSIBLE_USE.md` as the person whose name is attached
-      to the release. Confirm that the English-only quality boundary, consent
-      basis and the provenance trust boundary are described clearly and accurately.
+- [ ] README on GitHub. Open the rendered README in a private window. From the
+      README alone, confirm that a reader can tell what loudkit is, who it is
+      for, how to make the first WAV and which page covers their runtime.
+      Reject it if it reads as an internal specification.
+- [ ] Model card on Hugging Face. Both native players render and play. The
+      card gives, in this order: how the model sounds, how to try it, what
+      gets downloaded, and the quality limits. Reject it if implementation
+      details come before the first synthesis.
+- [ ] Listening. Play all 28 roster samples to the end, then a fresh English,
+      Polish and Spanish render. Reject dropouts, repetitions, bad tails,
+      numbers read in the wrong language, and any sample you would not publish
+      as a first example of the model.
+- [ ] Cloning. Enroll one recording that you have explicit permission to use,
+      and listen to at least two sentences. Decide by listening whether
+      identity and intelligibility meet the v0.1 claim.
+- [ ] Claims. Read the top half of the model card, `VOICES.md` and
+      `RESPONSIBLE_USE.md` as the person named on the release. Confirm that
+      they state the English-only quality evaluation, the consent basis and
+      the provenance trust boundary clearly and correctly.
 
-Everything below is reproducible operator evidence. It still has to pass, but
-it may be delegated.
+The checks below give evidence that anyone can reproduce. They must pass, and
+the operator can run them.
 
-### 4.1 The Python user
+### 4.1 Python
 
-- [ ] Build locally and install the wheel into a fresh venv, not `pip -e .`.
-      The glob has to be expanded before pip sees it, so resolve it into a
-      variable rather than quoting a pattern:
+- [ ] Build locally and install the wheel into a fresh venv, not with
+      `pip -e .`. Put the wheel path in a variable so the shell expands the
+      glob:
 
       ```bash
       python -m build
       python -m venv /tmp/lk
-      whl=$(ls dist/loudkit-0.1.1-*.whl)
-      /tmp/lk/bin/pip install "${whl}[torch,audio,hub]"
+      whl=$(ls dist/loudkit-X.Y.Z-*.whl)
+      /tmp/lk/bin/pip install "${whl}[torch,audio,enroll,hub]"
       ```
 
-- [ ] Run the README "Make a WAV" block **verbatim, copy-pasted**: the download
-      path, the cache, `engine.synthesize(...)`, `.save("hello.wav")`.
-      Listen to `hello.wav`.
-- [ ] Repeat the synthesize line in `pl` and `es`. Listen: numbers, currency
-      and times in a sentence like „Pociąg o 14:30 kosztuje 2,5 mln zł" must
-      come out in the right language, not English.
-- [ ] Enrollment: `loudkit.enroll(...)` on a 10-second clip, synthesize with
-      the result, listen for identity.
-- [ ] Break it on purpose and read the errors as a stranger:
-      wrong language code produces a 400-class message naming the supported
-      set; no network on first load produces an error that says what to
-      download, not a traceback from inside `huggingface_hub`.
-- [ ] `python -c "import loudkit; print(loudkit.__version__)"` matches the tag.
+- [ ] Run the Python example in the README (section "Python") unchanged. It
+      covers the download, the cache, `engine.synthesize(...)` and
+      `.save("hello.wav")`. Listen to `hello.wav`.
+- [ ] Repeat the synthesize line with a `pl` voice and an `es` voice. Listen:
+      numbers, currency and times in a sentence such as
+      „Pociąg o 14:30 kosztuje 2,5 mln zł" must be read in the voice's
+      language, not in English.
+- [ ] Enrollment: run `lk.enroll(...)` on a 10-second clip, synthesize with the
+      result and listen for identity.
+- [ ] Errors: an unsupported language code raises `UnsupportedLanguageError`,
+      and its message names the supported languages. A first load with no
+      network gives an error that names what to download.
+- [ ] `python -c "import loudkit; print(loudkit.__version__)"` prints `X.Y.Z`.
 - [ ] `twine check dist/*` passes on both artefacts.
 
-### 4.2 The Colab user
+### 4.2 Colab
 
-- [ ] Open the README Colab badge **logged out of GitHub**. It points at
-      `loudreader/loudkit`, opens without authentication and does not fall back
-      to a contributor's fork.
-- [ ] The pre-release banner is off both the README and the notebook (§2).
-- [ ] Runtime → Run all, no edits. Every cell green, audio plays inline.
+- [ ] Open the README Colab badge while **logged out of GitHub**. It points at
+      `loudreader/loudkit`, opens without authentication and does not fall
+      back to a contributor's fork.
+- [ ] The README and the notebook carry no pre-release note (§9).
+- [ ] Runtime → Run all, with no edits. Every cell passes and the audio plays
+      inline.
 
-### 4.3 The npm user
+### 4.3 npm
 
-- [ ] `cd js && npm pack --dry-run`. The `prepack` guard
+- [ ] Run `cd js && npm pack --dry-run`. The `prepack` guard
       (`js/scripts/check-pack.mjs`) runs `npm run build`, copies the data files
-      and refuses a tarball missing `dist/`, any of the three data files,
-      `LICENSE`, `NOTICE` or `DISCLOSURE`. Confirm the listing carries those
-      files, `README.md`, `data/numbers.json`, `data/numerals.json`,
-      `data/pl_en_respell.json` (about 6.6 MB) and `dist/`, and that no
-      `dist/test/` entry appears. Confirm `package.json` declares
+      and refuses a tarball that lacks `dist/`, any of the three data files,
+      `LICENSE`, `NOTICE` or `DISCLOSURE`. Confirm that the listing contains
+      those files, `README.md`, `data/numbers.json`, `data/numerals.json`,
+      `data/pl_en_respell.json` (about 6.6 MB) and `dist/`, and no
+      `dist/test/` entry. Confirm that `package.json` declares
       `contentPolicy.class` as `dual-use`.
 
-      `js/data/` is gitignored and copied at build time, so a file the copier
-      does not name is missing from a fresh clone and present on every machine
-      that has ever built the package. That is how `numerals.json` shipped in
-      nobody's tarball while the suite was green; `js/src/test/pack.test.ts`
-      packs, unpacks and folds a numeral out of the result.
-- [ ] In a scratch dir: `npm install /path/to/loudkit-0.1.1.tgz`, then run the
-      example from `js/README.md` against downloaded weights.
+      `js/data/` is gitignored and generated at build time. Run this check
+      from a fresh clone: a machine that built the package before can hold a
+      data file that the copier does not name. `js/src/test/pack.test.ts`
+      packs the package, unpacks it and folds a numeral from the result.
+- [ ] In a scratch directory, run `npm install /path/to/loudkit-X.Y.Z.tgz`,
+      then run the example from `js/README.md` against downloaded weights.
 
-### 4.4 The Rust user
+### 4.4 Rust
 
-- [ ] `cargo new /tmp/lk-rs && cd /tmp/lk-rs`, add the crate as a path
-      dependency, paste the example from `rust/README.md`,
-      `cargo run`. (Post-publish this repeats with the registry version.)
-- [ ] `cargo publish --dry-run` from `rust/` succeeds. It reads the index and
-      uploads nothing. It needs no token.
-- [ ] `cargo package --list` still shows `src/numbers.json` and
-      `src/pl_en_respell.json`. The crate is unusable without them.
-- [ ] `cargo package --list | grep -c '^tests/'` prints `0`. Several of those
-      tests panic without the monorepo's fixtures, so shipping them makes
-      `cargo test` on the published crate report failures that say nothing
-      about the crate. The `include` list in `rust/Cargo.toml` keeps them out.
-      An `include = ["tests/**"]` undoes it silently.
+- [ ] Run `cargo new /tmp/lk-rs && cd /tmp/lk-rs`, add the crate as a path
+      dependency, paste the example from `rust/README.md` and run
+      `cargo run`. §8 repeats this with the registry version.
+- [ ] `cargo publish --dry-run` from `rust/` succeeds. It reads the index,
+      uploads nothing and needs no token.
+- [ ] `cargo package --list` shows `src/numbers.json`, `src/numerals.json`,
+      `src/pl_en_respell.json` and the files under `src/enroll_data/`. The
+      crate compiles them in and does not build without them.
+- [ ] `cargo package --list | grep -c '^tests/'` prints `0`. Some of those
+      tests need the monorepo's fixtures and fail in the published crate. The
+      `include` list in `rust/Cargo.toml` keeps `tests/` out. Do not add
+      `tests/**` to it.
 
-### 4.5 The Go user
+### 4.5 Go
 
-- [ ] Pre-push stand-in: `go build ./...` and `go test ./...` from `go/`.
-- [ ] Post-push, in a scratch module:
+- [ ] Before the push: `go build ./...` and `go test ./...` from `go/`.
+- [ ] After the Go tag (§7.4), in a scratch module:
 
       ```bash
       go mod init tmp
-      go get github.com/loudreader/loudkit/go@v0.1.1
+      go get github.com/loudreader/loudkit/go@vX.Y.Z
       ```
 
-      **The version query is `@v0.1.1`, not `@go/v0.1.1`.** The `/go` suffix on
-      the module path is what tells the proxy the tag it wants is prefixed
-      `go/`. Writing the tag name into the query fails to resolve.
-      Paste the example from `go/README.md`, then `go run .`.
+      Use `@vX.Y.Z`, not `@go/vX.Y.Z`. The `/go` suffix of the module path
+      tells the proxy that the tag has the `go/` prefix, and a query that
+      names the tag does not resolve. Paste the example from `go/README.md`,
+      then run `go run .`.
 
-### 4.6 The Swift user
+### 4.6 Swift
 
-- [ ] Pre-push stand-in: `swift build && swift test` at the repo root.
-- [ ] Post-push, a scratch package depending on
-      `.package(url: "https://github.com/loudreader/loudkit", from: "0.1.1")`,
-      built and run against the example from the Swift section of the README on
-      macOS. SwiftPM strips the leading `v` from tags, so `from: "0.1.1"`
-      resolves the `v0.1.1` tag. No separate Swift tag is needed:
-      `Package.swift` is at the repo root precisely because SwiftPM cannot read
-      a manifest from a subdirectory.
+- [ ] Before the push: `swift build && swift test` at the repo root.
+- [ ] After the push: on macOS, build and run a scratch package that depends
+      on `.package(url: "https://github.com/loudreader/loudkit", from: "X.Y.Z")`,
+      with the example from the Swift section of the README. SwiftPM strips
+      the leading `v` from tags, so `from: "X.Y.Z"` resolves the `vX.Y.Z` tag.
+      Swift needs no tag of its own: `Package.swift` is at the repo root, and
+      SwiftPM cannot read a manifest from a subdirectory.
 
-### 4.7 The listener
+### 4.7 Roster samples
 
-- [ ] Play every sample under `docs/voices/roster/audio/` start to finish. Any
-      dropout, repetition, tail artifact or wrong-language reading disqualifies
-      the sample. Re-render it, put the new sha256 in
-      `docs/voices/roster/provenance.json`, and ship the new bytes. The hashes
-      record what is published. They do not reproduce on another machine.
+- [ ] Play every sample under `docs/voices/roster/audio/` to the end. A
+      dropout, repetition, tail artifact or wrong-language reading
+      disqualifies the sample. Render it again, put the new sha256 in
+      `docs/voices/roster/provenance.json` and ship the new file. The hashes
+      record the published bytes. They do not reproduce on another machine.
 
-### 4.8 The reader
+### 4.8 Links and model card
 
-- [ ] On the GitHub rendering of the public repo, click **every** link in
-      README.md and VOICES.md: relative links, docs/, the model card, the
-      benchmarks page. No 404s, no links into files that no longer exist.
-- [ ] Read `docs/MODEL_CARD.md` for anything a reader would trip on. §2
-      finalises it before it becomes a hashed member of the model bundle, so
-      this is the last pass where a wording fix is free.
-- [ ] The repo has a description, topics, and issues enabled.
+- [ ] On the GitHub rendering of the public repo, click every link in
+      `README.md` and `VOICES.md`: relative links, `docs/`, the model card and
+      the benchmarks page. No link returns 404 or points to a file that does
+      not exist.
+- [ ] Read `docs/MODEL_CARD.md` for errors a reader would notice. This is the
+      last check before §5.1 hashes the card into the bundle. A later change
+      means a rebuild.
+- [ ] The repo has a description and topics, and issues are enabled.
 
-### 4.9 The auditor
+### 4.9 Published tree
 
-- [ ] The published tree contains nothing that is not the project's to ship:
-      working notes, scraped pages, probe outputs, `.env`, credentials.
-      Verified 2026-08-23: `release-dir/`, `space-dir/`, `out/`, `dist/`,
-      `jobs/`, `progress.md`, `.opencode/` and `.agents/` are all untracked
-      and gitignored.
-- [ ] `LICENSE` (Apache-2.0) and `NOTICE` are at the root and render on GitHub.
-- [ ] `go/`, `rust/` and `js/` each carry a byte-identical copy of both, held
-      there by
-      `test_every_published_package_carries_the_licence_and_the_notice`.
+- [ ] The release commit tracks nothing that is not the project's to ship:
+      working notes, scraped pages, probe outputs, `.env` files, credentials,
+      or build output such as `out/` and `dist/`. Check `git ls-files`, not
+      only `.gitignore`.
+- [ ] `LICENSE` (Apache-2.0) and `NOTICE` are at the root and render on
+      GitHub.
+- [ ] `go/`, `rust/` and `js/` each carry a byte-identical copy of both.
+      `test_every_published_package_carries_the_licence_and_the_notice`
+      checks this.
 
 ## 5. Bundles, pins, then public main
 
-The order matters: the two bundles are uploaded first (§5.1, §5.2), their Hub
-commits are pinned in CI (§5.3), and only then is the tree pushed to public
-`main` (§5.5), so the commit that carries the tag can pass its own parity job.
+Upload the two bundles first (§5.1, §5.2). Then pin their Hub commits in CI
+(§5.3). Then push the tree to public `main` (§5.5). In this order, the commit
+that carries the tag can pass its own parity job.
 
 ### 5.1 Build the loudr-1 bundle and upload it
 
-Two things have to be true before the build reads anything.
-
-**The checkpoint is split.** A release ships two halves, and the builder looks
-for the enrollment one *beside* the synthesis one under its canonical name --
-there is no flag for it. Both have to sit in one directory, which is not the
-checkpoint's own: the tool refuses that, because a half written beside the
-packed original is a different artefact wearing the same directory.
+Split the checkpoint into a new directory. A release ships two halves. The
+builder finds the enrollment half beside the synthesis half by its canonical
+name; there is no flag for it. Both halves must be in one directory, and that
+directory must not be the packed checkpoint's own. The tool refuses to write a
+half beside the packed original.
 
 ```bash
 .venv/bin/python tools/split_checkpoint.py \
     --checkpoint assets/loudr-1.safetensors \
-    --out-dir    dist/release-0.1.1/split/loudr-1
+    --out-dir    dist/release-X.Y.Z/split/loudr-1
 ```
 
-**Only if the pair is not there yet.** With both halves present the tool says
-so and stops, which is correct and needs no answer -- do not reach for a force
-flag. The pair does not need re-cutting to be trusted: each half carries the
-digest of the packed original, and the build refuses two halves that came from
-different runs.
+Split only if the pair is missing. When both halves exist, the tool reports
+that and stops. Do not use a force flag. Each half records the digest of the
+packed original, and the build refuses two halves from different runs.
 
-**Then stamp the fade into the synthesis half, and nothing else.** The packed
-original predates the 20 ms ramp, so the halves cut from it carry no
-`edge_fade_seconds`. The amender writes only that key when told to, and it has
-to be told: its full list also rewrites `chunking` over the shorter block the
-manifest carries, and the tool refuses to do that over a manifest that already
-says something. The loader fills the same defaults either way, so the
-fingerprint is the same; what `--only` keeps still is the file digest.
+Add `edge_fade_seconds` to the synthesis half, and nothing else. A half cut
+from a packed original that lacks the key does not carry it either. Without
+`--only`, the amender also writes `chunking`, and it refuses a manifest that
+already carries a different value. The loader fills the same defaults either
+way, so the fingerprint does not change; `--only` keeps the file digest
+stable. If the half already carries the key, the tool reports that there is
+nothing to do.
 
 ```bash
 .venv/bin/python tools/amend_manifest.py \
-    --checkpoint dist/release-0.1.1/split/loudr-1/loudr-1.safetensors \
+    --checkpoint dist/release-X.Y.Z/split/loudr-1/loudr-1.safetensors \
     --only edge_fade_seconds
-shasum -a 256 dist/release-0.1.1/split/loudr-1/loudr-1.safetensors
+shasum -a 256 dist/release-X.Y.Z/split/loudr-1/loudr-1.safetensors
 ```
 
-The digest is `73e69a78d58176a3…`: the one `docs/voices/roster/provenance.json`
-records for every sample and the one the export records bind to. A different
-digest here is a different input, not a different day. The same step on the
-turbo half gives `590dcf9e1dcec31c…` (§5.2).
+For the loudr-1 weights that ship now, the digest is `73e69a78d58176a3…`.
+`docs/voices/roster/provenance.json` records it for every sample, and the
+export records bind to it. Investigate any other digest before you export. The
+same step on the turbo half gives `590dcf9e1dcec31c…` (§5.2).
 
-**Export from the split files, after splitting.** Copy `tokenizer.json` beside
-`dist/release-0.1.1/split/loudr-1/loudr-1.safetensors`, then run the synthesis
-exporters with that synthesis half as `--checkpoint`. Export enrollment from
-`dist/release-0.1.1/split/loudr-1/loudr-1-enrollment.safetensors` and the shared
-`ve.safetensors`. Every path below is under `dist/release-0.1.1/`: `split/<model>`
-for the halves, `exports/<model>/{onnx,coreml}` for graphs the exporters wrote
-(`assets/onnx` and `assets/coreml` hold loudr-1's in this tree), `samples/<model>`
-for the two rendered players, and `<model>` for the bundle itself.
+`assets/voices` must hold all 28 roster voices. Eight of the English profiles
+are versioned in this repository. Before you build either release, copy them
+in, also over files that already exist. The release audit does not compare
+these profiles with the versioned copies, so an old copy would ship:
 
 ```bash
-S=dist/release-0.1.1/split/loudr-1; E=dist/release-0.1.1/exports/loudr-1
+cp docs/voices/preview/profiles/*.safetensors assets/voices/
+```
+
+Model users do not download from `docs/voices/preview/`: both bundles ship
+these profiles under `voices/`, and every SDK loads them by name.
+
+Export from the split files. Copy `tokenizer.json` beside
+`dist/release-X.Y.Z/split/loudr-1/loudr-1.safetensors`, then run the synthesis
+exporters with that synthesis half as `--checkpoint`. Export enrollment from
+`dist/release-X.Y.Z/split/loudr-1/loudr-1-enrollment.safetensors` and the
+shared `ve.safetensors`. Every path below is under `dist/release-X.Y.Z/`:
+
+- `split/<model>`: the two halves
+- `exports/<model>/{onnx,coreml}`: the graphs the exporters write
+- `samples/<model>`: the two rendered players
+- `<model>`: the bundle
+
+```bash
+S=dist/release-X.Y.Z/split/loudr-1; E=dist/release-X.Y.Z/exports/loudr-1
 .venv/bin/python tools/export_onnx.py          --checkpoint $S/loudr-1.safetensors --out $E/onnx
 .venv/bin/python tools/export_enroll_onnx.py   --checkpoint $S/loudr-1-enrollment.safetensors --voice-encoder assets/ve.safetensors --out $E/onnx
 .venv/bin/python tools/export_coreml.py        --checkpoint $S/loudr-1.safetensors --out $E/coreml
 .venv/bin/python tools/export_enroll_coreml.py --checkpoint $S/loudr-1-enrollment.safetensors --voice-encoder assets/ve.safetensors --out $E/coreml
 ```
 
-Every exporter gates its graphs against torch before it writes, and the two
-synthesis records name `73e69a78…` and `7cd75498ad4e7531`. Run them from the
-checkout that holds `assets/`; a worktree has only the tracked logos there.
-Do not reuse synthesis graphs exported from the original unsplit file, which is
-what the tree's `assets/onnx` and `assets/coreml` are: their checkpoint digest
-is different, and the runtime refuses the mixed set.
+Every exporter checks its graphs against torch before it writes. The two
+synthesis export records name the checkpoint digest `73e69a78…` and the
+fingerprint `7cd75498ad4e7531`. The exporters need the untracked release
+assets in `assets/`: the packed checkpoint, `ve.safetensors`, `tokenizer.json`
+and `voices/`. Git tracks only the logos there, so a fresh worktree does not
+have them. Do not reuse synthesis graphs exported from the unsplit checkpoint:
+their checkpoint digest is different, and the runtime refuses a mixed set.
 Keep each model's output directories separate. Run CoreML export and inference
-with access to the macOS compute services; a sandboxed execution can select a
+with access to the macOS compute services. A sandboxed process can select a
 different compute path and does not reproduce the published measurements.
 
-**The model card is already final**, from §2. The bundle is built before the
-public push (§5.5) and the tag (§6), so a card that changed after this point
-would ship to the Hub without existing in `main`. The one tracked file the
-rest of §5 edits is `.github/workflows/ci.yml`, in the pin commit (§5.3).
-Read the card, do not write it.
+Do not edit the model card in §5; §2 finalizes it. The bundle is built before
+the public push (§5.5) and the tag (§6). A card changed after this point would
+ship to the Hub without being in `main`. The only tracked file the rest of §5
+edits is `.github/workflows/ci.yml`, in the pin commit (§5.3).
 
-- [ ] The two audio players §2 added name the model repository's own
+- [ ] The two audio players from §2 name the model repository's own
       `samples/joe.opus` and `samples/kathleen.opus`, not GitHub raw content.
-      They cannot answer until the new bundle is merged; the post-merge check
+      They play only after the new bundle is merged. The check after the merge
       below is the listening gate.
-- [ ] The card's claims still match the artefacts: voice count, language list,
-      artefact sizes, the download table.
-- [ ] Every link in the card resolves; the docs site is live, and §5.6
-      re-checks it after the push.
+- [ ] The card's claims match the artefacts: voice count, language list,
+      artefact sizes and the download table.
+- [ ] Every link in the card resolves, and the docs site is live. §5.6 checks
+      the site again after the push.
 
-Then build the bundle with the strict profile. It is the default, and it is the
-only profile a release is cut from:
-
-The inputs are settled, so the command is the command rather than a shape to
-fill in. `--checkpoint` names the *synthesis half*, and the builder finds the
-enrollment one beside it:
+Build the bundle with the strict profile, `full-0.1`. It is the default, and a
+release is cut only from it. `--checkpoint` names the synthesis half, and the
+builder finds the enrollment half beside it:
 
 ```bash
 .venv/bin/python -m tools.release --model loudr-1 \
-    --checkpoint    dist/release-0.1.1/split/loudr-1/loudr-1.safetensors \
+    --checkpoint    dist/release-X.Y.Z/split/loudr-1/loudr-1.safetensors \
     --voice-encoder assets/ve.safetensors \
     --voices        assets/voices \
-    --onnx          dist/release-0.1.1/exports/loudr-1/onnx \
-    --coreml        dist/release-0.1.1/exports/loudr-1/coreml \
-    --out           dist/release-0.1.1/loudr-1 \
+    --onnx          dist/release-X.Y.Z/exports/loudr-1/onnx \
+    --coreml        dist/release-X.Y.Z/exports/loudr-1/coreml \
+    --out           dist/release-X.Y.Z/loudr-1 \
     --profile       full-0.1
 ```
 
-`--profile full-0.1` requires the checkpoint under its canonical name
-`loudr-1.safetensors`, its manifest, the tokenizer, `ve.safetensors`, all 28
-voices of the roster by name, the complete ONNX and CoreML synthesis and
-enrollment graph families, the four
-documents, the LoudKit wordmark, the two listening samples, `release.json`,
-and a `SHA256SUMS` covering every file. The roster
-is `docs/voices/roster/provenance.json`: 28 voices: ten English and two per other language
-across ten languages. A missing voice is a refusal, and so is a voice that is
-not on the roster.
+`--profile full-0.1` requires:
 
-The tool checks the sources first and refuses with a list of what is absent
-and which tool exports it. It then assembles into a staging directory beside
-`--out` and renames it into place only after every check has passed, so a
-failed run leaves no directory that looks publishable. A run that is killed
-outright cannot clean up after itself, so the staging directory carries the
-pid of the build that owns it and the next run reclaims the trees whose
-process is gone, naming each one as it goes. A build that is still running is
-left alone, so two builds of one target do not eat each other. It copies the
-graphs and the packages **by name**, then audits the assembled bundle against the
-profile's allowlist: a file the profile does not name is an error, not a
-passenger.
+- the checkpoint under its canonical name `loudr-1.safetensors`, and its
+  manifest
+- the tokenizer and `ve.safetensors`
+- all 28 roster voices, by name
+- the complete ONNX and CoreML synthesis and enrollment graph families
+- the four documents and the loudkit wordmark
+- the two listening samples
+- `release.json`, and a `SHA256SUMS` that covers every other file
 
-The closing gate loads what the bundle ships. It speaks on the torch path,
-loads all 28 voices, clones a voice with the shipped `ve.safetensors`, speaks
-on the ONNX path, speaks on the CoreML path, and runs one enrollment through
-the three enrollment graphs on both graph paths, against the enrollment
-fixture.
+The roster is `docs/voices/roster/provenance.json`: 28 voices in ten
+languages, ten English and two for each other language. The build refuses a
+missing voice and a voice that is not on the roster.
 
-**Cut the release on macOS.** The shipped CoreML artefacts are platform-specific
-packages, and they only open on an Apple platform. `full-0.1` refuses on any
-other platform rather than skipping that half of the gate, because a bundle
-whose packages nothing ever opened is the defect this profile exists to
-prevent.
+The tool checks the sources first. If a source is missing, it refuses and
+lists each missing file with the tool that exports it. It assembles the bundle
+in a staging directory beside `--out` and renames it into place only after
+every check passes, so a failed run leaves no bundle that looks publishable. A
+killed run cannot clean up, so the staging directory records the pid of the
+build that owns it. The next run removes staging directories whose process is
+gone and names each one. It leaves the directory of a running build alone. The
+tool copies graphs and packages by name. Then it audits the bundle against the
+profile's allowlist and refuses any file the profile does not name.
 
-`release.json` records the profile that built it and `"verified": true` when
-the closing gate ran and passed, so a consumer or a CI job can tell a
-releasable bundle from a development one without counting files. It is written
-before `SHA256SUMS` and covered by it, so the file that says a bundle is
-trustworthy carries a checksum like every other file.
+The closing gate loads what the bundle ships. It synthesizes on the torch
+path, loads all 28 voices and clones a voice with the shipped
+`ve.safetensors`. It synthesizes on the ONNX and CoreML paths. It runs one
+enrollment through the three enrollment graphs on both graph paths and checks
+it against the enrollment fixture.
 
-The gate imports the bundle's own code and runs it, so after the gate the
-builder judges the bundle again from disk alone: every file is re-hashed
-against the manifests, the inventory is matched both ways, and the allowlist
-is re-audited. The manifests carry the digests taken before the gate, so a
-gate that mutated a byte or added a file ends in a refusal, not in a bundle
-stamped `verified: true` about bytes nothing verified.
+Build on macOS. The CoreML packages open only on an Apple platform.
+`full-0.1` refuses to run on another platform; it does not skip the CoreML
+checks.
+
+`release.json` records the profile that built the bundle, and
+`"verified": true` when the closing gate ran and passed. A consumer or a CI job
+reads it to tell a release bundle from a development bundle. The builder writes
+it before `SHA256SUMS`, so `SHA256SUMS` covers it.
+
+The gate imports and runs the bundle's own code. After the gate, the builder
+checks the bundle again from disk: it hashes every file against the
+manifests, matches the inventory in both directions and audits the allowlist
+again. The manifests carry the digests taken before the gate, so a gate that
+changed or added a file causes a refusal.
 
 The same audit runs in place, without a build:
 
 ```bash
-.venv/bin/python -m tools.release --verify-only dist/release-0.1.1/loudr-1
+.venv/bin/python -m tools.release --verify-only dist/release-X.Y.Z/loudr-1
 ```
 
-It is one function (`check_bundle`) shared by both callers, so the pre-upload
-check and the post-build check cannot drift apart. It does not load the model;
-it says whether the bytes on disk are the bytes the manifests vouch for, and
-whether the bundle matches the profile it claims.
+The build and `--verify-only` use the same function, `check_bundle`. It does
+not load the model. It reports whether the files on disk match the manifests,
+and whether the bundle matches the profile it names.
 
-`full-0.1` refuses `--skip-verify`. A bundle that names the profile is a
-bundle that passed the gate.
+`full-0.1` refuses `--skip-verify`.
 
 `--profile lenient` builds a partial bundle for development. It writes
 `"profile": "lenient"` and `"verified": false`. Do not upload one.
 
-Before a byte leaves the machine:
+Before the upload:
 
-- [ ] `.venv/bin/python -m tools.release --verify-only dist/release-0.1.1/loudr-1`
-      passes. Run it immediately before the upload; it catches anything that
-      touched the bundle after the build.
+- [ ] `.venv/bin/python -m tools.release --verify-only dist/release-X.Y.Z/loudr-1`
+      passes. Run it immediately before the upload. It detects any change to
+      the bundle after the build.
 - [ ] `shasum -a 256 -c SHA256SUMS` passes from the release root, and
       `SHA256SUMS` has **one fewer line than the bundle has files**: the count
       difference below is exactly one. `SHA256SUMS` cannot contain its own
-      digest; every other file, including `release.json`, every graph, package
-      leaf and sample, has a line.
+      digest. Every other file has a line, including `release.json`, every
+      graph, every package file and every sample.
 
       ```bash
       (
-        cd dist/release-0.1.1/loudr-1
+        cd dist/release-X.Y.Z/loudr-1
         shasum -a 256 -c SHA256SUMS
         echo $(( $(find . -type f | wc -l) - $(wc -l < SHA256SUMS) ))   # 1
       )
       ```
 
-- [ ] `release.json` says `"profile": "full-0.1"` and `"verified": true`.
-      A lenient or unverified bundle is not a release.
-- [ ] `diff docs/MODEL_CARD.md dist/release-0.1.1/loudr-1/README.md` is empty. The card is a
-      hashed bundle member; editing it on the Hub afterwards makes the remote
-      tree disagree with its own checksums.
-- [ ] The layout has `voices/*.safetensors` at one level and exactly three
-      safetensors at the root: the synthesis half, enrollment half and
-      `ve.safetensors`. `_only_checkpoint_in` selects the synthesis role, so
-      that ordinary three-file layout is not an ambiguity.
-- [ ] Re-read
-      [`docs/PROVENANCE-voice-encoder.md`](docs/PROVENANCE-voice-encoder.md).
-      It records the encoder's hash, tensors, upstream repository and licence;
-      publishing the weight is not reversible.
+- [ ] `release.json` says `"profile": "full-0.1"` and `"verified": true`. Do
+      not upload a lenient or unverified bundle.
+- [ ] `diff docs/MODEL_CARD.md dist/release-X.Y.Z/loudr-1/README.md` prints
+      nothing. The card is a hashed bundle member. An edit on the Hub later
+      makes the remote tree disagree with its own checksums.
+- [ ] The layout has `voices/*.safetensors` one level down and exactly three
+      safetensors files at the root: the synthesis half, the enrollment half
+      and `ve.safetensors`. The loader selects the synthesis half by its role,
+      so these three files are not ambiguous.
+- [ ] Read
+      [`docs/PROVENANCE-voice-encoder.md`](docs/PROVENANCE-voice-encoder.md)
+      again. It records the encoder's hash, tensors, upstream repository and
+      licence. Publishing the weight cannot be reversed.
 
-Open a new replacement pull request. Hub PR 2 already delivered the first full
-bundle and is merged, so it cannot be reused. `--delete "*"` is part of the
-command: without it, files that disappeared from the new release survive beside
-the new inventory and the remote repository is no longer the bundle the builder
-verified.
+Open a new pull request on the Hub for the bundle. `--delete "*"` is part of
+the command. Without it, files that the new release does not ship stay beside
+the new inventory, and the remote repository no longer matches the verified
+bundle.
 
 ```bash
 (
-  cd dist/release-0.1.1/loudr-1
+  cd dist/release-X.Y.Z/loudr-1
   hf upload loudreader/loudr-1 . . \
       --repo-type model \
       --create-pr \
       --delete "*" \
-      --commit-message "loudr-1: complete v0.1 bundle"
+      --commit-message "loudr-1: X.Y.Z bundle"
 )
 ```
 
-- [ ] Review the Hub PR before merging. Its final tree, not only its additions,
-      matches `dist/release-0.1.1/loudr-1`; the old packed checkpoint is deleted, both split
-      halves are present, and `samples/` contains exactly the two players.
+- [ ] Review the Hub pull request before merging. Its final tree, not only its
+      additions, matches `dist/release-X.Y.Z/loudr-1`: both split halves are
+      present, no file outside the bundle remains, and `samples/` holds
+      exactly the two players.
 - [ ] Merge it in the Hugging Face interface, then record the immutable commit
-      SHA. The default branch name is not a release identifier:
+      SHA. The default branch name does not identify a release:
 
       ```bash
       SHA=$(curl -s https://huggingface.co/api/models/loudreader/loudr-1 \
@@ -557,40 +550,43 @@ verified.
       echo "$SHA"
       ```
 
-- [ ] Tag that commit on the Hub as `v0.1.1`. The guides and the port READMEs
-      pin `revision: "v0.1.1"`, and the Hub has no tags until this is run:
+- [ ] Tag that commit on the Hub as `vX.Y.Z`. The guides and the port READMEs
+      pin a Hub tag as their `revision`. If the tag already exists, check its
+      target and do not move it:
 
       ```bash
-      .venv/bin/hf repos tag create loudreader/loudr-1 v0.1.1 --revision "$SHA"
+      .venv/bin/hf repos tag create loudreader/loudr-1 vX.Y.Z --revision "$SHA"
       HF_HOME=$(mktemp -d) .venv/bin/python -c '
       import loudkit as lk
-      print(lk.load("loudreader/loudr-1", revision="v0.1.1").describe())
+      print(lk.load("loudreader/loudr-1", revision="vX.Y.Z").describe())
       '
       ```
 
-- [ ] Open the rendered model card in a private window. The LoudKit wordmark
-      is visible. Both players fetch from `samples/` on the model repository
-      and play to the end. This is the first point in the sequence where those
-      claims can be tested against the public bytes.
+- [ ] Open the rendered model card in a private window. The loudkit wordmark
+      is visible. Both players fetch from `samples/` in the model repository
+      and play to the end.
 
-What is on the Hub is what the bundle contains, so the list below counts the
-bundle.
+Check the Hub repository against the bundle:
 
-- [ ] `loudreader/loudr-1` on Hugging Face is public and ungated, carrying
-      `loudr-1.safetensors`, `loudr-1-enrollment.safetensors`,
-      `ve.safetensors`, `tokenizer.json`,
-      `manifest.json`, `release.json`, `SHA256SUMS`, the nine ONNX graphs
-      (six synthesis, three enrollment), the six CoreML packages, the 28
-      voice profiles under `voices/`, `README.md`, `logo.png`, `LICENSE`,
-      `NOTICE` and `RESPONSIBLE_USE.md`, plus `samples/joe.opus` and
-      `samples/kathleen.opus` used by the card's native players.
-      `SUPPORTED.md` declares voice enrollment in five ports. Enrollment
-      needs `s3_tokenizer`, `camp` and `voice_encoder`, on both graph paths,
-      so a bundle without those six pieces is not the release.
-- [ ] **The first-mile test passes.** `lk.load("loudreader/loudr-1")`,
-      `lk.voice(...)` and a synthesize, run against the public repo from a
-      machine with no local cache, pinned to the SHA recorded above. A public
-      checkpoint that does not load is the same blocker as a private one.
+- [ ] `loudreader/loudr-1` on Hugging Face is public and ungated, and carries:
+      - `loudr-1.safetensors`, `loudr-1-enrollment.safetensors`,
+        `ve.safetensors` and `tokenizer.json`
+      - `manifest.json`, `release.json` and `SHA256SUMS`
+      - nine ONNX graphs and nine CoreML packages (in each format, six for
+        synthesis and three for enrollment), with `export.json` in `onnx/`
+        and in `coreml/`
+      - the 28 voice profiles under `voices/`
+      - `README.md`, `logo.png`, `LICENSE`, `NOTICE` and `RESPONSIBLE_USE.md`
+      - `samples/joe.opus` and `samples/kathleen.opus`, for the card's
+        players
+
+      `SUPPORTED.md` declares voice enrollment in all five implementations.
+      Enrollment needs `s3_tokenizer`, `camp` and `voice_encoder` on both
+      graph paths. A bundle without those six files is not a release.
+- [ ] The first-mile test passes. Run `lk.load("loudreader/loudr-1")`,
+      `lk.voice(...)` and a synthesis against the public repo, from a machine
+      with no local cache, pinned to the SHA recorded above. A failure blocks
+      the release.
 
       ```bash
       cd "$(git rev-parse --show-toplevel)"
@@ -611,28 +607,28 @@ bundle.
 
 ### 5.2 The second model, `loudreader/loudr-1-turbo`
 
-Turbo is its own repository, published before or after `loudr-1` without
-touching it. It is not optional: the README, the guides and the site name
-`loudreader/loudr-1-turbo` as a repo id anyone can load. Publish it before §6,
-or cut those mentions.
+Turbo has its own repository. Publish it before or after `loudr-1`; the two
+uploads are independent. The README, the guides and the site load
+`loudreader/loudr-1-turbo` by repo id, so publish it before §6, or remove those
+mentions.
 
 Both models ship ONNX and CoreML graphs and the same portable voice profiles.
-Split the fusion checkpoint with `tools/split_checkpoint.py`. Its bundle
-carries the synthesis half and its matching enrollment half, `ve.safetensors`, and the same enrollment
-graphs as loudr-1. A caller clones once and can use that profile with either
-model. Downloads for synthesis alone do not need the enrollment assets.
+Split the fusion checkpoint with `tools/split_checkpoint.py`. The turbo bundle
+carries its synthesis half, its matching enrollment half, `ve.safetensors` and
+the same enrollment graphs as loudr-1. A voice profile cloned once works with
+either model. A synthesis-only download does not need the enrollment assets.
 
-Export synthesis from the verified built checkpoint
-`dist/release-0.1.1/split/turbo/loudr-1-turbo.safetensors`, into
-`dist/release-0.1.1/exports/turbo/onnx` and `coreml`. Copy the canonical
-base enrollment graphs into those directories. Do not rewrite the synthesis
-export records or substitute base renderer graphs: the decoder and the Euler
-step count come from this checkpoint. Render `joe.opus` and `kathleen.opus`
-with this model into `dist/release-0.1.1/samples/turbo`; copying the base samples
-would mislabel the audio.
+Export synthesis from the verified split checkpoint
+`dist/release-X.Y.Z/split/turbo/loudr-1-turbo.safetensors`, into
+`dist/release-X.Y.Z/exports/turbo/onnx` and `coreml`. Copy the base model's
+enrollment graphs into those directories. Do not rewrite the synthesis export
+records or substitute base renderer graphs: the decoder and the Euler step
+count come from this checkpoint. Render `joe.opus` and `kathleen.opus` with
+this model into `dist/release-X.Y.Z/samples/turbo`. Copies of the base samples
+would carry the other model's audio.
 
 ```bash
-S=dist/release-0.1.1/split/turbo; E=dist/release-0.1.1/exports/turbo; B=dist/release-0.1.1/exports/loudr-1
+S=dist/release-X.Y.Z/split/turbo; E=dist/release-X.Y.Z/exports/turbo; B=dist/release-X.Y.Z/exports/loudr-1
 cp assets/tokenizer.json $S/tokenizer.json
 .venv/bin/python tools/amend_manifest.py --checkpoint $S/loudr-1-turbo.safetensors --only edge_fade_seconds
 shasum -a 256 $S/loudr-1-turbo.safetensors            # 590dcf9e1dcec31c…
@@ -641,15 +637,16 @@ shasum -a 256 $S/loudr-1-turbo.safetensors            # 590dcf9e1dcec31c…
 for g in s3_tokenizer camp voice_encoder; do cp $B/onnx/$g.onnx $E/onnx/; cp -R $B/coreml/$g.mlpackage $E/coreml/; done
 ```
 
-The synthesis records name `590dcf9e…` and `e5303ba243087222`, one Euler step,
-the `fusion_mtp2` family. The samples are the roster's two texts at seed 7,
-spoken on the CPU torch path and encoded the way the roster files are:
+The synthesis export records name `590dcf9e…` and the fingerprint
+`e5303ba243087222`, one Euler step and the `fusion_mtp2` family. The samples
+read the roster's sample text at seed 7, once per voice, on the CPU torch path.
+They are encoded the same way as the roster files:
 
 ```bash
 .venv/bin/python - <<'PY'
 import json, subprocess, loudkit as lk
 from pathlib import Path
-R = Path("dist/release-0.1.1"); out = R / "samples/turbo"; out.mkdir(parents=True, exist_ok=True)
+R = Path("dist/release-X.Y.Z"); out = R / "samples/turbo"; out.mkdir(parents=True, exist_ok=True)
 engine = lk.load(str(R / "split/turbo/loudr-1-turbo.safetensors"), device="cpu")
 roster = {v["name"]: v["sample"] for v in json.load(open("docs/voices/roster/provenance.json"))}
 for name in ("joe", "kathleen"):
@@ -663,60 +660,70 @@ PY
 
 ```bash
 .venv/bin/python -m tools.release --model turbo \
-    --checkpoint    dist/release-0.1.1/split/turbo/loudr-1-turbo.safetensors \
-    --tokenizer     dist/release-0.1.1/split/turbo/tokenizer.json \
-    --voice-encoder dist/release-0.1.1/loudr-1/ve.safetensors \
-    --enrollment    dist/release-0.1.1/split/turbo/loudr-1-enrollment.safetensors \
-    --voices        dist/release-0.1.1/loudr-1/voices \
-    --onnx          dist/release-0.1.1/exports/turbo/onnx \
-    --coreml        dist/release-0.1.1/exports/turbo/coreml \
-    --samples       dist/release-0.1.1/samples/turbo \
-    --out           dist/release-0.1.1/loudr-1-turbo
+    --checkpoint    dist/release-X.Y.Z/split/turbo/loudr-1-turbo.safetensors \
+    --tokenizer     dist/release-X.Y.Z/split/turbo/tokenizer.json \
+    --voice-encoder dist/release-X.Y.Z/loudr-1/ve.safetensors \
+    --enrollment    dist/release-X.Y.Z/split/turbo/loudr-1-enrollment.safetensors \
+    --voices        dist/release-X.Y.Z/loudr-1/voices \
+    --onnx          dist/release-X.Y.Z/exports/turbo/onnx \
+    --coreml        dist/release-X.Y.Z/exports/turbo/coreml \
+    --samples       dist/release-X.Y.Z/samples/turbo \
+    --out           dist/release-X.Y.Z/loudr-1-turbo
 ```
 
-The builder refuses missing graphs, enrollment or samples before copying.
-It then speaks on torch, ONNX and CoreML, verifies enrollment and the roster,
-and checks that the checkpoint declares the paired decoder. Only then does
-it stamp `profile: turbo-0.1, verified: true`. `--skip-verify` remains refused.
+The builder refuses missing graphs, enrollment files or samples before it
+copies anything. It then synthesizes on torch, ONNX and CoreML, verifies
+enrollment and the roster, and checks that the checkpoint declares the paired
+decoder. Only then does it write `profile: turbo-0.1, verified: true`. It
+refuses `--skip-verify`.
 
 - [ ] `docs/MODEL_CARD-turbo.md` is final and its links resolve. It ships as
-      the repository's `README.md`, and like §2's card it is read here, never
-      written.
+      the repository's `README.md`. Do not edit it in this step.
 - [ ] The bundle passes its own audit in place:
-      `.venv/bin/python -m tools.release --verify-only dist/release-0.1.1/loudr-1-turbo`
+      `.venv/bin/python -m tools.release --verify-only dist/release-X.Y.Z/loudr-1-turbo`
 - [ ] Every port passes its asset-backed conformance against the two built
-      bundles. The vectors were made with the reference voice, so
-      `LOUDKIT_VOICE` is `tests/data/reference/testvoice.voice.safetensors`,
-      never a shipped one; the ONNX Runtime library each port wants is in its
-      guide.
+      bundles, with the passes CI's `parity` job runs. The vectors were made
+      with the reference voice, so `LOUDKIT_VOICE` is
+      `tests/data/reference/testvoice.voice.safetensors`, not a shipped voice.
+      Each port's guide names the ONNX Runtime library it needs.
 
       ```bash
-      D=$PWD/dist/release-0.1.1; V=$PWD/tests/data/reference/testvoice.voice.safetensors
-      LOUDKIT_REQUIRE_ASSETS=1 LOUDKIT_ASSET_ROOT=$D/loudr-1 LOUDKIT_TURBO_CHECKPOINT=$D/loudr-1-turbo/loudr-1-turbo.safetensors \
+      D=$PWD/dist/release-X.Y.Z; T=$D/loudr-1-turbo
+      F=$PWD/tests/data/conformance/vectors_fusion_mtp2.json
+      export LOUDKIT_REQUIRE_ASSETS=1 LOUDKIT_TOKENIZER=$D/loudr-1/tokenizer.json \
+        LOUDKIT_VOICE=$PWD/tests/data/reference/testvoice.voice.safetensors
+      # Python: loudr-1 and the fused turbo case in one run.
+      LOUDKIT_ASSET_ROOT=$D/loudr-1 LOUDKIT_TURBO_CHECKPOINT=$T/loudr-1-turbo.safetensors \
         .venv/bin/python -m pytest tests/test_conformance.py -q
-      (cd go && LOUDKIT_REQUIRE_ASSETS=1 LOUDKIT_CKPT=$D/loudr-1/loudr-1.safetensors LOUDKIT_ONNX_DIR=$D/loudr-1/onnx \
-        LOUDKIT_TOKENIZER=$D/loudr-1/tokenizer.json LOUDKIT_VOICE=$V \
-        LOUDKIT_SECOND_CKPT=$D/loudr-1-turbo/loudr-1-turbo.safetensors LOUDKIT_SECOND_ONNX_DIR=$D/loudr-1-turbo/onnx \
-        LOUDKIT_ONNXRUNTIME_LIB=/path/to/libonnxruntime.dylib go test ./conformance/)
-      (cd rust && LOUDKIT_REQUIRE_ASSETS=1 LOUDKIT_CKPT=$D/loudr-1/loudr-1.safetensors LOUDKIT_ONNX_DIR=$D/loudr-1/onnx \
-        LOUDKIT_TOKENIZER=$D/loudr-1/tokenizer.json LOUDKIT_VOICE=$V \
-        LOUDKIT_FUSION_CKPT=$D/loudr-1-turbo/loudr-1-turbo.safetensors LOUDKIT_FUSION_ONNX_DIR=$D/loudr-1-turbo/onnx \
+      # Go, Rust and JS against loudr-1. Rust also runs its turbo test here.
+      (cd go && LOUDKIT_CKPT=$D/loudr-1/loudr-1.safetensors LOUDKIT_ONNX_DIR=$D/loudr-1/onnx \
+        LOUDKIT_SECOND_CKPT=$T/loudr-1-turbo.safetensors LOUDKIT_SECOND_ONNX_DIR=$T/onnx \
+        LOUDKIT_ONNXRUNTIME_LIB=/path/to/libonnxruntime.dylib go test ./...)
+      (cd rust && LOUDKIT_CKPT=$D/loudr-1/loudr-1.safetensors LOUDKIT_ONNX_DIR=$D/loudr-1/onnx \
+        LOUDKIT_FUSION_CKPT=$T/loudr-1-turbo.safetensors LOUDKIT_FUSION_ONNX_DIR=$T/onnx \
         ORT_DYLIB_PATH=/path/to/libonnxruntime.1.27.0.dylib cargo test --release -- --ignored)
-      (cd js && LOUDKIT_REQUIRE_ASSETS=1 LOUDKIT_CKPT=$D/loudr-1/loudr-1.safetensors LOUDKIT_ONNX_DIR=$D/loudr-1/onnx \
-        LOUDKIT_TOKENIZER=$D/loudr-1/tokenizer.json LOUDKIT_VOICE=$V \
-        LOUDKIT_SECOND_CKPT=$D/loudr-1-turbo/loudr-1-turbo.safetensors \
-        LOUDKIT_SECOND_ONNX_DIR=$D/loudr-1-turbo/onnx npm test)
-      LOUDKIT_REQUIRE_ASSETS=1 LOUDKIT_ASSET_ROOT=$D/loudr-1 LOUDKIT_COREML_ASSETS=$D/loudr-1/coreml \
-        LOUDKIT_FUSION_CHECKPOINT=$D/loudr-1-turbo/loudr-1-turbo.safetensors LOUDKIT_FUSION_COREML_ASSETS=$D/loudr-1-turbo/coreml \
+      (cd js && LOUDKIT_CKPT=$D/loudr-1/loudr-1.safetensors LOUDKIT_ONNX_DIR=$D/loudr-1/onnx \
+        LOUDKIT_SECOND_CKPT=$T/loudr-1-turbo.safetensors LOUDKIT_SECOND_ONNX_DIR=$T/onnx \
+        npm run test:all)
+      # Go and JS against turbo and its own fixture, as CI's turbo step runs them.
+      (cd go && LOUDKIT_CKPT=$T/loudr-1-turbo.safetensors LOUDKIT_FUSION_CKPT=$T/loudr-1-turbo.safetensors \
+        LOUDKIT_ONNX_DIR=$T/onnx LOUDKIT_FIXTURE=$F \
+        LOUDKIT_ONNXRUNTIME_LIB=/path/to/libonnxruntime.dylib \
+        go test ./conformance -run TestEngineConformance -count=1)
+      (cd js && LOUDKIT_CKPT=$T/loudr-1-turbo.safetensors LOUDKIT_FUSION_CKPT=$T/loudr-1-turbo.safetensors \
+        LOUDKIT_ONNX_DIR=$T/onnx LOUDKIT_FIXTURE=$F npm run test:fixture)
+      # Swift: both models.
+      LOUDKIT_ASSET_ROOT=$D/loudr-1 LOUDKIT_COREML_ASSETS=$D/loudr-1/coreml \
+        LOUDKIT_FUSION_CHECKPOINT=$T/loudr-1-turbo.safetensors LOUDKIT_FUSION_COREML_ASSETS=$T/coreml \
         swift test
       ```
 
-The repository `loudreader/loudr-1-turbo` is public and ungated, which the
-parity job needs because it downloads anonymously. Confirm that in its
-settings, then upload the directory's contents at its root, exactly as §5.1
-does for `loudr-1`: the same `hf upload ... --create-pr --delete "*"`, the
-same review of the PR's final tree, the merge, the recorded commit SHA, and
-the `v0.1.1` tag on that commit. Then, from a machine with no cache:
+The repository `loudreader/loudr-1-turbo` is public and ungated. The parity
+job needs this because it downloads anonymously. Confirm it in the repository
+settings. Then upload the directory's contents at its root, as §5.1 does for
+`loudr-1`: the same `hf upload ... --create-pr --delete "*"`, the same review
+of the pull request's final tree, the merge, the recorded commit SHA and the
+`vX.Y.Z` tag on that commit. Then, from a machine with no cache:
 
 ```bash
 HF_HOME=$(mktemp -d) .venv/bin/python -c '
@@ -727,120 +734,133 @@ print("OK", round(engine.synthesize("Turbo works.", voice, seed=7).duration, 2))
 '
 ```
 
-- [ ] Nothing to switch on in the tests: `tests/assets.py` already registers
-      the turbo assets, so `LOUDKIT_REQUIRE_ASSETS=1` insists on them. The
-      `parity` job starts passing once the repository is public and §5.3 pins
-      its commit.
-- [x] `docs/benchmarks.md` carries 0.1.1 figures for both models on every
-      machine, measured 2026-09-06, and the README, the landing page and the
-      guides quote them. The ONNX-provider table on the RTX 3090 is the one
-      table still marked 0.1.0.
+- [ ] `tests/assets.py` registers the turbo assets, so
+      `LOUDKIT_REQUIRE_ASSETS=1` requires them. The `parity` job passes only
+      when the repository is public and §5.3 pins its commit.
+- [ ] `docs/benchmarks.md` names the release each table was measured on
+      (§3.5).
 
 ### 5.3 The pin commit
 
-The `parity` job downloads both repositories anonymously and exits before
-its first step while `LOUDKIT_TURBO_HF_REVISION` is empty, and `release.yml`
-refuses a tag without a green parity run for that commit. So the last commit
-before the public push pins what §5.1 and §5.2 merged:
+The `parity` job downloads both repositories anonymously. Its first step fails
+unless `LOUDKIT_TURBO_HF_REVISION` is a 40-hex commit, and `release.yml`
+refuses a tag without a successful `parity` run for that commit. So the last
+commit before the public push pins what §5.1 and §5.2 merged:
 
 - [ ] `LOUDKIT_HF_REVISION` and `LOUDKIT_TURBO_HF_REVISION` in
       `.github/workflows/ci.yml` carry the two 40-hex commits recorded above,
       and the comment beside them describes those bundles.
 - [ ] `PYTHONPATH=$PWD/python .venv/bin/python -m pytest tests/test_release.py -q`
       passes with the new pins.
-- [ ] This is the release commit of §2, with every other §2 item already in
-      it. Nothing after it edits a tracked file.
+- [ ] This is the release commit of §2, and it contains every other §2 item.
+      No later step edits a tracked file.
 
-### 5.4 Confirm the tree has settled
+### 5.4 Check the release commit
 
-- All changes committed, worktree clean, all §3 checks run on that commit.
+- All changes are committed, the worktree is clean, and every §3 check ran on
+  that commit.
 - Merge the release work into the private main branch after review.
-- Fetch `public/main` before constructing the public update.
+- Fetch `public/main` before you make the public commit.
 
-### 5.5 Publish an update preserving public history
+### 5.5 Push the public commit
 
-Create the next public commit with `public/main` as its parent and the reviewed
-release tree as its contents. A private staging history must not accidentally
-be published. Review the resulting tree and diff, then push without force.
-The public branch must remain a descendant of the previous public release.
-Wait for the complete public CI run, including both models, before tagging.
+Make the next public commit on a local branch named `public-main`. Its parent
+is `public/main` and its tree is the reviewed release tree, so no private
+history becomes public:
 
-### 5.6 Verify before tagging
+```bash
+git fetch public
+RELEASE=PASTE_RELEASE_COMMIT
+git branch -f public-main "$(git commit-tree "$RELEASE^{tree}" -p public/main -m "loudkit X.Y.Z")"
+git diff --stat "$RELEASE" public-main   # prints nothing
+git log --oneline -2 public-main         # the second line is public/main
+```
 
-- [ ] The repository is public: the anonymous 200 from §0 still holds.
-- [ ] The pushed tree matches local, exactly:
+Review the resulting tree and diff, then push without force:
+
+```bash
+git push public public-main:main
+```
+
+The public branch must stay a descendant of the previous public release. Wait
+for the complete public CI run, both models included, before tagging.
+
+### 5.6 Check before tagging
+
+- [ ] The repository is public: the anonymous check from §0 still prints
+      `200`.
+- [ ] The pushed tree matches the local one:
       `git fetch public && git diff --stat public/main public-main` prints
       nothing.
-- [ ] Spot-check the rendered `README.md` and `VOICES.md` on GitHub. The
-      pre-release banner is gone (§9) and no link 404s.
+- [ ] Spot-check the rendered `README.md` and `VOICES.md` on GitHub. No
+      pre-release note remains (§9) and no link returns 404.
 - [ ] The docs site has deployed from `main` and carries no banner.
 
-Tagging is the next step and it is what the Go proxy caches. Do not tag until
-all four boxes are ticked.
+Do not tag until all four items pass. The tag starts the publish workflow.
 
 ## 6. Tag and let CI build
 
-Push one tag now, and only one:
+Push one tag now:
 
 ```bash
-git tag v0.1.1 public-main
-git push public v0.1.1
+git tag vX.Y.Z public-main
+git push public vX.Y.Z
 ```
 
-The explicit `public-main` target is a security boundary, not decoration. The
-maintainer checkout may be on a private development branch whose history must
-never become reachable from the public repository. Before pushing, both of
-these must print the same commit:
+Tag `public-main` explicitly. The maintainer checkout can be on a private
+development branch, and its history must not become reachable from the public
+repository. Before the push, both of these must print the same commit:
 
 ```bash
-git rev-parse v0.1.1^{}
+git rev-parse vX.Y.Z^{}
 git ls-remote public refs/heads/main | cut -f1
 ```
 
-**Do not create or push `go/v0.1.1` yet.** That tag is the Go release, and it
-is irrevocable in a way `v0.1.1` is not: once `proxy.golang.org` has fetched
-it, that version is cached immutably and forever. Retagging does not change
-what the proxy serves, and there is no yank. A `go/` tag pushed before the
-gate has run publishes to Go whatever the gate later refuses; the only remedy
-is a new version such as `go/v0.1.2`. So the Go tag comes last, in §7.4, after the workflow is
-green, the reviewer has approved the `release` environment, and every publish
-job has finished.
+**Do not create or push `go/vX.Y.Z` yet.** That tag is the Go release. Once
+`proxy.golang.org` fetches a version, it serves the cached copy permanently.
+Moving the tag does not change what the proxy serves, and a later version can
+only `retract` it. A `go/` tag pushed before the workflow passes publishes to
+Go whatever the workflow later refuses, and the only remedy is a new version.
+Push the Go tag last, in §7.4: after the workflow passes, the reviewer approves
+the `release` environment and every publish job finishes.
 
-`release.yml` triggers on `v*` only, so the later `go/v0.1.1` push starts no
-second build. That tag exists purely so the module proxy can find the
-subdirectory module.
+`release.yml` runs on `v*` tags only, so the `go/vX.Y.Z` push starts no second
+build. The Go tag lets the proxy find the module in the `go/` subdirectory.
 
-**The registries already hold 0.1.0**, so this is an update release:
-`publish-npm` stages the tarball through the stage-only trusted publisher and
-waits for a 2FA approval on npm's Staged Packages page (§7.1); PyPI and
-crates.io publish through their trusted publishers (§7.0). Confirm those
-publishers exist before approving the wall: a missing one fails the job at
-authentication, and §7.1 or §7.3 says what to do by hand. No long-lived
-registry token is stored in GitHub.
+npm, PyPI and crates.io already hold earlier versions, so the release adds a
+version to each. `publish-npm` stages the tarball through the stage-only
+trusted publisher and waits for a 2FA approval on npm's Staged Packages page.
+That staged path currently fails, and the manual fallback in §7.1 is the
+working path for npm. PyPI and crates.io publish through their trusted publishers. Before
+you approve the `release` environment, confirm the settings in §7.0. A missing
+trusted publisher fails its job at authentication, and §7.1 to §7.3 give the
+manual fallback. GitHub stores no long-lived registry token.
 
-Wait for `release.yml` to go green. It does the following:
+Wait for `release.yml` to pass. It does the following:
 
 - refuses the tag unless its commit is on `main` **and** that exact SHA has a
-  green `ci` run whose `parity` job succeeded (the `tag-gate` job);
+  successful `ci` run whose `parity` job succeeded (the `tag-gate` job);
 - checks the tag against `pyproject.toml`;
-- builds sdist and wheel;
-- verifies the lexicon and `py.typed` are inside the wheel;
-- smoke-tests **both** artefacts in clean venvs;
+- builds the sdist and the wheel;
+- checks that the wheel contains the lexicon and `py.typed`;
+- installs both artefacts in clean venvs, imports them and checks the
+  respelling data;
 - runs the no-weights suite;
-- generates an SBOM scoped to the wheel, not the runner;
-- attests the Python distributions and npm tarball in isolated jobs that run
-  no fetched tooling, so jobs that mint OIDC identities never execute the
+- generates an SBOM for the wheel's dependency set, not the runner's;
+- attests the Python distributions and the npm tarball in separate jobs that
+  run no fetched tooling, so no job that holds an OIDC identity runs the
   build's downloaded dependencies;
-- **creates the GitHub Release for the tag and uploads `dist/*` to it**,
-  including the SBOM, with auto-generated notes.
+- checks and publishes the three packages (§7);
+- after the publish jobs, creates the GitHub Release for the tag, uploads
+  `dist/*` and the SBOM to it, and generates release notes.
 
-The Release is made by CI, not by hand. What is left for a person is to replace
-the auto-generated notes with the `CHANGELOG.md` section for this version.
+CI creates the Release. Replace its generated notes with the `CHANGELOG.md`
+section for this version.
 
 ## 7. Publish, in this order
 
-`release.yml` does this on a version tag, and nothing is published until every
-registry has agreed that it can be:
+`release.yml` runs this on a version tag. No publish job starts until all
+three package checks pass:
 
 ```
 tag-gate → build → attest            ┐
@@ -850,94 +870,94 @@ tag-gate → build → attest            ┐
                                          publish-crates → github-release
 ```
 
-The three checks run each ecosystem's acceptance gate against the exact bytes
-the publish jobs will send: `twine check --strict` on the built distributions;
-`npm pack` followed by installing the packed tarball into a clean directory and
-importing it; `cargo package` followed by building and testing the unpacked
-`.crate`, plus a fresh consumer crate that depends on it and calls the API with
-no lockfile and no monorepo paths. They gate the first publish, so a packaging
-fault in one ecosystem surfaces while the other two are still untouched. That
-ordering is the point: a version number spent on crates.io is never freed, and
-a filename spent on PyPI is never reused, so a half-published release cannot be
-repaired, only worked around.
+Each check runs on the exact bytes its publish job sends:
 
-The GitHub Release is created last, after the publishes, rather than before the
-reviewer sees the request.
+- `check-pypi`: `twine check --strict` on the built distributions.
+- `check-npm`: `npm pack`, then an install of the packed tarball into a clean
+  directory and an import.
+- `check-crates`: `cargo package`, then a build and test of the unpacked
+  `.crate`, and a new consumer crate that depends on it and calls the API with
+  no lockfile and no monorepo paths.
 
-The manual commands below stay as the fallback and as the record of what the
-jobs do.
+The checks finish before the first publish, so a packaging fault in one
+ecosystem shows while the other two are untouched. crates.io never frees a
+version number and PyPI never reuses a filename, so a half-published release
+cannot be repaired; the next version replaces it. Registry authentication and
+upload can still fail in the publish jobs.
 
-### 7.0 Registry setup, once, by a human
+The GitHub Release is created last, after the publish jobs.
 
-None of this can be done from CI, and until it is done the publish jobs fail
-at the authentication step rather than publishing something wrong.
+The manual commands below are the fallback, and they show what the jobs do.
 
-- [ ] **PyPI**: add a Trusted Publisher at
-      <https://pypi.org/manage/account/publishing/>. Create a pending publisher
-      with project name `loudkit`, owner `loudreader`, repository `loudkit`,
-      workflow `release.yml` and environment `release`. PyPI turns it into a
-      normal publisher on first use; no token is stored. A pending publisher
-      does not reserve the name, so do this immediately before tagging.
-- [ ] **npm**: no repository secret. `loudkit` declares voice enrollment as
-      dual-use, so npm requires proof of presence: direct automated publishing
-      is forbidden. The first tarball is published interactively with 2FA from
-      the exact attested Actions artifact. Once the package exists, configure
-      its trusted publisher for **`npm stage publish` only**: owner
-      `loudreader`, repository `loudkit`, workflow `release.yml`, environment
-      `release`. Also set Publishing access to "Require two-factor
-      authentication and disallow tokens". Later workflows stage over OIDC and
-      wait while a maintainer reviews and approves the stage with 2FA. §7.1 is
-      the exact sequence. These requirements come from npm's
+### 7.0 Registry trust settings
+
+Confirm these settings before you approve the `release` environment. CI cannot
+set them. Without them, the publish jobs fail at authentication.
+
+- [ ] PyPI: the `loudkit` project has a Trusted Publisher with owner
+      `loudreader`, repository `loudkit`, workflow `release.yml` and
+      environment `release` (pypi.org → Your projects → `loudkit` → Manage →
+      Publishing). No token is stored.
+- [ ] npm: the `loudkit` package has a GitHub Actions trusted publisher for
+      owner `loudreader`, repository `loudkit`, workflow `release.yml` and
+      environment `release`, allowed for **`npm stage publish` only**.
+      Publishing access is "Require two-factor authentication and disallow
+      tokens". No repository secret is stored. `loudkit` declares voice
+      enrollment as dual-use. npm then requires proof of presence, so direct
+      automated publishing is not allowed: each staged version waits until a
+      maintainer approves it with 2FA. These requirements come from npm's
       [Dual-Use Content Policy](https://docs.npmjs.com/policies/dual-use/) and
-      [staged publishing](https://docs.npmjs.com/staged-publishing/) contract.
-- [ ] **crates.io**: no repository secret. The first crate must exist before
-      crates.io lets it trust a workflow, so §7.3 uses a short-lived token with
-      only the `publish-new` endpoint scope, logs out and revokes it. Then add
-      a GitHub Actions Trusted Publisher for owner `loudreader`, repository
-      `loudkit`, workflow `release.yml` and environment `release`, and require
-      Trusted Publishing for later versions. The workflow obtains a temporary
-      token through `rust-lang/crates-io-auth-action` and that action revokes it
-      when the job ends.
-- [ ] **GitHub**: create the `release` environment under Settings →
-      Environments and add at least one required reviewer. Without the
-      reviewer the wall is not there, and a mistaken tag publishes to three
-      registries with no human in between.
+      [staged publishing](https://docs.npmjs.com/staged-publishing/) rules.
+- [ ] crates.io: the `loudkit` crate has a GitHub Actions Trusted Publisher
+      for owner `loudreader`, repository `loudkit`, workflow `release.yml` and
+      environment `release`, and the setting that requires Trusted Publishing
+      for new versions is on. No repository secret is stored. The workflow gets
+      a temporary token through `rust-lang/crates-io-auth-action`, which
+      revokes it when the job ends.
+- [ ] GitHub: the `release` environment (Settings → Environments) has at
+      least one required reviewer. Without one, a tag publishes to three
+      registries with no approval.
 
-Upload **the artefacts CI built and attested**, never a local rebuild. The
-provenance attestation is for those exact bytes. Fetch them first:
+For a manual step, upload only the artefacts CI built and attested. The
+attestation covers those exact bytes. Download them from the release run (the
+artifacts are `dist`, `npm-tarball` and `crate-tarball`):
 
 ```bash
-gh run download --repo loudreader/loudkit --name <artifact> --dir dist/
+gh run download PASTE_RELEASE_RUN_ID --repo loudreader/loudkit --name <artifact> --dir dist/
 ```
 
-The order below runs from most reversible to least, and each step is gated on
-the previous one installing cleanly from the public registry. A packaging
-defect that surfaces on npm costs an unpublish. The same defect found after
-crates.io costs the version number in every ecosystem.
+The order runs from most to least reversible: npm, then PyPI, then crates.io.
+Each publish job runs only after the one before it succeeds. A defect found on
+npm can still be unpublished; a defect found after crates.io costs the version
+number in every registry.
 
-### 7.1 npm: the staged path, and the bootstrap if trust is not configured
+### 7.1 npm
 
-`loudkit@0.1.0` is on npm. If the package carries the stage-only trusted
-publisher and 2FA-required publishing (§7.0), the staged path further down
-applies and the bootstrap below is history. If it does not, do the bootstrap
-once. npm refuses to stage a package without a trusted publisher, and LoudKit's
-voice enrollment is declared as dual-use, so a direct publish must be
-interactive and protected by 2FA; a CI token that bypasses 2FA and a direct
-OIDC publish are both disallowed by npm's policy.
+Until `release.yml` is fixed, the staged path fails. `publish-npm` passes
+`npm-tarball/loudkit-X.Y.Z.tgz` to `npm stage publish` without a leading `./`,
+and npm reads that argument as a GitHub repository, not as a file. Use the
+manual fallback below: it is the working path for npm until the workflow
+passes `./npm-tarball/...`.
 
-The unavoidable bootstrap exception is native npm provenance: npm can only
-mint it from CI, while CI cannot create this first dual-use package. The exact
-tarball is still covered by the separate GitHub build attestation created by
-`attest-npm`. Every later version is staged through npm OIDC and receives npm's
-own provenance as well.
+When it works, `publish-npm` stages the checked tarball through the stage-only
+trusted publisher and waits up to 30 minutes. Open npm's Staged Packages page,
+inspect the version and approve it with 2FA. Leave the workflow running. PyPI
+starts only after the live registry shasum matches the checked tarball. A
+staged version carries GitHub's tarball attestation and npm's own OIDC
+provenance.
 
-The bootstrap sequence, for a package without a trusted publisher, is:
+A rerun of a tag whose publish already succeeded does not publish twice.
+`publish-npm` finds the version on the registry, compares the registry's
+`dist.shasum` with the tarball this run packed, and passes only if they
+match. A mismatch fails the job, because the registry then holds bytes this
+workflow did not check.
 
-1. Push the tag (§6) and wait until `attest`, `attest-npm` and all three
-   `check-*` jobs are green. `publish-npm` then waits at the GitHub `release`
-   environment. Do not approve it yet.
-2. Download the exact npm artifact from that run and verify its attestation.
-   Use a fresh directory so no local `npm pack` output can be selected:
+Manual fallback, when `publish-npm` fails at `npm stage publish` (the argument
+defect above, or a missing trusted publisher):
+
+1. Download the exact npm artifact from the release run and verify its
+   attestation. Use a fresh directory so no local `npm pack` output can be
+   selected:
 
    ```bash
    RUN_ID=PASTE_RELEASE_RUN_ID
@@ -949,228 +969,190 @@ The bootstrap sequence, for a package without a trusted publisher, is:
    tar -tzf "$NPM_OUT"/*.tgz
    ```
 
-   The listing must include `DISCLOSURE`, `LICENSE`, `NOTICE`, `dist/` and both
-   files under `data/`. Never run `npm pack` here; that would create different,
+   The listing must include `DISCLOSURE`, `LICENSE`, `NOTICE`, `dist/` and the
+   three files under `data/`: `numbers.json`, `numerals.json` and
+   `pl_en_respell.json`. Do not run `npm pack` here. It creates different,
    unattested bytes.
-3. Log in to npm with the owner account and publish that tarball interactively.
-   Complete the 2FA challenge npm presents:
+2. Log in to npm with the owner account and publish that tarball
+   interactively. Complete the 2FA challenge npm presents:
 
    ```bash
    npm login --auth-type=web
    npm publish --access public "$NPM_OUT"/*.tgz
    ```
 
-4. On the new `loudkit` package, add its GitHub Actions trusted publisher:
-   repository `loudreader/loudkit`, workflow `release.yml`, environment
-   `release`, and allow **`npm stage publish` only**. Then set Publishing access
-   to "Require two-factor authentication and disallow tokens".
-5. Approve the GitHub `release` environment. `publish-npm` compares npm's live
-   `dist.shasum` with the checked tarball and only then unblocks PyPI and
-   crates.io. A mismatch stops the chain.
-6. In a scratch directory, install `loudkit@0.1.1` and import it. Also repeat
-   `gh attestation verify` on the downloaded tarball as the provenance gate for
-   this bootstrap version.
+3. Rerun the failed jobs. `publish-npm` compares npm's live `dist.shasum` with
+   the checked tarball, and only then lets PyPI and crates.io continue. A
+   mismatch stops the chain:
 
-With the trusted publisher in place, `publish-npm` stages the checked tarball through
-the stage-only trusted publisher and waits for up to 30 minutes. Open npm's
-Staged Packages page, inspect the version, approve it with 2FA, and leave the
-workflow running. Only after the live registry shasum matches does PyPI start.
-Those later versions carry both GitHub's tarball attestation and npm's native
-OIDC provenance.
+   ```bash
+   gh run rerun "$RUN_ID" --repo loudreader/loudkit --failed
+   ```
 
-Re-running a tag whose publish already succeeded does not publish twice.
-`publish-npm` finds the version on the registry, compares the registry's
-`dist.shasum` against the tarball this run packed, and passes only if they are
-the same bytes. A mismatch fails the job on purpose: it means the registry
-holds bytes this workflow never checked.
+4. In a scratch directory, install `loudkit@X.Y.Z` and import it. Run
+   `gh attestation verify` on the downloaded tarball again. A hand-published
+   version has the GitHub attestation but no npm provenance.
+5. If a trust setting from §7.0 was missing, restore it before the next
+   release.
 
-Rollback: `npm unpublish loudkit@0.1.1` works for **72 hours** and only while
-nothing depends on it. After that the version is permanent and `npm deprecate`
-is the whole remedy.
+Rollback: `npm unpublish loudkit@X.Y.Z` works within 72 hours if no other
+package depends on it. After 72 hours, npm allows it only if nothing depends
+on the package, it had fewer than 300 downloads in the last week and it has a
+single owner (npm's [unpublish policy](https://docs.npmjs.com/policies/unpublish/)).
+npm never accepts an unpublished version number again. Otherwise,
+`npm deprecate` marks the version.
 
-Gate: in a scratch dir, `npm install loudkit@0.1.1` and import it. Do not
-continue until this passes.
+Gate: in a scratch directory, `npm install loudkit@X.Y.Z` and import it. Do
+not continue until this passes.
 
 ### 7.2 PyPI
 
+`publish-pypi` uploads through the Trusted Publisher. Manual fallback, with the
+`dist` artifact from the release run:
+
 ```bash
-twine check dist/loudkit-0.1.1*
-twine upload dist/loudkit-0.1.1*.whl dist/loudkit-0.1.1*.tar.gz
+twine check dist/loudkit-X.Y.Z*
+twine upload dist/loudkit-X.Y.Z*.whl dist/loudkit-X.Y.Z*.tar.gz
 ```
 
-Rollback: none worth the name. Deleting the release removes the files, so
-nobody installs a broken artefact, but **the version number is burned**. PyPI
-never allows `0.1.1` to be uploaded again, under any content. A mistake here
-costs `0.1.1`.
+Rollback: deleting the release removes the files, so nobody installs a broken
+artefact. PyPI never accepts the same filename again, so the fix ships as a
+new version.
 
-Gate: `pip install loudkit==0.1.1` in a fresh venv, run the README block.
+Gate: `pip install "loudkit[torch,audio,hub]==X.Y.Z"` in a fresh venv, then
+run the README's Python example.
 
 ### 7.3 crates.io
 
-`loudkit@0.1.0` is on crates.io. With its GitHub Actions Trusted Publisher
-configured (§7.0), `publish-crates` publishes through OIDC and nothing below
-is needed. Without it the workflow stops here, after npm and PyPI are live,
-and the failed job prints this procedure:
+With the Trusted Publisher from §7.0, `publish-crates` gets a short-lived
+crates.io token through OIDC and runs `cargo publish --locked`. Nothing below
+is needed. Without it, the job fails at the authentication step, after npm and
+PyPI are live. Then:
 
 1. Create an API token at <https://crates.io/settings/tokens/new> with a short
-   expiry and only the `publish-new` endpoint scope. Do not add it to GitHub.
-2. Check out the exact public tag in a clean worktree. Never publish from the
+   expiry, limited to the `loudkit` crate and the `publish-update` endpoint
+   scope. Do not add it to GitHub.
+2. Check out the exact public tag in a clean worktree. Do not publish from the
    private development branch:
 
    ```bash
    REPO=$(git rev-parse --show-toplevel)
    CRATE_TREE=$(mktemp -d)
-   git -C "$REPO" worktree add --detach "$CRATE_TREE" v0.1.1
+   git -C "$REPO" worktree add --detach "$CRATE_TREE" vX.Y.Z
    cd "$CRATE_TREE/rust"
    cargo login
    cargo publish --locked
    cargo logout
    ```
 
-   Paste the `publish-new` token only into `cargo login`'s prompt. It does not
-   enter shell history. Whether the publish succeeds or fails, run
-   `cargo logout` and revoke the token on crates.io immediately afterwards.
-3. On the new `loudkit` crate, configure GitHub Actions Trusted Publishing:
-   owner `loudreader`, repository `loudkit`, workflow `release.yml`,
-   environment `release`. Enable the setting that requires Trusted Publishing
-   for new versions.
+   Paste the token only into the prompt of `cargo login`, so it does not enter
+   shell history. Whether the publish succeeds or fails, run `cargo logout`
+   and revoke the token on crates.io immediately afterwards.
+3. Restore the crates.io Trusted Publisher from §7.0.
 4. Rerun the failed `publish-crates` job. It compares crates.io's immutable
-   checksum with the `.crate` artifact that passed both consumer gates before
-   anything was published, and creates the GitHub Release only if those exact
-   bytes match:
+   checksum with the `.crate` artifact that passed both consumer checks before
+   anything was published. It creates the GitHub Release only if those bytes
+   match:
 
    ```bash
    gh run rerun PASTE_RELEASE_RUN_ID --repo loudreader/loudkit --failed
    ```
 
-From `0.1.1` onward, the job obtains a short-lived crates.io token through
-OIDC and runs `cargo publish --locked` itself. No manual token is involved.
-
-Rollback: none. `cargo yank --version 0.1.1` stops **new** dependents from
-selecting it; it does not delete anything, existing lockfiles keep resolving
+Rollback: none. `cargo yank --version X.Y.Z` stops **new** dependents from
+selecting the version. It deletes nothing, existing lockfiles keep resolving
 it, and the version can never be reused or replaced. crates.io is last because
-it is the only registry where a bad upload cannot be withdrawn at all.
+an upload there cannot be withdrawn.
 
 ### 7.4 Go and Swift
 
-Nothing to upload, but Go has one act left: the tag §6 deliberately held back.
-Push it only now, with the workflow green, the approval given and the three
-registries published:
+Go and Swift upload nothing. Push the Go tag now, after the workflow passes,
+the approval is given and all three registries are published:
 
 ```bash
-git tag go/v0.1.1 public-main
-git push public go/v0.1.1
+git tag go/vX.Y.Z public-main
+git push public go/vX.Y.Z
 ```
 
-The pushed tags are the release. First `go get` against a fresh module can
-take a few minutes while `proxy.golang.org` indexes it. Swift needs no tag of
-its own: SwiftPM resolves `v0.1.1`.
+The pushed tags are the release. The first `go get` against a fresh module can
+take a few minutes while `proxy.golang.org` indexes the version. Swift needs no
+tag of its own: SwiftPM resolves `vX.Y.Z`.
 
-## 8. Post-publish smoke, from the public internet only
+## 8. Post-publish checks, from the public internet only
 
-Run these on a machine that has never seen this repository.
+Run these outside any checkout of this repository, with empty caches.
 
-The Python half is scripted, so it is a gate rather than a memory of having
-tried it:
+`tools/acceptance.py` runs the Python checks:
 
 ```bash
 python tools/acceptance.py --from-pypi --extras torch,audio,hub --speak
 ```
 
-It builds a venv outside any checkout, installs the published distribution,
-and **refuses to continue unless `loudkit` imported from that venv**. That
-refusal is the point: run the same venv's interpreter with the working
-directory inside `python/` and it imports the checkout instead, so without the
-check a wheel missing half its data files passes every step. `--wheel <path>`
-runs the same gate against a locally built wheel before anything is published.
+It builds a venv outside any checkout, installs the published distribution
+and stops unless `loudkit` imports from that venv. With a working directory
+inside `python/`, the same interpreter imports the checkout instead, and a
+wheel that lacks half its data files would pass every step. `--wheel <path>`
+runs the same checks against a locally built wheel before anything is
+published.
 
 - [ ] `python tools/acceptance.py --from-pypi --extras torch,audio,hub --speak`
-- [ ] `pip install loudkit` in a fresh venv; run the README block.
-- [ ] `npm install loudkit` in a scratch dir; import it.
-- [ ] `cargo add loudkit` in a scratch crate; build.
-- [ ] `go get github.com/loudreader/loudkit/go@latest` resolves via
+- [ ] `pip install "loudkit[torch,audio,hub]"` in a fresh venv; run the
+      README's Python example.
+- [ ] `npm install loudkit` in a scratch directory; import it.
+- [ ] `cargo add loudkit` in a scratch crate; build it.
+- [ ] `go get github.com/loudreader/loudkit/go@latest` resolves through
       `proxy.golang.org`.
-- [ ] `swift package resolve` picks up `0.1.1` from the repository URL.
-- [ ] The Colab badge, clicked from the public README, runs end to end.
+- [ ] `swift package resolve` picks up `X.Y.Z` from the repository URL.
+- [ ] The Colab badge on the public README runs end to end.
 - [ ] The docs site at `https://loudreader.github.io/loudkit/` has deployed
       from `main` and carries no pre-release banner.
-- [ ] The Space `jer3mi/loudkit` runs the release: bump `requirements.txt`
-      in `space-dir/` to `loudkit[torch,audio,enroll,hub]==0.1.1`, push it,
-      and confirm the Space restarts and speaks.
+- [ ] The Space `jer3mi/loudkit` runs the release. In the Space's repository,
+      set `requirements.txt` to `loudkit[torch,audio,enroll,hub]==X.Y.Z` and
+      push it. Confirm that the Space restarts and speaks.
 
-Then run each guide as a stranger would, from the published packages rather
-than from a checkout. A guide that was true against this working copy can
-still be false against a registry: the wheel ships a subset of the tree, the
-npm tarball another, and the crate a third.
+Then run each guide against the published packages and the public Hub
+release, not against a checkout. The wheel, the npm tarball and the crate each
+ship a different subset of the tree.
 
 - [ ] Guide 1: install, `loudkit download`, the two-line synthesis, and the
-      five one-liners in English, Spanish, French, German and Italian.
+      three one-liners in English, Spanish and French.
 - [ ] Guide 2: `stream` and `synthesize`, and `previous_tokens` across
       two calls.
-- [ ] Guide 3: `lk.enroll` from a ten-second recording, then synthesise with
+- [ ] Guide 3: `lk.enroll` from a ten-second recording, then synthesize with
       the profile it wrote.
 - [ ] Guide 4: `loudkit serve`, one `/v1/synthesize` call, one stream, the
       OpenAI route, `loudkit serve --mcp` and `loudkit serve --grpc`.
-- [ ] `python tools/bench.py` produces a row on this machine (guide: docs/design/benchmarking.md).
-- [ ] Guides 7 to 10: the TypeScript, Go, Rust and Swift quickstarts from
-      scratch consumers, against the published packages and the public Hub
+- [ ] `python tools/bench.py --checkpoint loudreader/loudr-1 --voice joe`
+      prints a row on this machine (see
+      [docs/design/benchmarking.md](docs/design/benchmarking.md)).
+- [ ] Guides 7 to 10: the TypeScript, Go, Rust and Swift quickstarts, from
+      scratch projects, against the published packages and the public Hub
       release.
 
-Record what broke. A guide that needs a fix is a patch release, not an
-edit to the tag.
+Record what failed. Fix a failure in its source, and do not move a published
+tag. A fix to a distributed artefact needs a new version.
 
-## 9. Pre-release wording, and when each piece comes off
+## 9. Pre-release wording
 
-Two rounds, because two things publish at different times. The weights went to
-the Hub first, and the wording that said they had not went with them. The
-package wording below is gone too; every row stays, so that a marker cannot
-come back unnoticed.
-
-Anything that reappears comes off in the **release commit (§2)**, not at §7
-where the packages actually publish: `tests/test_release_coherence.py` refuses a stable
-version while any of these stands, and the tag is cut in §6. So the wording
-goes one section before the gate that would otherwise stop the release.
-
-This table and `PRERELEASE_BANNERS` in that test are one list written twice,
-and a test asserts they agree. Grep for the marker rather than trusting a line
-number.
+`tests/test_release_coherence.py` refuses a stable version while any marker
+below remains in its file. `PRERELEASE_BANNERS` in that test and this table
+are the same list, and a test checks that they agree. Remove a marker that
+comes back in the release commit (§2), before the tag in §6. Line numbers
+change, so search for the marker.
 
 | file | grep for | what it is |
 | --- | --- | --- |
 | `README.md` | `packages are not yet` | the README pre-release note |
 | `notebooks/loudkit_quickstart.ipynb` | `Pre-release.` | the Colab pre-release note |
 | `docs/reference/troubleshooting.md` | `lands on PyPI with the 0.1.0 release` | the not-on-PyPI-yet paragraph |
-| `site/scripts/sync-docs.mjs` | `banner:` | the site-wide banner written into every generated page. Already absent; the row stays so it cannot come back unnoticed |
+| `site/scripts/sync-docs.mjs` | `banner:` | the site-wide banner written into every generated page |
 | `site/src/handwritten/index.mdx` | `lk-banner` | the landing-page banner block |
 | `site/src/handwritten/demo.mdx` | `banner:` | the demo page banner front matter |
-| `site/src/handwritten/index.mdx` | `git = "https://github.com/loudreader/loudkit"` | the landing page's Rust tab. Becomes `loudkit = "0.1"` |
-| `site/src/handwritten/index.mdx` | `branch: "main"` | the landing page's Swift tab. Becomes `from: "0.1.1"` |
-| `docs/guides/10-swift.md` | `branch: "main"` | guide 10's Swift dependency. Becomes `from: "0.1.1"`, which the sentence under it already tells the reader to use |
+| `site/src/handwritten/index.mdx` | `git = "https://github.com/loudreader/loudkit"` | the landing page's Rust tab; the release line is `loudkit = "0.1"` |
+| `site/src/handwritten/index.mdx` | `branch: "main"` | the landing page's Swift tab; the release line is a `from:` version |
+| `docs/guides/10-swift.md` | `branch: "main"` | guide 10's Swift dependency; the release line is a `from:` version |
 
-The last three are not banners, and that is why they went unnoticed: an install
-line naming a branch or a git URL is a pre-release instruction wearing ordinary
-syntax. A reader who copies one after 0.1.1 ships builds from `main`, the
-moving target the release exists to replace.
+The last three rows are install lines, not banners. An install line that names
+a branch or a git URL installs from `main`, not from the release.
 
 `site/src/content/docs/` is generated and gitignored. Do not edit the copies
-there; they are rewritten from `docs/` and `site/src/handwritten/` on every
-build.
-
-The README sentence "the teacher's training data is Resemble AI's and is not
-published" is a permanent statement about the upstream teacher, not a
-pre-release note. It stays.
-
-### Preparing the complete voice directory
-
-Both release profiles require all 28 names in the canonical roster. The eight
-additional English profiles are versioned in this repository. When preparing
-`assets/voices` from an older 20-voice release, include their corrected files
-before running either builder:
-
-```bash
-cp docs/voices/preview/profiles/*.safetensors assets/voices/
-```
-
-The `preview` directory is a retained source path, not a separate download
-requirement for model users. Both finished bundles include these files under
-`voices/`, and every SDK loads them by name.
+there. Each build rewrites them from `docs/` and `site/src/handwritten/`.

@@ -1,15 +1,13 @@
 """Measure every parity claim this project makes, and write the table.
 
-The numbers that justify loudkit live in test docstrings, gate constants and
-`docs/platforms/apple.md`. A reader deciding whether to trust the thing has to go and
-find them, and a number that is only ever quoted in prose drifts from the
-number the suite actually enforces, which is the failure mode this whole
-repository is organised against.
+The gates live in test docstrings, gate constants and `docs/platforms/apple.md`.
+A number quoted only in prose drifts from the number the suite enforces, so
+the table is generated from a run. Each row carries the gate the suite
+enforces and the measured value. A row that could not be measured says
+*not measured* and stays in the table.
 
-So the table is **generated from a run**, not typed. Each row carries the gate
-the suite enforces *and* what was measured, and a row that could not be
-measured says so rather than being omitted: a table with a hole in it is
-information, a table quietly missing a row is a claim.
+Do not edit the numbers in `docs/parity-measured.md` by hand. Run the
+generator with `--checkpoint` on a machine that has the weights:
 
     python tools/parity_table.py --out docs/parity-measured.md
 
@@ -75,7 +73,7 @@ def measure_weight_free(report: Report) -> None:
             "Philox 4x32-10",
             "published known-answer vectors",
             "exact",
-            detail="the RNG is checked against a standard, not against itself",
+            detail="checked against the published Random123 known-answer vectors",
         )
     )
     bad = 0
@@ -107,7 +105,7 @@ def _sampler_row(report: Report, vectors: dict[str, Any]) -> None:
             "LR-SAMPLER-v1",
             "shared fixture",
             "exact",
-            detail="min_p in logit space, gumbel-argmax, ties to the low index",
+            detail="min_p in logit space, Gumbel-argmax, ties broken to the lowest index",
         )
     )
     cases = vectors["sampler"]["cases"]
@@ -170,7 +168,8 @@ def _funnel_row(report: Report, speechtext: dict[str, Any]) -> None:
             "Speech funnel",
             "shared fixture (Python, Swift, Go, Rust, JS)",
             "exact",
-            detail="invisibles, symbols, footnotes, punctuation, Polish respelling",
+            detail="invisible characters, symbols, footnotes, punctuation and Polish "
+            "respelling",
         )
     )
     cases = speechtext["cases"]
@@ -190,7 +189,8 @@ def _chunking_row(report: Report, speechtext: dict[str, Any]) -> None:
             "Long-form splitting",
             "shared fixture (Python, Swift, Go, Rust, JS)",
             "exact",
-            detail="where the reader breathes; a different split is a different reading",
+            detail="chunk boundaries must match exactly, because a different split "
+            "changes the audio",
         )
     )
     cases = speechtext["chunking"]
@@ -226,7 +226,10 @@ def _postprocess_row(report: Report) -> None:
             "Postprocess detectors",
             "shared fixture (Python, Swift, Go, Rust, JS)",
             "exact",
-            detail="where a chunk ended; a different verdict is a different cut",
+            detail="verdicts and cut positions must match exactly, because a different "
+            "verdict cuts different audio. The Python count covers six sections of "
+            "the fixture: ceiling, trailing filler, desperation, ended tail, terminal "
+            "echo and resolve",
         )
     )
     fx = json.loads((FIXTURE / "postprocess.json").read_text(encoding="utf-8"))
@@ -330,7 +333,8 @@ def _eos_peak_row(report: Report, vectors: dict[str, Any]) -> None:
             "EOS peak observation",
             "shared fixture (Python, Swift, Go, Rust, JS)",
             f"step exact, probability rtol {section['prob_rtol']:g}",
-            detail="audible despite never feeding back: two detector rules threshold on it",
+            detail="the stop-token probability does not feed back into generation, "
+            "but two detector rules use it as a threshold, so it changes the audio",
         )
     )
     cases = section["cases"]
@@ -368,7 +372,7 @@ def _seed_row(report: Report, vectors: dict[str, Any]) -> None:
             "Seed derivation",
             "shared fixture",
             "exact",
-            detail="one user seed, independent per-stage streams",
+            detail="one user seed gives an independent stream to each stage",
         )
     )
     cases = vectors["seeds"]["derivation"]
@@ -413,7 +417,8 @@ def measure_against_reference(  # noqa: PLR0915 - one block per measured row
             "Token generator, teacher-forced",
             "reference implementation",
             "top-1 >= 99%, median KL < 1e-4",
-            detail="the only generator comparison free of sampling chaos (EXP-010)",
+            detail="both sides get the same input tokens, so the comparison does not "
+            "depend on sampling",
         )
     )
     agree = steps = 0
@@ -446,8 +451,8 @@ def measure_against_reference(  # noqa: PLR0915 - one block per measured row
             "Token generator, free-running",
             "committed reference stream",
             "exact",
-            detail="same law, same seed; pins generator and sampler stability, "
-            "against the committed free-running reference",
+            detail="same sampling algorithm and seed; checks the generator and the "
+            "sampler together against the committed free-running reference",
         )
     )
     matched = total = 0
@@ -471,7 +476,8 @@ def measure_against_reference(  # noqa: PLR0915 - one block per measured row
             "Mel decoder, fixed tokens",
             "reference implementation",
             "corr >= 0.999",
-            detail="same tokens and same injected noise, so a difference is arithmetic",
+            detail="same tokens and same injected noise, so any difference comes from "
+            "arithmetic",
         )
     )
     wav_row = report.add(
@@ -479,7 +485,8 @@ def measure_against_reference(  # noqa: PLR0915 - one block per measured row
             "Vocoder, fixed tokens",
             "reference implementation",
             "corr >= 0.98",
-            detail="gated loosely on purpose: predicted phase decorrelates, spectrum does not",
+            detail="the vocoder's predicted phase varies between implementations, so "
+            "the waveform gate is lower than the mel gate",
         )
     )
     mels, waves = [], []
@@ -501,7 +508,7 @@ def measure_against_reference(  # noqa: PLR0915 - one block per measured row
             "Re-render, same seed and build",
             "itself",
             "bit-identical",
-            detail="identity class I-2: determinism within one backend",
+            detail="per-build determinism: the same backend renders the same bytes",
         )
     )
     rec = meta[sentences[0]]
@@ -523,8 +530,7 @@ def _placeholder_reference_rows(report: Report) -> None:
         report.add(Row(stage, "reference implementation", gate))
 
 
-# The ONNX graphs are exported fp32 only (EXP-015: fp16 not worth a second
-# artefact; EXP-017: int8 blocked), while the fixture's `execution` block
+# The ONNX graphs are exported in fp32 only, while the fixture's `execution` block
 # records the CoreML precision map. Handing the fp16 map to ONNX is a refusal,
 # not a measurement, the same explicit map `test_render_band_onnx` uses.
 _ONNX_PRECISION: dict[str, Precision] = {
@@ -555,7 +561,8 @@ def measure_backend(report: Report, checkpoint: Path, device: Device, label: str
             f"{label} renderer",
             "shared fixture",
             f"mel corr >= {mel_gate:g}, wave corr >= {wave_gate:g}",
-            detail="a second backend does not get a second, looser bar",
+            detail="the mel and waveform thresholds that the model's conformance "
+            "fixture sets for every backend",
         )
     )
     if not cases:
@@ -601,19 +608,18 @@ def render(report: Report, environment: str) -> str:
     lines = [
         "# Parity, measured",
         "",
-        "Generated by `tools/parity_table.py`. Every row is a comparison the test",
-        "suite enforces; `gate` is the threshold that fails the build, `measured` is",
-        "what this run actually observed. A row that says *not measured* was not run",
-        "in this environment. It is left in rather than dropped, because a table",
-        "quietly missing a row reads as a table with nothing to hide.",
+        "Generated by `tools/parity_table.py`. Every row is a comparison that the test",
+        "suite enforces. `gate` is the threshold that fails the build, and `measured`",
+        "is the result of this run. A row that says *not measured* was not run in",
+        "this environment.",
         "",
-        "The rows are measured from Python: the weight-free rows against the shared",
-        "fixtures in `tests/data/conformance/`, the weighted rows against the",
-        "reference dumps in `tests/data/reference/` and the release checkpoint. A row",
-        "that names the four ports is held for them by their own harnesses over the",
-        "same fixture files: `go test ./...`, `cargo test`, `npm run test:all` and",
-        "`swift test`, which the parity job in CI runs. Never hand-type a number here;",
-        "run the generator with `--checkpoint` on a machine that holds the weights.",
+        "The rows are measured from Python. The weight-free rows use the shared",
+        "fixtures in `tests/data/conformance/`. The weighted rows use the reference",
+        "dumps in `tests/data/reference/` and the release checkpoint. The four ports",
+        "run their own harnesses over the same fixture files: `go test ./...`,",
+        "`cargo test`, `npm run test:all` and `swift test`. The parity job in CI runs",
+        "them. The numbers come only from the generator, run with `--checkpoint` on a",
+        "machine that has the weights.",
         "",
         f"Environment: {environment}",
         "",
@@ -628,8 +634,8 @@ def render(report: Report, environment: str) -> str:
 
     detailed = [r for r in report.rows if r.detail]
     if detailed:
-        lines += ["## Why each gate is where it is", ""]
-        lines += [f"- **{r.stage}**: {r.detail}" for r in detailed]
+        lines += ["## Why each gate is where it is", "", "| row | reason |", "|---|---|"]
+        lines += [f"| {r.stage} | {r.detail} |" for r in detailed]
         lines.append("")
 
     if report.notes:
@@ -640,20 +646,19 @@ def render(report: Report, environment: str) -> str:
 
 
 def _free_running_scope(report: Report) -> list[str]:
-    """The hardware scope of the free-running row, under the table: the
-    figure is exact for one architecture and one BLAS at a time."""
+    """The hardware scope of the free-running row, under the table."""
     free = next((r for r in report.rows if r.stage == "Token generator, free-running"), None)
     if free is None:
         return []
     here = platform.machine()
     if free.ok is None:
-        this_run = f"This run ({here}) did not measure it."
+        this_run = f"This run ({here}) did not measure the free-running row."
     else:
-        this_run = f"The figure in the row above is what this machine ({here}) reproduces."
+        this_run = f"The free-running row was measured on {here}."
     return [
-        "Exactness of a free-running stream is per architecture and per BLAS: the",
-        "sampling law is the same everywhere, and the logits under it move at the",
-        "last bit between machines, which can flip a sampled token.",
+        "Exact free-running tokens depend on the CPU architecture and the BLAS",
+        "library. The sampling algorithm is the same everywhere, but the logits can",
+        "differ in the last bit between machines, and that can change a sampled token.",
         this_run,
     ]
 

@@ -21,23 +21,20 @@ language:
 ---
 
 <p align="center">
-  <img src="https://huggingface.co/loudreader/loudr-1/resolve/main/logo.png" alt="LoudKit" width="640">
+  <img src="https://huggingface.co/loudreader/loudr-1/resolve/main/logo.png" alt="loudkit" width="640">
 </p>
 
 # loudr-1
 
-**Natural-sounding text-to-speech with 28 voices, ten languages and voice
-cloning.**
+**Text-to-speech with 28 voices, ten languages and voice cloning.**
 
 loudr-1 runs on your own hardware through
 [loudkit](https://github.com/loudreader/loudkit). Download it once and work offline
 from Python, Swift, Go, Rust or TypeScript with PyTorch, ONNX Runtime or CoreML.
 
-These are the weights behind [LoudReader](https://loudreader.io), a reading app
-that speaks articles, PDFs and books on device. They are published here so the
-engine can be used and checked on its own.
+[LoudReader](https://loudreader.io) uses these weights.
 
-[**Try it in the browser**](https://huggingface.co/spaces/jer3mi/loudkit) |
+[**Try the online demo**](https://huggingface.co/spaces/jer3mi/loudkit) |
 [**Hear all 28 voices**](https://loudreader.github.io/loudkit/demo/) |
 [**Open in Colab**](https://colab.research.google.com/github/loudreader/loudkit/blob/main/notebooks/loudkit_quickstart.ipynb) |
 [**GitHub**](https://github.com/loudreader/loudkit) |
@@ -57,10 +54,9 @@ Both voices read the same passage from *Alice's Adventures in Wonderland*.
 [Open the gallery](https://loudreader.github.io/loudkit/demo/) to compare every
 shipped voice with the enrollment reference used to create its profile.
 
-> English is the only language we could evaluate ourselves by ear. We do not
-> speak the other nine languages well enough to judge their naturalness
-> reliably. If you do, please listen and share what sounds good or wrong.
-> Feedback from native speakers is very welcome.
+> The maintainers evaluated naturalness by ear in English only. They do not
+> speak the other nine languages well enough to judge them. If you are a
+> native speaker, please listen and report what sounds right or wrong.
 
 ## Start in Python
 
@@ -95,16 +91,16 @@ mine.save("voices/my-voice.safetensors")
 The reusable profile is about 150 KB. Install
 `loudkit[torch,audio,enroll,hub]` for enrollment.
 
-The Swift, Go, Rust and TypeScript packages load the same repo id and fetch
-what they need themselves; the
-[README](https://github.com/loudreader/loudkit#the-same-in-swift-go-rust-and-typescript)
+The Swift, Go, Rust and TypeScript packages load the same repo id and
+download the files their backend needs. The
+[README](https://github.com/loudreader/loudkit#swift-go-rust-and-typescript)
 shows each one.
 
 ## What each runtime downloads
 
-The repository contains every supported format. A download takes one runtime
-and leaves the rest behind. Add `--with-cloning` when the installation also
-needs enrollment.
+The repository contains the files for every supported backend.
+`loudkit download --for` fetches only the files for one backend. Add
+`--with-cloning` when the installation also needs enrollment.
 
 | path | command |
 |---|---|
@@ -116,8 +112,17 @@ needs enrollment.
 | CoreML, with cloning | `--for coreml --with-cloning` |
 
 Download size depends on the model, backend and release revision. The
-synthesis checkpoint is 747 MB; graph downloads also include backend-specific
-weights.
+synthesis checkpoint is 747 MB, and the ONNX and CoreML downloads also include
+the weights of their graphs. Approximate decimal sizes for 0.1.1, with the
+backend weights included:
+
+| Model | Torch | Torch + cloning | ONNX | ONNX + cloning | CoreML | CoreML + cloning |
+|---|---:|---:|---:|---:|---:|---:|
+| loudr-1 | 0.75 GB | 1.28 GB | 2.60 GB | 3.13 GB | 2.46 GB | 2.99 GB |
+| loudr-1-turbo | 0.72 GB | 1.25 GB | 2.44 GB | 2.97 GB | 2.44 GB | 2.97 GB |
+
+Both models ship separate synthesis and enrollment checkpoints. The enrollment
+files come only with `--with-cloning`.
 
 Speed depends on the hardware and the backend.
 [Benchmarks](https://loudreader.github.io/loudkit/benchmarks/) has the
@@ -133,16 +138,17 @@ measured figures, the machines and the commands.
 | `onnx/` | varies by model | synthesis and enrollment graphs |
 | `coreml/` | varies by model | native generation, rendering and enrollment packages |
 | `voices/` | 4.3 MB | 28 voice profiles |
-| `samples/` | 108 KB | the two players above |
+| `samples/` | 168 KB | the two players above |
 | `tokenizer.json` | 70 KB | text processing |
 
-Synthesis and enrollment are separate so users who only need speech generation
-do not download the enrollment weights. What each graph under `onnx/` takes and
-returns, and the order to call them in, is in
-[the graph signatures](https://github.com/loudreader/loudkit/blob/main/docs/design/onnx-graphs.md),
-which is what a runtime loudkit has no port for needs. ONNX and CoreML use their own enrollment
-graphs. Every download is checked against the release's `SHA256SUMS` before
-it is used.
+Synthesis downloads do not include the enrollment weights. PyTorch enrollment
+uses `loudr-1-enrollment.safetensors` and `ve.safetensors`. ONNX and CoreML
+use their own enrollment graphs. Every download is checked against the
+release's `SHA256SUMS` before it is used.
+
+[The graph signatures](https://github.com/loudreader/loudkit/blob/main/docs/design/onnx-graphs.md)
+list what each graph under `onnx/` takes and returns, and the order to call
+them in. Use them to run loudr-1 from a language that loudkit has no port for.
 
 ## Voices and consent
 
@@ -150,8 +156,8 @@ The release includes ten English profiles and two for each of Spanish, French,
 German, Italian, Polish, Portuguese, Dutch, Swedish and Danish.
 
 The profiles were built from recordings donated for speech technology or from
-CC0 and CC-BY speech corpora. No scraped celebrity voices ship with the model.
-[The full roster](https://github.com/loudreader/loudkit/blob/main/VOICES.md) records
+CC0 and CC-BY speech corpora. No audio without a stated licence ships with the
+model. [The full roster](https://github.com/loudreader/loudkit/blob/main/VOICES.md) records
 the source, licence and consent basis for every profile. The
 [voice gallery](https://loudreader.github.io/loudkit/demo/) provides a generated
 sample and enrollment preview for all 28.
@@ -165,22 +171,21 @@ are recorded in
 
 loudr-1 is derived from
 [Chatterbox](https://github.com/resemble-ai/chatterbox), released by Resemble AI
-under the MIT licence. We optimized it for faster local inference by profiling
-the full synthesis path, changing the signal flow, separating synthesis from
-enrollment, and adjusting graph boundaries and device placement for PyTorch,
-ONNX Runtime and CoreML.
+under the MIT licence. loudr-1 changes the signal flow for faster local
+inference, separates synthesis from enrollment, and sets its own graph
+boundaries and device placement for PyTorch, ONNX Runtime and CoreML.
 
 Release gates compare the implementations, check output length and early end of
 speech, and run ASR-based checks per measured language. These checks catch
-mechanical regressions. They do not replace listening by native speakers.
+mechanical regressions. Native speakers still need to check the audio by ear.
 
 ## Reproducibility
 
-For a fixed build, device and backend, the same text, voice and seed produce the
-same waveform. Across devices or backends, loudkit checks the token stream and
-keeps waveform differences inside measured correlation bands. Floating-point
-execution means that waveforms are not promised to be byte-identical across
-different runtimes.
+For a fixed build, device, backend and execution configuration, the same text,
+voice and seed produce the same waveform. Across devices and backends, the
+conformance tests compare the token streams and the waveform correlation on
+fixed test cases. Waveforms are not promised to be byte-identical across
+devices or backends.
 
 The exact contract and current measurements are in the
 [identity contract](https://github.com/loudreader/loudkit/blob/main/docs/reference/IDENTITY-CONTRACT.md)
@@ -194,9 +199,12 @@ and [measured parity report](https://loudreader.github.io/loudkit/parity-measure
   prosody.
 - Voice cloning requires consent. A recording being public does not grant
   permission to clone the speaker.
-- Saved WAVs and server responses carry an unsigned, machine-readable note by
-  default, recording the model, voice, seed, backend and a checksum of the
-  audio. It is loudkit's own and is not C2PA Content Credentials.
+- By default, WAV files that Python's `Result.save()` writes and WAV replies
+  from the loudkit server carry an unsigned, machine-readable note. It records
+  the model, voice, seed, backend and a checksum of the audio. It is not C2PA.
+  The Swift, Go, Rust and TypeScript packages write WAV files without it.
+  [The format](https://github.com/loudreader/loudkit/blob/main/docs/reference/provenance.md)
+  has the details.
 
 Read [Responsible use](https://huggingface.co/loudreader/loudr-1/blob/main/RESPONSIBLE_USE.md)
 before exposing enrollment to other people.
@@ -219,14 +227,3 @@ the public roster.
 [Apache-2.0](https://huggingface.co/loudreader/loudr-1/blob/main/LICENSE).
 Upstream attributions and component licences are listed in
 [NOTICE](https://huggingface.co/loudreader/loudr-1/blob/main/NOTICE).
-
-## Download sizes for 0.1.1
-
-Approximate decimal sizes for the release files; backend weights are included.
-Cloning adds enrollment assets only when requested. Both models ship separate
-synthesis and enrollment checkpoints.
-
-| Model | Torch | Torch + cloning | ONNX | ONNX + cloning | CoreML | CoreML + cloning |
-|---|---:|---:|---:|---:|---:|---:|
-| loudr-1 | 0.75 GB | 1.28 GB | 2.60 GB | 3.13 GB | 2.46 GB | 2.99 GB |
-| loudr-1-turbo | 0.72 GB | 1.25 GB | 2.44 GB | 2.97 GB | 2.44 GB | 2.97 GB |

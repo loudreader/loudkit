@@ -1,6 +1,7 @@
 # loudkit for JavaScript and TypeScript
 
-Text to speech in Node, on `onnxruntime-node`. No Python, no torch.
+Text to speech in Node, on `onnxruntime-node`. It does not need Python or
+PyTorch.
 
 ## Hello
 
@@ -32,30 +33,36 @@ await engine.close();
 node hello.mjs
 ```
 
-The first run downloads the model files into
-`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS and
-`~/.cache/loudkit/loudreader--loudr-1` on Linux (`$LOUDKIT_CACHE` moves it),
-the directory the Go, Rust and Swift ports share, and checks every file
-against the release's own `SHA256SUMS`; later runs read what is there.
-`engine.voices()` names the 28 voices. `close()` hands back the
-runtime's memory; it matters when you build a second engine.
+The first run downloads the model files into the user cache:
 
-The snippets on this page need loudkit 0.1.1. From a checkout: `npm run build`,
-then `node examples/hello.mjs`, which is this file.
+- macOS: `~/Library/Caches/loudkit/loudreader--loudr-1`
+- Linux: `$XDG_CACHE_HOME/loudkit/loudreader--loudr-1`, or
+  `~/.cache/loudkit/loudreader--loudr-1` when `XDG_CACHE_HOME` is not set
+- Windows: `%LOCALAPPDATA%\loudkit\loudreader--loudr-1`
 
-Both `loudr-1` and `loudr-1-turbo` use this API in 0.1.1. Change the model
-name to switch; keep the same voice profile. A local release directory works
-as well as a published model name.
+Set `LOUDKIT_CACHE` to use `$LOUDKIT_CACHE/loudreader--loudr-1` instead. The
+Go, Rust and Swift ports use the same directory. Each downloaded file is
+checked against the release's `SHA256SUMS`. `engine.voices()` lists the 28
+voices. `close()` releases the native runtime's memory, which matters when a
+process loads a second engine.
+
+The examples on this page need loudkit 0.1.1. To run the example from a
+repository checkout, run `npm run build`, then `node examples/hello.mjs`, in
+`js/`. `examples/hello.mjs` is the program above.
+
+`loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
+model name. The same voice profiles work with both models. `Engine.load` also
+accepts a local release directory.
 
 
-## The rest of the front door
+## API overview
 
 ```javascript
-await download("loudreader/loudr-1", "loudr-1");          // a directory of your own
+await download("loudreader/loudr-1", "loudr-1");          // download to a local directory
 await download(repo, dir, { revision: "v0.1.1", cloning: true });
-await Engine.load("loudr-1");                            // a directory or a repo id
-engine.voices();                                         // the names in the release
-engine.voice("joe");                                     // one of them
+await Engine.load("loudr-1");                            // a local directory or a repo id
+engine.voices();                                         // the voice names in the release
+engine.voice("joe");                                     // load one voice by name
 await engine.synthesize(text, voice, { seed, language, speed, previousTokens });
 for await (const chunk of engine.stream(text, voice, options)) play(chunk.audio);
 const mine = await engine.enroll("me.wav", { name: "mine", language: "en" });
@@ -64,20 +71,23 @@ loadVoice("mine.safetensors");
 result.saveWav(path);  result.toWav();                   // 16-bit PCM
 ```
 
-`synthesize` takes text of any length: it splits at sentence boundaries and
-joins the audio. Every option has a default: seed 0, the voice's own language,
-normal speed. `stream` yields chunks as they are made; `options.shouldCancel`
-stops within one decode step. `enroll` on an engine loaded by repo id fetches
-the enrollment graphs once; a directory of your own needs `{ cloning: true }`.
-`Engine.loadPaths(checkpoint, onnxDir, tokenizer)` opens a layout of your own.
+`synthesize` splits long text into chunks at sentence boundaries and joins
+the audio in memory. Every option has a default: seed 0, the voice's own
+language, speed 1.0. `stream` yields each chunk when it is ready.
+`options.shouldCancel` is checked on every decode step.
+
+On an engine loaded by repo id, the first `enroll` call fetches the enrollment
+graphs. For a local directory, fetch them with `{ cloning: true }`.
+`Engine.loadPaths(checkpoint, onnxDir, tokenizer)` loads assets from the paths
+you give.
 
 Streaming, timestamps, speed and barge-in: `docs/guides/07-js-ts.md`.
 
 ## Execution provider
 
-`onnxProvider` picks the onnxruntime execution provider; the five values are
-the same in every port: `auto` (the default), `cpu`, `cuda`, `coreml`,
-`directml`.
+`onnxProvider` selects the ONNX Runtime execution provider: `auto` (the
+default), `cpu`, `cuda`, `coreml` or `directml`. The Python, Go and Rust
+implementations accept the same five values. This package refuses `coreml`.
 
 ```javascript
 const engine = await Engine.load("loudr-1", { onnxProvider: "auto" });
@@ -85,20 +95,21 @@ console.log(engine.onnxProvider);  // the one that ran, never "auto"
 console.log(engine.describe());
 ```
 
-`auto` takes CUDA where the build offers it and CPU otherwise. A named provider
-the build does not carry is an error, never a quiet fall back to CPU. Which
-providers exist is fixed when `onnxruntime-node` is installed:
+`auto` selects CUDA where the build has it, and CPU otherwise. If you name a
+provider that the build does not have, `Engine.load` throws. The installed
+`onnxruntime-node` binary decides which providers this package can use:
 
 | platform | providers |
 | --- | --- |
-| darwin/x64, darwin/arm64 | `cpu`, `coreml` |
+| darwin/x64, darwin/arm64 | `cpu` |
 | linux/x64 | `cpu`, `cuda` |
 | win32/x64, win32/arm64 | `cpu`, `directml` |
 
-`availableProviders()` reports what the installed build offers. This package
-refuses `coreml`, because `onnxruntime-node` cannot keep its compile cache;
-use the Swift package for CoreML. A GPU provider can change the token stream
-and waveform; conformance runs pin CPU. See
+`availableProviders()` lists the providers this package can use with the
+installed build. The darwin binaries also contain CoreML, but this package
+refuses `coreml`, because `onnxruntime-node` cannot keep its compile cache. For
+CoreML, use the Swift package. A GPU provider can change the token stream and
+waveform. Conformance runs use CPU. See
 [`docs/benchmarks.md`](../docs/benchmarks.md#onnx-execution-providers).
 
 ## Build and test

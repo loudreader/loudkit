@@ -1,7 +1,7 @@
 # Speed
 
-`speed` is what the control on a video player means: 1.5x is the same voice,
-sooner. The pitch does not move, so it is not a resampler.
+`speed` changes the playback rate and keeps the pitch, like the speed control
+of a video player. At 1.5x the same reading takes two thirds of the time.
 
 ```python
 import loudkit as lk
@@ -27,21 +27,20 @@ The result carries the value it was rendered at, and
 | MCP `synthesize` tool | `speed` argument |
 | gRPC | `speed` field, `optional` so an omitted one means 1.0 |
 
-Long-form and streaming stretch each chunk on its own, with the same constants.
-There is no join to hear, because a chunk is a whole utterance either way.
+Long-form synthesis and streaming stretch each chunk separately, with the same
+constants. The chunks are already rendered separately, so the stretch adds no
+join of its own.
 
-## The range is 0.5 to 2.0, and it is enforced
+## The range is 0.5 to 2.0
 
-Outside that range the call is **refused, not clamped**. A caller who asked for
-3x and silently got 2x has a bug that only a stopwatch finds. Python raises
-`ValueError`, Go returns an error, Rust returns `Err`, Swift throws
-`LoudKitError.shape` and TypeScript throws a `RangeError`. The HTTP server
-answers 4xx, including on the OpenAI-compatible route,
-whose own specification allows 0.25 to 4.0 and whose reply says which half of
-that this engine takes. A non-finite value is refused as well.
+A value outside that range is **refused, not clamped**. A non-finite value is
+refused too. Python raises `ValueError`, Go returns an error, Rust returns
+`Err`, Swift throws `LoudKitError.shape` and TypeScript throws a `RangeError`.
+The HTTP server answers 4xx, including on the OpenAI-compatible route. OpenAI's
+specification allows 0.25 to 4.0, and the error on that route names the loudkit
+range.
 
-The bounds are public, because a UI drawing a speed slider needs them and should
-not retype them:
+Each implementation exports the bounds as constants:
 
 | implementation | the two constants |
 | --- | --- |
@@ -51,49 +50,50 @@ not retype them:
 | Rust | `loudkit::timestretch::MIN_SPEED`, `MAX_SPEED` |
 | Swift | `TimeStretch.minSpeed`, `TimeStretch.maxSpeed` |
 
-The stretcher itself is not public in any of them. It is how the engine renders,
-not something a caller composes with.
+Go, Rust and Swift also export the stretcher itself:
+`timestretch.TimeStretch`, `loudkit::timestretch::time_stretch` and
+`TimeStretch.timeStretch`. Python and TypeScript do not export it. Set the
+speed through the `speed` argument.
 
-## `speed=1.0` is an exact bypass
+## `speed=1.0` skips the stretch
 
-The default does not enter the DSP at all. The waveform you get is the vocoder's
-own array, unmodified and, in Python, the same object. Every conformance vector,
-every golden byte and every existing caller is unaffected by this feature
-existing. Tests assert it rather than assume it.
+At the default speed the stretch returns its input unchanged. The edge fade
+still runs on every window at every speed and tapers both ends of the window.
+Tests check that the stretch returns the same array at 1.0, and that
+`speed=1.0` gives the same audio as a call without `speed`.
 
-`speed` is also **not part of the algorithm fingerprint**. It is an execution
-input like the seed and the text: two engines that disagree about it are still
-computing the same thing. See
+`speed` is an execution input, like the seed and the text, and is **not part of
+the algorithm fingerprint**. Two renders at different speeds have the same
+fingerprint and different audio. See
 [the identity contract](IDENTITY-CONTRACT.md).
 
 ## What it does to the audio
 
-The algorithm is WSOLA, waveform similarity overlap-add, written from first
-principles and identical in all five implementations. It stays in the time
-domain: it cuts the input into ~25 ms frames and overlap-adds them at a hop
-scaled by `speed`, moving each read position by up to ±10 ms to wherever the
-waveform best continues the frame already written. A plosive is copied whole or
-not copied, so there is nothing to smear. There is no RNG and no adaptivity: the
-same input gives the same output, always.
+The algorithm is WSOLA (waveform similarity overlap-add). All five
+implementations use the same algorithm and the same constants. It works in the
+time domain: it cuts the input into 25 ms frames and overlap-adds them at a hop
+scaled by `speed`. Each read position moves by up to ±10 ms, to where the
+waveform best continues the frame already written. A plosive is copied with its
+frame or skipped, so it is not smeared. The stretch uses no random numbers, so
+the same input gives the same output.
 
 Output length is exactly `floor(n / speed + 0.5)` samples.
 
-At 1.25x this is hard to distinguish from a native reading. Toward the bounds it
-is audibly processed: the alignment search cannot always find a match within
-±10 ms, and the artefact is a faint roughness, occasionally a doubled consonant.
-0.5x is the least convincing direction, because stretching invents overlap that
-was never spoken.
+At 1.25x the result is hard to tell from a natural reading. Toward the bounds
+it sounds processed, because the alignment search cannot always find a match
+within ±10 ms. The artefact is a faint roughness, and sometimes a doubled
+consonant. 0.5x sounds the least natural, because the stretch repeats audio
+that was spoken once.
 
-A genuinely faster *reading*, rather than faster *playback*, is a different
-feature. It would have to come from the model, not from the samples.
+`speed` changes playback only. A faster speaking style needs a change in the
+model.
 
 ## Interaction with timestamps
 
-The stretch runs last, after the postprocess detectors have inspected the render
-and before the waveform is returned. Those detectors measure pacing as duration
-per token, and a 2x reading stretched first would look like a dropout to them.
+The postprocess detectors judge the generated speech tokens before any audio
+is rendered. The render then runs the vocoder, the stretch and the edge fade,
+in that order.
 
-`Result.chunks` is computed on the stretched waveform, so the spans it reports
-are the spans of the audio you were handed. **There is no `1/speed` correction
-to apply**, and applying one would double-count. See
-[timestamps.md](timestamps.md).
+`Result.chunks` is computed on the final waveform, so the spans it reports are
+the spans of the audio you get. **There is no `1/speed` correction to apply**,
+and applying one would double-count. See [timestamps.md](timestamps.md).

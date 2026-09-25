@@ -1,20 +1,20 @@
 # 3. Cloning a voice
 
-A voice in loudkit is a handful of tensors, not a model: a file of about 150 KB
-you can copy, ship and version on its own. Making one from five to ten seconds
-of clean audio is the `enroll` extra:
+A loudkit voice is a file of about 150 KB that holds a few tensors. You can
+copy, ship and version it separately from the model. To make one from 5 to 10
+seconds of clean audio, install the `enroll` extra:
 
 ```bash
 pip install "loudkit[torch,audio,enroll,hub]"
 ```
 
-Two front ends, one enrollment: `loudkit clone` in the shell, and `enroll` in
-each of the five SDKs. There is no MCP clone tool.
+Clone a voice with `loudkit clone` in the shell, or with `enroll` in any of the
+five SDKs. The MCP server has no clone tool.
 
 Enrollment runs the speaker encoder and the speech tokenizer, models that
-synthesis never loads. Their weights are a second file beside the 747 MB
-synthesis checkpoint, 523 MB, fetched the first time you clone or with
-`loudkit download ... --with-cloning`.
+synthesis never loads. Their weights are a second file of 523 MB beside the
+747 MB synthesis checkpoint. loudkit fetches it the first time you clone, or
+with `loudkit download ... --with-cloning`.
 
 ## From the shell
 
@@ -27,40 +27,42 @@ That writes `voices/my-voice.safetensors` and prints the `speak` command that
 reads it. The file is mode `0600` on POSIX.
 
 The command reads **one local WAV or FLAC file**. It does not record, fetch a
-URL, denoise or batch. The input is checked before any model runs: 5 to
-10 seconds of one speaker is right, more than 30 seconds is refused, and so are
-silence, NaN or Inf samples, and a clip under one second.
+URL, denoise or batch. The input is checked before any model runs. Use 5 to 10
+seconds of one speaker. The command refuses more than 30 seconds, silence, NaN
+or Inf samples, and a clip under one second.
 
 By default, the command cuts at the last suitable pause in the first ten
 seconds and appends 0.4 seconds of silence. A pause near the ten-second limit
 leaves only part of that silence inside the prompt. If no pause fits, the
-command cuts at 9.6 seconds when needed to make room for silence. This can help soften speech onsets, but the fallback can cut
-through a word. Use `--no-end-in-silence` to enroll the recording as given.
+command cuts at 9.6 seconds when needed to make room for the silence. The added
+silence can soften speech onsets. The 9.6-second cut can fall inside a word.
+Use `--no-end-in-silence` to enroll the recording as given.
 
 | flag | what it does |
 |---|---|
 | `--checkpoint` | a repo id, a release directory or a checkpoint file. Must be a cloning-capable release. |
 | `--name` | what to call the voice. Carried in the profile, and the default filename. |
-| `--language` | the language the voice speaks. Stated, never guessed. |
+| `--language` | the language the voice speaks. Required: loudkit does not detect it. |
 | `-o`, `--output` | where to write. Default `voices/<name>.safetensors`. |
 | `--revision` | commit, tag or branch to pin `--checkpoint` to. |
 | `--device` | enrollment runtime: `cpu`, `cuda`, `cuda:<index>`, `mps`, `onnx` or `coreml`. Default `cpu`. |
 | `--no-end-in-silence` | keep the recording as given, without cutting and padding its ending. |
 | `--force` | overwrite the output. Without it an existing file is left alone and the command exits 1. |
 
-Name the language. A Polish voice cloned without `--language pl` reads its
-text through the English rules:
+The language sets the text rules the voice reads with. A Polish voice cloned
+with `--language en` reads its text through the English rules. For a Polish
+voice, pass `--language pl`:
 
 ```bash
 loudkit clone nagranie.wav --checkpoint loudreader/loudr-1 \
-  --name gosia --language pl
+  --name ania --language pl
 ```
 
 ## From Python
 
-One call. It takes a recording and the same reference
+`lk.enroll` takes a recording and the same reference that
 [`lk.load`](01-getting-started.md#say-something) takes, and returns the
-profile.
+profile:
 
 ```python
 import loudkit as lk
@@ -69,28 +71,28 @@ mine = lk.enroll("my-recording.wav", "loudreader/loudr-1", name="my-voice")
 mine.save("voices/my-voice.safetensors")  # ~150 KB
 ```
 
-The prompt is built from the first ten seconds and the speaker embedding reads
-the whole clip, which is why anything over 30 seconds is refused rather than
-cut: trim the recording to its best 5 to 10 seconds yourself.
+The prompt uses the first ten seconds, and the speaker embedding reads the
+whole clip. Recordings longer than 30 seconds are refused, not cut. Trim the
+recording to its best 5 to 10 seconds.
 
 Python leaves the recording as given by default. Pass `end_in_silence=True`
 to use the shell command's pause selection and silence padding. The original
 recording must pass the input checks before it is changed.
 
-Name the language when the voice is not English:
+For a voice that is not English, name the language:
 
 ```python
 mine = lk.enroll("nagranie.wav", "loudreader/loudr-1", name="my-voice", language="pl")
 ```
 
-`VoiceProfile.language` is what the engine uses when a call names no language,
-so a Polish voice enrolled without this reads its text through the English
-rules.
+`lk.enroll` sets the language to `"en"` when you omit it. The engine reads text
+in `VoiceProfile.language` when a call names no language.
 
-The other arguments: `device` places the enrollment models (`cpu` is enough);
-`revision` pins the release, as on `lk.load`. Reading an audio file uses
-soundfile, which the `enroll` extra brings; pass mono samples in `[-1, 1]`
-instead and no reader is involved.
+The other arguments: `device` places the enrollment models (default `cpu`), and
+`revision` pins the release, as on `lk.load`. A file path is read with
+soundfile, which the `enroll` and `audio` extras bring. You can also pass mono
+samples in `[-1, 1]` with their `sample_rate` (default 24000). Then no file
+reader runs.
 
 ## Clone without PyTorch
 
@@ -110,8 +112,8 @@ mine = lk.enroll("nagranie.wav", "loudreader/loudr-1-turbo",
 mine.save("voices/my-voice.safetensors")
 ```
 
-Both models use the canonical enrollment assets. You do not need to clone
-again when changing the synthesis model.
+Both models use the same enrollment assets. You do not need to clone again
+when you change the synthesis model.
 
 ## Use it
 
@@ -127,24 +129,23 @@ engine.synthesize("Now it is my voice speaking.", voice, seed=1).save("mine.wav"
 
 A `VoiceProfile` holds the speaker embedding for the token generator, the
 conditioning tensors for the renderer, and the reference-prompt tokens and mel
-the enrollment produced. A voice does not change when the machine or the backend
-changes, so the file travels, and it works with both models.
+the enrollment produced. The same file works on every machine and backend, and
+with both models.
 
-## Good input, honest limits
+## Choosing the recording
 
-Five to ten seconds of clean, single-speaker, noise-free audio is enough. The
-hard limits: more than 30 seconds, silence, non-finite samples and clips under
-one second are refused, with a message that says what a good input looks like.
-The best ten seconds is rarely the first ten you try; how the shipped voices
-were chosen, and how to check a new profile before shipping it, is in
-[choosing a reference](../design/choosing-a-reference.md).
+Use five to ten seconds of clean, single-speaker audio without noise. The
+limits in [From the shell](#from-the-shell) apply to `lk.enroll` too, and the
+refusal message describes a good input. Try more than one clip.
+[Choosing a reference](../design/choosing-a-reference.md) describes how the
+shipped voices were chosen, and how to check a new profile before you ship it.
 
-**Consent is yours to obtain.** Do not clone a voice you have no permission to
-use. See [RESPONSIBLE_USE.md](../../RESPONSIBLE_USE.md). The shipped voices are
-enrollments of donated or openly licensed recordings named per voice in
-[VOICES.md](../../VOICES.md), not clones of private individuals.
+**Clone a voice only with permission to use it.** See
+[RESPONSIBLE_USE.md](../../RESPONSIBLE_USE.md). The shipped voices are
+enrollments of donated or openly licensed recordings.
+[VOICES.md](../../VOICES.md) names the source and licence of each.
 
 ## Next
 
-[Server and agents](04-server-and-agents.md): a warm server and an MCP tool
-for any agent on the machine.
+[Server and agents](04-server-and-agents.md): a warm server over HTTP, gRPC or
+MCP.

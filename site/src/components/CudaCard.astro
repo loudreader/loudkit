@@ -20,13 +20,14 @@ const hosts: Array<{ name: string; base: string; turbo: string; note?: string }>
   { name: 'A100', base: '7.68', turbo: '11.87' },
   { name: 'T4', base: '5.16', turbo: '7.95' },
   { name: 'GTX&nbsp;1080&nbsp;Ti', base: '2.26', turbo: '4.64', note: '&thinsp;*' },
-  { name: 'Jetson Orin Nano', base: '1.85', turbo: '2.50' },
+  { name: 'Jetson Orin Nano Super', base: '1.85', turbo: '2.50' },
 ];
 
 // Batch scaling of the token generator alone, RTX 3090 with CUDA graphs,
-// loudr-1-turbo: audio-equivalent output per second of wall clock across the
-// whole batch. Mel decoding and the vocoder are excluded, as on the benchmark
-// page, so these are never the speed of one synthesis.
+// loudr-1-turbo, from research/bench_batch.py: audio-equivalent output per
+// second of wall clock across the whole batch. The tool replays a recorded
+// token sequence, so sampling, prefill, mel decoding and the vocoder are
+// outside the timed loop, and these are never the speed of one synthesis.
 const batch: Array<[string, string]> = [
   ['42.0', 'batch 1'],
   ['121.8', 'batch 8'],
@@ -43,7 +44,7 @@ const batch: Array<[string, string]> = [
     13.05&times;<span>real time with loudr-1-turbo, RTX 3090 with CUDA graphs; loudr-1 runs 8.55&times;</span>
   </div>
   {/* One line, and it says what the figures cannot: the range of hardware. */}
-  <p>PyTorch, from an embedded board to a datacentre card. Both models, CUDA graphs on.</p>
+  <p>PyTorch on six NVIDIA parts, from an embedded board to a datacentre card, with CUDA graphs on (eager on the 1080&nbsp;Ti).</p>
 
   <table class="lk-bench">
     <thead>
@@ -66,15 +67,15 @@ const batch: Array<[string, string]> = [
     </tbody>
   </table>
   <p class="lk-bench-note">
-    &thinsp;*&nbsp;Pascal cannot capture graphs: the 1080&nbsp;Ti figures are its eager path. Eager figures and time to first audio for every part are on the benchmark page.
+    &thinsp;*&nbsp;loudkit does not capture CUDA graphs on Pascal cards, so the 1080&nbsp;Ti figures are its eager path. Eager figures and time to first audio for every part are on the benchmark page.
   </p>
 
   <div class="lk-batch">
     <p class="lk-batch-label">Token-generator throughput · RTX 3090 · loudr-1-turbo</p>
     <p class="lk-batch-note">
-      These figures measure token generation only, expressed as equivalent seconds
-      of audio per second of processing, for the whole batch rather than one request.
-      They exclude audio rendering and do not represent end-to-end synthesis speed.
+      Token generator only, in seconds of audio per second, summed over the batch.
+      The generator replays a recorded token sequence, so sampling, prefill and
+      audio rendering are excluded. These are not end-to-end synthesis speeds.
       loudr-1 runs 16.7&times; at batch&nbsp;1 and 57.3&times; at batch&nbsp;64 on the
       same card.
     </p>
@@ -91,8 +92,8 @@ const batch: Array<[string, string]> = [
     <p class="lk-batch-note">
       <a href="/loudkit/benchmarks/#aggregate-throughput-at-batch-n-011-both-models">
         What it measures, and the full table
-      </a>. The highest measured aggregate is 223.6&times; (token-generator only), turbo on
-      an A100 at batch&nbsp;64.
+      </a>. The highest measured aggregate is 223.6&times;, turbo on an A100 at
+      batch&nbsp;64.
     </p>
   </div>
 </div>

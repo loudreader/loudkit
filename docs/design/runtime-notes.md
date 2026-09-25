@@ -1,8 +1,9 @@
 # Runtime notes
 
-Maintainer notes moved out of the runtime's docstrings: the reasoning and
-the measurements behind each symbol. Each heading names the module and
-the symbol the note belongs to. Not user documentation.
+Maintainer notes for the runtime's checkpoint, configuration, error, provenance
+and voice modules: the reasoning and the measurements behind each symbol. Each
+heading names the module and the symbol a note belongs to. User documentation
+is under `docs/guides/` and `docs/reference/`.
 
 
 ## `loudkit/checkpoint.py`
@@ -10,396 +11,162 @@ the symbol the note belongs to. Not user documentation.
 
 ### `module`
 
-A loudkit checkpoint is a single ``safetensors`` file whose tensors live in two
-namespaces, ``t3.*`` for the token generator and ``s3gen.*`` for everything
-downstream, with a JSON manifest embedded in the file's metadata and mirrored
-in a ``manifest.json`` beside it.
-
-The manifest is not documentation, it is authority. Values that are properties
-of the weights, silence-token ids, Euler step count, vocabulary bounds, the
-per-module dtype map, are read from it and nowhere else, because the worst
-The divergence class this format exists to prevent is defaults re-guessed by a second
-implementation (see ``AlgorithmConfig``'s module docstring).
-
-Two facts about the tensor payload that loading code must know:
-
-* precision is **mixed per module** and recorded in ``manifest["dtype_map"]``
-  by longest-prefix match. The packed dtype is the *storage* dtype; a backend
-  may upcast (fp16 -> fp32 is exact) but must consult its own
-  ``ExecutionConfig.precision`` for the compute dtype.
-* the vocoder's weight-norm reparametrisation is already folded, the packed
-  weights are plain ``weight`` tensors, bit-exactly equal to what the
-  parametrised forward would have computed.
-
-This module is deliberately torch-free: it reads numpy arrays, so a future
-runtime-only backend (ONNX, CoreML) can load the same file without dragging
-torch in.
-
-
-### `require_decode_support`
-
-Args:
-    mode: the loop that will actually run: the resolved
-        ``AlgorithmConfig.decode``, not the manifest's raw block, so an
-        explicit ``algorithm=`` override is judged on what it asked for.
-    target: a backend name (``torch``, ``onnx``, ``coreml``) or a torch
-        device (``cpu``, ``cuda``, ``mps``, with or without an index).
-        One function for both because the two callers speak different
-        halves of the same vocabulary: the fetch knows backends, the
-        engine builder knows devices.
-    name: the checkpoint's ``manifest["name"]``, when the caller has it,
-        so the message names the model the user chose.
-
-Raises:
-    ValueError: naming the model, the backend that refused it, and the two
-        ways on. Without the mode's name: the reader is choosing a model,
-        and ``fusion_mtp2`` is a fact about the weights they cannot act
-        on. ``AlgorithmConfig.describe()`` prints it into the log, which
-        is where a maintainer reads it.
-
-
-### `verified_sibling`
-
-A checkpoint is not self-contained: the tokenizer, and on the graph
-backends the exported ONNX or CoreML packages, are separate files
-resolved by name from the checkpoint's directory. Nothing tied them to
-the weights. Swapping ``tokenizer.json`` for another valid one changes
-the text ids, the speech, and potentially where EOS lands, and
-``AlgorithmConfig.fingerprint()`` does not move, because the tokenizer
-is not part of the algorithm config and ``TextFrontend`` carries no
-config for ``Engine._assert_one_algorithm`` to compare. The result is
-two different readings reporting the same identity, which is the one
-thing this library promises cannot happen.
-
-Enforced when the manifest records the digest and skipped when it does
-not, because packs predating the field are still loadable, a checkpoint
-that cannot state what it expects cannot have its expectation checked.
-`tools/build_release.py` records the digests it ships.
-
-
-### `asset`
-
-The tokenizer and the Polish respelling lexicon are not weights, but
-they decide what the weights are asked to say: a different
-``tokenizer.json`` reads the same text as different ids, and a different
-lexicon reads embedded English a different way. Shipped beside the file
-they are two more things to keep in step, and this project has now spent
-five copies of the
-lexicon, a sibling bound only by a digest the shipping manifest does not
-carry, and three ports that disagreed about the funnel.
-
-Carried as a ``uint8`` tensor under ``assets.`` rather than in a new
-container format, because **every port already has a safetensors
-reader**. Nothing new to write in five languages, and the bytes are
-covered by the same file the weights live in.
-
-Returns ``None`` when the checkpoint predates the convention, which is
-what :meth:`resolve_asset` falls back on.
-
-
-## `loudkit/errors.py`
-
-
-### `module`
-
-Until now loudkit defined exactly one exception of its own and otherwise raised
-bare ``ValueError``, ``RuntimeError``, ``NotImplementedError`` and
-``FileNotFoundError``. That is fine inside a function and expensive at a
-boundary, because the boundary has to classify: the HTTP server maps exception
-*types* to status codes, and with builtins the only thing it could map was
-"something raised NotImplementedError", which is true of an unsupported
-language, and equally true of a backend with a stub method. One is the caller's
-question and answers 400; the other is a server defect and must answer 500. The
-server could not tell them apart, so every backend bug arrived at the client as
-"your fault".
-
-**Every class here inherits from the builtin it replaces.** ``except
-ValueError`` still catches a :class:`WindowOverflowError`, ``except
-FileNotFoundError`` still catches a :class:`VoiceNotFoundError`. Nothing written
-against the bare-exception shape breaks; what is added is the ability to be *specific* -
-``except loudkit.LoudkitError`` for "loudkit refused this", or a named class for
-one refusal.
-
-The hierarchy is deliberately small. A class earns its place by being something
-a caller would branch on, and each one carries the values a caller would
-otherwise have to parse back out of the message.
-
-**Error codes.** Each class also names its condition as a short stable string,
-``code``, the vocabulary the transports speak. An HTTP error body carries it
-as ``"code"``, the SSE ``done`` event as ``"error_code"``, gRPC as
-``loudkit-error-code`` trailing metadata, so the same refusal has the same name
-whether it crossed a process boundary or not. The catalog is frozen: codes are
-never renamed or reused, only added. Conditions no class names yet fall back to
-``invalid_request`` (the caller's question) or ``server_fault`` (a defect
-here); the transports add ``unauthorized`` and ``busy`` for conditions that
-exist only at a boundary. :func:`error_code` is the one mapping.
-
-
-### `UnsupportedLanguageError`
-
-Raised: by :class:`~loudkit.frontend.text.GraphemeTextFrontend` for the
-languages whose upstream pipeline needs model-based preprocessing this
-frontend does not carry, Cangjie codes, kana conversion, diacritisation,
-jamo decomposition, stress marks. Refused rather than silently skipped: a
-grapheme read of Chinese is the wrong sounds in the right order, and no
-error downstream would say why.
-
-Carries:
-    language: the id that was refused, lowercased.
-    supported: the language ids this build *does* accept, sorted. Read from
-        the tokenizer's own vocabulary rather than hardcoded, so it cannot
-        drift from the tokenizer that ships.
-
-Still a ``NotImplementedError``, so existing ``except NotImplementedError``
-handlers keep working, but the server now catches *this* rather than the
-builtin, which is how a genuine ``NotImplementedError`` from a half-written
-backend stopped being reported to the client as a bad request.
-
-
-### `VoiceNotFoundError`
-
-Raised: by :class:`~loudkit.transports.http.VoiceLibrary` when a request names a
-voice the library does not hold, and by
-:func:`~loudkit.hub.resolve_voice` when a reference is neither a file nor
-resolvable against a repo.
-
-Carries:
-    ref: what was asked for, a name over HTTP, a path or name in-process.
-    available: the names that *were* found, when listing them is cheap
-        (a local directory). Empty when it is not, resolving a name
-        against a remote repo would mean a network call to answer an error,
-        and an error that goes slower than the thing that failed is its own
-        problem.
-
-When ``available`` holds a close match, the message ends with ``did you mean
-'<name>'?``. Done here rather than at each raise site so that every site
-which can afford to list alternatives gets the suggestion automatically -
-the message and the list are the same fact, and letting them be assembled
-separately is how one of them ends up stale. Voice names are short,
-lowercase donor or character names (``kathleen``, ``gosia``, ``thorsten``),
-which is the exact shape a caller retypes wrong and a reader scans past in
-a list of twenty.
-
-Still a ``FileNotFoundError``, so a caller catching that keeps catching
-this, and the CLI's "not found:" path is unchanged.
-
-
-### `InvalidTokensError`
-
-Raised: by :meth:`~loudkit.engine.Engine.synthesize` and friends when
-``previous_tokens`` holds an id outside the acoustic codebook, a control
-token, a negative, or something past the vocabulary. Those ids index an
-embedding table, so the alternative to refusing is an index error three
-stages away from the argument that caused it.
-
-Carries:
-    token: the first offending id, so a caller filtering a long sequence
-        knows which entry to look at rather than which list.
-    limit: the exclusive upper bound. Ids must satisfy ``0 <= id < limit``.
-
-It earns a class rather than a bare ``ValueError`` because a boundary has to
-classify it, and getting that wrong was visible: the streaming route maps
-exception *types* to ``bad_request`` or ``server_fault``, everything outside
-this hierarchy is a server fault by definition, and so a client sending one
-bad integer was told the server had broken. That is the one verdict a client
-cannot act on, and it is exactly backwards, the request is the thing to fix.
-The one-shot route was already correct, which is how the two disagreed.
-
-Still a ``ValueError``, which is what the HTTP server maps to 422 and what an
-existing ``except ValueError`` around a synthesis call already catches.
-
-
-### `WindowOverflowError`
-
-Raised: by :meth:`~loudkit.engine.Engine.synthesize` with
-``single_window=True``, and by
-:meth:`~loudkit.engine.Engine.synthesize_tokens` for a sequence longer
-than ``window.max_speech_tokens``. Silent truncation is not an option:
-text would go missing while the audio still sounds fine, and only a
-listener who knows the passage would notice. Plain ``synthesize`` never
-raises it, it splits.
-
-Carries:
-    n_tokens: how many speech tokens were produced.
-    window: how many the window holds. The overflow is the difference, and
-        the message states it in seconds of speech as well as in tokens.
-
-Still a ``ValueError``, which is what the HTTP server maps to 422 and what
-every existing test expects.
-
-
-## `loudkit/provenance.py`
-
-
-### `module`
-
-The EU AI Act (Article 50) requires synthetic audio to carry a
-machine-readable marking, and the Commission's draft Code of Practice names
-**C2PA Content Credentials** as the reference implementation, the same shape
-of answer ElevenLabs, OpenAI and Adobe ship: a manifest bound to the file,
-not an in-audio mark. This module writes a marking of that shape and is not
-that standard.
-
-What it is, stated precisely rather than claimed:
-
-* An **unsigned** manifest in JUMBF-shaped boxes, carried in a ``LKPV`` RIFF
-  chunk after the audio, where a player steps over it and the ``data`` payload
-  keeps the bytes it would have had. It carries an assertion shaped like
-  ``c2pa.actions`` with
-  ``digitalSourceType = trainedAlgorithmicMedia``, the vocabulary that means
-  "this was generated by a model", plus the loudkit-specific claims that make
-  the marking *traceable*, not just labelled: the algorithm fingerprint, the
-  recipe version, the seed, the voice and the digests of the checkpoint and
-  voice-profile files that spoke, the backend and execution layer that ran,
-  the language, and the SHA-256 of the audio bytes it binds to.
-* **Unsigned.** A full C2PA chain signs the manifest with a certificate, which
-  is a deployment decision (whose cert?) and a key-management burden; a
-  library cannot choose that for its caller. The claim-only manifest is the
-  generator half of the standard, and a signer can wrap it later without
-  changing what it says.
-* **Metadata, with metadata's limits.** Re-encoding strips it, exactly as it
-  strips every metadata-based marking in the field. It is the disclosure duty
-  of Article 50, a labelling obligation, not tamper-proofing. There is no
-  in-audio watermark: one was written and measured, its detection never
-  cleared an honest null, and shipping a mark that cannot be found would be
-  the worse of the two failures. Disclosure stays the caller's job.
-
-The box layout borrows JUMBF's outline without being JUMBF: a superbox holding
-a claim box holding a JSON box, each big-endian length-prefixed and UUID-typed,
-no compression, readable with no dependencies. Real JUMBF opens a superbox with
-a ``jumd`` description box, which these do not, and ``c2pa-python`` says so if
-it is pointed at them. That is the distance between this and Content
-Credentials, and it is why the chunk carries a private identifier rather than
-``C2PA``: a reader that finds that name is entitled to a manifest store, and
-handing it something else turns a file it should ignore into a file it reports
-as broken.
-
-
-## `loudkit/voice.py`
-
-
-### `module`
-
-A :class:`VoiceProfile` is the handful of tensors the two stages need in order
-to speak as someone: a speaker embedding, a prompt of speech tokens, the mel of
-the reference audio, and the conditioning the token generator was trained to
-read. A few hundred kilobytes, no weights.
-
-That framing is deliberate and it is what makes cloning cheap. An earlier
-version baked the prompt into the graph, so every voice was a separate exported
-model of several hundred megabytes; taking the prompt as an input instead turned
-a voice into a file you can email. It also means voices can be enrolled once on
-a fast machine and shipped, rather than re-derived on a phone, which matters
-because enrollment needs a speaker encoder and a speech tokenizer that synthesis
-otherwise never touches, together about 40% of the checkpoint.
-
-Profiles are saved as ``safetensors`` with a small JSON header, so they are
-inspectable, versioned, and safe to load from an untrusted source.
-
-
-### `VoiceProfile`
-
-The two stages read two *different* speaker encoders' outputs, so a profile
-carries two embeddings: the token generator was trained against a 256-d
-utterance-level voice-encoder vector, while the flow decoder conditions on
-a 192-d CAM++ x-vector. They are not interchangeable and neither can be
-derived from the other, which is why both are enrolled once and stored.
-
-Attributes:
-    name: human label. Carried for provenance and error messages only;
-        nothing dispatches on it.
-    speaker_embedding: ``(256,)`` speaker vector for the token generator's
-        conditioning encoder.
-    flow_embedding: ``(192,)`` x-vector for the mel decoder.
-    prompt_tokens: speech tokens of the reference audio, the prosodic and
-        timbral prompt the mel decoder continues from. Stored at natural
-        length; the window recipe (``WindowConfig``) decides framing.
-    prompt_mel: ``(80, frames)`` mel of the reference, conditioning the flow.
-    cond_prompt_tokens: the token generator's own conditioning prompt, which
-        may be a different length from ``prompt_tokens``.
-    source_sample_rate: sample rate of the audio this was enrolled from.
-        Provenance only, **nothing reads it**. It said "kept so a mismatch
-        is detectable rather than silently resampled", which described a
-        check no layer performs: `enroll` writes it and no renderer, loader
-        or engine looks at it again. Recorded here rather than removed
-        because the fact is worth carrying and a future check would want it;
-        described honestly because a promise in a docstring is the kind of
-        thing a caller builds on.
-    language: **the language this voice reads in.** Not provenance: it is
-        the default every `synthesize` / `stream` call without an explicit
-        `language=` resolves to, so a profile stamped `en` reads Polish
-        text through the English funnel. It sits beside
-        `source_sample_rate`, which is honestly documented as read by
-        nothing, and used to be described the same way.
-
-
-## Notes moved from the runtime docstrings
-
-
-## `loudkit/checkpoint.py`
+A loudkit checkpoint is one `safetensors` file with a JSON manifest embedded in
+its metadata. A release also ships a `manifest.json` copy beside it. Tensors
+live in three namespaces:
+
+- `t3.*`: the token generator;
+- `s3gen.*`: everything downstream of it (flow, vocoder, and the enrollment
+  models `s3gen.tokenizer` and `s3gen.speaker_encoder`);
+- `assets.*`: text artefacts packed into the file (see `asset` below).
+
+A release splits the weights into two files by `manifest["artifact_role"]`.
+The synthesis checkpoint (`loudr-1.safetensors`, 747 MB) holds `t3`,
+`s3gen.flow` and `s3gen.mel2wav`. The enrollment checkpoint
+(`loudr-1-enrollment.safetensors`, 523 MB) holds the speech tokenizer and the
+speaker encoder. A manifest with no role is a pre-split checkpoint that holds
+every tensor, and it still loads.
+
+The manifest is the source for values that are properties of the weights: the
+silence-token ids, the Euler step count, the vocabulary bounds and the
+per-module dtype map. Loaders read these values from the manifest. A field an
+older manifest may omit takes its default from one place, `AlgorithmConfig`
+(and `production_algorithm` for the window, EOS floor and postprocess blocks).
+A second implementation that guesses such a default again is the divergence
+this format exists to prevent (see the module docstring of `AlgorithmConfig`).
+
+Two facts about the tensor payload matter to loading code:
+
+- Precision is mixed per module and recorded in `manifest["dtype_map"]`,
+  matched by longest prefix. The packed dtype is the storage dtype. A backend
+  may upcast (fp16 to fp32 is exact), and it takes the compute dtype from its
+  own `ExecutionConfig.precision`.
+- The vocoder's weight-norm reparametrisation is already folded. The packed
+  weights are plain `weight` tensors, bit-exactly equal to what the
+  parametrised forward computes.
+
+The module is torch-free: it reads NumPy arrays, so the ONNX and CoreML
+backends load the same file without importing torch.
 
 
 ### `read_manifest`
 
-The embedded copy is authoritative, the sibling ``manifest.json`` is a
-convenience for humans and can drift if someone edits it, so it is never
-read here.
+The embedded manifest is authoritative. The sibling `manifest.json` is a copy
+for humans and can drift if someone edits it, so `read_manifest` never reads it.
 
-Raises:
-    ValueError: if the file carries no manifest or declares a format this
-        build does not read. Failing loudly beats loading a checkpoint
-        under wrong assumptions about what its numbers mean.
+Raises `ValueError` if the file carries no manifest, if the manifest is not a
+JSON object, or if it declares a format or `format_version` this build does not
+read. A checkpoint is refused when its numbers cannot be read with the meaning
+this build assigns to them.
 
 
 ### `_check_decode_version`
 
-Checked here rather than in :class:`~loudkit.config.AlgorithmConfig`, and
-checked at all, because the version number is the *portable* half of this
-contract: four engines gate on it and none of them reads the ``decode``
-block. A manifest that understates its version is therefore not a Python
-problem, Python reads it correctly, it is a file that four correct
-engines will accept and misread, and the only place to catch that is where
-the file is opened.
+Refuses a manifest whose `format_version` does not cover its `decode.mode`, when
+the file is opened. `DECODE_FORMAT_VERSION` gives the minimum version per mode.
+`fusion_mtp2` needs version 2. A mode absent from the table needs no minimum, so
+`single`, and an absent `decode` block, which means `single`, load from any
+version-1 file.
 
-Refused rather than repaired. Whichever number is wrong, a checkpoint whose
-manifest contradicts itself is one whose provenance nobody can state, and
-guessing which half the packer meant is how a build ships weights nobody
-can name.
+The version number is the portable half of the contract. A version-1 reader
+that ignores the `decode` block finds weights it knows, runs the one-token loop
+over two-token weights, and produces fluent wrong speech with no error. Every
+current engine reads `decode.mode` and refuses `fusion_mtp2` under
+`format_version 1`: Python here, `Checkpoint::open` in Rust, `checkpoint.Open`
+in Go, `Checkpoint.open` in TypeScript and `Checkpoint(url:)` in Swift. The gate
+protects readers that check only the version.
+
+A manifest that contradicts itself is refused. When the version and the mode
+disagree, the loader cannot tell which one the packer meant, and a guess would
+ship weights under a description nobody can confirm.
+
+
+### `require_decode_support`
+
+Refuses a decode mode this build does not run. Every backend runs both known
+modes (`single` and `fusion_mtp2`), so only an unknown mode is refused.
+
+- `mode`: the loop that will run. It is the resolved `AlgorithmConfig.decode`,
+  not the manifest's raw block, so an explicit `algorithm=` override is judged
+  on what it asks for.
+- `target`: a backend name (`torch`, `onnx`, `coreml`) or a torch device (`cpu`,
+  `cuda`, `mps`, with or without an index). One parameter takes both because
+  the model fetch knows backends and the engine builder knows devices.
+- `name`: the checkpoint's `manifest["name"]`, when the caller has it.
+
+Raises `ValueError` naming the backend, the checkpoint (when `name` is given)
+and the unsupported mode.
 
 
 ### `Checkpoint`
 
-Tensors are pulled on demand rather than loaded wholesale because the two
-stages of the engine may live in different processes or devices, and
-enrollment (~40% of the payload) is not needed for synthesis at all.
+Tensors are read on demand, by namespace, not loaded wholesale. The two stages
+of the engine may run in different processes or on different devices, and a
+consumer loads only the stages it needs.
 
-Example:
-    >>> ckpt = Checkpoint.open("loudr-1.safetensors")
-    >>> t3 = ckpt.tensors("t3.")            # generator weights, prefix stripped
-    >>> ckpt.manifest["n_cfm_timesteps"]
-    2
+```python
+from loudkit.checkpoint import Checkpoint
+
+ckpt = Checkpoint.open("loudr-1.safetensors")
+t3 = ckpt.tensors("t3.")          # generator weights, prefix stripped
+ckpt.manifest["n_cfm_timesteps"]  # 2
+```
 
 
 ### `file_digest`
 
-This is the value a release's ``SHA256SUMS`` lists and the value
-provenance manifests carry as ``checkpoint_sha256``, the digest that
-names *which artefact* rendered a waveform. It is not
-``tensor_payload_sha256``, which lives inside the file and can only
-say the payload survived the download. Computed on first use and
-cached: one chunked read of the file, once per opened checkpoint.
+The SHA-256 of the whole checkpoint file. A release's `SHA256SUMS` lists this
+value, and provenance manifests carry it as `checkpoint_sha256`: it names the
+artefact that rendered a waveform. It differs from `tensor_payload_sha256`,
+which the manifest records inside the file and which covers the tensor payload
+only. The file digest is computed on first use with one chunked read, and
+cached for the opened checkpoint.
 
 
 ### `shapes`
 
-No tensor data is touched, so this is cheap on a 747 MB file and, the
-reason it exists, it is available *before* anything is allocated. A
-manifest declares the architecture and the architecture decides how much
-memory the model constructor asks the allocator for, so a manifest that
-nothing checks is a 20 kB file that can demand gigabytes. These shapes
-are the other half of the same checkpoint and cannot be inflated without
-inflating the file, which makes them the thing to check the manifest
-against.
+Reads tensor shapes from the safetensors header and touches no tensor data, so
+it is cheap even on the 747 MB synthesis checkpoint. It exists because it is
+available before anything is allocated. The manifest declares the architecture,
+and the architecture decides how much memory the model constructor requests.
+An unchecked manifest lets a 20 kB file demand gigabytes. The shapes are in the
+same file and cannot grow without the file growing, so builders check the
+manifest against them (see `docs/design/execution-config.md`).
+
+
+### `verified_sibling`
+
+A checkpoint does not always carry everything it needs. The tokenizer, and on
+the graph backends the exported ONNX or CoreML packages, can be separate files,
+resolved by name from the checkpoint's directory. Replacing `tokenizer.json`
+with another valid tokenizer changes the text ids, the speech, and possibly
+where EOS lands, while `AlgorithmConfig.fingerprint()` stays the same: the
+tokenizer is not part of the algorithm config, and `TextFrontend` carries no
+config for `Engine._assert_one_algorithm` to compare. Two different readings
+would then report the same identity.
+
+`verified_sibling` checks a sibling file against the digest the manifest
+records for it. The check is skipped when the manifest records no digest, so
+checkpoints packed before the field existed still load.
+`tools/amend_manifest.py` records `tokenizer_sha256`, and the release preflight
+in `tools/build_release.py` refuses a bundle whose tokenizer does not match it.
+
+
+### `asset`
+
+The tokenizer and the Polish respelling lexicon are not weights, but they
+decide what the weights are asked to say. A different `tokenizer.json` reads
+the same text as different ids, and a different lexicon reads embedded English
+differently. Shipped as loose files, they must be kept in step with the weights
+by hand, and a sibling is bound to the weights only when the manifest records
+its digest.
+
+`tools/pack_assets.py` packs both into the checkpoint as `uint8` tensors under
+`assets.`. The format needs no new container, because every port already reads
+safetensors, and the bytes are covered by the same file as the weights.
+
+`asset` returns `None` when the checkpoint has no packed copy.
+`resolve_asset` then falls back to the verified sibling.
 
 
 ## `loudkit/config.py`
@@ -407,212 +174,399 @@ against.
 
 ### `module`
 
-:class:`AlgorithmConfig` holds every value that decides what comes out and is
-identical on every backend. :class:`~loudkit.execution.ExecutionConfig` holds
-what decides how fast and is free to differ. The test for a new setting: if it
-changed on one backend only, would the output be a different reading of the
-text? Then it is algorithm. Why the split exists, and the measurements behind
-each value, are in ``docs/design/algorithm-config.md``.
+`AlgorithmConfig` holds every value that defines the output and is the same on
+every backend. `ExecutionConfig` holds placement, precision, kernels and thread
+counts. Execution settings may differ per backend, and some of them change the
+computed samples within the identity contract's classes. A setting belongs in
+`AlgorithmConfig` when changing it on one backend alone would make that backend
+read the text differently. The reasons for the split, and the measurements
+behind each value, are in `docs/design/algorithm-config.md` and
+`docs/design/execution-config.md`.
 
 
 ## `loudkit/errors.py`
 
 
+### `module`
+
+Named exception classes separate a refusal the caller can act on from a
+defect. A transport boundary maps exception types to responses. With builtin
+exceptions alone it cannot tell an unsupported language from a backend stub:
+both raise `NotImplementedError`, but the first is the caller's question
+(HTTP 400) and the second is a server defect (HTTP 500).
+
+**Each class keeps the builtin it replaces as a base.** `except ValueError`
+still catches a `WindowOverflowError`, and `except FileNotFoundError` still
+catches a `VoiceNotFoundError`. A caller can also catch
+`loudkit.LoudkitError` for "loudkit refused this", or one named class for one
+refusal.
+
+A class exists only for a condition a caller would branch on, and each carries
+the values a caller would otherwise parse out of the message.
+
+**Error codes.** Each class also names its condition with a short stable
+string, `code`. An HTTP error body carries it as `"code"`, the SSE `done` event
+as `"error_code"`, and gRPC as `loudkit-error-code` trailing metadata, so a
+refusal has the same name on every transport. The catalog is frozen: codes are
+never renamed or reused, only added. A refusal that no class names yet is
+`invalid_request`, and a defect is `server_fault`. The transports add their own
+codes for conditions that exist only at a boundary, such as `unauthorized` and
+`busy`. `error_code` is the one mapping, and `docs/reference/errors.md` lists
+the full catalog.
+
+
 ### `LoudkitError`
 
-Raised: never directly. It exists so a caller embedding the library can
-write ``except loudkit.LoudkitError`` and catch the refusals loudkit means,
-without also catching the ``ValueError`` that came out of numpy.
+The base class of every named loudkit exception. It is never raised directly.
+A caller that embeds the library writes `except loudkit.LoudkitError` to catch
+the refusals loudkit names, without also catching a `ValueError` from NumPy.
 
-Carries: nothing of its own. The subclasses carry the diagnostics.
+It carries nothing of its own; the subclasses carry the diagnostics.
 
-An error that is *not* a ``LoudkitError`` coming out of loudkit is either a
-bug here or a failure in a dependency, in both cases something to report,
-not something to handle.
-
-
-### `NumberGrammarError`
-
-Raised: by :mod:`loudkit.frontend.numbers` when a language has no grammar, or a
-value is larger than the grammar's largest scale. Raised rather than
-returning the digits: a caller who gets ``"1000000000"`` back has no way to
-tell it apart from a number the grammar handled, and silently reading
-digits aloud is the failure that module exists to remove.
-
-Carries: nothing beyond its message.
-
-Defined here rather than in :mod:`loudkit.frontend.numbers`, where it started and
-where it is still exported from, only because that module imports this one:
-the class has to live below the base it now inherits.
-``loudkit.frontend.numbers.NumberGrammarError`` remains the same object.
-
-
-### `AudioNotFoundError`
-
-A plain `FileNotFoundError` was what this raised, and
-`docs/design/embedding.md` promises that every loudkit error is also a
-`LoudkitError`, so `except LoudkitError` did not catch the most ordinary
-failure of the most file-dependent entry point.
-
-Still a ``FileNotFoundError``, which is what a caller who wrote
-``except FileNotFoundError`` around it already expects, and what
-:class:`VoiceNotFoundError` beside it also keeps.
+`LoudkitError` does not cover every error a caller can cause. Some argument and
+configuration checks raise builtin exceptions, for example a `speed` outside
+[0.5, 2.0] or an invalid `ExecutionConfig` field raises a bare `ValueError`. A
+transport treats a bare exception it did not classify as a refusal as a
+defect, and answers `server_fault`.
 
 
 ### `error_code`
 
-A :class:`LoudkitError` names its own condition. Anything else that a
-boundary chose to report as a refusal (a bare ``ValueError`` from a layer
-that has not earned a class yet) is ``invalid_request``; an exception the
-boundary did *not* choose, a stub method, a numpy failure, a bug, is
-``server_fault``, decided by the caller passing it here only for errors it
-classified as refusals. This function does not guess: it reads the class.
+A `LoudkitError` names its own condition through `code`. Any other exception
+maps to `invalid_request`. The transport calls this function only for errors it
+has classified as refusals, such as a bare `ValueError` from a layer that has
+no class yet. An exception the boundary did not classify (a stub method, a
+NumPy failure, a bug) never reaches this function, and the transport reports it
+as `server_fault`.
 
 
 ### `__reduce__`
 
-``BaseException.__reduce__`` returns ``(type(self), self.args)``, so
-unpickling calls ``cls(*args)``, and every subclass below takes its
-diagnostics as *required keyword-only* arguments, which that call does
-not supply. Default pickling therefore raises ``TypeError`` and masks
-the original error wherever exceptions cross a process boundary, such
-as errors ferried back from a ``ProcessPoolExecutor`` worker.
+`BaseException.__reduce__` returns `(type(self), self.args)`, so unpickling
+calls `cls(*args)`. Four subclasses take required keyword-only diagnostics
+(`UnsupportedLanguageError`, `VoiceNotFoundError`, `InvalidTokensError` and
+`WindowOverflowError`), and that call does not supply them. Default pickling
+therefore raises `TypeError` and hides the original error wherever exceptions
+cross a process boundary, for example errors returned from a
+`ProcessPoolExecutor` worker.
 
-Rebuilt through ``__new__`` and ``BaseException.__init__`` rather than
-by giving the keywords defaults, because the diagnostics are the whole
-reason these classes exist and a default would make them optional at
+The base class rebuilds every subclass through `__new__` and
+`BaseException.__init__`, then restores its attributes. Giving the keywords
+defaults would also fix pickling, but it would make the diagnostics optional at
 every raise site.
+
+
+### `NumberGrammarError`
+
+Raised by `loudkit.frontend.numbers` when a language has no grammar, or when a
+value is larger than the grammar's largest scale. Returning the digits instead
+would give the caller `"1000000000"` with no way to tell it from a number the
+grammar handled, and reading digits aloud is the failure that module exists to
+remove.
+
+It carries nothing beyond its message.
+
+It is defined in `loudkit.errors` because `loudkit.frontend.numbers` imports
+that module, and the class must live below its base. `loudkit.frontend.numbers`
+re-exports it, and both names refer to the same class.
+
+
+### `UnsupportedLanguageError`
+
+Raised by `GraphemeTextFrontend.encode` (in `loudkit.frontend.text`) for any
+language outside the twelve this build's text layer supports. For the languages
+whose upstream pipeline needs model-based preprocessing that this frontend does
+not carry (Cangjie codes, kana conversion, diacritisation, jamo decomposition,
+stress marks), the message says so. The tokenizer holds tags for 31 languages
+and would emit ids for any of them. A language the model was not trained on
+would come out as fluent nonsense with no error downstream, so it is refused.
+
+It carries:
+
+- `language`: the refused id, lowercased;
+- `supported`: the ids this build accepts, sorted, from
+  `loudkit.frontend.numbers.supported_languages()`.
+
+It is also a `NotImplementedError`, so `except NotImplementedError` still
+catches it. The HTTP server catches this class, not the builtin, so a genuine
+`NotImplementedError` from an unfinished backend is reported as a server fault,
+not as a bad request.
+
+
+### `VoiceNotFoundError`
+
+Raised by `loudkit.synthesis.VoiceLibrary` when a request names a voice the
+library does not hold, and by `loudkit.hub.resolve_voice` when a reference is
+neither a file nor a voice in the named release.
+
+It carries:
+
+- `ref`: what was asked for, a name over HTTP, a path or a name in-process;
+- `available`: the names that were found, when listing them is cheap (a local
+  directory). It is empty for a remote repo, where listing would cost a network
+  call to report an error.
+
+When `available` holds a close match, the message ends with `did you mean
+'<name>'?`. The suggestion is built in the class, not at each raise site, so
+every site that lists alternatives gets it, and the message and the list cannot
+disagree. Voice names are short lowercase donor or character names (`kathleen`,
+`gosia`, `thorsten`), easy to mistype and easy to miss in a list of 28.
+
+It is also a `FileNotFoundError`, so a caller that catches that still catches
+this, and the CLI's "not found:" path is unchanged.
+
+
+### `InvalidTokensError`
+
+Raised when a caller-supplied speech token sequence cannot be rendered:
+`previous_tokens` on `synthesize` and `stream`, and `tokens` on
+`synthesize_tokens`, which also refuses an empty sequence.
+`window.validate_speech_tokens` refuses a fractional id and any id outside the
+acoustic codebook: a negative id, a control token, or an id past the
+vocabulary. These ids index an embedding table, so without the check the
+failure is an index error several stages away from the argument that caused
+it.
+
+It carries:
+
+- `token`: the first offending id, so a caller filtering a long sequence knows
+  which entry to look at;
+- `limit`: the exclusive upper bound. Ids must satisfy `0 <= id < limit`.
+
+A boundary must classify this error as the client's to fix. The streaming route
+reports a `LoudkitError` as `bad_request` and anything else as `server_fault`,
+and the HTTP routes answer 422 for a `ValueError` that is a `LoudkitError` and
+500 for a bare `ValueError`. As a bare `ValueError`, one bad integer from a
+client would be reported as a broken server.
+
+It is also a `ValueError`, so an existing `except ValueError` around a
+synthesis call still catches it.
+
+
+### `WindowOverflowError`
+
+Raised by `Engine.synthesize` with `single_window=True` when the text does not
+fit one window, and by `Engine.synthesize_tokens` for a sequence longer than
+`window.max_speech_tokens`. Truncating instead would drop text while the audio
+still sounds complete. Plain `synthesize` never raises it: it splits the text.
+
+It carries:
+
+- `n_tokens`: how many speech tokens were produced or supplied;
+- `window`: how many the window holds. The `single_window` message also states
+  the window in seconds of speech.
+
+It is also a `ValueError`, and the HTTP server answers it with 422.
+
+
+### `AudioNotFoundError`
+
+Raised when a recording that `loudkit.enroll` was asked to read is not there.
+It is a `LoudkitError`, so `except LoudkitError` catches it, and a
+`FileNotFoundError`, like `VoiceNotFoundError`, so `except FileNotFoundError`
+catches it too.
 
 
 ## `loudkit/provenance.py`
 
 
-### `_stamped_now`
+### `module`
 
-C2PA wants a creation time, and this is the only value in a rendered file
-that is not a function of the input. It is therefore the one byte-range in
-which two identical renders can legitimately differ, and the transport
-suites, which assert that a transport returns *byte for byte* what the
-library returns, patch this (see ``conftest.py``): two identical renders
-straddling a second boundary would otherwise differ in the trailer.
+Article 50(2) of the EU AI Act asks providers of systems that generate
+synthetic audio to mark the output in a machine-readable format, detectable as
+artificially generated. This module writes such a marking as metadata, the
+loudkit provenance manifest. It is not C2PA, and it is not an in-audio
+watermark. Whether it meets a particular legal obligation is outside this note.
+
+The marking has these properties:
+
+- It is an **unsigned** manifest in JUMBF-shaped boxes, carried in an `LKPV`
+  RIFF chunk after the audio. A player skips the chunk, and the `data` chunk
+  keeps the bytes it would have without the manifest.
+- It carries an assertion shaped like `c2pa.actions` with
+  `digitalSourceType = trainedAlgorithmicMedia`, the IPTC term for media a
+  model generated.
+- It carries loudkit's own assertion, which makes the marking traceable: the
+  algorithm fingerprint, the recipe version, the seed, the sample rate and
+  speed, the voice label, the digests of the checkpoint and voice-profile files,
+  the backend and execution description, the language, a hash of the text, and
+  the SHA-256 of the audio bytes it binds to.
+
+It is unsigned because a C2PA signature needs a certificate, and choosing whose
+certificate, and managing its key, is a deployment decision a library cannot
+make for its caller. The boxes alone are not a C2PA manifest either (see
+below), so interoperable Content Credentials would need a C2PA implementation
+as well as a signature.
+
+It is metadata, with metadata's limits. Re-encoding or metadata-stripping tools
+remove it, so it provides neither tamper resistance nor the robustness that
+Article 50(2) also asks for as far as technically feasible. loudkit ships no
+in-audio watermark: a watermark prototype did not pass its null test, because
+its detector did not separate marked audio from unmarked audio. Disclosure to
+listeners remains the caller's responsibility.
+
+The box layout follows JUMBF's outline without being JUMBF: a superbox holding
+a claim box holding a JSON box, each big-endian, length-prefixed and
+UUID-typed, uncompressed, and readable with no dependencies. Real JUMBF opens a
+superbox with a `jumd` description box, which these boxes omit, and
+`c2pa-python` reports that when pointed at them. The chunk therefore carries a
+private identifier, `LKPV`, and not `C2PA`: a reader that finds a `C2PA` chunk
+expects a manifest store, and would report this file as broken instead of
+ignoring it.
 
 
 ### `build_manifest`
 
-The loudkit assertion carries the values that make the label *traceable*:
-the algorithm fingerprint and the seed reproduce the exact waveform, the
-audio hash binds the manifest to these bytes and not some other file, and
-the checkpoint and profile digests name which weights and which voice
-spoke, a fingerprint pins the algorithm, not the artefact, and a voice
-*name* is a label anyone can reuse. ``backend`` and ``execution`` name the
-datapath: execution never changes what is computed, but reduced precision
-perturbs it within measured bands, and a manifest that names the waveform
-should name what produced it. Empty strings mean "not known here", never
-"does not apply".
+The loudkit assertion carries the values that make the marking traceable:
+
+- the algorithm fingerprint and the seed identify the algorithm and the random
+  stream;
+- the audio hash binds the manifest to these audio bytes;
+- the checkpoint and profile digests name the weights and the voice that
+  spoke. A fingerprint pins the algorithm, not the artefact, and a voice name
+  is a label anyone can reuse;
+- `backend` and `execution` name the datapath. Execution settings such as
+  reduced precision and the thread count can change the samples, and in some
+  cases the tokens, within the identity contract's measured classes.
+
+These fields help trace and repeat a render. Repeating it exactly also needs
+the input text and the same build, device and execution configuration; the
+manifest stores only a hash of the text. An empty string means "not known
+here", never "does not apply".
+
+
+### `_stamped_now`
+
+The `c2pa.actions`-shaped assertion records a creation time (`when`). It is the
+only value in a rendered file that is not a function of the input, so it is the
+one byte range in which two identical renders legitimately differ. The
+transport suites assert that a transport returns byte for byte what the library
+returns, so they patch this function (see `conftest.py`). Otherwise two
+identical renders on either side of a second boundary would differ in the
+trailer.
 
 
 ## `loudkit/voice.py`
 
 
+### `module`
+
+A `VoiceProfile` is the set of tensors the two stages need to speak as one
+voice: a speaker embedding, a prompt of speech tokens, the mel of the reference
+audio, and the conditioning the token generator was trained to read. A shipped
+profile is about 150 KB and holds no weights.
+
+Because a profile holds no weights, cloning is cheap and a voice is a small
+file. The prompt is an input to the graphs, not part of them, so a new voice
+needs no new exported model. Voices can be enrolled once on a fast machine and
+shipped, and a device that only synthesises never needs the enrollment models
+(the speech tokenizer and the speaker encoders), which ship in the separate
+523 MB enrollment checkpoint and the 5.7 MB `ve.safetensors`.
+
+Profiles are saved as `safetensors` with a small JSON header, so they hold no
+executable content (no pickle). `VoiceProfile.load` also checks the file before
+use: the size limit (`MAX_VOICE_BYTES`), the header's format version and field
+types, the tensor shapes, finite values, embedding norms, token-id bounds and
+the enrolment label.
+
+
+### `VoiceProfile`
+
+The two stages read the outputs of two different speaker encoders, so a profile
+carries two embeddings. The token generator was trained against a 256-d
+utterance-level voice-encoder vector, and the flow decoder conditions on a 192-d
+CAM++ x-vector. Neither can be derived from the other, so both are enrolled
+once and stored.
+
+Attributes:
+
+- `name`: a human label, carried for provenance and error messages. Nothing
+  dispatches on it.
+- `speaker_embedding`: the `(256,)` speaker vector for the token generator's
+  conditioning encoder.
+- `flow_embedding`: the `(192,)` x-vector for the mel decoder.
+- `prompt_tokens`: the speech tokens of the reference audio, the prosodic and
+  timbral prompt the mel decoder continues from. Stored at natural length; the
+  window recipe (`WindowConfig`) decides the framing.
+- `prompt_mel`: the `(80, frames)` mel of the reference, conditioning the flow.
+- `cond_prompt_tokens`: the token generator's own conditioning prompt, which may
+  differ in length from `prompt_tokens`.
+- `source_sample_rate`: the sample rate of the enrollment input. It is
+  provenance metadata only: `enroll` writes it, and no renderer, loader or
+  engine reads it or resamples because of it. It stays in the format because
+  it records a fact about the source.
+- `language`: the language this voice reads in. It is the default for every
+  `synthesize` or `stream` call without an explicit `language=`, so a profile
+  marked `en` reads Polish text through the English funnel unless the call
+  overrides it.
+
+
+### `KNOWN_ENROLMENTS` and `enrolment`
+
+The `enrolment` field records how the prompt was cut from the reference clip.
+Enrolment chooses a window of the clip before any model runs, so two strategies
+make two different voices from one recording, and nothing in the tensors shows
+which strategy made them. The field is recorded for the same reason
+`TextConfig.recipe` is: a build must not assume a strategy it cannot name.
+
+`KNOWN_ENROLMENTS` lists the accepted labels, and a profile that names any other
+label is refused at load:
+
+- `first-10s`: the prompt is the first ten seconds of the clip. Every port's
+  enroller makes this, and a profile with no label is read as this one.
+- `first-10s-pause`: the clip is cut at its last pause before ten seconds and
+  padded with 0.4 s of silence. `loudkit clone` makes this by default, and
+  `enroll(end_in_silence=True)` makes it on request.
+
+Every port loads both labels and uses the stored tensors as they are: a saved
+profile is reused, never cut again.
+
+
 ### `_validate_values`
 
-Checked here rather than discovered per backend. A profile is a file
-that can be copied, mailed and loaded from an untrusted source, and the
-three renderers disagree about what a degenerate one means: torch's
-``F.normalize`` carries an epsilon and returns finite values for a zero
-vector, while ONNX and CoreML divide by the raw norm and produce 192
-NaNs. One accepted profile, two behaviours, no error anywhere, the
-divergence class this library exists to make impossible, arriving
-through data instead of through code.
+Profile values are checked once, at construction, not discovered per backend.
+A profile is a file that can be copied, mailed and loaded from a source the
+caller does not control, and the renderers disagree about a degenerate one.
+Torch's `F.normalize` adds an epsilon and returns finite values for a zero
+vector, while ONNX and CoreML divide by the raw norm and produce 192 NaNs. The
+same profile would then speak differently per backend with no error, so an
+embedding norm below `MIN_EMBEDDING_NORM` is refused.
+
+The check also bounds every token id. A prompt token must be below the speech
+codebook (`start_speech_token`), and a conditioning token below the full speech
+vocabulary (`speech_vocab_size`). Both limits come from the shipped
+`AlgorithmConfig`, not from constants repeated here. An id outside them would
+index past the end of an embedding table, so it is refused before any backend
+sees it.
 
 
 ### `cond_key`
 
-The generator's conditioning is a pure function of
-``speaker_embedding`` and ``cond_prompt_tokens`` (the third slot is the
-constant :data:`EMOTION_NEUTRAL`), so two profiles that agree on these
-bytes get the same row. Keyed by content rather than by object
-identity: profiles are frozen but freely copied, and an ``id()`` key
-would silently miss on every copy. A few hundred bytes of hashing per
-call, against a perceiver pass per miss.
+The generator's conditioning is a pure function of `speaker_embedding` and
+`cond_prompt_tokens` (the third slot is the constant `EMOTION_NEUTRAL`), so two
+profiles with the same bytes there get the same cached row. The key hashes the
+contents, not the object identity: profiles are frozen but freely copied, and an
+`id()` key would miss on every copy. Hashing a few kilobytes per call costs far
+less than the perceiver pass a cache miss runs.
 
 
-## Notes moved from attribute docstrings and comments
-
-
-### `loudkit/checkpoint.py`
-
-
-#### `DECODE_FORMAT_VERSION`
-
-The version gate is the *only* thing standing between a fusion checkpoint and
-four engines that would misread it: Rust, Go, TypeScript and Swift refuse
-version 2 by number and none of them parses the ``decode`` block at all. So a
-manifest saying ``format_version 1`` beside ``decode.mode = "fusion_mtp2"``
-loads everywhere and speaks fluent nonsense in four of the five, and until
-this table existed, the coupling was asserted in a design note and enforced by
-the packer remembering to write a 2.
-
-A mode absent from this table needs no minimum, which is how ``single`` (and
-an absent block, its synonym) keeps loading out of every version-1 file.
-
-
-### `loudkit/voice.py`
-
-
-#### `EMOTION_NEUTRAL`
+### `EMOTION_NEUTRAL`
 
 The checkpoint architecture reserves one of its 34 conditioning slots for an
-emotion scalar (``t3.cond_enc.emotion_adv_fc``). On these weights the axis is
-dead, distillation collapsed the response, so the slot is not a control and
-is not part of the profile format. It still has to be fed *something*, and it
-has to be the value the model was distilled with and every profile ever
-written carried: 0.5. Every renderer in every port uses this constant.
+emotion scalar (`t3.cond_enc.emotion_adv_fc`). On these weights the axis has no
+effect (distillation collapsed the response), so the slot is not a control and
+is not part of the profile format. It still needs an input, and that input is
+0.5, the value the model was trained with and the value every profile carried.
+The token generator in every implementation feeds this constant.
 
 
-#### `MAX_VOICE_BYTES`
+### `MAX_VOICE_BYTES`
 
-Every voice the kit ships weighs about 165 KB, and the format has no field that
-grows with anything a caller controls, so fifty times the real size is room for
-a format change, not for a payload. Without a bound, ``prompt_mel`` declared as
-``(80, 100_000_000)`` is 64 GB of allocation the moment it is read, from a file
-the server loads by name on an unauthenticated request. Checked on the file
-rather than per tensor because the file bounds every tensor in it at once, and
-does so before anything is materialised.
-
-
-#### `KNOWN_ENROLMENTS`
-
-A profile naming anything else is refused at load. That is the point of the
-field: a build without the strategy that produced a voice must say so, rather
-than apply its own and hand back a different voice under the same name.
-
-Two strategies exist. `first-10s` is the prompt as the first ten seconds of the
-clip, which every port's enroller makes. `first-10s-pause` is the clip cut at its
-last pause before ten seconds and padded with 0.4 s of silence, which `loudkit
-clone` makes by default and `enroll(end_in_silence=True)` makes on request. The
-ports write only the first and read both: a profile is reused, never re-cut.
-
-
-#### `enrolment`
-
-A profile is an artefact, and this says how it was made. Enrolment picks a
-window of the reference clip before any of the tested transform runs, so two
-strategies produce two different voices from one recording, with nothing in
-the tensors to tell them apart.
-
-Recorded rather than assumed, for the reason `TextConfig.recipe` exists: an
-implementation that does not have the strategy named here must refuse the
-profile instead of silently applying its own. Five implementations agreeing
-on the transform is worth nothing if they disagree about which ten seconds
-to feed it.
-
-
-#### `_validate_values` bounds every id
-
-A prompt token is refused above the speech codebook and a conditioning token
-above the full speech vocabulary, both ceilings taken from the shipped
-algorithm rather than repeated here. `load()` promises a profile is safe to
-open from an untrusted source, and a bound the renderer relies on has to be
-checked where that promise is made: an oversized id indexes past the end of
-`nn.Embedding`, or on the ONNX path reads whatever follows the table.
+The limit is 8 MiB. A shipped voice is about 150 KB, and the format has no
+field that grows with anything a caller controls. The limit is about fifty
+times the real size, which leaves room for a format change. Without a limit, a
+profile whose `prompt_mel` is `(80, 100_000_000)` float32 would be read as
+32 GB of tensor data, from a file the server loads by name on an
+unauthenticated request. The limit is checked on
+the file size, before any tensor is read, because the file size bounds every
+tensor in it at once.

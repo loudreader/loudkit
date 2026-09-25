@@ -1,25 +1,22 @@
-# One service, because the engine is one process. What varies is the backend,
-# and that is a build argument rather than a topology.
+# One loudkit server. The `VARIANT` build argument selects the backend.
 #
-# `VARIANT` picks the image *and* the backend the server is told to use: one
-# variable, because a torch-less image told to use torch does not start. Set
-# `LOUDKIT_DEVICE` to override the second half (`cuda:1`, or `cpu` on a cuda
-# image with no GPU visible).
+# `VARIANT` sets the image and the server's `--device`, because the onnx image
+# has no torch. `LOUDKIT_DEVICE` overrides only `--device` (`cuda:1`, or `cpu`
+# for a cuda image with no GPU visible).
 #
-# Point LOUDKIT_CHECKPOINTS at the directory holding the weights. They are not
-# in the image on purpose: the 747 MB synthesis checkpoint is versioned
-# separately.
+# Point LOUDKIT_CHECKPOINTS at the directory with the weights. The image does
+# not include them: the 747 MB synthesis checkpoint is versioned separately.
 #
-# LOUDKIT_TOKEN is required. A container has to bind 0.0.0.0, because its own
-# loopback is not reachable through a port mapping, and the server treats any
-# non-loopback bind as public, which means `--allow-public` and a bearer
-# token. Left to generate its own, the server prints a token nothing here can
-# read, and the healthcheck has none to send.
+# LOUDKIT_TOKEN is required. A port mapping cannot reach the container's own
+# loopback, so the server binds 0.0.0.0. The server treats any non-loopback
+# bind as public, which needs `--allow-public` and a bearer token. A token the
+# server generates goes to its log, and the healthcheck cannot read it.
 #
-# The real boundary is the `127.0.0.1:` on the left of the port mapping below.
-# The server cannot see that from inside the container, so it insists.
+# The `127.0.0.1:` on the left of the port mapping below limits access to this
+# machine. The server cannot see that from inside the container, so it still
+# requires the token.
 #
-# docs/platforms/docker.md carries the commands and the full variable table.
+# docs/platforms/docker.md has the commands and the full variable table.
 
 services:
   loudkit:
@@ -28,22 +25,19 @@ services:
       args:
         VARIANT: ${VARIANT:-cpu}
     image: loudkit:${VARIANT:-cpu}
-    # Reachable from this machine and nowhere else. The left-hand side is the
-    # boundary; changing it publishes the port on every interface, and the
-    # bearer token becomes the only thing between the network and every voice
-    # on the host. Change it deliberately, and read the TLS note in
-    # `docs/guides/04-server-and-agents.md` first — the token crosses the
-    # wire in clear.
+    # Reachable from this machine only. Without the `127.0.0.1:` prefix the
+    # port is published on every interface, and the bearer token is the only
+    # access control. The server speaks plain HTTP, so the token crosses the
+    # network unencrypted. Read the TLS note in
+    # `docs/guides/04-server-and-agents.md` before you change this.
     ports:
       - "127.0.0.1:8000:8000"
-    # Cheap and load-bearing. The process reads a checkpoint and answers on a
-    # socket: it needs no capability, gains nothing from a setuid binary, and
-    # writes to exactly one path — the hub cache volume below. `read_only` makes
-    # the rest of the filesystem what it already was in practice, so a write
-    # that appears is a bug reported at the write rather than a file nobody
-    # expected. `/tmp` is a tmpfs because the interpreter and libsndfile may
-    # want scratch space; `PYTHONDONTWRITEBYTECODE=1` in the image keeps
-    # `__pycache__` out of the read-only venv.
+    # The process reads a checkpoint and answers on a socket. It needs no
+    # capability and no setuid binary. The root filesystem is read-only. The
+    # paths not mounted read-only are the hub cache volume below and `/tmp`, a
+    # tmpfs for the scratch space of the interpreter and libsndfile.
+    # `PYTHONDONTWRITEBYTECODE=1` in the image keeps `__pycache__` out of the
+    # read-only venv.
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -55,11 +49,12 @@ services:
       - ${LOUDKIT_CHECKPOINTS:-./checkpoints}:/weights:ro
       # Voices are small and read-only too.
       - ${LOUDKIT_VOICES:-./voices}:/voices:ro
-      # The hub cache, so a restart does not re-download a checkpoint it
-      # already has when `loudkit.load("org/name")` is used instead of a mount.
+      # The Hugging Face cache, for a `--checkpoint` that names a repo id
+      # instead of a mounted file.
       - loudkit-hub:/home/loudkit/.cache/huggingface
-    # Passed through to the server *and* to the healthcheck, which is behind the
-    # same token as every other route.
+    # Passed to the server and to the healthcheck, which needs the same token
+    # as every other route. The server skips its startup warm-up for any
+    # non-empty LOUDKIT_NO_WARM, `0` included.
     environment:
       LOUDKIT_NO_WARM: ${LOUDKIT_NO_WARM:-0}
       LOUDKIT_TOKEN: ${LOUDKIT_TOKEN:?set LOUDKIT_TOKEN, e.g. export LOUDKIT_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')}
@@ -67,29 +62,25 @@ services:
       - serve
       - --checkpoint=/weights/${LOUDKIT_MODEL_FILE:-loudr-1.safetensors}
       - --voices=/voices
-      # Inside the container only; the port mapping above is the boundary.
+      # Inside the container only; the port mapping above limits access.
       - --host=0.0.0.0
-      # The server's own default is 8765. Without this the mapping above points
-      # at a port nothing is listening on, and the service comes up unreachable
-      # rather than failing.
+      # The server's own default is 8765. Without this flag nothing listens on
+      # the mapped port, and the container still starts.
       - --port=8000
-      # 0.0.0.0 is a public bind as far as the server is concerned, and a public
-      # bind requires a token rather than being quietly allowed without one.
+      # The server treats 0.0.0.0 as a public bind, and a public bind requires
+      # a bearer token.
       - --allow-public
-      # token comes from $LOUDKIT_TOKEN via the CLI's env fallback —
-      # never on argv, where docker inspect would print it.
+      # The token comes from $LOUDKIT_TOKEN through the CLI's environment
+      # fallback. On the command line, `ps` would show it to every account on
+      # the host.
       #
-      # The backend follows the variant, because it has to: the onnx image
-      # carries no torch, and without this flag `serve` asks for the torch
-      # backend and dies at import with "pip install loudkit[torch,audio]" —
-      # advice that is wrong for the image the user just built. `VARIANT` and
-      # `--device` share a vocabulary (cpu, cuda, onnx), so one variable
-      # settles both. `LOUDKIT_DEVICE` overrides it for the cases the variant
-      # name does not cover: a cuda image on a box with no GPU (`cpu`), or a
-      # specific card (`cuda:1`).
+      # The device follows the variant: the onnx image has no torch and needs
+      # `--device onnx`. `VARIANT` and `--device` share their values (cpu,
+      # cuda, onnx). `LOUDKIT_DEVICE` overrides the device: `cpu` for a cuda
+      # image on a host with no GPU, or `cuda:1` for a specific card.
       - --device=${LOUDKIT_DEVICE:-${VARIANT:-cpu}}
-    # The model is the memory. A CPU render peaks around 3 GB; give it room and
-    # fail loudly rather than being OOM-killed halfway through a passage.
+    # A CPU render peaks around 3 GB. Over this limit the kernel's OOM killer
+    # stops the process. Raise it for a larger model or workload.
     deploy:
       resources:
         limits:

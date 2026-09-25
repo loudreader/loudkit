@@ -10,18 +10,21 @@ import VoiceGrid from '../../components/VoiceGrid.astro';
 
 ## Listen
 
-Press play on any voice. Filter by language or presentation, search by name,
-and expand a card to hear the original recording, see its licence, or copy the
-line that loads the voice. All 28 voices are included in both model downloads and load by name. Every card has one play button and starts with
-loudr-1. Use the English model selector above the gallery to hear the same
-story with turbo, with seed 7 and matched loudness. Other languages play loudr-1.
+Press play on any voice. Filter by language or presentation, or search by
+name. Expand a card to hear the original recording, see its licence, or copy
+the line that loads the voice. All 28 voices are included in both model
+downloads and load by name.
+
+The gallery plays loudr-1. For English voices, the model selector above the
+gallery switches to loudr-1-turbo on the same story, with seed 7 and matched
+loudness. Other languages play loudr-1 only.
 
 <VoiceGrid />
 
 ### Voice cloning
 
-Ten seconds of clean audio is enough. A cloned voice is a file of tensors around
-150 KB, not a model.
+Use five to ten seconds of clean audio from one speaker. A cloned voice is a
+voice profile of about 150 KB.
 
 ```python
 import loudkit as lk
@@ -30,7 +33,7 @@ mine = lk.enroll("my-recording.wav", "loudreader/loudr-1", name="my-voice")
 mine.save("voices/my-voice.safetensors")
 ```
 
-The weights this needs are published, so the snippet runs today. The method,
-the audio requirements and the measured similarity are in
-[Cloning a voice](/loudkit/guides/03-cloning-a-voice/). Consent is yours to
-obtain: [Responsible use](/loudkit/responsible-use/).
+Cloning needs `pip install "loudkit[enroll,hub]"`.
+[Cloning a voice](/loudkit/guides/03-cloning-a-voice/) covers the method, the
+audio requirements and the measured similarity. Get the speaker's consent
+before you clone a voice: see [Responsible use](/loudkit/responsible-use/).

@@ -1,13 +1,22 @@
-# A user service, so the model stays warm across reboots.
+# A user service that keeps the server running and the model loaded.
 #
 #     mkdir -p ~/.config/systemd/user
 #     cp loudkit.service ~/.config/systemd/user/
 #     systemctl --user daemon-reload
 #     systemctl --user enable --now loudkit
+#     journalctl --user -fu loudkit
 #
-# User scope, not system: this binds localhost, runs as you, and reads voices
-# from your home directory. Running it as root would grant it more than it
-# needs to speak.
+# It runs as your user, binds localhost and reads from your home directory.
+# Put the checkpoint at ~/.local/share/loudkit/loudr-1.safetensors, or change
+# LOUDKIT_CHECKPOINT below.
+#
+# `/usr/bin/env loudkit` finds `loudkit` on the PATH of the systemd user
+# manager, which usually does not include a virtualenv or ~/.local/bin. If
+# the service cannot find `loudkit`, put its absolute path in ExecStart, for
+# example %h/.venv/bin/loudkit.
+#
+# PrivateDevices=true hides /dev/nvidia*, so this unit runs on the CPU even on
+# a machine with an NVIDIA GPU. To use the GPU, remove that line.
 
 [Unit]
 Description=loudkit text-to-speech server
@@ -17,22 +26,21 @@ After=network.target
 [Service]
 Type=simple
 Environment=LOUDKIT_CHECKPOINT=%h/.local/share/loudkit/loudr-1.safetensors
-# Unbuffered, so `journalctl -fu loudkit` shows the banner and any warning as
-# they happen rather than when the pipe fills. A service whose logs arrive in
-# 4 KB batches looks hung while it is starting.
+# Unbuffered, so `journalctl --user -fu loudkit` shows the banner and any
+# warning as they happen. Buffered logs arrive in 4 KB batches, and a service
+# that is starting then looks hung.
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/env loudkit serve --checkpoint ${LOUDKIT_CHECKPOINT}
 Restart=on-failure
 RestartSec=5
 
-# It needs to read a checkpoint and open a localhost port. Nothing else.
+# The service only reads a checkpoint and opens a localhost port.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-# No writable paths at all: the service reads a checkpoint, holds it in
-# memory and answers on a socket. Granting a directory "just in case" is how
-# a hardened unit stops being one.
+# No writable paths: the service reads a checkpoint, holds it in memory and
+# answers on a socket.
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -41,7 +49,7 @@ RestrictNamespaces=true
 RestrictSUIDSGID=true
 LockPersonality=true
 MemoryDenyWriteExecute=false
-# ^ false on purpose: torch JITs, and denying W^X kills it at import.
+# ^ false: torch generates code at run time, and denying W^X stops it at import.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]

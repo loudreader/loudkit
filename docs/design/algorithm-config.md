@@ -1,203 +1,226 @@
-# Algorithm config: what is computed, and why each value is where it is
+# Algorithm config
 
-Maintainer notes for `python/loudkit/config.py`. The runtime docstrings say
-what each field does; this page says why it is an algorithm value and what
-measurement settled it.
+Maintainer notes for `python/loudkit/config.py`: why each value is an
+algorithm value, and the measurement behind it. The runtime docstrings say
+what each field does.
 
 ## The two layers
 
-Every setting belongs to one of two frozen dataclasses. `AlgorithmConfig` is
-everything that decides what comes out and is identical on every backend.
-`ExecutionConfig` (see `execution-config.md`) is everything that decides how
-fast and is free to differ per backend. The test for a new setting: if it
-changed on one backend only, would the output be a different reading of the
-text, or the same reading computed differently? A different reading is
-algorithm.
+Every setting belongs to one of two frozen dataclasses. `AlgorithmConfig`
+holds the values that decide what the engine computes, and it is identical on
+every backend. `ExecutionConfig` (see `execution-config.md`) holds how the
+engine computes it: devices, precision and kernels. It can differ per
+backend, and some execution choices change the numbers;
+`docs/reference/IDENTITY-CONTRACT.md` states what each one guarantees.
 
-The split is enforced rather than documented because a misapplied execution
-setting can change the audio while both outputs stay plausible. Guidance mode
-is the founding example: applying dual-path guidance to an estimator that was
-distilled for single-path use yields plausible audio under a different
-algorithm, and no output comparison alone can tell it from correct output. So
-every algorithm value has exactly one home, every component carries the
-engine's config, and the engine refuses a component whose fingerprint
-disagrees.
+To classify a new setting, change it on one backend only. If the output
+becomes a different reading of the text, the setting is an algorithm value.
+If the output is the same reading computed differently, it is an execution
+value.
+
+The engine enforces the split, because a wrong algorithm value can still
+produce plausible audio. Guidance mode is an example: dual-path guidance on an
+estimator distilled for single-path use gives plausible audio from a
+different algorithm, and a comparison of outputs alone does not reveal it. So
+each algorithm value is defined in one place, each component carries the
+engine's `AlgorithmConfig`, and the engine refuses a component whose
+fingerprint differs.
 
 ## The fingerprint
 
-`AlgorithmConfig.fingerprint()` is sixteen hex digits of SHA-256 over
-`canonical_form()`. The canonical form is specified, not incidental: floats
-use `repr` (the shortest round-tripping string, the same on every IEEE-754
-double), numpy scalars are coerced, only fields the schema knows are hashed,
-keys are sorted, and unset optional fields drop out at every depth. That last
-rule is what lets a field be added with a default without re-fingerprinting
-every algorithm that did not change; a check that cries wolf on every upgrade
-is a check people learn to override.
+`AlgorithmConfig.fingerprint()` is the first sixteen hex digits of SHA-256
+over `canonical_form()`. The canonical form is specified:
 
-`recipe_version` travels in the hash because the sampling law, the Euler grid
+- floats use `repr`, the shortest string that round-trips, which is the same
+  for every IEEE-754 double;
+- numpy scalars are coerced to Python numbers;
+- only fields the schema defines are hashed;
+- keys are sorted;
+- unset optional fields are omitted at every depth.
+
+The last rule lets a new field with a default leave the fingerprint of every
+unchanged algorithm as it is. Without it, every upgrade would change every
+fingerprint.
+
+`recipe_version` is in the hash because the sampling law, the Euler grid
 formula, the framing recipe and the EOS arithmetic are code, not fields. Two
-builds could agree on every value and still compute different things because
-one shipped a different sampler. Bump it when the recipe changes.
+builds can agree on every field and still compute different things if one has
+a different sampler. Bump `recipe_version` when the recipe changes.
 
-`decode_mode` is unset rather than `"single"` so that adding the field left
-every existing fingerprint alone; an explicit `"single"` in a manifest hashes
-the same as an absent block for the same reason.
+`decode_mode` defaults to unset, not `"single"`, so its absence does not
+change a fingerprint. A manifest with an explicit `"single"` hashes the same
+as one without a `decode` block.
 
-The fingerprint is a final integrity check, not a design constraint. When an
-audible change moves it, the pins move with it (see `COMPATIBILITY.md`).
+The fingerprint is an integrity check. An audible change moves it, and the
+pinned values move with it (see `docs/reference/COMPATIBILITY.md`).
 
 ## Sampling
 
-`SamplingConfig` is LR-SAMPLER-v1, specified so five implementations agree
-bit for bit: a counter-based RNG (a token's random number depends on
-`(seed, stream, step, index)` alone, because `torch.multinomial` gives
-different samples for the same probabilities on x86 and arm64) and `min_p`
-evaluated in logit space (no softmax, no CDF scan, no reduction whose order a
-backend could vary).
+`SamplingConfig` is LR-SAMPLER-v1. It is specified so that the five
+implementations agree bit for bit:
 
-`silence_token_ids` are exempt from the `min_p` floor and from nothing else.
-A pause token is the only way to pause, and a cutoff that removes it removes
-prosody: dropping the exemption was measured catastrophic (median long-form
-gap 2.46 s to 4.64 s). The ids were also exempt from the repetition penalty
-until the interior-stall study showed the pair of exemptions makes a silence
-run absorbing (no exit in 1,031 instrumented trap steps, a hole over one
-second in 33% of long-form paragraphs). The penalty now applies to silence
-like every other token. Do not widen the list to the render census
-(`silence_render_ids` on the postprocess preset): exempting exactly the
-truly-silent ids from `min_p` was measured harmful too, doubling pause-time
-share. The detectors read the census; the sampler keeps this list.
+- The RNG is counter-based: a token's random number depends only on
+  `(seed, stream, step, index)`. `torch.multinomial` is not used, because it
+  gives different samples for the same probabilities on x86 and arm64.
+- `min_p` is evaluated in logit space. It needs no softmax, no CDF scan and no
+  other reduction whose order a backend could change.
 
-`min_tokens_floor` and `min_tokens_text_ratio` are the shipped engine's
-early-EOS guard, `max(10, textIds * 6/5)`: speech runs about 1.7 to 2.6
-tokens per text token, so a 1.2x floor stops early truncations without
-forcing overlong reads. The dataclass defaults are 0 (off) so the bare law
-stays the textbook one; the production values come from the manifest, or
-from `backends.PRODUCTION_EOS_FLOOR` for a checkpoint packed before its
-manifest carried them.
+`silence_token_ids` are exempt from the `min_p` filter and from nothing else.
+A pause token is the only way the model pauses, and a filter that removes it
+removes prosody. Without the exemption, the measured median long-form gap
+goes from 2.46 s to 4.64 s. The repetition penalty applies to silence ids like
+every other token. With both exemptions, a silence run has no exit: an
+instrumented run found none in 1,031 trap steps, and 33% of long-form
+paragraphs had a hole longer than one second.
+
+Do not widen the list to the render census (`silence_render_ids` on the
+postprocess preset). Exempting exactly the truly silent ids from `min_p` is
+also measured harmful: it doubles the pause-time share. The detectors read the
+census; the sampler reads this list.
+
+`min_tokens_floor` and `min_tokens_text_ratio` form the early-EOS guard,
+`max(10, int(text_tokens * 1.2))`. Speech runs at about 1.7 to 2.6 tokens per
+text token, so a 1.2x floor stops early truncations without forcing overlong
+reads. The dataclass defaults are 0 (off), so the bare sampling law has no
+floor. The production values come from the manifest's `eos_floor` block, or
+from `backends.PRODUCTION_EOS_FLOOR` and `PRODUCTION_EOS_TEXT_RATIO` for a
+checkpoint whose manifest does not carry them.
 
 ## Chunking
 
-A window carries about 10.2 s of speech, so anything longer than a couple of
-sentences is split, generated in pieces and joined. Where the splits fall and
-what each piece is conditioned on decide where the reader breathes, which is
+A window holds about 10.2 s of speech, so text longer than a couple of
+sentences is split, generated in pieces and joined. Where the splits fall, and
+what each piece is conditioned on, change where the speech pauses. That is
 audible, so they are algorithm values.
 
-`prefix_tokens`: generating each chunk independently restarts its pitch
-contour like a new sentence, heard as a stutter at the join. On the reference
-voice the contour restarts about 74 Hz higher at an independent join against
-about 7 Hz with a six-token prefix. Six costs little generation time on
-discarded tokens and removes the restart.
+`prefix_tokens`: a chunk generated independently restarts its pitch contour
+like a new sentence, which sounds like a stutter at the join. On the reference
+voice, the contour restarts about 74 Hz higher at an independent join, and
+about 7 Hz with a six-token prefix. Six tokens cost little extra time.
 
-`abbreviations`: the token before the period, without it. `Dr` and `St` are
-there on a second measurement: the surveyed corpus (120 passages per
-language) contained neither, but on 24 books of English prose the list
-without them still ended a chunk on `St.` 178 times and on `Dr.` 80 times.
-One union list serves every language: over 1200 passages in ten languages a
+`abbreviations`: the token before a period, without the period. `Dr` and `St`
+are in the list because of a second measurement. The surveyed corpus (120
+passages per language) contained neither. On 24 books of English prose, the
+list without them still ended a chunk on `St.` 178 times and on `Dr.` 80
+times.
+
+One union list serves every language. Over 1200 passages in ten languages, a
 language-blind union re-chunks the corpus identically to ten per-language
-lists (same 4968 chunks, same 17 remaining harmful cuts, same 37 passages
-moved), at the cost of one false hold in 2253 sites at a position never
-chosen as a cut. Ten lists would need a language tag the splitter does not
-have and a dispatch in five implementations. This list is not the funnel's:
-`Grammar.abbreviations` expands the unambiguous ones (`e.g.` to "for
-example") before the splitter sees them; what reaches here is the residue the
-funnel refuses to expand because `St.` is Saint or Street. The tuple is
-hashed as written, so keep it sorted.
+lists: the same 4968 chunks, the same 17 remaining harmful cuts and the same 37
+passages moved. The cost is one false hold in 2253 sites, at a position never
+chosen as a cut. Ten lists would need a language tag, which the splitter does
+not have, and a dispatch in five implementations.
+
+This list is separate from the funnel's. `Grammar.abbreviations` expands the
+unambiguous abbreviations (`e.g.` to "for example") before the splitter sees
+them. What reaches the splitter is what the funnel does not expand because it
+is ambiguous: `St.` is Saint or Street. The tuple is hashed as written, so keep
+it sorted.
 
 `cap_resplit`: `split_text` budgets characters against a constant measured on
 one voice in three languages. A slower speaker fills the window before the
-text runs out, the generator stops mid-word and the remainder is lost,
-because chunk texts are fixed before any of them renders. Over 9920 rendered
-chunks in ten languages, 51 hit the window cap and 27 were still speaking
-when it closed, about 0.5% of the words of the two slowest voices. `"word"`
-splits the chunk at the word boundary nearest its middle and generates both
-halves under the same chunk index so no later seed moves; measured over the
-51 passages, windows still speaking at the cap went from 29 to 1, and the
-remaining one is a single unbroken word. A half that still overruns is not
-split again: over the 51 passages exactly one half still reached the cap and
-finished its clause on a 0.42 s tail, and an unbounded split is a new way to
-fail. `"off"` ships the truncation, for a checkpoint measured under the old
-law.
+text ends. The generator then stops mid-word and the rest of the chunk is
+lost, because chunk texts are fixed before any of them renders. In a census
+of 9920 rendered chunks in ten languages (August 2026), 54 chunks hit a cap
+and 30 were still speaking when it closed. Counting only the window cap
+leaves 51 and 27. The 27 are all from the two slowest voices, and they lose
+about 0.5% of those voices' words.
 
-`mid_sentence_period`: `"hold"` treats a period after an abbreviation, or
-before a word starting in lower case, as not a boundary; the splitter looks
-for an earlier break and falls through to a word boundary. It does not take
-the held candidate after all: over 1200 passages that saved six word breaks
-and cost seven period breaks, five of which left a title dangling. The
-lower-case rule catches what the funnel manufactures: an ellipsis becomes
-`...`, a run of `[.,;:]` folds to one mark, so "grzeją się... ciepłem"
-arrives as "grzeją się. ciepłem". That is the dominant cause in Polish, which
-has no abbreviation cuts at all. The mechanism is a suffix test, one guard on
-the character before the match and one on the character after the separator,
-with no regular expression, case folding or Unicode class, so five
-implementations agree character for character (`docs/design/preprocess.md`).
+`"word"` splits such a chunk at the word boundary nearest its middle and
+generates both halves under the same chunk index, so no later seed moves. A
+second measurement drove `engine.stream` on the loudr-1 checkpoint over the
+51 passages that carry a cap hit, once with `"off"` and once with `"word"`.
+Windows at the cap go from 52 to 2, and windows still speaking at the cap
+from 29 to 1; the remaining one is a single unbroken word. These passages
+were selected for a cap hit, so the counts are not rates for the whole
+roster. A half that still overruns is not split again. In the same
+measurement one half still reached the cap and finished its clause on a
+0.42 s tail, and a split without a bound would add a new way to fail. `"off"`
+keeps the truncation, for a checkpoint measured without re-splitting.
 
-`first_chunk_max_tokens`: time to first audio is the first chunk's
-generation plus its render, and both scale with its length. Capping only the
-first chunk starts the stream at the first clause. On an Apple laptop a
-96-token first budget cut first audio from about 1.9 s to 1.4 s on a clause
-boundary; smaller budgets shave little more and cut mid-clause. Below about
-48 tokens the first chunk stops being a phrase. It changes where the first
-split falls, so it is an algorithm value and re-fingerprints; unset, it is
-absent from the hash. Python only for now.
+`mid_sentence_period`: `"hold"` does not treat a period as a boundary when it
+follows an abbreviation or precedes a word that starts in lower case. The
+splitter then looks for an earlier break and falls back to a word boundary.
+It does not take the held candidate instead: over 1200 passages, that would
+save six word breaks and cost seven period breaks, five of which leave a title
+dangling. The lower-case rule catches periods that the funnel creates. An
+ellipsis becomes `...`, and a run of `[.,;:]` folds to one mark, so "grzeją
+się... ciepłem" arrives as "grzeją się. ciepłem". That is the main cause in
+Polish, which has no abbreviation cuts at all. The mechanism is a suffix test,
+with one guard on the character before the match and one on the character
+after the separator. It uses no regular expression, case folding or Unicode
+class, so the five implementations agree character for character
+(`docs/design/preprocess.md`).
 
-`max_tokens` must not exceed the render window and neither may
-`sampling.max_new_tokens`: the three budgets live in three manifest blocks,
-and a config that guarantees a mid-passage overflow is refused at load rather
-than after audio has played.
+`first_chunk_max_tokens`: time to first audio is the first chunk's generation
+plus its render, and both grow with its length. Capping only the first chunk
+starts the stream at the first clause. Measured on an M3 Pro on 2026-08-20,
+before the 0.1.0 release, a 96-token first budget cuts first audio from about
+1.9 s to 1.4 s, on a clause boundary. Smaller budgets save little more and cut
+mid-clause. Below about 48 tokens the first chunk is no longer a phrase. The
+field changes where the first split falls, so it is an algorithm value and
+changes the fingerprint; when unset, it is absent from the hash. Only the
+Python implementation honours it. The four ports refuse a manifest that sets
+the key, `null` included, because they would split the text differently under
+the same `recipe_version`.
+
+`max_tokens` must not exceed the render window, and neither may
+`sampling.max_new_tokens`. The three budgets are in three manifest blocks. A
+config that guarantees an overflow mid-passage is refused at load, before any
+audio plays.
 
 ## Window
 
-`WindowConfig` is here rather than in a backend because the pad-and-truncate
-recipe was the entire measured deviation of one renderer from another (mel
-correlation 0.975 to 0.993, worst on the shortest sentence). It traced not to
-the hardware, not to fp16 and not to the framework, but to the static
-window's padding differing from the reference path's. A backend that needs
-fixed shapes may pad to them; it may not decide what padding means.
+`WindowConfig` is an algorithm value, not a backend detail, because padding
+changes the output. In one measurement, the static window's padding was the
+whole difference between two renderers: mel correlation 0.975 to 0.993,
+lowest on the shortest sentence. Hardware, fp16 and the framework contributed
+nothing to it. A backend that needs fixed shapes pads to them with this
+recipe.
 
-`pad_token_id`: padding with token 0, an ordinary speech unit, bleeds into
-the tail through the encoder's attention (+3 dB of high-band mel energy after
-the last real token). The shipped engine pads with silence unit 4254.
+`pad_token_id`: padding with token 0, an ordinary speech unit, leaks into the
+tail through the encoder's attention: +3 dB of high-band mel energy after the
+last real token. The released checkpoints pad with silence unit 4254.
 
 `static_prompt_tokens`: the reference prompt is framed at exactly 238 tokens
-(longer truncates, shorter pads with the silence token) and its mel condition
-occupies exactly twice that many frames.
+(longer truncates, shorter pads with the silence token), and its mel
+condition occupies exactly twice that many frames.
 
 ## Edge fade
 
-`edge_fade_seconds` is an algorithm value by the test above: a half-cosine
+`edge_fade_seconds` is an algorithm value by the test above. A half-cosine
 ramp on both edges of every rendered window changes what a listener hears at
-a join, and it changes it the same way on every backend or the ports disagree
-at the seam. It is bounded to `[0.001, 0.05]` in `_validate_numeric_core`,
-because a ramp longer than a syllable eats word onsets and a ramp shorter than
-a few samples does not cover the flow decoder's hot first frame.
+a join. It must be the same on every backend, or the implementations disagree
+at the seam. `_validate_numeric_core` bounds it to `[0.001, 0.05]`. A ramp
+longer than a syllable attenuates word onsets. A ramp of only a few samples
+does not cover the loud first frame of the flow decoder.
 
-It is the one field with a conditional canonical form: `canonical_form` writes
-the effective value unless it is the historical 0.005, which drops out so
-manifests predating the field keep their fingerprints. The shipped default is
-0.02, applied by `window._fade_edges`. `docs/design/postprocess.md` says what
-the ramp does to the waveform and `docs/reference/IDENTITY-CONTRACT.md` states
-the serialization.
+It is the one field with a conditional canonical form. `canonical_form`
+writes the effective value, except 0.005, which it omits: 0.005 is the fade
+that older checkpoints were fingerprinted with, so a manifest that declares it
+keeps that fingerprint. The default is 0.02, applied by `window._fade_edges`.
+`docs/design/postprocess.md` says what the ramp does to the waveform, and
+`docs/reference/IDENTITY-CONTRACT.md` states the serialization.
 
 ## The manifest
 
-`loudkit.manifest.algorithm_from` reads a checkpoint's manifest. Absent keys
-default (older packs predate several blocks); present keys must be the right
-shape. `manifest.get(key) or default` once treated `window: []` and
-`sampling_defaults: {}` as the defaults, loading a truncated pack under a
-fingerprint that said its algorithm had been chosen. A string is a `Sequence`
-of characters, so `silence_token_ids: "123"` and `split_on: ". "` are refused
-by name rather than loaded as three tokens or two separators. Raised, never
-asserted, because `python -O` strips asserts and the manifest is external
-data.
+`loudkit.manifest.algorithm_from` reads a checkpoint's manifest. An absent key
+takes its default, because older packs predate several blocks. A present key
+must have the right JSON type: `window: []` and `sampling_defaults: []` are
+refused, not read as the defaults. A string is a `Sequence` of characters, so
+`silence_token_ids: "123"` and `split_on: ". "` are refused by name, not
+loaded as three tokens or two separators. The checks raise exceptions and do
+not use `assert`, because `python -O` strips asserts and the manifest is
+external data.
 
-Right shape means the JSON type, not what a cast would accept. Every scalar
+The right type means the JSON type, not what a cast accepts. Every scalar
 goes through `_number`, `_int`, `_opt_int` or `_flag`, and every id list
-through `_int_list`: a JSON boolean and a string of digits are refused by
-name, and a count given as a non-integral number is refused rather than
-truncated, the rule `postprocess_from` already applied to its own counts.
-`int()` and `float()` accept all three, so `pad_token_id: true` loaded as
-token 1 and `max_new_tokens: "7"` as a budget of seven, each yielding a
-working engine under a fingerprint that said the manifest had been read.
+through `_int_list`. A JSON boolean and a string of digits are refused by
+name. A count given as a non-integral number is refused, not truncated, which
+is the rule `postprocess_from` applies to its own counts. `int()` and
+`float()` accept all three, so without these helpers `pad_token_id: true`
+would load as token 1 and `max_new_tokens: "7"` as a budget of seven, each
+under an unchanged fingerprint.
 
 The count rule covers the keys that count things: the window cap and its
 three lengths, the chunk budget and prefix carry, the two speech tokens, the
@@ -205,17 +228,19 @@ generation budget, the EOS floor, the step count, the sample rate, the
 vocabulary size, the detector counts, and every element of the three
 censuses. It does not cover `token_rate_hz`, `temperature`,
 `repetition_penalty`, `min_p`, `min_tokens_text_ratio`, `guidance_rate`,
-`edge_fade_seconds` or the `euler_grid` points, which take 2.7 as a value; a
-check applied there refuses a manifest that is correct. `format_version` is
-outside it as well, because `checkpoint._read_manifest` reads that key with a
-bare `int()`, so a file declaring 2.7 opens in all five and what decides it
-is the number. The four ports carry the rule and both of its edges.
-A refusal names the whole path, `manifest['window']['pad_token_id']`, because
-the reader that refuses is not the one the manifest author reads. `null` is
-still a value where a key means it: the ragged window lengths and the unset
-first-chunk budget.
+`edge_fade_seconds` or the `euler_grid` points, which take 2.7 as a value; the
+rule would refuse a correct manifest there. `format_version` is outside it as
+well: `checkpoint.read_manifest` reads that key with a bare `int()`, so the
+reference opens a file declaring 2.7 as version 2. Go, TypeScript and Swift
+truncate it the same way; Rust refuses it. The four ports carry the count rule
+and both of its edges.
+
+A refusal names the whole path, such as `manifest['window']['pad_token_id']`,
+because the person who reads the error is often not the one who wrote the
+manifest. `null` is a valid value where a key means it: the ragged window
+lengths and the unset first-chunk budget.
 
 The render censuses (`silence_render_ids`, `quiet_render_ids`) are properties
-of the weights and live at the manifest top level beside `silence_token_ids`;
-a manifest that puts them inside the `postprocess` block is refused so one
-value has one home.
+of the weights. They are at the manifest top level beside
+`silence_token_ids`, and a manifest that puts them inside the `postprocess`
+block is refused.

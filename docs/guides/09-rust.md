@@ -1,15 +1,36 @@
 # 9. Rust
 
-The same engine as a Rust crate over ONNX Runtime, through `ort`. No Python,
-no torch.
+The Rust port of loudkit runs on ONNX Runtime through the `ort` crate. It does
+not need Python or PyTorch.
 
 ## Hello
 
-One shared library that cannot be vendored: `brew install onnxruntime` on
-macOS, `apt install libonnxruntime-dev` on Linux, the
-[onnxruntime-win-x64 archive](https://github.com/microsoft/onnxruntime/releases)
-on Windows. `Engine::load` finds it; set `LOUDKIT_ONNXRUNTIME_LIB` if yours is
-somewhere unusual.
+The crate loads the ONNX Runtime shared library at run time. You need version
+1.27 or newer. The library is not part of the crate. Install it separately:
+
+- macOS: `brew install onnxruntime`. Check that its version is 1.27 or newer.
+- Linux: unpack the `onnxruntime-linux-x64` archive from the
+  [ONNX Runtime releases](https://github.com/microsoft/onnxruntime/releases).
+- Windows: unpack the `onnxruntime-win-x64` archive from the same page.
+
+`Engine::load` looks for the library in this order:
+
+1. the file that `ORT_DYLIB_PATH` names
+2. the file that `LOUDKIT_ONNXRUNTIME_LIB` names
+3. `/opt/homebrew/lib` and `/usr/local/lib` on macOS; `/usr/local/lib`,
+   `/usr/lib`, `/usr/lib/x86_64-linux-gnu` and `/usr/lib/aarch64-linux-gnu` on
+   Linux; `C:\Program Files\onnxruntime\lib` and the working directory on
+   Windows
+
+Set `ORT_DYLIB_PATH` to the library file in two cases:
+
+- A provider feature (`cuda`, `coreml`, `directml`) is on. The crate then loads
+  the library before this search, so `LOUDKIT_ONNXRUNTIME_LIB` and the
+  directories above are not used.
+- The program loads an `Enroller` with `Enroller::load_with` before it loads
+  any `Engine`. `Enroller::load_with` does not search for the library.
+
+Distribution packages such as `libonnxruntime-dev` can be older than 1.27.
 
 For a new application:
 
@@ -40,20 +61,28 @@ fn main() -> Result<(), String> {
 }
 ```
 
-The first run downloads the model files into
-`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS and
-`~/.cache/loudkit/loudreader--loudr-1` elsewhere (`$LOUDKIT_CACHE` moves it),
-the directory the Go, JS and Swift ports share, and checks every file
-against the release's own `SHA256SUMS`; later runs read what is there.
-`engine.voices()` names the 28 voices. The snippets need loudkit 0.1.1;
-from a checkout, `cargo run --example hello`.
+The first run downloads the model files into the user cache:
 
-Both `loudr-1` and `loudr-1-turbo` use this API in 0.1.1. Change the model
-name to switch; keep the same voice profile. A local release directory works
-as well as a published model name.
+- macOS: `~/Library/Caches/loudkit/loudreader--loudr-1`
+- Linux: `$XDG_CACHE_HOME/loudkit/loudreader--loudr-1`, or
+  `~/.cache/loudkit/loudreader--loudr-1` when `XDG_CACHE_HOME` is not set
+- Windows: `%LOCALAPPDATA%\loudkit\loudreader--loudr-1`
+
+Set `LOUDKIT_CACHE` to use `$LOUDKIT_CACHE/loudreader--loudr-1` instead. The
+Go, JS and Swift ports use the same directory. Each downloaded file is checked
+against the release's `SHA256SUMS`. Later runs reuse the cache and fetch only
+the files that changed when the repo's `main` branch moves. `engine.voices()`
+lists the 28 voices.
+
+The examples on this page need loudkit 0.1.1. To run the example from a
+repository checkout, run `cargo run --example hello` in `rust/`.
+
+`loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
+model name. The same voice profiles work with both models. `Engine::load` also
+accepts a local release directory.
 
 
-## A directory of your own
+## Download to a local directory
 
 ```rust
 use loudkit::hub;
@@ -63,18 +92,25 @@ let dir = hub::download_with("loudreader/loudr-1", "loudr-1", &options)?;
 let mut engine = Engine::load(&dir)?;
 ```
 
-`download` writes a receipt, `.loudkit-release.json`; a later call whose
-revision still resolves to the same commit fetches and hashes nothing, a moved
-revision keeps every file that still hashes to the new `SHA256SUMS` and fetches
-the rest, and an interrupted fetch resumes. Pin `revision` for anything reproducible. Under `loudreader/`,
-`release.json` must say the bundle passed the builder's gate, and it is
-checked before any weight moves.
+`download` writes a receipt, `.loudkit-release.json`, into the directory. On
+a later call:
+
+- If the revision still resolves to the same commit, `download` fetches and
+  hashes no weight file.
+- If the revision moved, it keeps every file that matches the new
+  `SHA256SUMS` and fetches the rest.
+- An interrupted fetch resumes.
+
+Pin `revision` to a tag or commit for a reproducible build. For repos under
+`loudreader/`, `release.json` must show that the release passed its build
+checks. `download` reads it before it fetches any weight file.
 
 ## Synthesize
 
-`synthesize` takes text of any length: it splits at sentence boundaries,
-gives each chunk its own seed, carries the pitch contour across the joins and
-returns one `Synthesis`. `Options::default()` is every default.
+`synthesize` splits long text into chunks at sentence boundaries. It gives
+each chunk its own seed, conditions each chunk on the speech tokens at the end
+of the chunk before it, and returns one `Synthesis` that holds all the audio.
+`Options::default()` selects every default.
 
 ```rust
 let out = engine.synthesize(
@@ -96,7 +132,7 @@ out.save_wav(path)?;
 ```
 
 `synthesize_window` renders exactly one model window and returns an error on
-longer text; it is for the conformance harness.
+longer text. The conformance tests use it.
 
 ## Streaming and barge-in
 
@@ -108,17 +144,18 @@ engine.stream(text, &voice, &Options::default(), Some(&mut stop), &mut |chunk| {
 })?;
 ```
 
-`stream` hands out chunks as they are made, so playback starts before the
-passage is finished. The cancel closure is polled on every decode step, and
-the chunk being generated is discarded. `Options.should_cancel` is the same
-flag for `synthesize`, which returns `Err(error::CANCELLED)` instead of a
-passage cut short.
+`stream` passes each chunk to the callback when it is ready, so playback can
+start before the passage is finished. The cancel closure is checked on every
+decode step. When it returns true, the chunk in progress is discarded.
+
+`synthesize` reads the same flag from `Options.should_cancel`. When it
+returns true, `synthesize` returns `Err(error::CANCELLED)` and no audio.
 
 ## Timestamps and speed
 
-`out.chunks` is exact at the chunk level and an estimate at the word level;
-read [timestamps.md](../reference/timestamps.md) before building on the word
-times. `speed` is refused outside `[0.5, 2.0]`; see
+`out.chunks` is exact at the chunk level and an estimate at the word level.
+Read [timestamps.md](../reference/timestamps.md) before you use the word
+times. `speed` outside `[0.5, 2.0]` is refused; see
 [speed.md](../reference/speed.md).
 
 ## Cloning a voice
@@ -128,15 +165,15 @@ let mine = engine.enroll_wav("me.wav", "mine", "en")?;
 mine.save("mine.safetensors")?;
 ```
 
-The first `enroll_wav` on an engine loaded by repo id fetches the three
-enrollment graphs into the same cache directory,
-`~/Library/Caches/loudkit/loudreader--loudr-1` on macOS and
-`~/.cache/loudkit/loudreader--loudr-1` elsewhere; later calls read them from
-there. An engine loaded from a directory of your own needs them fetched with
+On an engine loaded by repo id, the first `enroll_wav` call fetches the three
+enrollment graphs into the model's cache directory. Later calls use the cached
+graphs. For an engine loaded from a local directory, fetch the graphs first
+with
 `hub::download_with(repo, dir, &hub::Options { cloning: true, ..Default::default() })`.
-Five to ten seconds of clean speech is the input this was tuned for.
-`enroll_wav` reads 16-bit PCM and 32-bit float WAVs at any rate and channel
-count; `enroll` takes samples. `voice::load(path)` reads the profile back.
+
+Use five to ten seconds of clean speech. `enroll_wav` reads 16-bit PCM and
+32-bit float WAV files at any sample rate and channel count. `enroll` takes
+samples. `voice::load(path)` loads a saved profile.
 
 ## Execution provider
 
@@ -152,27 +189,35 @@ let mut engine = Engine::load_with("loudreader/loudr-1", &execution)?;
 println!("{}", engine.describe());
 ```
 
-Two things must be true for a provider to run, and the refusal says which one
-is missing: the cargo feature (`--features cuda`, `coreml`, `directml`; none
-is on by default, so `auto` resolves to `cpu` in a default build) and a
-shared library that carries it. A named provider that is not available is an
-error, never a quiet demotion to CPU.
+A provider other than `cpu` runs only if two conditions are true:
 
-`coreml` runs the renderer on CoreML and keeps the generator on CPU, so the
-speech tokens are identical to a `cpu` run and the waveform is not
-bit-identical. The first run compiles the graphs, about two minutes, cached
-under `~/Library/Caches/loudkit/coreml` (`$LOUDKIT_COREML_CACHE` moves it).
+- Its cargo feature is on. Enable it when you add the crate, for example
+  `cargo add loudkit@0.1.1 --features cuda`. The features are `cuda`, `coreml`
+  and `directml`.
+- The ONNX Runtime library at `ORT_DYLIB_PATH` contains the provider.
 
-CUDA measured 3.60x on an RTX 3090 (measured on 0.1.0), against 0.70x for the
-CPU provider on the same host. On an Apple M3 Pro the CPU provider runs the
-shared passage at 1.21x with loudr-1 and 1.74x with loudr-1-turbo, measured on
-0.1.1. Build with `--features cuda` and use a CUDA-enabled ONNX Runtime.
+No provider feature is on by default, so `auto` selects `cpu` in a default
+build. If you name a provider that is not available, `load_with` returns an
+error that names the missing condition.
 
-## Your own layout
+`coreml` runs the renderer on CoreML and keeps the token generator on the CPU.
+The speech tokens are identical to a `cpu` run, but the waveform is not
+bit-identical. The first run compiles the graphs, which takes about two
+minutes. The compiled graphs are cached in `~/Library/Caches/loudkit/coreml`.
+Set `LOUDKIT_COREML_CACHE` to use another directory.
 
-`Engine::load_paths(checkpoint, onnx_dir, tokenizer)` opens three paths you
-assembled yourself, and `hub::Bundle::open(dir)` reads a release's paths
-without loading it.
+On an RTX 3090, measured on 0.1.0, the CUDA provider runs at 3.60x real time
+and the CPU provider at 0.70x on the same host. On an Apple M3 Pro, measured on
+0.1.1, the CPU provider runs the shared passage at 1.21x with loudr-1 and 1.74x
+with loudr-1-turbo. For CUDA, add the crate with `--features cuda` as shown
+above and use a CUDA build of ONNX Runtime.
+
+## Explicit asset paths
+
+`Engine::load_paths(checkpoint, onnx_dir, tokenizer)` loads a checkpoint, a
+directory of ONNX graphs and a tokenizer file from the paths you give.
+`hub::Bundle::open(dir)` finds these paths in a release directory without
+loading the engine.
 
 ## Verify against the shared fixture
 
@@ -181,6 +226,7 @@ cd rust && cargo test                                              # weight-free
 LOUDKIT_CKPT=… LOUDKIT_ONNX_DIR=… LOUDKIT_VOICE=… ORT_DYLIB_PATH=… cargo test -- --ignored
 ```
 
-The engine conformance is `#[ignore]` so a run without the assets reports it
-as ignored rather than passed. It holds `synthesize` and `synthesize_window`
-to the fixture's tokens, chunk by chunk.
+The engine conformance test is marked `#[ignore]`, so a run without the assets
+reports it as ignored. Run it with `cargo test -- --ignored` after you set the
+asset variables. It compares the tokens from `synthesize` and
+`synthesize_window` with the fixture, chunk by chunk.
