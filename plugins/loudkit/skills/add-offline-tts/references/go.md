@@ -1,0 +1,175 @@
+# loudkit in Go
+
+Excerpt from the loudkit guide for loudkit 0.1.1. Full guide: https://github.com/loudreader/loudkit/blob/main/docs/guides/08-go.md
+
+## Hello
+
+You need Go 1.25 or newer and the ONNX Runtime shared library, version 1.28
+or newer. The library is not part of the module. Install it separately:
+
+- macOS: `brew install onnxruntime`. Check that its version is 1.28 or newer.
+- Linux: unpack the `onnxruntime-linux-x64` archive from the
+  [ONNX Runtime releases](https://github.com/microsoft/onnxruntime/releases).
+- Windows: unpack the `onnxruntime-win-x64` archive from the same page.
+
+`loudkit.Load` looks for the library in these directories:
+
+- macOS: `/opt/homebrew/lib`, `/usr/local/lib`
+- Linux: `/usr/local/lib`, `/usr/lib`, `/usr/lib/x86_64-linux-gnu`,
+  `/usr/lib/aarch64-linux-gnu`
+- Windows: `C:\Program Files\onnxruntime\lib`, the working directory
+
+If the library is somewhere else, for example in the unpacked archive, set
+`LOUDKIT_ONNXRUNTIME_LIB` to the library file. Distribution packages such as
+`libonnxruntime-dev` can be older than 1.28.
+
+```bash
+mkdir hello && cd hello
+go mod init hello
+go get github.com/loudreader/loudkit/go@v0.1.1
+```
+
+Save this as `main.go`, then run `go run .`:
+
+```go
+package main
+
+import (
+	"log"
+
+	loudkit "github.com/loudreader/loudkit/go"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run holds the body so the deferred Close runs on the way out: log.Fatal
+// ends the process through os.Exit, which runs no deferred function.
+func run() error {
+	eng, err := loudkit.Load("loudreader/loudr-1")
+	if err != nil {
+		return err
+	}
+	defer eng.Close()
+
+	v, err := eng.Voice("joe")
+	if err != nil {
+		return err
+	}
+
+	out, err := eng.Synthesize("Hello from loudkit.", v, loudkit.Options{Seed: 7})
+	if err != nil {
+		return err
+	}
+	if err := out.SaveWav("hello.wav"); err != nil {
+		return err
+	}
+	log.Printf("hello.wav: %.2fs", out.Duration().Seconds())
+	return nil
+}
+```
+
+The first run downloads the model files into the user cache:
+
+- macOS: `~/Library/Caches/loudkit/loudreader--loudr-1`
+- Linux: `$XDG_CACHE_HOME/loudkit/loudreader--loudr-1`, or
+  `~/.cache/loudkit/loudreader--loudr-1` when `XDG_CACHE_HOME` is not set
+- Windows: `%LOCALAPPDATA%\loudkit\loudreader--loudr-1`
+
+Set `LOUDKIT_CACHE` to use `$LOUDKIT_CACHE/loudreader--loudr-1` instead. The
+Rust, JS and Swift ports use the same directory. Each downloaded file is
+checked against the release's `SHA256SUMS`. Later runs reuse the cache and
+fetch only the files that changed when the repo's `main` branch moves.
+`eng.Voices()` lists the 28 voices.
+
+The examples on this page need loudkit 0.1.1. To run the example from a
+repository checkout, run `go run ./examples/hello` in `go/`.
+
+`loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
+model name. The same voice profiles work with both models. `loudkit.Load` also
+accepts a local release directory.
+
+## Download to a local directory
+
+```go
+dir, err := loudkit.DownloadWith("loudreader/loudr-1", "./loudr-1", loudkit.Fetch{Revision: "v0.1.1"})
+if err != nil {
+	log.Fatal(err)
+}
+eng, err := loudkit.Load(dir)
+```
+
+Give the directory with a path prefix, such as `./loudr-1`. `loudkit.Load`
+reads the bare names `loudr-1` and `loudr-1-turbo` as the repo ids
+`loudreader/loudr-1` and `loudreader/loudr-1-turbo`. It then loads `main` from
+the Hub into the cache and ignores a directory with that name.
+
+`Download` writes a receipt, `.loudkit-release.json`, into the directory. On
+a later call:
+
+- If the revision still resolves to the same commit, `Download` fetches and
+  hashes no weight file.
+- If the revision moved, it keeps every file that matches the new
+  `SHA256SUMS` and fetches the rest.
+- An interrupted fetch resumes.
+
+Pin `Revision` to a tag or commit for a reproducible build. For repos under
+`loudreader/`, `release.json` must show that the release passed its build
+checks. `Download` reads it before it fetches any weight file.
+
+## Synthesize
+
+`Synthesize` splits long text into chunks at sentence boundaries. It gives
+each chunk its own seed, conditions each chunk on the speech tokens at the end
+of the chunk before it, and returns one `Result` that holds all the audio. The
+zero `Options` value selects every default.
+
+```go
+out, err := eng.Synthesize(text, v, loudkit.Options{
+	Seed:           7,              // 0 when omitted
+	Language:       "pl",           // the voice's own when empty
+	Speed:          1.25,           // [0.5, 2.0], pitch preserved; 0 or 1.0 is an exact bypass
+	PreviousTokens: earlier.Tokens, // continue an earlier result's pitch contour
+})
+out.Audio       // []float32 at out.SampleRate
+out.Tokens      // the speech tokens
+out.Chunks      // where each chunk lands, and an estimate of each word
+out.HitTokenCap   // generation stopped at the token cap: probably cut off
+out.SaveWav(path); out.WriteWav(w)
+```
+
+`SynthesizeWindow` renders exactly one model window and returns an error on
+longer text. The conformance tests use it.
+
+## Streaming and barge-in
+
+```go
+err := eng.Stream(text, v, loudkit.Options{Seed: 7, ShouldCancel: stopped}, func(c loudkit.Chunk) bool {
+	play(c.Audio) // c.Timing starts at zero; c.Timing.Shifted adds your offset
+	return true   // false stops at the next chunk
+})
+```
+
+`Stream` passes each chunk to the callback when it is ready, so playback can
+start before the passage is finished. `ShouldCancel` is checked on every
+decode step. When it returns true, the chunk in progress is discarded.
+
+## Cloning a voice
+
+```go
+mine, err := eng.Enroll("me.wav", "mine", "en")
+if err != nil { log.Fatal(err) }
+if err := mine.Save("mine.safetensors"); err != nil { log.Fatal(err) }
+```
+
+On an engine loaded by repo id, the first `Enroll` call fetches the three
+enrollment graphs into the model's cache directory. Later calls use the cached
+graphs. For an engine loaded from a local directory, fetch the graphs first
+with `loudkit.DownloadWith(repo, dir, loudkit.Fetch{Cloning: true})`.
+
+Use five to ten seconds of clean speech. `Enroll` reads 8, 16, 24 and 32-bit
+PCM and 32-bit float WAV files at any sample rate. `EnrollPCM` takes samples.
+`voice.Load(path)` loads a saved profile.
