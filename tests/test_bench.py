@@ -35,6 +35,19 @@ Sample, bench, render_table, run_bench, to_json = (
 profile_passage = tool("profile_stages").profile_passage
 
 
+def _spend(seconds: float) -> None:
+    """Take at least ``seconds`` by ``time.perf_counter``, the clock the bench reads.
+
+    ``time.sleep`` alone can return early on Windows, where its timer has
+    millisecond resolution: a 2 ms sleep measured 1.87 ms on CI and failed the
+    one-decode-step lower bound below. Sleeping, then spinning to the deadline,
+    makes that bound hold on every platform."""
+    deadline = time.perf_counter() + seconds
+    time.sleep(seconds)
+    while time.perf_counter() < deadline:
+        pass
+
+
 class FakeGenerator:
     step_delay_s = 0.002
     """Cost of one decode step.
@@ -67,7 +80,7 @@ class FakeGenerator:
             if should_cancel is not None and should_cancel():
                 return out
             self.polls += 1
-            time.sleep(self.step_delay_s)  # a forward pass is not free
+            _spend(self.step_delay_s)  # a forward pass is not free
             out.append(i)
         out.append(self.config.stop_speech_token)
         return out
