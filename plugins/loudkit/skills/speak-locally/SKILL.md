@@ -13,24 +13,24 @@ run with no network at all, pass a local release directory to
 
 ## Where you are running
 
-- **Your shell runs on the user's own computer** (Codex CLI, the Codex IDE
-  extension or the desktop app on a local project): follow the steps below
-  and produce the file.
-- **Your shell runs in a cloud environment** (a Codex cloud task or another
+- **Your shell runs on the user's own computer** (a coding agent in a
+  terminal, an IDE or a desktop app, working on a local project): follow the
+  steps below and produce the file.
+- **Your shell runs in a cloud environment** (a cloud coding task or another
   remote container): you can run loudkit there if the environment can reach
   the internet to install it and fetch the model. Use only text that is
   already in that environment for this task; ask before moving any other
-  document or text there. Before you start, say that
-  it runs in that cloud environment, not on the user's computer. Use the CPU
-  build: install `"loudkit[onnx,audio,hub]"` and add `--device onnx` to the
-  `speak` command. The WAV stays in the environment: tell the user where it
-  is and how to get it, for example by committing it only if they ask. If
-  there is no internet access, give the commands instead.
-- **You have no shell** (ChatGPT on the web or a phone): do not claim to have
-  made audio. Give the user the install command and the `speak` command from
-  steps 2 and 4, with their voice and output file name. The command reads the
-  text from a file on stdin; never put the passage itself into the command.
-  Say the commands run on their own computer.
+  document or text there. Before you start, say that it runs in that cloud
+  environment, not on the user's computer. Use the CPU build: install
+  `"loudkit[onnx,audio,hub]"` and add `--device onnx` to the `speak` command.
+  The WAV stays in the environment: tell the user where it is and how to get
+  it, for example by committing it only if they ask. If there is no internet
+  access, give the commands instead.
+- **You have no shell** (a chat app on the web or a phone): do not claim to
+  have made audio. Give the user the install command and the `speak` command
+  from steps 2 and 4, with their voice and output file name. The command reads
+  the text from a file on stdin; never put the passage itself into the
+  command. Say the commands run on their own computer.
 
 ## Steps
 
@@ -63,7 +63,9 @@ run with no network at all, pass a local release directory to
 
 4. **Synthesise.** Write the text as data to a private temporary file with a
    unique name, using a file-writing tool rather than shell interpolation.
-   Pass it on stdin, and delete it afterwards:
+   Pass it on stdin, and delete it afterwards. Only the text file is
+   temporary: write the WAV where the user asked, and by default to the
+   current working directory, not a temporary directory:
 
    ```bash
    loudkit speak - --voice joe -o narration.wav < passage.txt

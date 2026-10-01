@@ -35,17 +35,17 @@ loudkit cannot check who owns a voice; the user is responsible for that.
 
 ## Where you are running
 
-- **Your shell runs on the user's own computer** (Codex CLI, the Codex IDE
-  extension or the desktop app on a local project): follow the steps below.
-- **Your shell runs in a cloud environment** (a Codex cloud task or another
+- **Your shell runs on the user's own computer** (a coding agent in a
+  terminal, an IDE or a desktop app, working on a local project): follow the
+  steps below.
+- **Your shell runs in a cloud environment** (a cloud coding task or another
   remote container): clone there only if the recording is already in that
   environment and it can reach the internet for the models. Say first that
   cloning runs in that cloud environment, not on the user's computer. Use
-  `"loudkit[onnx,audio,hub]"`, fetch the cloning graphs with
-  `loudkit download loudreader/loudr-1 --for onnx --with-cloning`, and add
-  `--device onnx` to `loudkit clone`. Never commit the profile
-  or the recording to a repository.
-- **You have no shell** (ChatGPT on the web or a phone): give the user the
+  `"loudkit[onnx,audio,hub]"`, fetch the cloning graphs with `loudkit download
+  loudreader/loudr-1 --for onnx --with-cloning`, and add `--device onnx` to
+  `loudkit clone`. Never commit the profile or the recording to a repository.
+- **You have no shell** (a chat app on the web or a phone): give the user the
   commands from steps 1 to 4 and say they run on their own computer. Do not
   ask them to upload the recording to you for cloning.
 

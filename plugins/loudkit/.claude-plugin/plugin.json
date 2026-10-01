@@ -1,0 +1,21 @@
+{
+  "name": "loudkit",
+  "version": "0.1.0",
+  "description": "Offline text to speech on your own computer: add local speech to an app, pick a voice, make WAV files from text, clone a voice you have the right to use.",
+  "author": {
+    "name": "LoudReader",
+    "url": "https://loudkit.loudreader.io/"
+  },
+  "homepage": "https://loudkit.loudreader.io/",
+  "repository": "https://github.com/loudreader/loudkit",
+  "license": "Apache-2.0",
+  "keywords": [
+    "text-to-speech",
+    "tts",
+    "offline",
+    "on-device",
+    "voice",
+    "audio",
+    "narration"
+  ]
+}

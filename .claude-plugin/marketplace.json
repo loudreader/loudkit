@@ -1,0 +1,15 @@
+{
+  "name": "loudkit",
+  "description": "loudkit: open-source offline text to speech for coding agents.",
+  "owner": {
+    "name": "LoudReader",
+    "url": "https://loudkit.loudreader.io/"
+  },
+  "plugins": [
+    {
+      "name": "loudkit",
+      "source": "./plugins/loudkit",
+      "description": "Offline text to speech on your own computer: add local speech to an app, pick a voice, make WAV files from text, clone a voice you have the right to use."
+    }
+  ]
+}
