@@ -55,9 +55,9 @@ The code is Apache-2.0; the voice licences are in the `choose-voice` skill.
      needs something the reference does not show, link the full guide.
 
 6. **Test it.** Add a test that synthesises one short sentence and checks that
-   the audio is not empty. Run it only when your shell is on the user's own
-   computer, and ask first: it downloads the model. Otherwise, give the
-   command to run.
+   the audio is not empty. Ask before running it: it downloads the model.
+   In a cloud environment, run it only if it can reach the internet, and say
+   it ran there. Without a shell, give the command to run.
 
 ## Rules
 

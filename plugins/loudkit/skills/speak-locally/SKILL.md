@@ -1,12 +1,12 @@
 ---
 name: speak-locally
-description: Make a spoken-audio WAV file from text or a text file with loudkit on the user's own computer, offline and without a cloud API. In a local coding agent, produce the file; elsewhere, give the commands to run locally. Use when the user wants an audio file, narration or voice-over made from text or a document on their machine, not when they only want the assistant's reply read aloud.
+description: Make a spoken-audio WAV file from text or a text file with loudkit, an open-source engine that runs offline without a cloud API. In a coding agent with a shell, on the user's computer or in a cloud task, produce the file; without a shell, give the commands to run locally. Use when the user wants an audio file, narration or voice-over made from text or a document on their machine, not when they only want the assistant's reply read aloud.
 ---
 
 # Speak locally
 
-loudkit synthesises speech on the user's computer. The text and the audio
-never leave it. The model is downloaded once from Hugging Face; after that,
+loudkit synthesises speech where it runs. The text and the audio are never
+sent to the loudkit project or any speech service. The model is downloaded once from Hugging Face; after that,
 loading by name may still check Hugging Face for a newer revision. For a
 run with no network at all, pass a local release directory to
 `--checkpoint`.
@@ -16,11 +16,18 @@ run with no network at all, pass a local release directory to
 - **Your shell runs on the user's own computer** (Codex CLI, the Codex IDE
   extension or the desktop app on a local project): follow the steps below
   and produce the file.
-- **Anywhere else** (ChatGPT on the web or a phone, a cloud task or container,
-  or you are not sure): do not run loudkit there and do not claim to have made
-  audio. Give the user the install command and the `speak` command from
+- **Your shell runs in a cloud environment** (a Codex cloud task or another
+  remote container): you can run loudkit there if the environment can reach
+  the internet to install it and fetch the model. Before you start, say that
+  it runs in that cloud environment, not on the user's computer. Use the CPU
+  build: install `"loudkit[onnx,audio,hub]"` and add `--device onnx` to the
+  `speak` command. The WAV stays in the environment: tell the user where it
+  is and how to get it, for example by committing it only if they ask. If
+  there is no internet access, give the commands instead.
+- **You have no shell** (ChatGPT on the web or a phone): do not claim to have
+  made audio. Give the user the install command and the `speak` command from
   steps 2 and 4, filled in with their text, voice and file name, and say they
-  run on their own computer. Ask if you cannot tell where your shell runs.
+  run on their own computer.
 
 ## Steps
 

@@ -39,8 +39,9 @@ audio or recordings.
 The plugin contains instructions only. It has no server, and we receive
 nothing when you use it.
 
-- In a coding agent that runs on your computer, the plugin runs loudkit
-  there, as described above.
+- In a coding agent with a shell, the plugin runs loudkit where that shell
+  runs: on your computer, or in a cloud environment you chose, such as a
+  Codex cloud task. Either way, nothing is sent to us.
 - In ChatGPT, the plugin gives you code and commands to run locally.
 
 Your conversation, including any text or file you share in it, is processed
