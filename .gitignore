@@ -83,7 +83,8 @@ checkpoints/
 # docs, not the drafting.
 /out/
 /openspec/
-/.agents/
+/.agents/*
+!/.agents/plugins/
 /notebooks/*
 !/notebooks/loudkit_quickstart.ipynb
 /lexicons/
