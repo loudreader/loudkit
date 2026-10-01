@@ -16,7 +16,7 @@
       "interface": {
         "displayName": "loudkit",
         "shortDescription": "Offline text to speech",
-        "longDescription": "loudkit is an open-source speech engine with open weights. It runs on your own computer, with no account and no cloud API. This plugin adds local speech to a Python, JavaScript, Rust, Go or Swift project and helps you pick one of 28 voices in 10 languages. In a coding agent with a shell, on your computer or in a cloud task, it also makes WAV files from text and clones a voice from a short recording you have the right to use. Without a shell, it gives you the code and commands to run on your own computer. Your text and recordings are never sent to us: we run no servers. The model is downloaded once from Hugging Face.",
+        "longDescription": "loudkit is an open-source speech engine with open weights. It runs on your own computer, with no account and no cloud API. This plugin adds local speech to a Python, JavaScript, Rust, Go or Swift project and helps you pick one of 28 voices in 10 languages. In a coding agent with a shell, on your computer or in a cloud task, it also makes WAV files from text and clones a voice from a short recording you have the right to use. Without a shell, it gives you the code and commands to run on your own computer. Your text and recordings are never sent to us: we run no servers. The model is downloaded once, then everything runs offline.",
         "developerName": "LoudReader",
         "category": "Developer Tools",
         "capabilities": ["Read", "Write"],
