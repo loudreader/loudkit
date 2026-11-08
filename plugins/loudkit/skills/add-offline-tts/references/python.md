@@ -1,6 +1,6 @@
 # loudkit in Python
 
-Excerpt from the loudkit guides for loudkit 0.1.1. Full guides: https://github.com/loudreader/loudkit/blob/main/docs/guides/01-getting-started.md and https://github.com/loudreader/loudkit/blob/main/docs/guides/02-streaming-and-long-form.md
+Excerpt from the loudkit guides for loudkit 0.1.2. Full guides: https://github.com/loudreader/loudkit/blob/main/docs/guides/01-getting-started.md and https://github.com/loudreader/loudkit/blob/main/docs/guides/02-streaming-and-long-form.md
 
 ## Install
 

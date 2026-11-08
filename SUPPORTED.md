@@ -1,6 +1,6 @@
 # What loudkit 0.1 supports
 
-loudkit 0.1.1 supports the features below. Each item is *Supported*,
+loudkit 0.1.2 supports the features below. Each item is *Supported*,
 *Supported with stated limits*, *Experimental* or *Out of scope for 0.1*.
 Experimental features ship and work, but they may change, and feedback on them
 is welcome. Out-of-scope items are not attempted in 0.1. Removing an item from

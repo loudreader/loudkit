@@ -26,7 +26,7 @@ If the library is somewhere else, for example in the unpacked archive, set
 ```bash
 mkdir hello && cd hello
 go mod init hello
-go get github.com/loudreader/loudkit/go@v0.1.1
+go get github.com/loudreader/loudkit/go@v0.1.2
 ```
 
 `main.go`:
@@ -90,7 +90,7 @@ checked against the release's `SHA256SUMS`. `eng.Voices()` lists the 28
 voices. `Close` releases the native runtime's memory, which matters when a
 process loads a second engine.
 
-The examples on this page need loudkit 0.1.1. To run the example from a
+The examples on this page need loudkit 0.1.2. To run the example from a
 repository checkout, run `go run ./examples/hello` in `go/`.
 `examples/hello/main.go` is the program above.
 
@@ -105,7 +105,7 @@ ids.
 
 ```go
 loudkit.Download(repo, dir)                            // download to a local directory
-loudkit.DownloadWith(repo, dir, loudkit.Fetch{Revision: "v0.1.1", Cloning: true})
+loudkit.DownloadWith(repo, dir, loudkit.Fetch{Revision: "v0.1.2", Cloning: true})
 loudkit.Load(dirOrRepoID)                              // a local directory or a repo id
 eng.Voices()                                           // the voice names in the release
 eng.Voice("joe")                                       // load one voice by name
