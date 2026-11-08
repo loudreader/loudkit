@@ -456,7 +456,13 @@ jobs:
           python-version: "3.12"
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          go-version: "1.25"
+          # govulncheck reports the standard library of the toolchain it runs
+          # on, so the audit runs on a Go release that still gets security
+          # fixes, at its newest patch rather than whatever the image cached.
+          # 1.25 stopped getting them when 1.27 shipped; the module's own
+          # floor (`go 1.25.0` in go/go.mod) is a separate question.
+          go-version: "1.26"
+          check-latest: true
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "22"
