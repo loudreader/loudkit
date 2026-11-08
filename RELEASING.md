@@ -33,10 +33,10 @@ their version from the git tag and have nothing to edit.
 
 | file | field | value on `main` |
 | --- | --- | --- |
-| `pyproject.toml` | `version` | `0.1.1` |
-| `js/package.json` | `version` | `0.1.1` |
-| `rust/Cargo.toml` | `version` | `0.1.1` |
-| `python/loudkit/_version.py` | `__version__` | `0.1.1` |
+| `pyproject.toml` | `version` | `0.1.2` |
+| `js/package.json` | `version` | `0.1.2` |
+| `rust/Cargo.toml` | `version` | `0.1.2` |
+| `python/loudkit/_version.py` | `__version__` | `0.1.2` |
 
 Set all four to `X.Y.Z`, and change the last column of this table in the same
 commit. `js/package-lock.json` carries the version twice; update it too.

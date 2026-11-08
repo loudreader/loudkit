@@ -50,7 +50,7 @@ The code is Apache-2.0; the voice licences are in the `choose-voice` skill.
    - Load the engine once and keep it. Loading takes seconds.
    - Use `stream` when playback should start before the whole passage is
      rendered, and `synthesize` for a file.
-   - Pin the release revision (`v0.1.1`) for reproducible builds.
+   - Pin the release revision (`v0.1.2`) for reproducible builds.
    - Do not invent API names. Use only the calls in the reference. If the user
      needs something the reference does not show, link the full guide.
 

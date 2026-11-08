@@ -46,7 +46,7 @@ checked against the release's `SHA256SUMS`. `engine.voices()` lists the 28
 voices. `close()` releases the native runtime's memory, which matters when a
 process loads a second engine.
 
-The examples on this page need loudkit 0.1.1. To run the example from a
+The examples on this page need loudkit 0.1.2. To run the example from a
 repository checkout, run `npm run build`, then `node examples/hello.mjs`, in
 `js/`. `examples/hello.mjs` is the program above.
 
@@ -59,7 +59,7 @@ accepts a local release directory.
 
 ```javascript
 await download("loudreader/loudr-1", "loudr-1");          // download to a local directory
-await download(repo, dir, { revision: "v0.1.1", cloning: true });
+await download(repo, dir, { revision: "v0.1.2", cloning: true });
 await Engine.load("loudr-1");                            // a local directory or a repo id
 engine.voices();                                         // the voice names in the release
 engine.voice("joe");                                     // load one voice by name

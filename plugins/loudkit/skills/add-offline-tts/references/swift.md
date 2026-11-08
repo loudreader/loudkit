@@ -1,13 +1,13 @@
 # loudkit in Swift
 
-Excerpt from the loudkit guide for loudkit 0.1.1. Full guide: https://github.com/loudreader/loudkit/blob/main/docs/guides/10-swift.md
+Excerpt from the loudkit guide for loudkit 0.1.2. Full guide: https://github.com/loudreader/loudkit/blob/main/docs/guides/10-swift.md
 
 ## Hello
 
 `Package.swift` is at the repository root.
 
 ```swift
-.package(url: "https://github.com/loudreader/loudkit", from: "0.1.1")
+.package(url: "https://github.com/loudreader/loudkit", from: "0.1.2")
 ```
 
 For an existing app, also add the `LoudKit` product to its target. For a new
@@ -22,7 +22,7 @@ let package = Package(
     name: "Hello",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/loudreader/loudkit", from: "0.1.1")
+        .package(url: "https://github.com/loudreader/loudkit", from: "0.1.2")
     ],
     targets: [
         .executableTarget(name: "Hello", dependencies: [
@@ -55,7 +55,7 @@ the same directory. Each downloaded file is checked against the release's
 `SHA256SUMS`. Later runs reuse the cache and fetch only the files that changed
 when the repo's `main` branch moves. `engine.voiceNames` lists the 28 voices.
 
-The examples on this page need loudkit 0.1.1. To run the example from a
+The examples on this page need loudkit 0.1.2. To run the example from a
 repository checkout, run `swift run Hello`.
 
 `loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
@@ -66,7 +66,7 @@ accepts a local release directory.
 
 ```swift
 let dir = try await LoudKit.download(
-    repo: "loudreader/loudr-1", to: URL(fileURLWithPath: "loudr-1"), revision: "v0.1.1")
+    repo: "loudreader/loudr-1", to: URL(fileURLWithPath: "loudr-1"), revision: "v0.1.2")
 let engine = try Engine.load(bundle: dir)
 ```
 

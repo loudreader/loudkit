@@ -5,6 +5,35 @@ describes. [docs/reference/COMPATIBILITY.md](docs/reference/COMPATIBILITY.md)
 defines versioning and what counts as a breaking change.
 
 
+## [0.1.2] - 2026-11-08
+
+A patch release. The fingerprint stays `7cd75498ad4e7531` and the models are
+the 0.1.1 bundles, unchanged: `loudreader/loudr-1` and
+`loudreader/loudr-1-turbo` carry a `v0.1.2` tag on the same commits as
+`v0.1.1`.
+
+### Fixed
+
+- Voices load by name again from a Hub cache written by huggingface_hub 2.x
+  ([#49](https://github.com/loudreader/loudkit/pull/49)). That version
+  deduplicates Xet files into a cache-wide store,
+  `<cache>/blobs/<2 hex>/<hash>`, and links each entry's `blobs/<etag>` there,
+  so `engine.voice("henry")` and the HTTP voice library refused every voice as
+  an escape from the release. The store now counts as part of the release when
+  it carries huggingface_hub's `.huggingface-shared-blobs` marker; a link
+  anywhere else, including into another repo's cache entry, is still refused.
+  On 0.1.1, pass the voice file's full path to `engine.voice` instead.
+
+### Changed
+
+- `torch` is capped below 2.15 in every extra that installs it. torch 2.15.0
+  flips one sampled token on CPU for the same text, voice and seed, so a new
+  install rendered differently from the reference streams the fingerprint
+  stands for. Lifting the cap is a re-baseline under the identity contract.
+- The release parity job runs on torch 2.14.1, the version the reference
+  tokens were measured with.
+
+
 ## [0.1.1] - 2026-09-10
 
 The fingerprint moves: `79f71f5821477353` -> `7cd75498ad4e7531`. Changes to

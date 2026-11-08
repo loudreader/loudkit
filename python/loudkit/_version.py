@@ -3,7 +3,7 @@
 A leaf, so the provenance writers can read it without importing the package root.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 
 def package_version() -> str:

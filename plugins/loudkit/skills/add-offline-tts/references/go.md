@@ -1,6 +1,6 @@
 # loudkit in Go
 
-Excerpt from the loudkit guide for loudkit 0.1.1. Full guide: https://github.com/loudreader/loudkit/blob/main/docs/guides/08-go.md
+Excerpt from the loudkit guide for loudkit 0.1.2. Full guide: https://github.com/loudreader/loudkit/blob/main/docs/guides/08-go.md
 
 ## Hello
 
@@ -26,7 +26,7 @@ If the library is somewhere else, for example in the unpacked archive, set
 ```bash
 mkdir hello && cd hello
 go mod init hello
-go get github.com/loudreader/loudkit/go@v0.1.1
+go get github.com/loudreader/loudkit/go@v0.1.2
 ```
 
 Save this as `main.go`, then run `go run .`:
@@ -85,7 +85,7 @@ checked against the release's `SHA256SUMS`. Later runs reuse the cache and
 fetch only the files that changed when the repo's `main` branch moves.
 `eng.Voices()` lists the 28 voices.
 
-The examples on this page need loudkit 0.1.1. To run the example from a
+The examples on this page need loudkit 0.1.2. To run the example from a
 repository checkout, run `go run ./examples/hello` in `go/`.
 
 `loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
@@ -95,7 +95,7 @@ accepts a local release directory.
 ## Download to a local directory
 
 ```go
-dir, err := loudkit.DownloadWith("loudreader/loudr-1", "./loudr-1", loudkit.Fetch{Revision: "v0.1.1"})
+dir, err := loudkit.DownloadWith("loudreader/loudr-1", "./loudr-1", loudkit.Fetch{Revision: "v0.1.2"})
 if err != nil {
 	log.Fatal(err)
 }
