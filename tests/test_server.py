@@ -609,6 +609,36 @@ def test_voice_library_accepts_the_hub_cache_layout(tmp_path) -> None:
         lib.load("leak")
 
 
+def test_voice_library_accepts_the_hubs_shared_blob_store(tmp_path) -> None:
+    """huggingface_hub 2.x adds one more link: the entry's ``blobs/<etag>``
+    points into the cache-wide store ``<cache>/blobs/<2 hex>/<hash>``. The
+    library lists and loads through it, and still refuses a link elsewhere."""
+    cache = tmp_path / "hub"
+    entry = cache / "models--loudreader--loudr-1"
+    voices = entry / "snapshots" / ("0" * 40) / "voices"
+    voices.mkdir(parents=True)
+    (entry / "blobs").mkdir()
+    store = cache / "blobs"
+    xet_hash, etag = "ab" * 32, "cd" * 32
+    (store / xet_hash[:2]).mkdir(parents=True)
+    (store / ".huggingface-shared-blobs").write_text("1\n")
+    _voice().save(store / xet_hash[:2] / xet_hash)
+    outside = tmp_path / "secret.safetensors"
+    _voice().save(outside)
+    try:
+        (entry / "blobs" / etag).symlink_to(Path("../../blobs") / xet_hash[:2] / xet_hash)
+        (voices / "joe.safetensors").symlink_to(Path("../../../blobs") / etag)
+        (voices / "leak.safetensors").symlink_to(outside)
+    except OSError as exc:  # pragma: no cover - platform-dependent
+        pytest.skip(f"cannot create a symlink on this machine: {exc}")
+
+    lib = VoiceLibrary(voices)
+    assert lib.names() == ["joe"]
+    assert lib.load("joe") is not None
+    with pytest.raises(VoiceNotFoundError):
+        lib.load("leak")
+
+
 def test_voice_library_rejects_symlink_out_of_the_library(tmp_path) -> None:
     """A bare name cannot escape the directory, but a symlink sitting in it can.
 
@@ -871,14 +901,28 @@ def test_stream_does_not_freeze_health(tmp_path) -> None:
     voices = _voices(tmp_path)
     client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        stream_fut = pool.submit(
-            lambda: client.stream(
+    stream = contextlib.ExitStack()
+
+    def open_stream() -> None:
+        # Held in `stream`, not entered and dropped: Starlette 1.x's TestClient
+        # returns a generator-based context manager, and an unreferenced one is
+        # collected and closed at once, taking the response with it. The
+        # httpx-based client had already run the body by then, so the drop
+        # went unnoticed until the client changed.
+        resp = stream.enter_context(
+            client.stream(
                 "POST",
                 "/v1/synthesize/stream",
                 json={"text": "one. two. three.", "voice": "fake"},
-            ).__enter__()
+            )
         )
+        # And read one chunk: the newer client runs the body only as it is
+        # read, so an unread stream never reaches the engine. One chunk is the
+        # same mid-flight state under both clients.
+        next(resp.iter_bytes())
+
+    with stream, ThreadPoolExecutor(max_workers=2) as pool:
+        stream_fut = pool.submit(open_stream)
         import time
 
         # The state the next line needs, waited for rather than guessed at:
@@ -890,7 +934,7 @@ def test_stream_does_not_freeze_health(tmp_path) -> None:
         elapsed = time.time() - t0
         assert resp.status_code == 200, resp.text
         assert elapsed < 1.0, f"/health blocked by in-flight stream: {elapsed:.2f}s"
-        stream_fut.result().close()
+        stream_fut.result()
 
 
 def test_a_disconnect_stops_the_one_shot_render_too(tmp_path) -> None:

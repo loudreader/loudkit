@@ -1881,6 +1881,74 @@ class TestAHubCacheSnapshotIsARelease:
             _voice_in_tree(snapshot, "leak", "leak.safetensors")
 
 
+class TestTheHubsSharedBlobStoreIsTheRelease:
+    """huggingface_hub 2.x deduplicates Xet files across repos in a cache-wide
+    store, ``<cache>/blobs/<2 hex>/<xet hash>``, marked by a
+    ``.huggingface-shared-blobs`` file. The entry's own ``blobs/<etag>`` is then
+    a second link into that store, so a voice resolves outside the entry. Every
+    voice named on such a cache failed as an escape; the store is the release's
+    bytes too. A store without the marker is just a directory and stays out."""
+
+    _HASH = "ab" * 32
+    _ETAG = "cd" * 32
+
+    def _cache(self, tmp_path: Path, *, marker: bool = True) -> tuple[Path, Path]:
+        cache = tmp_path / "hub"
+        entry = cache / "models--loudreader--loudr-1"
+        snapshot = entry / "snapshots" / ("0" * 40)
+        (snapshot / "voices").mkdir(parents=True)
+        (entry / "blobs").mkdir()
+        store = cache / "blobs"
+        (store / self._HASH[:2]).mkdir(parents=True)
+        if marker:
+            (store / ".huggingface-shared-blobs").write_text("1\n")
+        stored = store / self._HASH[:2] / self._HASH
+        stored.write_bytes(b"not read here")
+        try:
+            (entry / "blobs" / self._ETAG).symlink_to(
+                Path("../../blobs") / self._HASH[:2] / self._HASH
+            )
+            (snapshot / "voices" / "joe.safetensors").symlink_to(
+                Path("../../../blobs") / self._ETAG
+            )
+        except OSError as exc:  # pragma: no cover - platform-dependent
+            pytest.skip(f"cannot create a symlink on this machine: {exc}")
+        return snapshot, stored
+
+    def test_a_voice_in_the_shared_store_resolves(self, tmp_path) -> None:
+        from loudkit.release import _voice_in_tree, within_release
+
+        snapshot, stored = self._cache(tmp_path)
+
+        assert within_release(stored.resolve(), snapshot / "voices")
+        assert _voice_in_tree(snapshot, "joe", "joe.safetensors") == stored.resolve()
+
+    def test_a_blobs_directory_without_the_marker_is_still_an_escape(self, tmp_path) -> None:
+        from loudkit.release import _voice_in_tree
+
+        snapshot, _ = self._cache(tmp_path, marker=False)
+
+        with pytest.raises(VoiceNotFoundError, match="escapes"):
+            _voice_in_tree(snapshot, "joe", "joe.safetensors")
+
+    def test_the_store_does_not_open_the_rest_of_the_cache(self, tmp_path) -> None:
+        """Only ``<cache>/blobs`` joins the boundary: another repo's entry in
+        the same cache is still outside this release."""
+        from loudkit.release import _voice_in_tree
+
+        snapshot, _ = self._cache(tmp_path)
+        other = tmp_path / "hub" / "models--someone--private-llm" / "secret.safetensors"
+        other.parent.mkdir(parents=True)
+        other.write_bytes(b"never handed out")
+        try:
+            (snapshot / "voices" / "leak.safetensors").symlink_to(other)
+        except OSError as exc:  # pragma: no cover - platform-dependent
+            pytest.skip(f"cannot create a symlink on this machine: {exc}")
+
+        with pytest.raises(VoiceNotFoundError, match="escapes"):
+            _voice_in_tree(snapshot, "leak", "leak.safetensors")
+
+
 class TestDownloadJudgesItsOwnArguments:
     """Both refusals happen before the client is reached, so both say
     something in loudkit's vocabulary rather than the client's."""

@@ -573,14 +573,45 @@ def release_confinement(directory: Path) -> Path:
     return resolved
 
 
+SHARED_BLOBS_MARKER = ".huggingface-shared-blobs"
+"""huggingface_hub 2.x writes this file into its cache-wide blob store,
+``<cache>/blobs/``, and it is how that store is told apart from a directory
+that only happens to be called ``blobs``."""
+
+
+def release_boundaries(directory: Path) -> tuple[Path, ...]:
+    """Every directory a file named inside ``directory`` may resolve into.
+
+    :func:`release_confinement`, plus, for a Hub-cached release, the cache-wide
+    blob store huggingface_hub 2.x deduplicates Xet files into. There the
+    entry's ``blobs/<etag>`` is itself a link to ``<cache>/blobs/<2 hex>/<hash>``,
+    so the release's bytes sit outside the entry. The store joins the boundary
+    only when it carries huggingface_hub's marker; the rest of the cache,
+    including other repos' entries, stays outside.
+    """
+    entry = release_confinement(directory)
+    if entry == directory.resolve():
+        return (entry,)
+    store = entry.parent / "blobs"
+    if (store / SHARED_BLOBS_MARKER).is_file():
+        return (entry, store.resolve())
+    return (entry,)
+
+
+def within_release(path: Path, directory: Path) -> bool:
+    """Whether the already resolved ``path`` lies inside the release that
+    ``directory`` belongs to (see :func:`release_boundaries`)."""
+    return any(path.is_relative_to(b) for b in release_boundaries(directory))
+
+
 def _voice_in_tree(tree: Path, ref: str, name: str) -> Path:
     """The voice file ``name`` under ``tree/voices``, or a complaint listing
     what is there. Checked after ``resolve()`` so a symlink out of the release
-    is caught too; the Hub cache's own links, into its blob store, are the
+    is caught too; the Hub cache's own links, into its blob stores, are the
     release."""
     voices_dir = (tree / VOICE_DIR).resolve()
     candidate = (voices_dir / name).resolve()
-    if not candidate.is_relative_to(release_confinement(tree / VOICE_DIR)):
+    if not within_release(candidate, tree / VOICE_DIR):
         raise VoiceNotFoundError(
             f"{ref}: a voice is named, not addressed: {name!r} escapes "
             f"{voices_dir}. Pass a bare name, or a full path as the first "
