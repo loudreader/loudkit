@@ -657,7 +657,15 @@ jobs:
           python -m venv .venv
           # `audio` is file I/O; the enrollment path imports torchaudio from
           # the separate `enroll` extra and is exercised later in this job.
-          .venv/bin/pip install -e ".[dev,hub,torch,audio,enroll,coreml,onnx]"
+          #
+          # torch is pinned to the version the reference tokens were measured
+          # with (IDENTITY-CONTRACT.md, measurement rule 4: every reference
+          # result records its torch version). The free-run streams in
+          # tests/data/reference were re-based on 2.14.x; torch 2.15.0 flips a
+          # sampled token in sentence 2 on CPU while the teacher-forced gate
+          # still passes. Moving this pin is a re-baseline decision, not a
+          # dependency bump.
+          .venv/bin/pip install -e ".[dev,hub,torch,audio,enroll,coreml,onnx]" "torch==2.14.1"
 
       - name: Fetch and verify the pinned public release
         run: |
