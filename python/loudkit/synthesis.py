@@ -131,13 +131,12 @@ class VoiceLibrary:
     """
 
     def names(self) -> list[str]:
-        from .release import release_confinement
+        from .release import within_release
 
-        boundary = release_confinement(self.root)
         return sorted(
             p.stem
             for p in self.root.glob("*.safetensors")
-            if p.resolve().is_relative_to(boundary)
+            if within_release(p.resolve(), self.root)
         )
 
     def load(self, name: str) -> VoiceProfile:
@@ -163,12 +162,12 @@ class VoiceLibrary:
         # unauthenticated caller. Resolve first, then confine, the same check
         # `hub.resolve_voice` makes, arriving here by a different door. The
         # boundary is the release, which for a Hub-cached one includes the
-        # blob store its snapshot links into.
-        from .release import release_confinement
+        # blob stores its snapshot links into.
+        from .release import within_release
 
         root = self.root.resolve()
         path = (root / f"{name}.safetensors").resolve()
-        if not path.is_relative_to(release_confinement(self.root)) or not path.is_file():
+        if not within_release(path, self.root) or not path.is_file():
             # Deliberately omits `self.root`: it's an absolute filesystem path
             # on the host, and this error is returned verbatim as an HTTP 404
             # detail to an unauthenticated client. The voice-name list is

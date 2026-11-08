@@ -609,6 +609,36 @@ def test_voice_library_accepts_the_hub_cache_layout(tmp_path) -> None:
         lib.load("leak")
 
 
+def test_voice_library_accepts_the_hubs_shared_blob_store(tmp_path) -> None:
+    """huggingface_hub 2.x adds one more link: the entry's ``blobs/<etag>``
+    points into the cache-wide store ``<cache>/blobs/<2 hex>/<hash>``. The
+    library lists and loads through it, and still refuses a link elsewhere."""
+    cache = tmp_path / "hub"
+    entry = cache / "models--loudreader--loudr-1"
+    voices = entry / "snapshots" / ("0" * 40) / "voices"
+    voices.mkdir(parents=True)
+    (entry / "blobs").mkdir()
+    store = cache / "blobs"
+    xet_hash, etag = "ab" * 32, "cd" * 32
+    (store / xet_hash[:2]).mkdir(parents=True)
+    (store / ".huggingface-shared-blobs").write_text("1\n")
+    _voice().save(store / xet_hash[:2] / xet_hash)
+    outside = tmp_path / "secret.safetensors"
+    _voice().save(outside)
+    try:
+        (entry / "blobs" / etag).symlink_to(Path("../../blobs") / xet_hash[:2] / xet_hash)
+        (voices / "joe.safetensors").symlink_to(Path("../../../blobs") / etag)
+        (voices / "leak.safetensors").symlink_to(outside)
+    except OSError as exc:  # pragma: no cover - platform-dependent
+        pytest.skip(f"cannot create a symlink on this machine: {exc}")
+
+    lib = VoiceLibrary(voices)
+    assert lib.names() == ["joe"]
+    assert lib.load("joe") is not None
+    with pytest.raises(VoiceNotFoundError):
+        lib.load("leak")
+
+
 def test_voice_library_rejects_symlink_out_of_the_library(tmp_path) -> None:
     """A bare name cannot escape the directory, but a symlink sitting in it can.
 
