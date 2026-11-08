@@ -901,14 +901,28 @@ def test_stream_does_not_freeze_health(tmp_path) -> None:
     voices = _voices(tmp_path)
     client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        stream_fut = pool.submit(
-            lambda: client.stream(
+    stream = contextlib.ExitStack()
+
+    def open_stream() -> None:
+        # Held in `stream`, not entered and dropped: Starlette 1.x's TestClient
+        # returns a generator-based context manager, and an unreferenced one is
+        # collected and closed at once, taking the response with it. The
+        # httpx-based client had already run the body by then, so the drop
+        # went unnoticed until the client changed.
+        resp = stream.enter_context(
+            client.stream(
                 "POST",
                 "/v1/synthesize/stream",
                 json={"text": "one. two. three.", "voice": "fake"},
-            ).__enter__()
+            )
         )
+        # And read one chunk: the newer client runs the body only as it is
+        # read, so an unread stream never reaches the engine. One chunk is the
+        # same mid-flight state under both clients.
+        next(resp.iter_bytes())
+
+    with stream, ThreadPoolExecutor(max_workers=2) as pool:
+        stream_fut = pool.submit(open_stream)
         import time
 
         # The state the next line needs, waited for rather than guessed at:
@@ -920,7 +934,7 @@ def test_stream_does_not_freeze_health(tmp_path) -> None:
         elapsed = time.time() - t0
         assert resp.status_code == 200, resp.text
         assert elapsed < 1.0, f"/health blocked by in-flight stream: {elapsed:.2f}s"
-        stream_fut.result().close()
+        stream_fut.result()
 
 
 def test_a_disconnect_stops_the_one_shot_render_too(tmp_path) -> None:
