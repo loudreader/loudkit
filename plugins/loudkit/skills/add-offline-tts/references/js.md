@@ -1,6 +1,6 @@
 # loudkit in JavaScript / TypeScript
 
-Excerpt from the loudkit guide for loudkit 0.1.1. Full guide: https://github.com/loudreader/loudkit/blob/main/docs/guides/07-js-ts.md
+Excerpt from the loudkit guide for loudkit 0.1.2. Full guide: https://github.com/loudreader/loudkit/blob/main/docs/guides/07-js-ts.md
 
 ## Hello
 
@@ -35,7 +35,7 @@ checked against the release's `SHA256SUMS`. Later runs reuse the cache and
 fetch only the files that changed when the repo's `main` branch moves.
 `engine.voices()` lists the 28 voices.
 
-The examples on this page need loudkit 0.1.1. To run the example from a
+The examples on this page need loudkit 0.1.2. To run the example from a
 repository checkout, run `npm run build`, then `node examples/hello.mjs`, in
 `js/`.
 
@@ -48,7 +48,7 @@ accepts a local release directory.
 ```javascript
 import { download, Engine } from "loudkit";
 
-const dir = await download("loudreader/loudr-1", "loudr-1", { revision: "v0.1.1" });
+const dir = await download("loudreader/loudr-1", "loudr-1", { revision: "v0.1.2" });
 const engine = await Engine.load(dir);
 ```
 

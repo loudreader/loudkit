@@ -134,7 +134,7 @@ because it renders once and exits.
 
 ### Turbo cannot be downloaded or loaded
 
-Use loudkit 0.1.1 and a release that contains the graphs for your runtime.
+Use loudkit 0.1.2 and a release that contains the graphs for your runtime.
 loudkit cannot fetch a repository or revision that is not published. Check the
 repo id and the revision in the error, or load a complete local release
 directory.

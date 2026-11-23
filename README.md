@@ -63,10 +63,10 @@ next.
 ## Swift, Go, Rust and TypeScript
 
 Each port loads the model by name. The first call downloads and verifies it,
-and later calls run offline. The snippets need version 0.1.1 of each package.
+and later calls run offline. The snippets need version 0.1.2 of each package.
 
 **Swift** (CoreML, macOS 14 or iOS 17). Add
-`.package(url: "https://github.com/loudreader/loudkit", from: "0.1.1")` to
+`.package(url: "https://github.com/loudreader/loudkit", from: "0.1.2")` to
 `Package.swift`. [Guide](https://github.com/loudreader/loudkit/blob/main/docs/guides/10-swift.md).
 
 ```swift
@@ -77,7 +77,7 @@ let voice = try engine.voice(named: "joe")
 try engine.synthesize("Hello from loudkit.", voice: voice, seed: 7).saveWav("hello.wav")
 ```
 
-**Go** (ONNX Runtime). `go get github.com/loudreader/loudkit/go@v0.1.1`.
+**Go** (ONNX Runtime). `go get github.com/loudreader/loudkit/go@v0.1.2`.
 [Guide](https://github.com/loudreader/loudkit/blob/main/docs/guides/08-go.md).
 
 ```go
@@ -91,7 +91,7 @@ if err != nil { log.Fatal(err) }
 if err := res.SaveWav("hello.wav"); err != nil { log.Fatal(err) }
 ```
 
-**Rust** (ONNX Runtime). `cargo add loudkit@0.1.1`.
+**Rust** (ONNX Runtime). `cargo add loudkit@0.1.2`.
 [Guide](https://github.com/loudreader/loudkit/blob/main/docs/guides/09-rust.md).
 
 ```rust
@@ -103,7 +103,7 @@ let options = Options { seed: 7, ..Default::default() };
 engine.synthesize("Hello from loudkit.", &voice, &options)?.save_wav("hello.wav")?;
 ```
 
-**TypeScript** (ONNX Runtime, Node 20). `npm install loudkit@0.1.1`.
+**TypeScript** (ONNX Runtime, Node 20). `npm install loudkit@0.1.2`.
 [Guide](https://github.com/loudreader/loudkit/blob/main/docs/guides/07-js-ts.md).
 
 ```typescript

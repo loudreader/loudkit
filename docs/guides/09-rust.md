@@ -37,7 +37,7 @@ For a new application:
 ```bash
 cargo new hello
 cd hello
-cargo add loudkit@0.1.1
+cargo add loudkit@0.1.2
 ```
 
 Save this as `src/main.rs`, then run `cargo run`:
@@ -74,7 +74,7 @@ against the release's `SHA256SUMS`. Later runs reuse the cache and fetch only
 the files that changed when the repo's `main` branch moves. `engine.voices()`
 lists the 28 voices.
 
-The examples on this page need loudkit 0.1.1. To run the example from a
+The examples on this page need loudkit 0.1.2. To run the example from a
 repository checkout, run `cargo run --example hello` in `rust/`.
 
 `loudr-1` and `loudr-1-turbo` use the same API. To switch models, change the
@@ -87,7 +87,7 @@ accepts a local release directory.
 ```rust
 use loudkit::hub;
 
-let options = hub::Options { revision: "v0.1.1".into(), ..Default::default() };
+let options = hub::Options { revision: "v0.1.2".into(), ..Default::default() };
 let dir = hub::download_with("loudreader/loudr-1", "loudr-1", &options)?;
 let mut engine = Engine::load(&dir)?;
 ```
@@ -192,7 +192,7 @@ println!("{}", engine.describe());
 A provider other than `cpu` runs only if two conditions are true:
 
 - Its cargo feature is on. Enable it when you add the crate, for example
-  `cargo add loudkit@0.1.1 --features cuda`. The features are `cuda`, `coreml`
+  `cargo add loudkit@0.1.2 --features cuda`. The features are `cuda`, `coreml`
   and `directml`.
 - The ONNX Runtime library at `ORT_DYLIB_PATH` contains the provider.
 

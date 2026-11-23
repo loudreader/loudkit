@@ -647,7 +647,7 @@ jobs:
       - name: Verify the live tarball, or stage it and wait for 2FA approval
         run: |
           set -euo pipefail
-          tarball=$(ls npm-tarball/*.tgz)
+          tarball=$(ls ./npm-tarball/*.tgz)
           version="${GITHUB_REF_NAME#v}"
           local=$(sha1sum "$tarball" | cut -d' ' -f1)
           echo "loudkit@$version from $tarball"

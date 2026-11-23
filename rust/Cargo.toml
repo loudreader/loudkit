@@ -4,7 +4,7 @@ categories = ["multimedia::audio"]
 name = "loudkit"
 # Kept in lockstep with the Python and npm packages. The release-coherence gate
 # normalises each ecosystem's version syntax before comparing them.
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 # The floor `ort` and `ort-sys` 2.0.0-rc.13 declare, and this crate's own:
 # `slice::as_chunks` is stable at 1.88, which is the highest of the features

@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loudkit"
-version = "0.1.1"
+version = "0.1.2"
 description = "A small text-to-speech engine that behaves the same on every backend."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -47,14 +47,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-torch = ["torch>=2.4"]
+# torch is capped at the last release the reference token streams were
+# measured with. 2.15.0 flips a sampled token on CPU for the same seed
+# (tests/test_parity.py free-run), so lifting the cap is a re-baseline
+# decision under docs/reference/IDENTITY-CONTRACT.md, not a version bump.
+torch = ["torch>=2.4,<2.15"]
 # `loudkit.load("org/model")` resolves a repo id and caches the download. Keep
 # this direct declaration even though tokenizers currently brings the same
 # client transitively: hub.py imports it itself, so correctness must not depend
 # on an unrelated package retaining that dependency. The extra remains the
 # stable, documented capability selector even while that transitive edge exists.
 hub = ["huggingface_hub>=0.23"]
-enroll = ["torch>=2.4", "torchaudio>=2.4", "librosa>=0.10", "soundfile>=0.12"]
+enroll = ["torch>=2.4,<2.15", "torchaudio>=2.4", "librosa>=0.10", "soundfile>=0.12"]
 onnx = ["onnxruntime>=1.17"]
 coreml = ["coremltools>=8.0"]
 audio = ["soundfile>=0.12", "librosa>=0.10"]
@@ -81,7 +85,7 @@ server = ["loudkit[torch]", "fastapi>=0.110", "uvicorn>=0.29", "soundfile>=0.12"
 # unreleased: `>=2.0.0a1` keeps accepting pre-releases forever, and this SDK has
 # shipped security advisories. Capped below 3 because the tool-registration API
 # it uses is the part that moved between 1.x and 2.x.
-mcp = ["loudkit[audio]", "torch", "mcp>=2.0.0,<3"]
+mcp = ["loudkit[audio]", "torch>=2.4,<2.15", "mcp>=2.0.0,<3"]
 # A third transport over the one synthesis path, for callers who want a typed
 # schema and streaming backpressure. Its own extra because neither matters on
 # loopback with one caller, and grpcio is a compiled dependency the core does
@@ -95,7 +99,7 @@ mcp = ["loudkit[audio]", "torch", "mcp>=2.0.0,<3"]
 # rather than a version bound. `grpcio-tools` matches so a regeneration cannot
 # produce stubs demanding a runtime the metadata does not. The floors move
 # together, when the stubs are regenerated.
-grpc = ["loudkit[audio]", "torch", "grpcio>=1.83", "grpcio-tools>=1.83", "protobuf>=7.35.1,<8"]
+grpc = ["loudkit[audio]", "torch>=2.4,<2.15", "grpcio>=1.83", "grpcio-tools>=1.83", "protobuf>=7.35.1,<8"]
 dev = [
   "pytest>=8.0,<10",
   "pytest-cov>=5.0",
@@ -125,7 +129,7 @@ dev = [
   # nothing but `.[dev]`, so without this a clean runner fails at collection
   # rather than at a test. The reference backend is a development dependency
   # whether or not it is a runtime one.
-  "torch>=2.4",
+  "torch>=2.4,<2.15",
   # An optional *runtime* extra is still a mandatory *test* dependency when
   # there are tests for it: without the MCP SDK here, tests/test_mcp.py
   # `importorskip`s away on every matrix cell and the agent-facing transport

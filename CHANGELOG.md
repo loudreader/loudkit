@@ -4,7 +4,7 @@ Notable changes, in the format [Keep a Changelog](https://keepachangelog.com)
 describes. [docs/reference/COMPATIBILITY.md](docs/reference/COMPATIBILITY.md)
 defines versioning and what counts as a breaking change.
 
-## [Unreleased]
+## [0.1.2] - 2026-11-23
 
 The base algorithm fingerprint moves from `7cd75498ad4e7531` to
 `4a2918bb653ce531`. The turbo fingerprint moves from `e5303ba243087222` to
@@ -40,6 +40,28 @@ build that produced it.
 - Long-form Go and Rust synthesis joins spectrograms in linear time. Node
   skips vocoding after cancellation during mel decoding. Swift reports each
   stage duration and Python accounts for overlapping work in playback speed.
+
+
+### Fixed
+
+- Voices load by name again from a Hub cache written by huggingface_hub 2.x
+  ([#49](https://github.com/loudreader/loudkit/pull/49)). That version
+  deduplicates Xet files into a cache-wide store,
+  `<cache>/blobs/<2 hex>/<hash>`, and links each entry's `blobs/<etag>` there,
+  so `engine.voice("henry")` and the HTTP voice library refused every voice as
+  an escape from the release. The store now counts as part of the release when
+  it carries huggingface_hub's `.huggingface-shared-blobs` marker; a link
+  anywhere else, including into another repo's cache entry, is still refused.
+  On 0.1.1, pass the voice file's full path to `engine.voice` instead.
+
+### Changed
+
+- `torch` is capped below 2.15 in every extra that installs it. torch 2.15.0
+  flips one sampled token on CPU for the same text, voice and seed, so a new
+  install rendered differently from the reference streams the fingerprint
+  stands for. Lifting the cap is a re-baseline under the identity contract.
+- The release parity job runs on PyTorch 2.13.0 and ONNX Runtime 1.29.0,
+  the versions used to verify the reference outputs.
 
 
 ## [0.1.1] - 2026-09-10
