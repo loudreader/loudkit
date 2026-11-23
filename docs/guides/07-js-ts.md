@@ -50,7 +50,7 @@ accepts a local release directory.
 ```javascript
 import { download, Engine } from "loudkit";
 
-const dir = await download("loudreader/loudr-1", "loudr-1", { revision: "v0.1.2" });
+const dir = await download("loudreader/loudr-1", "loudr-1", { revision: "v0.1.3" });
 const engine = await Engine.load(dir);
 ```
 

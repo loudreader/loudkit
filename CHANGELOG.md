@@ -4,6 +4,16 @@ Notable changes, in the format [Keep a Changelog](https://keepachangelog.com)
 describes. [docs/reference/COMPATIBILITY.md](docs/reference/COMPATIBILITY.md)
 defines versioning and what counts as a breaking change.
 
+## [0.1.3] - 2026-11-23
+
+This release ships the narration, chunking and voice-loading fixes described
+under 0.1.2. The 0.1.2 tag passed repository CI, but its standalone Rust
+consumer check stopped publication before any package reached a registry.
+
+Rust consumers now resolve the tested ONNX Runtime binding, `ort`
+`2.0.0-rc.13`. The base fingerprint is `4a2918bb653ce531` and the Turbo
+fingerprint is `ccaeab4e92d9edc1`.
+
 ## [0.1.2] - 2026-11-23
 
 The base algorithm fingerprint moves from `7cd75498ad4e7531` to

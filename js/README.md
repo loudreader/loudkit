@@ -59,7 +59,7 @@ accepts a local release directory.
 
 ```javascript
 await download("loudreader/loudr-1", "loudr-1");          // download to a local directory
-await download(repo, dir, { revision: "v0.1.2", cloning: true });
+await download(repo, dir, { revision: "v0.1.3", cloning: true });
 await Engine.load("loudr-1");                            // a local directory or a repo id
 engine.voices();                                         // the voice names in the release
 engine.voice("joe");                                     // load one voice by name
