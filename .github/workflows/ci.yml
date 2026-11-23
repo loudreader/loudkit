@@ -574,7 +574,7 @@ jobs:
   parity:
     name: parity (hosted macOS, pinned public release)
     runs-on: macos-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     # Also on pull requests from this repository, which is the change: it ran
     # only on `main` and on demand, so every weights regression reached `main`
     # before anything measured it -- the one job that can catch a weights
@@ -861,7 +861,9 @@ jobs:
           # The LOUDKIT_* paths come from the "Resolve the asset paths" step
           # above, through $GITHUB_ENV, so this step and the Python and Swift
           # steps before it all measure the same checkpoint.
-          (cd go && go test ./...)
+          # Each weighted Go package loads full ONNX sessions on the 7 GB runner.
+          # Run one package at a time and bound its complete set of renders.
+          (cd go && go test -p 1 -timeout 30m ./...)
           (cd rust && cargo test && cargo test -- --ignored)
           (cd js && npm ci --silent && npm run test:all)
 
@@ -880,7 +882,7 @@ jobs:
           export LOUDKIT_ONNX_DIR="$LOUDKIT_FUSION_ONNX_DIR"
           export LOUDKIT_FIXTURE="$PWD/tests/data/conformance/vectors_fusion_mtp2.json"
           .venv/bin/pytest tests/test_conformance.py -k fused -q
-          (cd go && go test ./conformance -run TestEngineConformance -count=1)
+          (cd go && go test -timeout 30m ./conformance -run TestEngineConformance -count=1)
           (cd rust && cargo test fusion_engine_conformance -- --ignored)
           (cd js && npm run test:fixture)
 
