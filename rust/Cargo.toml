@@ -76,7 +76,8 @@ directml = ["ort/directml"]
 libm = "0.2"
 # The caller supplies ORT_DYLIB_PATH. Do not pull the unused binary downloader
 # and its native OpenSSL build dependency into a dynamically loaded runtime.
-ort = { version = "2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray", "api-27", "tracing"] }
+# Later release candidates can change the session API for fresh consumers.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray", "api-27", "tracing"] }
 ndarray = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
