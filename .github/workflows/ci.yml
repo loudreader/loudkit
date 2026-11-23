@@ -320,6 +320,14 @@ jobs:
       # asset-less run would advertise conformance it never checked.
       - name: Weight-free conformance
         run: cargo test
+      - name: Build a consumer with freshly resolved dependencies
+        if: runner.os == 'Linux'
+        run: |
+          consumer="$RUNNER_TEMP/loudkit-consumer"
+          cargo new --quiet --bin "$consumer"
+          cargo add --manifest-path "$consumer/Cargo.toml" --path "$PWD"
+          CARGO_TARGET_DIR="$PWD/target" cargo check --manifest-path "$consumer/Cargo.toml"
+
 
   rust-msrv:
     # `rust-version = "1.88"` in rust/Cargo.toml is a promise made to a

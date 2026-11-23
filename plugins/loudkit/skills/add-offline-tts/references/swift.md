@@ -7,7 +7,7 @@ Excerpt from the loudkit guide for loudkit 0.1.2. Full guide: https://github.com
 `Package.swift` is at the repository root.
 
 ```swift
-.package(url: "https://github.com/loudreader/loudkit", from: "0.1.2")
+.package(url: "https://github.com/loudreader/loudkit", from: "0.1.3")
 ```
 
 For an existing app, also add the `LoudKit` product to its target. For a new
@@ -22,7 +22,7 @@ let package = Package(
     name: "Hello",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/loudreader/loudkit", from: "0.1.2")
+        .package(url: "https://github.com/loudreader/loudkit", from: "0.1.3")
     ],
     targets: [
         .executableTarget(name: "Hello", dependencies: [
@@ -66,7 +66,7 @@ accepts a local release directory.
 
 ```swift
 let dir = try await LoudKit.download(
-    repo: "loudreader/loudr-1", to: URL(fileURLWithPath: "loudr-1"), revision: "v0.1.2")
+    repo: "loudreader/loudr-1", to: URL(fileURLWithPath: "loudr-1"), revision: "v0.1.3")
 let engine = try Engine.load(bundle: dir)
 ```
 

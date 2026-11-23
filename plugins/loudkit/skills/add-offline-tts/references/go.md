@@ -26,7 +26,7 @@ If the library is somewhere else, for example in the unpacked archive, set
 ```bash
 mkdir hello && cd hello
 go mod init hello
-go get github.com/loudreader/loudkit/go@v0.1.2
+go get github.com/loudreader/loudkit/go@v0.1.3
 ```
 
 Save this as `main.go`, then run `go run .`:
@@ -95,7 +95,7 @@ accepts a local release directory.
 ## Download to a local directory
 
 ```go
-dir, err := loudkit.DownloadWith("loudreader/loudr-1", "./loudr-1", loudkit.Fetch{Revision: "v0.1.2"})
+dir, err := loudkit.DownloadWith("loudreader/loudr-1", "./loudr-1", loudkit.Fetch{Revision: "v0.1.3"})
 if err != nil {
 	log.Fatal(err)
 }
