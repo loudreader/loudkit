@@ -1188,7 +1188,7 @@ func (e *Engine) stream(text string, v *voice.Profile, o Options, onChunk func(C
 	// changes the length, so a budget computed first would be a budget for
 	// text the engine never speaks.
 	prepared := speechtext.Prepared(text, language)
-	chunks := chunking.SplitText(prepared, e.config.Chunking)
+	chunks := chunking.SplitTextForLanguage(prepared, e.config.Chunking, language)
 	if len(chunks) == 0 {
 		return errors.New("nothing to speak")
 	}
@@ -1293,10 +1293,11 @@ func (e *Engine) stream(text string, v *voice.Profile, o Options, onChunk func(C
 func (e *Engine) Synthesize(text string, v *voice.Profile, o Options) (*Result, error) {
 	out := &Result{SampleRate: e.config.SampleRate}
 	var spans []timing.Span
+	var mels [][]float32
 	err := e.stream(text, v, o, func(c Chunk) bool {
 		out.Audio = append(out.Audio, c.Audio...)
 		out.Tokens = append(out.Tokens, c.Tokens...)
-		out.Mel = appendMelAlongTime(out.Mel, c.Mel)
+		mels = append(mels, c.Mel)
 		out.HitTokenCap = out.HitTokenCap || c.HitTokenCap
 		// Timed once at the end: Timeline accumulates the offsets as integer
 		// samples, so every join is exact.
@@ -1307,6 +1308,7 @@ func (e *Engine) Synthesize(text string, v *voice.Profile, o Options) (*Result, 
 	if err != nil {
 		return nil, err
 	}
+	out.Mel = joinMels(mels)
 	out.Chunks = timing.Timeline(spans, e.config.SampleRate)
 	return out, nil
 }
@@ -1385,26 +1387,21 @@ func (e *Engine) checkTextRow(textTokens []int) error {
 	return nil
 }
 
-// appendMelAlongTime concatenates two row-major [melBins, frames] mels along
-// the TIME axis.
-//
-// Appending the flat buffers end to end (the obvious thing, and what the JS
-// port did) is not concatenation: after the first chunk the next chunk's bin 0
-// lands after the previous chunk's bin 79, so every row but the first is wrong.
-// The audio is unaffected (it is vocoded per chunk) but the returned mel is the
-// diagnostic people reach for when two backends disagree, and a mis-shaped one
-// sends them looking in the wrong place.
-func appendMelAlongTime(dst, src []float32) []float32 {
-	if len(dst) == 0 {
-		return append([]float32(nil), src...)
+// joinMels copies each row of each spectrogram once into its final location.
+func joinMels(parts [][]float32) []float32 {
+	var size int
+	for _, part := range parts {
+		size += len(part)
 	}
-	const bins = melBins
-	dstFrames := len(dst) / bins
-	srcFrames := len(src) / bins
-	out := make([]float32, bins*(dstFrames+srcFrames))
-	for b := 0; b < bins; b++ {
-		copy(out[b*(dstFrames+srcFrames):], dst[b*dstFrames:(b+1)*dstFrames])
-		copy(out[b*(dstFrames+srcFrames)+dstFrames:], src[b*srcFrames:(b+1)*srcFrames])
+	out := make([]float32, size)
+	stride := size / melBins
+	offset := 0
+	for _, part := range parts {
+		frames := len(part) / melBins
+		for bin := 0; bin < melBins; bin++ {
+			copy(out[bin*stride+offset:], part[bin*frames:(bin+1)*frames])
+		}
+		offset += frames
 	}
 	return out
 }

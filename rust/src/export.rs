@@ -91,7 +91,26 @@ pub(crate) fn check_export_record(
         quote(fingerprint),
         euler_steps.to_string(),
     ];
-    if agreed[..3] != want {
+    // Text preparation and chunk planning run on the host. Each model can use
+    // the same graphs exported under its funnel-6 or funnel-7 fingerprint.
+    let previous: &[&str] = match fingerprint {
+        "4a2918bb653ce531" => &[
+            "7cd75498ad4e7531",
+            "b99ab84725b40e91",
+            "f171bcc07df48436",
+            "82c2c12d6e725542",
+        ],
+        "ccaeab4e92d9edc1" => &[
+            "e5303ba243087222",
+            "e800f3bbb7eb6b4e",
+            "06d8ccb48891899e",
+            "62d674008ef832fd",
+        ],
+        _ => &[],
+    };
+    let fingerprint_matches =
+        agreed[1] == want[1] || previous.iter().any(|old| agreed[1] == quote(old));
+    if agreed[0] != want[0] || !fingerprint_matches || agreed[2] != want[2] {
         return Err(format!(
             "{} was exported from a different engine than the one loading it:\n  graphs: {}\n  \
              checkpoint: {}\nRe-export against {}",
@@ -292,6 +311,61 @@ mod tests {
             Ok(()),
             "a set exported before the record must load"
         );
+    }
+
+    #[test]
+    fn current_frontend_accepts_each_models_complete_historical_graph_sets() {
+        let dir = scratch("historical-graphs");
+        for (current, published, interim, eighth, ninth, other_model, steps) in [
+            (
+                "4a2918bb653ce531",
+                "7cd75498ad4e7531",
+                "b99ab84725b40e91",
+                "f171bcc07df48436",
+                "82c2c12d6e725542",
+                "e5303ba243087222",
+                2usize,
+            ),
+            (
+                "ccaeab4e92d9edc1",
+                "e5303ba243087222",
+                "e800f3bbb7eb6b4e",
+                "06d8ccb48891899e",
+                "62d674008ef832fd",
+                "7cd75498ad4e7531",
+                1,
+            ),
+        ] {
+            let verify = || {
+                check_export_record(
+                    &dir,
+                    &dir.join("ckpt.safetensors"),
+                    &HashMap::new(),
+                    current,
+                    steps,
+                    &GRAPHS,
+                )
+            };
+            let mut fields = match_fields(&dir);
+            fields["euler_steps"] = json!(steps);
+            for compatible in [published, interim, eighth, ninth, current] {
+                fields["algorithm_fingerprint"] = json!(compatible);
+                write_record(&dir, &fields, None);
+                assert_eq!(verify(), Ok(()));
+            }
+            fields["algorithm_fingerprint"] = json!(published);
+            let mut different_stage = fields.clone();
+            different_stage["algorithm_fingerprint"] = json!(interim);
+            write_record(&dir, &fields, Some(&different_stage));
+            assert!(verify().unwrap_err().contains("mixed graph set"));
+            fields["euler_steps"] = json!(steps + 1);
+            write_record(&dir, &fields, None);
+            assert!(verify().unwrap_err().contains("different engine"));
+            fields["algorithm_fingerprint"] = json!(other_model);
+            fields["euler_steps"] = json!(steps);
+            write_record(&dir, &fields, None);
+            assert!(verify().unwrap_err().contains("different engine"));
+        }
     }
 
     #[test]

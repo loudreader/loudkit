@@ -20,8 +20,8 @@ func TestAnIDListIsHashedInTheOrderTheManifestGaveIt(t *testing.T) {
 		ids  []interface{}
 		want string
 	}{
-		{"ascending", []interface{}{float64(1), float64(5), float64(9)}, "47a50fe9fe6f42bf"},
-		{"unsorted", []interface{}{float64(9), float64(1), float64(5)}, "38bcc642490920d4"},
+		{"ascending", []interface{}{float64(1), float64(5), float64(9)}, "61a7c219e591b1b2"},
+		{"unsorted", []interface{}{float64(9), float64(1), float64(5)}, "c0459bc9c822a60d"},
 	} {
 		m := make(map[string]interface{}, len(base))
 		for k, v := range base {

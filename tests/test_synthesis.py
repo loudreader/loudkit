@@ -242,3 +242,18 @@ def test_a_zero_prefix_carries_nothing() -> None:
     algorithm = replace(AlgorithmConfig(), chunking=ChunkConfig(prefix_tokens=0))
     engine = cast("Engine", _CarryEngine(algorithm))
     assert synthesis._continuation(engine, list(range(50))) == ()
+
+
+def test_overlapping_stages_report_elapsed_playback_speed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from loudkit import stream
+
+    from .conftest import chunking_engine, fake_voice
+
+    ticks = iter((10.0, 12.5))
+    monkeypatch.setattr(stream, "perf_counter", lambda: next(ticks))
+    result = chunking_engine().synthesize("One two three four five. Go.", fake_voice())
+    assert len(result.chunks) > 1
+    assert result.timings.elapsed == 2.5
+    assert result.timings.rtf(result.duration) == result.duration / 2.5

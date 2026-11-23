@@ -16,6 +16,13 @@ The five implementations compute the fingerprint independently and agree.
 loudr-1 fingerprint is `7cd75498ad4e7531` and the loudr-1-turbo fingerprint is
 `e5303ba243087222`.
 
+The current base fingerprint is `4a2918bb653ce531`. An existing model
+bundle uses the running SDK's text frontend and chunk planner. The ONNX
+and CoreML graphs published with 0.1.1 and those exported under
+`funnel-7`, `funnel-8` or `funnel-9` work with this host code. Each backend still checks that every
+stage belongs to the same export and checkpoint.
+To reproduce an older render, pin both the SDK build and the model revision.
+
 Every audible change to the algorithm or the grammar tables moves the
 fingerprint, with one exception: the Polish respelling rules
 (`pl_respell_rules.json`) are not hashed into it. A test pins the bytes of that
@@ -108,8 +115,11 @@ reads no receipt and hashes nothing.
 
 Python's own cache follows the same rule. A load by repo id asks the Hub once
 per process which commit `main` (or the tag) resolves to. It reads the cached
-snapshot only when it is that commit. Offline, it uses the cache and prints one
-line on stderr. A revision that is a full commit id is not resolved on the Hub.
+snapshot only when it is that commit. Offline, omitting the revision accepts the verified local copy. An explicit
+40-character commit must match the commit in its receipt. An explicit tag or
+branch, including `main`, must match the revision recorded when that copy was
+downloaded. A mismatch fails and identifies the installed revision, so an app
+can ask for that revision or reconnect to fetch the one it needs. A revision that is a full commit id is not resolved on the Hub.
 
 ## Versioned formats
 

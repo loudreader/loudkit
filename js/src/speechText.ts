@@ -21,6 +21,7 @@ import {
   decimalSeparator,
   expandAbbreviations,
   expandNumbers,
+  expandPolishQuantities,
   expandRomanNumerals,
   expandTimes,
   foldForeignDigits,
@@ -83,7 +84,15 @@ const ASCII_OPERATORS: readonly (readonly [string, string])[] = [
  * exclamation. A tag is replaced by a space rather than by nothing, because two
  * block tags meeting back to back are two paragraphs and not one glued word.
  */
-const MARKUP_TAG = /<\/?[A-Za-z!][^<>]*>/g;
+const MARKUP_ENTITIES: Record<string, string> = {"&apos;": "'", "&quot;": "\"", "&lt;": "<", "&gt;": ">", "&nbsp;": " ", "&amp;": "&"};
+const htmlTagName = String.raw`[A-Za-z][A-Za-z0-9-]*(?::[A-Za-z][A-Za-z0-9-]*)?`;
+const htmlSpace = String.raw`[ \t\r\n\f]`;
+const htmlAssignment = String.raw`[^ \t\r\n\f"'<>/=]+${htmlSpace}*=${htmlSpace}*`;
+const htmlQuoted = String.raw`(?:"[^"]*"|'[^']*')`;
+const htmlUnquoted = String.raw`[^ \t\r\n\f"'<>\x60]+`;
+const htmlBoolean = String.raw`(?:allowfullscreen|async|autofocus|autoplay|checked|controls|default|defer|disabled|download|exact|formnovalidate|hidden|inert|ismap|itemscope|loop|multiple|muted|nomodule|novalidate|nowrap|open|playsinline|popover|readonly|required|reversed|selected|v-cloak)`;
+const htmlAttribute = String.raw`(?:${htmlBoolean}|${htmlAssignment}(?:${htmlQuoted}${htmlAssignment})*(?:${htmlQuoted}|${htmlUnquoted}))`;
+const MARKUP_TAG = new RegExp(String.raw`</?(?:![^<>]*|${htmlTagName}(?:${htmlSpace}+${htmlAttribute})*${htmlSpace}*/?)>`, "gi");
 
 // Symbol -> word per language, from the shared grammar file (numbers.json).
 // One row per language on the roster, because a symbol is spoken in the
@@ -152,9 +161,51 @@ function priced(amount: string, language: string): string {
   return amount;
 }
 
+const ENGLISH_SINGULAR_CURRENCIES: Record<string, string> = {
+  dollars: "dollar", euros: "euro", pounds: "pound",
+};
+
+function unscaledPrice(amount: string, word: string, language: string): string {
+  const singular = ENGLISH_SINGULAR_CURRENCIES[word];
+  if (language === "en" && singular && /^1(?:\.0{1,2})?$/.test(amount)) {
+    return "1 " + singular;
+  }
+  return priced(amount, language) + " " + word;
+}
+
 function dropMarkupTags(text: string): string {
   if (!text.includes("<")) return text;
   return text.replace(MARKUP_TAG, " ");
+}
+
+// Match the complete run first so a malformed final group leaves all digits in place.
+const SPACED_DIGITS = /(?<![0-9])[0-9]+(?:[ \u00a0\u2009\u202f][0-9]+)+/gu;
+const GROUPING_SPACE = /[ \u00a0\u2009\u202f]/u;
+const PREFIX_PRICE = new RegExp(
+  `(?<!\\p{L})[${CURRENCY_PREFIX_SYMBOLS.join("")}]\\p{White_Space}?$`,
+  "u",
+);
+
+const COUNT_AFTER_PRICE = /^[ \t]+(?:times|days|weeks|months|years|hours|minutes|seconds|items|units)\b/i;
+
+function compactGroupedNumbers(text: string, language: string): string {
+  return text.replace(SPACED_DIGITS, (run: string, offset: number) => {
+    // Four UTF-16 units cover an astral letter, currency mark and optional space.
+    const before = text.slice(Math.max(0, offset - 4), offset);
+    const end = offset + run.length;
+    if (
+      /[\p{L}\p{Nd}_]$|[0-9][.,]$/u.test(before) ||
+      /^[\p{L}\p{Nd}_]/u.test(text.slice(end, end + 2))
+    ) return run;
+    const groups = run.split(GROUPING_SPACE);
+    if (!/[\u00a0\u2009\u202f]/u.test(run)) {
+      const separateCount = language === "en" && groups.length === 2 &&
+        !groups[1].startsWith("0") && COUNT_AFTER_PRICE.test(text.slice(end));
+      if (!PREFIX_PRICE.test(before) || separateCount) return run;
+    }
+    if (groups[0].length > 3 || groups.slice(1).some((group) => group.length !== 3)) return run;
+    return groups.join("");
+  });
 }
 
 /** The ASCII comparison operators, as words in this language. */
@@ -246,20 +297,19 @@ function speakSymbols(text: string, languageId: string): string {
       // A scale this language has no noun for. The suffix stays written, which
       // is what it did before the amount was moved.
       if (suffix && !said) return `${price} ${word}${suffix}`;
-      return said ? `${price} ${said} ${word}` : `${price} ${word}`;
+      return said ? `${price} ${said} ${word}` : unscaledPrice(amount, word, language);
     });
   }
   // The same amount with the symbol behind it. `2.50 €` and `0.49¢` are prices by
   // exactly the evidence `€2.50` is, and reached the time pass with the dot intact:
-  // German answered "zwei Uhr fünfzig Euro". Currency written as a *word*, such
-  // as `5.50 zł`, is not covered: telling those from a unit needs a per-language
-  // lexicon.
+  // German answered "zwei Uhr fünfzig Euro". Polish zł amounts have already
+  // been expanded by the Polish quantity pass.
   for (const symbol of CURRENCY_SYMBOLS) {
     const word = unitWord(symbol, language);
     if (!word || !out.includes(symbol)) continue;
     const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp("(\\d+(?:[.,]\\d+)*)\\s?" + escaped, "g");
-    out = out.replace(re, (_m, amount: string) => `${priced(amount, languageId)} ${word}`);
+    out = out.replace(re, (_m, amount: string) => unscaledPrice(amount, word, language));
   }
   for (const symbol of SPOKEN_SYMBOLS) {
     if (!out.includes(symbol)) continue;
@@ -396,6 +446,7 @@ function numeralTable(): NumeralTable {
 const WHITE_SPACE = "\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000";
 
 /** `\s` as this funnel means it: the characters above and nothing else. */
+const LEADING_COMMA = new RegExp(`(^|[${WHITE_SPACE}([{«‹„“‘≈=+−$£€¥₹*/:<>-])(,)([0-9])`, "gu");
 const SPACE = `[${WHITE_SPACE}]`;
 
 /**
@@ -524,7 +575,18 @@ export function speechText(text: string, languageId?: string | null): string {
   let out = stripInvisibles(foldForeignDigits(text.normalize("NFC"), languageId ?? "en"));
   // Before the symbol pass, which would otherwise read a tag's angle brackets as
   // comparison operators and its attributes as text.
+  out = out.replace(/(^|[^\p{L}\p{N}_])([\p{L}\p{N}_]+)([ \t]*)(?:<|&lt;)[ \t]*([\p{L}\p{N}_]+[ \t]+(?:[Oo][Rr]|[Aa][Nn][Dd]|lub|albo|i|oder|und|ou|et|o|y|e|of|en|eller|og|och|tai|ja)[ \t]+)([\p{L}\p{N}_]+)[ \t]*(?:>|&gt;)(=?)([ \t]*)([-+]?[\p{L}\p{N}_])/gu,
+    (raw, prefix, left, before, condition, repeated, equal, after, right) =>
+      (before || after) && left !== repeated ? raw : `${prefix}${left} < ${condition}${repeated} >${equal} ${right}`);
+
   out = dropMarkupTags(out);
+  out = out.replace(/&#(?:0*39|[xX]0*27);/g, "'");
+  out = out.replace(/&(?:apos|quot|lt|gt|nbsp|amp);/g, entity => MARKUP_ENTITIES[entity]);
+  out = out.replace(/(^|[^\p{L}\p{N}_.,])(\.)([0-9])/gu, "$10$2$3");
+  out = out.replace(LEADING_COMMA, "$10$2$3");
+  if (UNIT_WORDS[languageId ?? "en"]) out = compactGroupedNumbers(out, languageId ?? "en");
+  // The superscript in m² identifies square metres only before the numeral fold.
+  if (languageId === "pl") out = expandPolishQuantities(out);
   // Before the symbol table: see the Python reference. Every pass downstream
   // asks "is this a digit" and the five ports spell it four ways, so folding
   // first means all of them see ASCII.

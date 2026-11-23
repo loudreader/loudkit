@@ -567,9 +567,8 @@ impl StubHub {
 
     fn options(&self) -> hub::Options {
         hub::Options {
-            revision: "main".to_string(),
-            cloning: false,
             endpoint: self.endpoint.clone(),
+            ..Default::default()
         }
     }
 
@@ -621,7 +620,9 @@ fn serve(
             )
             .into_bytes(),
         )
-    } else if let Some(rest) = path.split("/resolve/main/").nth(1) {
+    } else if let Some((_, rest)) =
+        path.split_once(&format!("/resolve/{}/", commit.lock().unwrap()))
+    {
         asked.lock().unwrap().push(rest.to_string());
         if let Some((when, cancel)) = trip.lock().unwrap().as_ref() {
             if when == rest {
@@ -712,6 +713,12 @@ fn download_fetches_the_plan_and_nothing_else_bookkeeping_first() {
 
     let root = hub::download_with("loudreader/loudr-1", &dir, &hub_stub.options()).unwrap();
     assert_eq!(root, dir);
+    assert_eq!(
+        hub::read_receipt(&dir, "loudreader/loudr-1", false)
+            .unwrap()
+            .revision,
+        "main"
+    );
 
     // 1 checkpoint + 2 manifests + tokenizer + SHA256SUMS + 6 graphs +
     // the export record + 2 voices
@@ -1383,19 +1390,24 @@ fn a_receipt_that_is_not_a_record_is_nothing() {
     }
 }
 
-/// Offline, a pin is answered by the bytes it names or by nothing.
-///
-/// A caller asking for one revision and getting another is the failure a pin
-/// exists to prevent, so the receipt's own commit and ref are what the request
-/// is held to. `main` is this port's unpinned request, because `Options` gives
-/// `revision` that default and cannot tell it from one a caller wrote.
+/// A cached tag can satisfy an unpinned offline request or a matching pin.
 #[test]
 #[cfg(feature = "download")]
 fn offline_refuses_a_cache_that_is_not_the_pin() {
     let hub_stub = StubHub::start(stub_release());
     let scratch = Scratch::new("offline-pin");
     let dir = scratch.path().join("loudr-1");
-    hub::download_with("loudreader/loudr-1", &dir, &hub_stub.options()).unwrap();
+    let repo = "loudreader/loudr-1";
+    let tag = hub::Options {
+        revision: "v0.1.1".into(),
+        cloning: true,
+        ..hub_stub.options()
+    };
+    hub::download_with(repo, &dir, &tag).unwrap();
+    assert_eq!(
+        hub::read_receipt(&dir, repo, true).unwrap().revision,
+        "v0.1.1"
+    );
 
     let offline = |revision: &str| {
         let mut options = hub_stub.options();
@@ -1425,9 +1437,23 @@ fn offline_refuses_a_cache_that_is_not_the_pin() {
     ));
     assert!(why.contains("cannot be resolved without it"), "{why}");
 
-    // The default is not a pin: it takes whatever the cache holds.
+    assert!(hub::download_with(repo, &dir, &offline("main")).is_err());
     assert_eq!(
-        hub::download_with("loudreader/loudr-1", &dir, &offline("main")).unwrap(),
+        hub::download_with(repo, &dir, &offline("v0.1.1")).unwrap(),
         dir
     );
+    let default_fetch = hub::Options {
+        endpoint: unlistened_endpoint(),
+        ..Default::default()
+    };
+    assert_eq!(hub::download_with(repo, &dir, &default_fetch).unwrap(), dir);
+
+    // Already-installed enrollment graphs must respect the same explicit pin.
+    let mut bundle = Bundle::open(&dir).unwrap();
+    assert!(bundle.fetch_cloning_with(&offline("main")).is_err());
+    bundle.fetch_cloning_with(&default_fetch).unwrap();
+    bundle.repo = Some(repo.into());
+    assert!(bundle.fetch_cloning_with(&offline("main")).is_err());
+    bundle.fetch_cloning_with(&offline("v0.1.1")).unwrap();
+    bundle.fetch_cloning_with(&default_fetch).unwrap();
 }

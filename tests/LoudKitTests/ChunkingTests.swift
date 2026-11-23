@@ -19,6 +19,8 @@ final class ChunkingTests: XCTestCase {
         let splitOn: [String]
         let abbreviations: [String]
         let midSentencePeriod: String
+        let language: String?
+        let capResplit: String?
         let text: String
         let chunks: [String]
 
@@ -29,6 +31,8 @@ final class ChunkingTests: XCTestCase {
             case splitOn = "split_on"
             case abbreviations
             case midSentencePeriod = "mid_sentence_period"
+            case language
+            case capResplit = "cap_resplit"
             case text, chunks
         }
     }
@@ -60,7 +64,8 @@ final class ChunkingTests: XCTestCase {
             config.splitOn = c.splitOn
             config.abbreviations = c.abbreviations
             config.midSentencePeriod = MidSentencePeriod(rawValue: c.midSentencePeriod)!
-            let got = Chunking.splitText(c.text, config: config)
+            if let law = c.capResplit { config.capResplit = try XCTUnwrap(CapResplit(rawValue: law)) }
+            let got = Chunking.splitText(c.text, config: config, language: c.language ?? "en")
             if got != c.chunks {
                 mismatches.append(
                     """
@@ -90,6 +95,29 @@ final class ChunkingTests: XCTestCase {
         // A family emoji is one grapheme cluster and several scalars; counting
         // clusters would under-estimate and overflow the window.
         XCTAssertGreaterThan(Chunking.estimateTokens("👨‍👩‍👧‍👦"), Chunking.estimateTokens("ab"))
+    }
+
+    func testShortOverrunRequiresARecoverableWindow() {
+        let sentence = "The birds that had spent the winter in the quiet fields beyond the river "
+            + "flew low across the water and disappeared into the trees."
+        XCTAssertEqual(Chunking.splitText(sentence, config: ChunkConfig()), [sentence])
+
+        var strict = ChunkConfig()
+        strict.capResplit = .off
+        let pieces = Chunking.splitText(sentence, config: strict)
+        XCTAssertEqual(pieces.count, 2)
+        XCTAssertTrue(pieces.allSatisfy { $0.unicodeScalars.count <= 127 })
+        XCTAssertEqual(pieces.joined(separator: " "), sentence)
+    }
+
+    func testEnglishClauseUsesTheRequestedNarrationLanguage() {
+        let trail = "On the trail, we watched the river wind slowly through the valley"
+        let children = "while the children followed the tracks of an animal they had never seen before."
+        let paragraph = trail + " " + children
+        var config = ChunkConfig()
+        config.capResplit = .off
+        XCTAssertEqual(Chunking.splitText(paragraph, config: config, language: "EN"), [trail, children])
+        XCTAssertEqual(Chunking.splitText(paragraph, config: config, language: "fr").first, trail + " while")
     }
 
     /// A period that does not end a sentence must not end a chunk.
@@ -146,7 +174,8 @@ final class ChunkingTests: XCTestCase {
         // heard worse.
         let norrell =
             "Mr. Norrell, who had been waiting in the hall for the better part of an "
-            + "hour, said nothing at all to either of them about what he had seen there."
+            + "hour, said nothing at all to either of them about what he had seen there "
+            + "on the previous evening."
         XCTAssertTrue(
             Chunking.splitText(norrell, config: ChunkConfig())[0].hasSuffix("hour,"))
 
@@ -166,7 +195,7 @@ final class ChunkingTests: XCTestCase {
     /// nothing, and it is the pin that moves when a *default* changes: the
     /// reference asserts the same value in `tests/test_chunking.py`.
     func testTheDefaultFingerprintMatchesTheReference() {
-        XCTAssertEqual(AlgorithmConfig().fingerprint(), "6c1c79aab72fa0cb")
+        XCTAssertEqual(AlgorithmConfig().fingerprint(), "a894772425517885")
     }
 
     /// The shipping list must be the one the reference ships, sorted.

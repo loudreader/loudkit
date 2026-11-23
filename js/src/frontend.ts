@@ -17,31 +17,12 @@ import { supportedNumberLanguages } from "./numbers.js";
 
 const SPACE = "[SPACE]";
 
-/**
- * The two characters the tokenizer's word split reads differently here.
- *
- * The vocabulary's pre-tokenizer is `Whitespace`, which keeps runs of word
- * characters and runs of symbols and drops whitespace between them. The
- * reference reads that rule through the Rust `tokenizers` crate, whose
- * whitespace is the Unicode `White_Space` property; this port reads it through
- * a JavaScript regex, whose `\s` is ECMAScript WhiteSpace plus LineTerminator.
- * Those two classes differ in exactly two characters, in opposite directions:
- * U+FEFF is whitespace only here, and U+0085 NEL is whitespace only there.
- *
- * So `encode("a\uFEFFb")` dropped the character Python, Go, Rust and Swift all
- * answer `[UNK]` for, and `encode("a\u0085b")` answered an `[UNK]` those four
- * all drop. Swapping the pair hands the tokenizer the class the reference would
- * have seen. The swap is a bijection between the two disputed classes, so a run
- * of symbols groups into the same word it groups into there; a one-way rewrite
- * would have fixed one direction and left the other.
- *
- * `speechText.ts` removes U+FEFF and folds U+0085 to a space before
- * `synthesize` ever reaches here, so this is the public `encode` alone.
- */
-const DISPUTED_WHITESPACE = /[\uFEFF\u0085]/g;
+// A tab or line break together with its indentation contributes one word
+// boundary. Plain ASCII spaces each have their own token in the trained input.
+const WORD_SPACES = /[ \t-\r\u0085\u2028\u2029]+/g;
 
-function swapDisputedWhitespace(ch: string): string {
-  return ch === "\uFEFF" ? "\u0085" : "\uFEFF";
+function spaceTokens(run: string): string {
+  return run.length === 1 || /[^ ]/.test(run) ? SPACE : SPACE.repeat(run.length);
 }
 
 /**
@@ -101,8 +82,11 @@ export class GraphemeTextFrontend {
     // matches them greedily, so "he [sigh]ed" would make the model sigh. The
     // language tag added below is the one bracket that belongs.
     normalised = normalised.replace(/[[\]]/g, " ");
-    normalised = normalised.replace(DISPUTED_WHITESPACE, swapDisputedWhitespace);
-    const tagged = `[${lang}]${normalised}`.replace(/ /g, SPACE);
+    normalised = normalised.replace(WORD_SPACES, spaceTokens);
+    // In a direct encode, Python treats U+FEFF as an unknown symbol. The JS
+    // tokenizer's whitespace class drops it, so use its unknown U+0085 proxy.
+    normalised = normalised.replace(/\uFEFF/g, "\u0085");
+    const tagged = `[${lang}]${normalised}`;
     return this.tokenizer.encode(tagged).ids;
   }
 }

@@ -6,7 +6,7 @@
  * these, never from its own guess.
  */
 
-import { CHARS_PER_TOKEN } from "./chunking.js";
+import { CHARS_PER_TOKEN, PROSE_SEPARATORS } from "./chunking.js";
 
 import {
   POSTPROCESS_MODES,
@@ -630,7 +630,7 @@ export const PRODUCTION_CHUNKING: ChunkConfig = {
   enabled: true,
   maxTokens: 255,
   prefixTokens: 6,
-  splitOn: [". ", "! ", "? ", "; ", ", "],
+  splitOn: [...PROSE_SEPARATORS],
   // The surveyed union, sorted. It must equal
   // `loudkit.config.ChunkConfig.abbreviations`.
   // prettier-ignore

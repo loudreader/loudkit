@@ -166,29 +166,19 @@ test("frontend token ids match the fixture", () => {
   }
 });
 
-test("the two characters the whitespace classes disagree about encode as Python", () => {
-  // The tokenizer's word split drops whitespace and keeps everything else.
-  // This port reads that class through a JavaScript regex and the reference
-  // reads it through the Rust crate behind `tokenizers`, and the two classes
-  // differ in exactly two characters, in opposite directions: U+FEFF is
-  // whitespace only here, U+0085 NEL only there. So U+FEFF vanished where the
-  // other four ports answer [UNK], and U+0085 answered an [UNK] the other four
-  // drop. Every id below is Python's, read off
-  // `loudkit.frontend.text.GraphemeTextFrontend` against this same tokenizer.
+test("wrapped words encode with one space token and FEFF retains its unknown id", () => {
   const frontend = new GraphemeTextFrontend(TOKENIZER);
   const enc = (s: string) => frontend.encode(s, "en");
   assert.deepEqual(enc("ab"), [708, 109]);
-  // U+FEFF is a symbol there, so it survives as an [UNK] between the letters,
-  // and it splits "ab" into two words while it does so.
+  for (const gap of [" ", " \r\n  ", "\u0085", "\t", "\v", "\f", "\u2028", " \u2029\t "]) {
+    assert.deepEqual(enc("a" + gap + "b"), [708, 14, 2, 15], JSON.stringify(gap));
+  }
+  assert.deepEqual(enc("a  b"), [708, 14, 2, 2, 15]);
   assert.deepEqual(enc("a\uFEFFb"), [708, 14, 1, 15]);
   assert.deepEqual(enc("a\uFEFF\uFEFFb"), [708, 14, 1, 1, 15]);
-  // U+0085 is whitespace there, so it leaves no token, only the split.
-  assert.deepEqual(enc("a\u0085b"), [708, 14, 15]);
-  // A run of symbols is one word, and the fix has to be a swap rather than two
-  // independent rewrites, or a run mixing the pair would group the wrong way.
   assert.deepEqual(enc("a\uFEFF!b"), [708, 14, 1, 3, 15]);
-  assert.deepEqual(enc("a\uFEFF\u0085b"), [708, 14, 1, 15]);
-  assert.deepEqual(enc("a\u0085\uFEFFb"), [708, 14, 1, 15]);
+  assert.deepEqual(enc("a\uFEFF\u0085b"), [708, 14, 1, 2, 15]);
+  assert.deepEqual(enc("a\u0085\uFEFFb"), [708, 14, 2, 1, 15]);
 });
 
 test("seed derivation matches the fixture", () => {
@@ -456,6 +446,7 @@ test("the splitter cuts where the shared fixture says", () => {
   // not a formatting choice.
   const cases = JSON.parse(readFileSync(SPEECHTEXT_FIXTURE, "utf8")).chunking as Array<{
     config: string;
+    language?: string;
     max_tokens: number;
     prefix_tokens: number;
     split_on: string[];
@@ -468,15 +459,13 @@ test("the splitter cuts where the shared fixture says", () => {
   for (const c of cases) {
     const got = splitText(c.text, {
       enabled: true,
-      // Not a splitter input: `capResplit` decides what the engine does with a
-      // window that overran, so the shared fixture does not vary it.
       capResplit: "word",
       maxTokens: c.max_tokens,
       prefixTokens: c.prefix_tokens,
       splitOn: c.split_on,
       abbreviations: c.abbreviations,
       midSentencePeriod: c.mid_sentence_period,
-    });
+    }, c.language);
     assert.deepEqual(got, c.chunks, `${c.config}: ${JSON.stringify(c.text.slice(0, 40))}`);
   }
 });
@@ -523,7 +512,7 @@ test("a period that does not end a sentence does not end a chunk", () => {
   // latest comma. A comma break is heard; a chunk of "Mr." is heard worse.
   const norrell =
     "Mr. Norrell, who had been waiting in the hall for the better part of an " +
-    "hour, said nothing at all to either of them about what he had seen there.";
+    "hour, said nothing at all to either of them about what he had seen there the evening before he left town.";
   assert.ok(splitText(norrell, PRODUCTION_CHUNKING)[0].endsWith("hour,"));
 });
 
@@ -900,15 +889,15 @@ test("a token-id census is hashed in the order the manifest declared it", () => 
   // here to the number the reference answers for the sorted one, and the one
   // mechanism that exists to catch two engines computing different things
   // agreed with the misreading instead of reporting it.
-  assert.equal(fingerprint(algorithmFromManifest({ silence_token_ids: [9, 1, 5] })), "0253d842841afe71");
-  assert.equal(fingerprint(algorithmFromManifest({ silence_token_ids: [1, 5, 9] })), "29ce8cbf4b263a2a");
-  assert.equal(fingerprint(algorithmFromManifest({ silence_render_ids: [9, 1, 5] })), "b1c9f0fbef48d5b8");
-  assert.equal(fingerprint(algorithmFromManifest({ silence_render_ids: [1, 5, 9] })), "6a52663d1d5565d5");
-  assert.equal(fingerprint(algorithmFromManifest({ quiet_render_ids: [9, 1, 5] })), "98d72152aadd6b64");
-  assert.equal(fingerprint(algorithmFromManifest({ quiet_render_ids: [1, 5, 9] })), "002beda344c02360");
+  assert.equal(fingerprint(algorithmFromManifest({ silence_token_ids: [9, 1, 5] })), "b1324e6d53a01168");
+  assert.equal(fingerprint(algorithmFromManifest({ silence_token_ids: [1, 5, 9] })), "f9c1fd1143ce0fdd");
+  assert.equal(fingerprint(algorithmFromManifest({ silence_render_ids: [9, 1, 5] })), "67ad0f39886e5117");
+  assert.equal(fingerprint(algorithmFromManifest({ silence_render_ids: [1, 5, 9] })), "e8641481db333415");
+  assert.equal(fingerprint(algorithmFromManifest({ quiet_render_ids: [9, 1, 5] })), "924de634261a5bd6");
+  assert.equal(fingerprint(algorithmFromManifest({ quiet_render_ids: [1, 5, 9] })), "080c9950a4fb8ca4");
 });
 
-test("the shipped 0.1.1 manifest still fingerprints 7cd75498ad4e7531", () => {
+test("the 0.1.1 manifest with the current text frontend fingerprints 4a2918bb653ce531", () => {
   // The manifest `tools/amend_manifest.py` writes, spelled out here rather than
   // assembled from this port's constants: a manifest built from them would
   // agree with a reader that ignored every key and answered its defaults, which
@@ -991,7 +980,7 @@ test("the shipped 0.1.1 manifest still fingerprints 7cd75498ad4e7531", () => {
       6537,
     ],
   });
-  assert.equal(fingerprint(algo), "7cd75498ad4e7531");
+  assert.equal(fingerprint(algo), "4a2918bb653ce531");
 });
 
 test("a manifest count is refused when it is not a whole number", () => {
@@ -1198,7 +1187,7 @@ test("a manifest that omits the optional keys fingerprints as the reference does
   // divergence class the fingerprint exists to catch. Release manifests carry
   // the keys, so the shipped fingerprints never showed it.
   const algo = algorithmFromManifest({});
-  assert.equal(fingerprint(algo), "2f7468a9a48fa2ab");
+  assert.equal(fingerprint(algo), "b5f5c644f0725418");
   assert.equal(algo.sampling.minTokensFloor, 0);
   assert.equal(algo.sampling.minTokensTextRatio, 0.0);
   assert.equal(algo.window.staticLength, null);

@@ -29,6 +29,9 @@ public final class TextFrontend {
     private let addedTokens: [(content: String, id: Int)]
     private let addedRegex: NSRegularExpression?
     private let preTokRegex: NSRegularExpression
+    // A wrapped line and its indentation represent one word boundary.
+    private static let wrappedSpace = try! NSRegularExpression(
+        pattern: #"(?<! ) *[\t-\r\u0085\u2028\u2029][ \t-\r\u0085\u2028\u2029]*"#)
     private let unkId: Int
 
     /// Read a `tokenizer.json` and build the BPE tables.
@@ -123,6 +126,8 @@ public final class TextFrontend {
         // of becoming `[SPACE]`. The reference replaces code points.
         t = t.replacingOccurrences(of: "[", with: " ", options: .literal)
         t = t.replacingOccurrences(of: "]", with: " ", options: .literal)
+        t = Self.wrappedSpace.stringByReplacingMatches(
+            in: t, range: NSRange(t.startIndex..., in: t), withTemplate: " ")
         t = "[\(lang)]" + t
         t = t.replacingOccurrences(of: " ", with: "[SPACE]", options: .literal)
 

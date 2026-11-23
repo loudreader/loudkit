@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from .contracts import Mel, SpeechTokens, Waveform
 from .postprocess import Inspection
@@ -18,6 +19,7 @@ class StageTimings:
     tokens: float
     mel: float
     audio: float
+    elapsed: float | None = None
 
     @property
     def total(self) -> float:
@@ -25,7 +27,8 @@ class StageTimings:
 
     def rtf(self, audio_seconds: float) -> float:
         """Real-time factor: seconds of audio produced per second of work."""
-        return audio_seconds / self.total if self.total > 0 else float("inf")
+        elapsed = self.total if self.elapsed is None else self.elapsed
+        return audio_seconds / elapsed if elapsed > 0 else float("inf")
 
     def describe(self, audio_seconds: float) -> str:
         return (
@@ -90,7 +93,7 @@ class Result:
 
     def save(
         self,
-        path: str,
+        path: str | Path,
         *,
         voice: str = "",
         language: str = "",
@@ -98,7 +101,8 @@ class Result:
     ) -> None:
         """Write a 16-bit WAV, with an unsigned loudkit provenance manifest by default.
 
-        ``voice`` and ``language`` override the labels the result carries.
+        The filename must end in ``.wav``. ``voice`` and ``language`` override the
+        labels the result carries.
         """
         from ._version import package_version
         from .provenance import write_wav

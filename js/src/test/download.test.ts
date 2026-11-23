@@ -150,8 +150,9 @@ async function hub(files: Map<string, string>): Promise<Hub> {
       response.end(JSON.stringify(tree));
       return;
     }
-    const at = url.indexOf("/resolve/main/");
-    const path = at >= 0 ? decodeURIComponent(url.slice(at + "/resolve/main/".length)) : "";
+    const prefix = `/resolve/${state.commit}/`;
+    const at = url.indexOf(prefix);
+    const path = at >= 0 ? decodeURIComponent(url.slice(at + prefix.length)) : "";
     const body = files.get(path);
     if (body === undefined) {
       response.writeHead(404).end();
@@ -188,8 +189,8 @@ async function hub(files: Map<string, string>): Promise<Hub> {
 /** The files the stub served, by name, in the order they were asked for. */
 function served(stub: Hub): string[] {
   return stub.asked
-    .filter((u) => u.includes("/resolve/main/"))
-    .map((u) => decodeURIComponent(u.slice(u.indexOf("/resolve/main/") + "/resolve/main/".length)));
+    .filter((u) => u.includes("/resolve/"))
+    .map((u) => decodeURIComponent(u.split("/resolve/")[1].split("/").slice(1).join("/")));
 }
 
 function workdir(): string {
@@ -383,6 +384,7 @@ test("a fetch writes the plan and nothing else, the bookkeeping first", async ()
   try {
     const lines: string[] = [];
     const got = await download(REPO, dir, { endpoint: stub.endpoint, onProgress: (m) => lines.push(m) });
+    assert.ok(stub.asked.some(url => url.includes(`/tree/${COMMIT_A}`)));
     assert.equal(got, dir);
     assert.equal(readFileSync(join(dir, "loudr-1.safetensors"), "utf8"), "checkpoint bytes");
     assert.equal(readFileSync(join(dir, "onnx", "vocoder.onnx"), "utf8"), "vocoder graph");
@@ -596,7 +598,7 @@ test("a half-written file is resumed rather than restarted", async () => {
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(`${target}.part`, "checkpoint");
     await download(REPO, dir, { endpoint: stub.endpoint, ...quiet });
-    assert.deepEqual(stub.ranged, ["/loudreader/loudr-1/resolve/main/loudr-1.safetensors bytes=10-"]);
+    assert.deepEqual(stub.ranged, [`/loudreader/loudr-1/resolve/${COMMIT_A}/loudr-1.safetensors bytes=10-`]);
     assert.equal(readFileSync(target, "utf8"), "checkpoint bytes");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -998,8 +1000,9 @@ async function hubAnsweringWrongRange(files: Map<string, string>): Promise<Hub> 
       );
       return;
     }
-    const at = url.indexOf("/resolve/main/");
-    const path = at >= 0 ? decodeURIComponent(url.slice(at + "/resolve/main/".length)) : "";
+    const prefix = `/resolve/${COMMIT_A}/`;
+    const at = url.indexOf(prefix);
+    const path = at >= 0 ? decodeURIComponent(url.slice(at + prefix.length)) : "";
     const body = files.get(path);
     if (body === undefined) {
       response.writeHead(404).end();

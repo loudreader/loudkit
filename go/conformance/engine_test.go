@@ -217,7 +217,7 @@ func longForm(t *testing.T, eng *engine.Engine, v *voice.Profile, vectors map[st
 		for i, ch := range chunks {
 			wantTexts[i] = ch.(map[string]interface{})["text"].(string)
 		}
-		gotTexts := chunking.SplitText(prepared, eng.Config().Chunking)
+		gotTexts := chunking.SplitTextForLanguage(prepared, eng.Config().Chunking, language)
 		if len(gotTexts) != len(wantTexts) {
 			t.Fatalf("%s: split into %d chunks, fixture has %d", name, len(gotTexts), len(wantTexts))
 		}

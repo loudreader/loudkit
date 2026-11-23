@@ -11,7 +11,7 @@ final class GrammarDigestTests: XCTestCase {
         // Update deliberately, in the same commit as the data change, and only
         // after checking every port ships the same bytes.
         XCTAssertEqual(
-            Numbers.grammarDigest, "71ad748c2caf97dd",
+            Numbers.grammarDigest, "51b9a5c04ddb180b",
             "this bundle's numbers.json has drifted from the Python reference")
     }
 

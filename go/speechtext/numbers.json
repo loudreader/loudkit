@@ -115,6 +115,13 @@
     "i.e.": "that is",
     "etc.": "etcetera"
    },
+   "title_abbreviations": {
+    "Dr.": "Doctor",
+    "Mr.": "Mister",
+    "Mrs.": "Missus",
+    "Ms.": "Miz",
+    "Prof.": "Professor"
+   },
    "dates": {
     "day_form": "ordinal",
     "day_words": {

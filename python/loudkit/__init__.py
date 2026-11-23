@@ -239,14 +239,12 @@ def enroll(
         samples, sample_rate = _read_audio(audio)
     else:
         samples = np.asarray(audio, dtype=np.float32)
+    from .models.enrollment_audio import validate_reference_audio
     from .voice import ENROLMENT_FIRST_WINDOW, ENROLMENT_PAUSE_CUT
 
+    # Validate the original recording before padding it or resolving model weights.
+    validate_reference_audio(samples, sample_rate)
     if end_in_silence:
-        from .models.enrollment_audio import validate_reference_audio
-
-        # Validate the original: padding must not rescue a too-short clip, and
-        # trimming must not hide invalid samples or an oversized recording.
-        validate_reference_audio(samples, sample_rate)
         samples = with_prompt_ending_in_silence(samples, sample_rate)
 
     if device in ("onnx", "coreml"):

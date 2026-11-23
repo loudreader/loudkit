@@ -19,8 +19,8 @@ Environment: Python 3.12.12, torch 2.13.0, onnxruntime 1.29.0, loudkit 0.1.1
 |---|---|---|---|
 | Philox 4x32-10 | published known-answer vectors | `exact` | ✓ 3/3 vectors |
 | LR-SAMPLER-v1 | shared fixture | `exact` | ✓ 3/3 cases |
-| Speech funnel | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 217/217 cases |
-| Long-form splitting | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 48/48 cases |
+| Speech funnel | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 281/281 cases |
+| Long-form splitting | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 84/84 cases |
 | Postprocess detectors | shared fixture (Python, Swift, Go, Rust, JS) | `exact` | ✓ 37/37 cases |
 | EOS peak observation | shared fixture (Python, Swift, Go, Rust, JS) | `step exact, probability rtol 1e-09` | ✓ 3/3 cases |
 | Seed derivation | shared fixture | `exact` | ✓ 6/6 cases |

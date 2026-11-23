@@ -68,6 +68,21 @@ final class BundleTests: XCTestCase {
         XCTAssertNoThrow(try ModelBundle(directory: root))
     }
 
+    func testEnrollmentResolvesEachStageInItsShippedForm() async throws {
+        try release()
+        try write("coreml/s3_tokenizer.mlmodelc/model.espresso.net")
+        try package("coreml/camp.mlpackage")
+        try write("coreml/voice_encoder.mlmodelc/model.espresso.net")
+        try package("coreml/voice_encoder.mlpackage")
+
+        let bundle = try ModelBundle(directory: root)
+        try await bundle.fetchCloning()
+        for expected in ["s3_tokenizer.mlmodelc", "camp.mlpackage", "voice_encoder.mlpackage"] {
+            let stem = (expected as NSString).deletingPathExtension
+            XCTAssertEqual(try MLHelpers.stageURL(stem, in: bundle.coreml).lastPathComponent, expected)
+        }
+    }
+
     func testNamesEverythingMissingAtOnce() throws {
         try release()
         try FileManager.default.removeItem(at: root.appendingPathComponent("tokenizer.json"))

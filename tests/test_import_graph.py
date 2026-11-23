@@ -267,17 +267,17 @@ ALLOWED: dict[str, set[str]] = {
         # resolves the snapshot (and its voices/) by the same call the other
         # two doors make. The hub edge lives there now, not here.
         "loudkit.transports.resolve",
-        # `_STREAMABLE`, the formats a chunk can be delivered in on its own.
-        # `proto/loudkit.proto` says this contract mirrors the HTTP one field
-        # for field, so the streaming RPC has to refuse what
-        # `/v1/synthesize/stream` refuses -- from the same set, not a second
-        # copy of it that can drift.
-        "loudkit.transports.schemas",
     },
     # The hub talks to the network and re-exports the two modules beneath it:
     # `release` (what a release is, read off disk) and `checksums` (the
     # SHA256SUMS rules). Neither of those knows the hub exists.
-    "hub": {"loudkit.checkpoint", "loudkit.checksums", "loudkit.errors", "loudkit.release"},
+    "hub": {
+        "loudkit.checkpoint",
+        "loudkit.checksums",
+        "loudkit.errors",
+        "loudkit.release",
+        "loudkit.voice",  # enrollment language comes from the same header the SDK reads
+    },
     "release": {"loudkit.checkpoint", "loudkit.errors"},
     "checksums": {"loudkit.checkpoint", "loudkit.release"},
     # The two modules the three transports share: what every door refuses and

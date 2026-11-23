@@ -190,7 +190,8 @@ public enum LoudKit {
     /// - Parameters:
     ///   - repo: a Hub repo id, `org/name`.
     ///   - directory: where the release lands. Created if it is not there.
-    ///   - revision: branch, tag or commit. Pin it for a build that must not move.
+    ///   - revision: branch, tag or commit. An empty value fetches `main` online
+    ///     and accepts a complete cached revision when offline.
     ///   - cloning: also fetch the three enrollment packages `Enrollment` needs.
     ///   - progress: called on the session's queue, many times per file. Nil
     ///     prints one line per file to stderr.
@@ -198,7 +199,7 @@ public enum LoudKit {
     public static func download(
         repo: String,
         to directory: URL,
-        revision: String = "main",
+        revision: String = "",
         cloning: Bool = false,
         progress: (@Sendable (DownloadProgress) -> Void)? = nil
     ) async throws -> URL {
@@ -220,7 +221,7 @@ public enum LoudKit {
     /// pagination and the idempotence are decidable without a network.
     struct Fetch {
         var repo: String
-        var revision: String = "main"
+        var revision: String = ""
         var cloning: Bool = false
         var endpoint: String = defaultEndpoint
         var configuration: URLSessionConfiguration = .ephemeral
@@ -243,9 +244,10 @@ public enum LoudKit {
         to directory: URL,
         progress: (@Sendable (DownloadProgress) -> Void)?
     ) async throws -> URL {
-        var fetch = fetch
-        fetch.repo = modelRepo(fetch.repo)
-        let repo = fetch.repo
+        let repo = modelRepo(fetch.repo)
+        // The wire and receipt name the default branch. Keep the original
+        // argument for the offline check so an explicit "main" is a pin.
+        let revision = fetch.revision.isEmpty ? "main" : fetch.revision
         guard isRepoID(repo) else {
             throw LoudKitError.asset(
                 "\(repo): not a Hugging Face repo id (those look like 'org/name')")
@@ -256,12 +258,11 @@ public enum LoudKit {
         let commit: String
         let complete = { (try? verifyInventory(at: directory, cloning: fetch.cloning)) != nil }
         do {
-            commit = try await resolveCommit(repo: repo, revision: fetch.revision,
+            commit = try await resolveCommit(repo: repo, revision: revision,
                                              endpoint: fetch.endpoint, fetcher: fetcher)
         } catch let error as URLError {
             if let receipt = readReceipt(directory, repo: repo, cloning: fetch.cloning), complete() {
-                try refuseACacheThatIsNotThePin(directory, receipt: receipt,
-                                                revision: fetch.revision)
+                try refuseACacheThatIsNotThePin(directory, receipt: receipt, revision: fetch.revision)
                 FileHandle.standardError.write(Data((
                     "loudkit: the hub cannot be reached; using \(directory.path), which holds "
                     + "\(receipt.repo) at \(receipt.commit) (fetched \(receipt.fetchedAt))\n").utf8))
@@ -283,15 +284,15 @@ public enum LoudKit {
         // A stale receipt must not outlive the files it vouched for.
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(receiptName))
 
-        let files = try await listFiles(repo: repo, revision: fetch.revision,
+        let files = try await listFiles(repo: repo, revision: commit,
                                         endpoint: fetch.endpoint, fetcher: fetcher)
         let wanted = bookkeepingFirst(plan(files, cloning: fetch.cloning))
         guard !wanted.isEmpty else {
             throw LoudKitError.asset(
-                "\(repo) at \(fetch.revision): holds none of the files a loudkit release "
+                "\(repo) at \(revision): holds none of the files a loudkit release "
                 + "carries. Check the repo id and the revision.")
         }
-        try refuseBeforeFetching(repo: repo, revision: fetch.revision, wanted: wanted.map(\.path))
+        try refuseBeforeFetching(repo: repo, revision: revision, wanted: wanted.map(\.path))
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let planBytes = wanted.reduce(Int64(0)) { $0 + max($1.size, 0) }
@@ -315,7 +316,7 @@ public enum LoudKit {
                 try FileManager.default.createDirectory(
                     at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 let url = try resolveURL(endpoint: fetch.endpoint, repo: repo,
-                                         revision: fetch.revision, path: file.path)
+                                         revision: commit, path: file.path)
                 try await reachable(fetch.endpoint) {
                     try await fetcher.download(request(url), to: destination) { written, total in
                         report(written, total > 0 ? total : file.size)
@@ -341,7 +342,7 @@ public enum LoudKit {
         // plan fetches whatever subset the repo holds and says nothing about the
         // rest.
         try verifyInventory(at: directory, cloning: fetch.cloning)
-        try writeReceipt(directory, repo: repo, revision: fetch.revision, commit: commit)
+        try writeReceipt(directory, repo: repo, revision: revision, commit: commit)
         return directory
     }
 
@@ -580,38 +581,12 @@ public enum LoudKit {
         let fetchedAt: String
     }
 
-    /// The receipt under `root` when it vouches for `repo`, else nil: every
-    /// field present with its type (null is the wrong type for all but
-    /// `sha256sums`; keys it does not know are ignored), `repo` the one
-    /// asked, `commit` forty lowercase hex, `sha256sums` the digest of the
-    /// `SHA256SUMS` on disk (nil for none), and every file it lists that the
-    /// plan selects present. No weight is hashed: the receipt is checked, not
-    /// the release. This is the only place the file is read.
-    /// Offline, answer a pinned request with those bytes or with nothing.
-    ///
-    /// A caller asking for one revision and getting another is the failure a
-    /// pin exists to prevent, and a warning is not a refusal: a build that
-    /// pins its weights would run on different ones and report success.
-    ///
-    /// Both halves of the pin are already on disk. A forty-hex request names
-    /// the commit, which the receipt records, so it is answered exactly. A tag
-    /// or a branch cannot be resolved with no hub, but the receipt also
-    /// records the ref it was fetched for, and asking for a different one
-    /// cannot be satisfied from this directory either.
-    ///
-    /// `main` is this port's unpinned request. `revision` defaults to `"main"`
-    /// in every entry point here, so an omitted revision and an explicit one
-    /// arrive as the same string; the reference tells them apart. Reading it
-    /// as a pin would refuse every default call over a cache fetched for a
-    /// tag, which is the commoner shape and the one no caller pinned, so it is
-    /// read as the absence it usually is.
-    ///
-    /// - Throws: `LoudKitError.asset` when the cache answers to another
-    ///   revision than the one asked for.
+    /// An explicit commit must match the cached commit. An explicit branch
+    /// or tag must match the cached ref because it cannot be resolved offline.
     static func refuseACacheThatIsNotThePin(
         _ root: URL, receipt: Receipt, revision: String
     ) throws {
-        if revision.isEmpty || revision == "main" { return }
+        if revision.isEmpty { return }
         let fortyHex = revision.count == 40
             && revision.allSatisfy { $0.isHexDigit && !$0.isUppercase }
         if fortyHex {
@@ -629,6 +604,13 @@ public enum LoudKit {
             + "Rerun with the hub reachable, or ask for the revision this copy holds.")
     }
 
+    /// The receipt under `root` when it vouches for `repo`, else nil: every
+    /// field present with its type (null is the wrong type for all but
+    /// `sha256sums`; keys it does not know are ignored), `repo` the one
+    /// asked, `commit` forty lowercase hex, `sha256sums` the digest of the
+    /// `SHA256SUMS` on disk (nil for none), and every file it lists that the
+    /// plan selects present. No weight is hashed: the receipt is checked, not
+    /// the release. This is the only place the file is read.
     static func readReceipt(_ root: URL, repo: String, cloning: Bool) -> Receipt? {
         let path = root.appendingPathComponent(receiptName)
         guard let size = (try? path.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size <= receiptLimit,

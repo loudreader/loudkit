@@ -784,6 +784,53 @@ class TestTheRuntimeRefusesAMixedSet:
         exported.write(tmp_path, dict.fromkeys(exported.names(), exported.matching_entry()))
         exported.check(tmp_path)
 
+    @pytest.mark.parametrize(
+        ("fixture_name", "euler", "previous", "other_model"),
+        [
+            ("vectors.json", 2, "7cd75498ad4e7531", "e5303ba243087222"),
+            ("vectors.json", 2, "f171bcc07df48436", "06d8ccb48891899e"),
+            ("vectors.json", 2, "82c2c12d6e725542", "62d674008ef832fd"),
+            ("vectors_fusion_mtp2.json", 1, "06d8ccb48891899e", "f171bcc07df48436"),
+            ("vectors_fusion_mtp2.json", 1, "62d674008ef832fd", "82c2c12d6e725542"),
+            ("vectors.json", 2, "b99ab84725b40e91", "e800f3bbb7eb6b4e"),
+            ("vectors_fusion_mtp2.json", 1, "e5303ba243087222", "7cd75498ad4e7531"),
+            ("vectors_fusion_mtp2.json", 1, "e800f3bbb7eb6b4e", "b99ab84725b40e91"),
+        ],
+    )
+    def test_published_graphs_work_with_the_new_text_frontend(
+        self,
+        exported: _ExportSet,
+        tmp_path,
+        monkeypatch,
+        fixture_name,
+        euler,
+        previous,
+        other_model,
+    ) -> None:
+        import json
+
+        fixture = REPO / "tests/data/conformance" / fixture_name
+        algo = json.loads(fixture.read_text(encoding="utf-8"))["algorithm"]
+        monkeypatch.setattr(
+            type(exported.algorithm()), "fingerprint", lambda _self: algo["fingerprint"]
+        )
+        entries = dict.fromkeys(
+            exported.names(), exported.entry(fingerprint=previous, euler=euler)
+        )
+        exported.write(tmp_path, entries)
+        exported.check(tmp_path, euler=euler)
+
+        # Updating one graph's provenance would mix two exports.
+        entries[exported.names()[0]] = exported.matching_entry(euler=euler)
+        exported.write(tmp_path, entries)
+        with pytest.raises(ValueError, match="mixed"):
+            exported.check(tmp_path, euler=euler)
+
+        wrong = exported.entry(fingerprint=other_model, euler=euler)
+        exported.write(tmp_path, dict.fromkeys(exported.names(), wrong))
+        with pytest.raises(ValueError, match="different engine"):
+            exported.check(tmp_path, euler=euler)
+
     def test_a_set_from_another_checkpoint_is_refused(
         self, exported: _ExportSet, tmp_path
     ) -> None:

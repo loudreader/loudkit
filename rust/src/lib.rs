@@ -32,6 +32,7 @@ pub mod hub;
 pub mod letters;
 pub mod noise;
 pub mod numbers;
+mod polish_quantities;
 pub mod postprocess;
 pub mod respell;
 pub mod rng;

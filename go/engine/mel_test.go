@@ -17,7 +17,7 @@ func TestAppendMelAlongTime(t *testing.T) {
 		}
 		return m
 	}
-	joined := appendMelAlongTime(appendMelAlongTime(nil, make2(3, 0)), make2(2, 100))
+	joined := joinMels([][]float32{make2(3, 0), make2(2, 100)})
 	if len(joined) != melBins*5 {
 		t.Fatalf("length %d, want %d", len(joined), melBins*5)
 	}
@@ -32,5 +32,20 @@ func TestAppendMelAlongTime(t *testing.T) {
 				t.Fatalf("row %d: got %v, want %v", b, got, want)
 			}
 		}
+	}
+}
+
+func TestJoinMelsAllocatesOneOutputForAChapter(t *testing.T) {
+	parts := make([][]float32, 320)
+	for i := range parts {
+		parts[i] = make([]float32, melBins*5)
+	}
+	allocs := testing.AllocsPerRun(5, func() {
+		if len(joinMels(parts)) != 320*melBins*5 {
+			t.Fatal("missing mel frames")
+		}
+	})
+	if allocs > 1 {
+		t.Fatalf("chapter join allocated %.0f buffers, want one output", allocs)
 	}
 }

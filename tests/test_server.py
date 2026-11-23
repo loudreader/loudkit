@@ -140,7 +140,9 @@ def test_synthesize_returns_wav(tmp_path) -> None:
     resp = client.post("/v1/synthesize", json={"text": "hello", "voice": "fake"})
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("audio/wav")
-    assert b"RIFF" in resp.content  # WAV magic
+    assert resp.content[:4] == b"RIFF"
+    assert int.from_bytes(resp.content[4:8], "little") + 8 == len(resp.content)
+    assert b"LKPV" in resp.content
     assert "X-Loudkit-Tokens" in resp.headers
 
 
@@ -216,6 +218,7 @@ def test_concurrent_synthesis_is_serialised(tmp_path) -> None:
     client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")
 
     with client, ThreadPoolExecutor(max_workers=n) as pool:
+        assert voices.loads.acquire(blocking=False), "startup validated the installed voice"
         futures = [
             pool.submit(
                 client.post,
@@ -448,6 +451,34 @@ def test_truncation_is_reported_in_the_stream(tmp_path) -> None:
     }
 
 
+@pytest.mark.parametrize("route", ["/v1/synthesize", "/v1/synthesize/stream"])
+def test_unreadable_voice_is_a_structured_client_error(tmp_path, route):
+    library = VoiceLibrary(tmp_path)
+    (tmp_path / "broken.safetensors").write_bytes(b"unfinished")
+    client = TestClient(build_app(chunking_engine(), library), base_url="http://127.0.0.1")
+    assert client.get("/v1/voices").json()["voices"] == []
+    response = client.post(route, json={"text": "hello", "voice": "broken"})
+    assert response.status_code == 400
+    assert "unreadable voice profile" in response.json()["detail"]
+
+
+def test_turbo_continuation_matches_across_transports(tmp_path):
+    from .conftest import fake_engine
+
+    engine = fake_engine(AlgorithmConfig(decode_mode="fusion_mtp2"))
+    client = TestClient(build_app(engine, _voices(tmp_path)), base_url="http://127.0.0.1")
+    body = {"text": "The cat on the mat was sleeping. " * 12, "voice": "fake", "seed": 7}
+    whole = client.post("/v1/synthesize", json=body)
+    streamed = client.post("/v1/synthesize/stream", json=body)
+    events = [
+        json.loads(line[6:]) for line in streamed.text.splitlines() if line.startswith("data: ")
+    ]
+    assert len(events) > 2
+    assert events[-1]["continuation"] == [
+        int(x) for x in whole.headers["X-Loudkit-Continuation"].split(",")
+    ]
+
+
 def test_synthesize_rejects_unknown_voice(tmp_path) -> None:
     client = _client(tmp_path)
     resp = client.post("/v1/synthesize", json={"text": "hello", "voice": "nope"})
@@ -555,6 +586,70 @@ def test_health_reports_fingerprint(tmp_path) -> None:
     assert "fingerprint" in body
     assert "voices" in body
     assert "fake" in body["voices"]
+
+
+def test_large_voice_catalog_shares_validations_with_health(tmp_path, monkeypatch):
+    library = VoiceLibrary(tmp_path)
+    names = [f"voice-{i:03}" for i in range(130)]
+    for name in [*names, "broken"]:
+        (tmp_path / f"{name}.safetensors").touch()
+    parsed = []
+    profile = _voice()
+
+    def load(_library, name):
+        parsed.append(name)
+        if name == "broken":
+            raise ValueError("unfinished")
+        return profile
+
+    monkeypatch.setattr(VoiceLibrary, "load", load)
+    with TestClient(
+        build_app(chunking_engine(), library), base_url="http://127.0.0.1"
+    ) as client:
+        assert len(parsed) == len(names) + 1
+        assert client.get("/health").json()["voices"] == names
+        assert client.get("/v1/voices").json()["voices"] == names
+        assert len(parsed) == len(names) + 1
+        (tmp_path / "voice-001.safetensors").write_bytes(b"replaced")
+        assert client.get("/v1/voices").json()["voices"] == names
+        assert parsed[len(names) + 1 :] == ["voice-001"]
+
+
+def test_health_recovers_when_a_usable_voice_appears(tmp_path, monkeypatch) -> None:
+    library = VoiceLibrary(tmp_path)
+    client = TestClient(build_app(chunking_engine(), library), base_url="http://127.0.0.1")
+    empty = client.get("/health")
+    assert empty.status_code == 503
+    assert empty.json()["status"] == "no_usable_voice"
+    assert empty.json()["voices"] == []
+
+    parsed = []
+    load = VoiceProfile.load
+
+    def record_load(path):
+        parsed.append(path.name)
+        return load(path)
+
+    monkeypatch.setattr(VoiceProfile, "load", staticmethod(record_load))
+    broken = tmp_path / "a.safetensors"
+    broken.write_bytes(b"unfinished")
+    assert client.get("/health").status_code == 503
+    assert client.get("/health").status_code == 503
+    assert parsed == ["a.safetensors"]
+
+    working = tmp_path / "z.safetensors"
+    _voice().save(working)
+    assert client.get("/health").status_code == 200
+    assert client.get("/health").status_code == 200
+    assert parsed == ["a.safetensors", "z.safetensors"]
+    rendered = client.post("/v1/synthesize", json={"text": "hello", "voice": "z"})
+    assert rendered.status_code == 200
+
+    working.unlink()
+    assert client.get("/health").status_code == 503
+    _voice().save(broken)
+    assert client.get("/health").status_code == 200
+    assert parsed == ["a.safetensors", "z.safetensors", "a.safetensors"]
 
 
 def test_voice_library_rejects_path_traversal(tmp_path) -> None:
@@ -820,6 +915,7 @@ class _CountingLibrary:
     """
 
     def __init__(self, root: Path) -> None:
+        self.root = root
         self._inner = VoiceLibrary(root)
         self.loads = threading.Semaphore(0)
 
@@ -897,44 +993,23 @@ def test_stream_does_not_freeze_health(tmp_path) -> None:
     its chance to release it."""
     from concurrent.futures import ThreadPoolExecutor
 
-    engine = _SlowEngine()
+    engine = _HeldEngine()
     voices = _voices(tmp_path)
     client = TestClient(build_app(engine, voices), base_url="http://127.0.0.1:8765")
 
-    stream = contextlib.ExitStack()
-
-    def open_stream() -> None:
-        # Held in `stream`, not entered and dropped: Starlette 1.x's TestClient
-        # returns a generator-based context manager, and an unreferenced one is
-        # collected and closed at once, taking the response with it. The
-        # httpx-based client had already run the body by then, so the drop
-        # went unnoticed until the client changed.
-        resp = stream.enter_context(
-            client.stream(
-                "POST",
-                "/v1/synthesize/stream",
-                json={"text": "one. two. three.", "voice": "fake"},
-            )
+    # Share the application's event loop and keep the render in flight until
+    # readiness answers. The timeout detects a deadlock on a loaded runner.
+    with client, ThreadPoolExecutor(max_workers=2) as pool:
+        stream = pool.submit(
+            client.post, "/v1/synthesize/stream", json={"text": "one. two.", "voice": "fake"}
         )
-        # And read one chunk: the newer client runs the body only as it is
-        # read, so an unread stream never reaches the engine. One chunk is the
-        # same mid-flight state under both clients.
-        next(resp.iter_bytes())
-
-    with stream, ThreadPoolExecutor(max_workers=2) as pool:
-        stream_fut = pool.submit(open_stream)
-        import time
-
-        # The state the next line needs, waited for rather than guessed at:
-        # `/health` is only interesting while the stream holds the slot, and a
-        # stream that has not started yet holds nothing.
-        assert engine.rendering.wait(30.0), "the stream never reached the engine"
-        t0 = time.time()
-        resp = client.get("/health")
-        elapsed = time.time() - t0
-        assert resp.status_code == 200, resp.text
-        assert elapsed < 1.0, f"/health blocked by in-flight stream: {elapsed:.2f}s"
-        stream_fut.result()
+        try:
+            assert engine.rendering.wait(30), "the stream never reached the engine"
+            health = pool.submit(client.get, "/health").result(timeout=10)
+            assert health.status_code == 200, health.text
+        finally:
+            engine.release.set()
+        assert stream.result(timeout=30).status_code == 200
 
 
 def test_a_disconnect_stops_the_one_shot_render_too(tmp_path) -> None:
@@ -1473,6 +1548,7 @@ def test_stream_and_sync_synthesis_do_not_deadlock(tmp_path) -> None:
     n_sync = 48
 
     with client, ThreadPoolExecutor(max_workers=n_sync + 1) as pool:
+        assert voices.loads.acquire(blocking=False), "startup validated the installed voice"
         stream_fut = pool.submit(
             lambda: client.stream(
                 "POST",
@@ -3300,7 +3376,7 @@ class TestATokenHasToBeUsableAsOne:
 
         server_mod.serve(
             _stub_checkpoint(tmp_path),
-            voices=tmp_path,
+            voices=_voices(tmp_path).root,
             host="0.0.0.0",
             allow_public=True,
             token=self.GOOD,

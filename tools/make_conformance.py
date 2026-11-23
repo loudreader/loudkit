@@ -394,6 +394,8 @@ def frontend_section(tokenizer_path: Path) -> dict:
         ("The quick brown fox jumps over the lazy dog.", "en"),
         ("Wait — was that a knock at the door, or only the wind?", "en"),
         ("Hello,   world!\tTabs and  double  spaces.", "en"),
+        ("The train  \r\n  rolled\t past\u2028the\u2029old\x85bridge.", "en"),
+        ("Un train\n\t longe le fleuve.", "fr"),
         ("Zażółć gęślą jaźń — pchnąć w tę łódź jeża.", "pl"),
         ("Ël naïve façade: 3.14, 100%!", "en"),
     ]

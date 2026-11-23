@@ -105,12 +105,12 @@ func shipped011() map[string]interface{} {
 // ignores every key and answers its defaults. This one starts where a user
 // starts, at the manifest a released checkpoint carries, so a reader change
 // that drops a key or reads it differently moves the number here instead of
-// reaching a listener. `7cd75498ad4e7531` is the algorithm this build
+// reaching a listener. `4a2918bb653ce531` is the algorithm this build
 // implements, recorded in CHANGELOG.md and in the conformance vectors. A
 // published voice records the fingerprint it was rendered under, which is a
 // fact about that artefact and does not move with this one.
 func TestTheShippedManifestStillReadsToTheShippedFingerprint(t *testing.T) {
-	const shippedFingerprint = "7cd75498ad4e7531"
+	const shippedFingerprint = "4a2918bb653ce531"
 	cfg := mustFromManifest(t, shipped011())
 	if got := Fingerprint(cfg); got != shippedFingerprint {
 		t.Errorf("the shipped 0.1.1 manifest now reads as %s, not %s\ncanonical form: %s",

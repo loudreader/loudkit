@@ -16,11 +16,11 @@ import XCTest
 /// `go/config/freeze_test.go` and `rust/tests/freeze.rs` are the same test in
 /// the other two ports, over the same manifest.
 final class ManifestFreezeTests: XCTestCase {
-    /// `7cd75498ad4e7531` is the algorithm this build implements, recorded in
+    /// `4a2918bb653ce531` is the algorithm this build implements, recorded in
     /// CHANGELOG.md and in the conformance vectors. A published voice records
     /// the fingerprint it was rendered under, which is a fact about that
     /// artefact and does not move with this one.
-    static let shippedFingerprint = "7cd75498ad4e7531"
+    static let shippedFingerprint = "4a2918bb653ce531"
 
     /// The manifest 0.1.1 ships, as `tools/amend_manifest.py` writes it over
     /// the values the packed checkpoint already carried.

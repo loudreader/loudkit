@@ -26,6 +26,7 @@ from .numbers import (
     cardinal,
     decimal_separator,
     expand_abbreviations,
+    expand_polish_quantities,
     expand_roman_numerals,
     expand_times,
     fold_foreign_digits,
@@ -114,7 +115,35 @@ _ASCII_OPERATORS: tuple[tuple[str, str], ...] = (
     (">", ">"),
 )
 
-_MARKUP_TAG = re.compile(r"</?[A-Za-z!][^<>]*>")
+_ENTITIES = {
+    "&apos;": "'",
+    "&quot;": '"',
+    "&lt;": "<",
+    "&gt;": ">",
+    "&nbsp;": " ",
+    "&amp;": "&",
+}
+_ENTITY_RE = re.compile("|".join(map(re.escape, _ENTITIES)))
+_HTML_TAG_NAME = r"""[A-Za-z][A-Za-z0-9-]*(?::[A-Za-z][A-Za-z0-9-]*)?"""
+_HTML_SPACE = r"""[ \t\r\n\f]"""
+_HTML_ASSIGNMENT = rf"""[^ \t\r\n\f"'<>/=]+{_HTML_SPACE}*={_HTML_SPACE}*"""
+_HTML_QUOTED = r"""(?:"[^"]*"|'[^']*')"""
+_HTML_UNQUOTED = r"""[^ \t\r\n\f"'<>\x60]+"""
+_HTML_BOOLEAN = (
+    "(?:allowfullscreen|async|autofocus|autoplay|checked|controls|"
+    "default|defer|disabled|download|exact|formnovalidate|hidden|"
+    "inert|ismap|itemscope|loop|multiple|muted|nomodule|novalidate|nowrap|open|playsinline|"
+    "popover|readonly|required|reversed|selected|v-cloak)"
+)
+# Only a quoted value can end immediately before the next assignment.
+_HTML_ATTRIBUTE = (
+    rf"(?:{_HTML_BOOLEAN}|{_HTML_ASSIGNMENT}(?:{_HTML_QUOTED}{_HTML_ASSIGNMENT})*"
+    rf"(?:{_HTML_QUOTED}|{_HTML_UNQUOTED}))"
+)
+_MARKUP_TAG = re.compile(
+    rf"""</?(?:![^<>]*|{_HTML_TAG_NAME}(?:{_HTML_SPACE}+{_HTML_ATTRIBUTE})*{_HTML_SPACE}*/?)>""",
+    re.ASCII | re.IGNORECASE,
+)
 """A markup tag, comment or declaration, which is not text anyone reads aloud.
 
 The name inside the angle brackets otherwise reaches the model as a word, and
@@ -135,6 +164,53 @@ _CURRENCY_SYMBOLS = (*_CURRENCY_PREFIXES, "¢")
 `¢` is here and not in `_CURRENCY_PREFIXES` because `¢49` is not a written order;
 it is a suffix in every convention, which is precisely why the prefix pass
 never saw it and `0.49¢` reached the clock reader intact."""
+
+# Match the entire run before deciding if its spaces separate thousands. This
+# keeps a telephone number, year or ID from donating a plausible-looking tail.
+_COUNT_AFTER_PRICE = re.compile(
+    r"(?i)[ \t]+(?:times|days|weeks|months|years|hours|minutes|seconds|items|units)\b"
+)
+_SPACED_DIGITS = re.compile(r"(?<![0-9])[0-9]+(?:[ \u00a0\u2009\u202f][0-9]+)+")
+
+
+def _compact_grouped_numbers(text: str, language: str) -> str:
+    """Keep grouped quantities together through the currency and number passes."""
+
+    def compact(match: re.Match[str]) -> str:
+        raw = match.group()
+        before, end = match.span()
+        previous = text[before - 1] if before else ""
+        following = text[end] if end < len(text) else ""
+        if previous == "_" or (previous and _is_word_char(previous)):
+            return raw
+        if following == "_" or (following and _is_word_char(following)):
+            return raw
+        if before >= 2 and previous in ".," and "0" <= text[before - 2] <= "9":
+            return raw
+        groups = raw.split()
+        if len(groups[0]) > 3 or any(len(group) != 3 for group in groups[1:]):
+            return raw
+        if raw.isascii():
+            # The number grammar already reads plain-space groups. Only a
+            # prefix currency needs those joined sooner or £1 234 becomes
+            # "one pound" followed by a separate 234.
+            symbol = before - (2 if previous and _is_space(previous) else 1)
+            if (
+                (
+                    language == "en"
+                    and len(groups) == 2
+                    and not groups[1].startswith("0")
+                    and _COUNT_AFTER_PRICE.match(text, end)
+                )
+                or symbol < 0
+                or text[symbol] not in _CURRENCY_PREFIXES
+                or _letter_before(text, symbol)
+            ):
+                return raw
+        return "".join(groups)
+
+    return _SPACED_DIGITS.sub(compact, text)
+
 
 # Punctuation that carries prosody stays; the rest becomes a space. These are
 # language models trained on punctuated text, so the final period is the
@@ -164,6 +240,32 @@ def _priced(amount: str, language: str) -> str:
     if re.fullmatch(rf"{_DIGIT}+\.{_DIGIT}+", amount):
         return amount.replace(".", separator)
     return amount
+
+
+def _unscaled_price(amount: str, word: str, language: str) -> str:
+    if (
+        language == "en"
+        and amount in {"1", "1.0", "1.00"}
+        and word in {"dollars", "euros", "pounds"}
+    ):
+        return f"1 {word[:-1]}"
+    return f"{amount} {word}"
+
+
+_PAIRED_COMPARISON = re.compile(
+    r"(^|[^\w])(\w+)([ \t]*)(?:<|&lt;)[ \t]*(\w+[ \t]+"
+    r"(?:[Oo][Rr]|[Aa][Nn][Dd]|lub|albo|i|oder|und|ou|et|o|y|e|of|en|"
+    r"eller|og|och|tai|ja)[ \t]+)"
+    r"(\w+)[ \t]*(?:>|&gt;)(=?)([ \t]*)([-+]?\w)"
+)
+
+
+def _space_comparison(match: re.Match[str]) -> str:
+    prefix, left, before, condition, repeated, equal, after, right = match.groups()
+    # Spaces outside both brackets also describe prose placeholders.
+    if (before or after) and left != repeated:
+        return match[0]
+    return f"{prefix}{left} < {condition}{repeated} >{equal} {right}"
 
 
 def _drop_markup_tags(text: str) -> str:
@@ -268,7 +370,9 @@ def _speak_symbols(text: str, lang: str | None) -> str:
                 # A scale this language has no noun for. The suffix stays
                 # written, which is what it did before the amount was moved.
                 return f"{amount} {word}{suffix}"
-            return f"{amount} {said} {word}" if said else f"{amount} {word}"
+            return (
+                f"{amount} {said} {word}" if said else _unscaled_price(amount, word, language)
+            )
 
         out = re.sub(pattern, _say_amount, out)
     # ...and the same amount with the symbol *behind* it.
@@ -281,7 +385,7 @@ def _speak_symbols(text: str, lang: str | None) -> str:
         pattern = rf"({_DIGIT}+(?:[.,]{_DIGIT}+)*){_SPACE}?" + re.escape(symbol)
 
         def _say_suffix(m: re.Match[str], word: str = word) -> str:
-            return f"{_priced(m.group(1), language)} {word}"
+            return _unscaled_price(_priced(m.group(1), language), word, language)
 
         out = re.sub(pattern, _say_suffix, out)
     for symbol in _SPOKEN_SYMBOLS:
@@ -503,7 +607,23 @@ def speech_text(text: str, language_id: str | None) -> str:
     out = _strip_invisibles(out)
     # Before the symbol pass, which would otherwise read a tag's angle brackets
     # as comparison operators and its attributes as text.
+    out = _PAIRED_COMPARISON.sub(_space_comparison, out)
     out = _drop_markup_tags(out)
+    if "&" in out:
+        out = re.sub(r"&#(?:0*39|[xX]0*27);", "'", out)
+        out = _ENTITY_RE.sub(lambda match: _ENTITIES[match[0]], out)
+    out = re.sub(r"(^|[^\w.,])(\.)([0-9])", r"\g<1>0\2\3", out)
+    out = re.sub(
+        rf"(^|[{re.escape(WHITE_SPACE)}(\[{{«‹„“‘≈=+−$£€¥₹*/:<>-])(,)([0-9])",
+        r"\g<1>0\2\3",
+        out,
+    )
+    if tagged in supported_languages():
+        out = _compact_grouped_numbers(out, tagged)
+    if tagged == "pl":
+        # The square in m² still identifies the unit here; the numeral fold
+        # would turn it into an ordinary digit.
+        out = expand_polish_quantities(out)
     # Before the symbol table, not after.
     out = fold_numerals(out)
     out = _speak_symbols(out, lang)

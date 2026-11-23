@@ -112,6 +112,28 @@ for (const mode of ["synthesize", "synthesizeWindow", "stream"] as const) {
       await assert.rejects(engine[mode]("Hello world.", voice, options), CancelledError);
     }
   });
+
+  test(`${mode} skips vocoding when cancelled during mel decoding`, async () => {
+    // Substitute expensive stages, but exercise the public window/stream path.
+    const engine = Object.create(Engine.prototype) as Engine;
+    const voice = loadVoice(fileURLToPath(new URL("../../../tests/data/enrollment/profile.safetensors", import.meta.url)));
+    let cancelled = false;
+    Object.assign(engine, {
+      config: algorithmFromManifest({}),
+      frontend: { encode: () => [1, 2] },
+      generateInspected: () => Promise.resolve({ tokens: [1, 2], inspection: {}, hitTokenCap: false, hitWindow: false }),
+      decodeMel: () => { cancelled = true; return Promise.resolve(new Float32Array(320)); },
+      vocode: () => assert.fail("vocoded after cancellation"),
+    });
+    const options = { shouldCancel: () => cancelled };
+    if (mode === "stream") {
+      const chunks = [];
+      for await (const chunk of engine.stream("Hello world.", voice, options)) chunks.push(chunk);
+      assert.deepEqual(chunks, []);
+    } else {
+      await assert.rejects(engine[mode]("Hello world.", voice, options), CancelledError);
+    }
+  });
 }
 
 test("public synthesis refuses fractional carry before generation", async () => {

@@ -830,8 +830,7 @@ build. The Go tag lets the proxy find the module in the `go/` subdirectory.
 npm, PyPI and crates.io already hold earlier versions, so the release adds a
 version to each. `publish-npm` stages the tarball through the stage-only
 trusted publisher and waits for a 2FA approval on npm's Staged Packages page.
-That staged path currently fails, and the manual fallback in §7.1 is the
-working path for npm. PyPI and crates.io publish through their trusted publishers. Before
+PyPI and crates.io publish through their trusted publishers. Before
 you approve the `release` environment, confirm the settings in §7.0. A missing
 trusted publisher fails its job at authentication, and §7.1 to §7.3 give the
 manual fallback. GitHub stores no long-lived registry token.
@@ -933,13 +932,7 @@ number in every registry.
 
 ### 7.1 npm
 
-Until `release.yml` is fixed, the staged path fails. `publish-npm` passes
-`npm-tarball/loudkit-X.Y.Z.tgz` to `npm stage publish` without a leading `./`,
-and npm reads that argument as a GitHub repository, not as a file. Use the
-manual fallback below: it is the working path for npm until the workflow
-passes `./npm-tarball/...`.
-
-When it works, `publish-npm` stages the checked tarball through the stage-only
+`publish-npm` stages the checked tarball through the stage-only
 trusted publisher and waits up to 30 minutes. Open npm's Staged Packages page,
 inspect the version and approve it with 2FA. Leave the workflow running. PyPI
 starts only after the live registry shasum matches the checked tarball. A
@@ -952,8 +945,7 @@ A rerun of a tag whose publish already succeeded does not publish twice.
 match. A mismatch fails the job, because the registry then holds bytes this
 workflow did not check.
 
-Manual fallback, when `publish-npm` fails at `npm stage publish` (the argument
-defect above, or a missing trusted publisher):
+If npm staging fails, for example because the trusted publisher is missing, use the manual fallback:
 
 1. Download the exact npm artifact from the release run and verify its
    attestation. Use a fresh directory so no local `npm pack` output can be

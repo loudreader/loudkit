@@ -63,7 +63,9 @@ func Load(ref string) (*Engine, error) {
 // LoadContext is Load under a caller's context, which bounds the download a
 // repo id may set off. A directory needs no network and ignores it.
 func LoadContext(ctx context.Context, ref string) (*Engine, error) {
-	ref = modelRepo(ref)
+	if _, err := os.Stat(ref); os.IsNotExist(err) {
+		ref = modelRepo(ref)
+	}
 	dir, repo := ref, ""
 	if isRepoID(ref) {
 		cached, err := cacheDir(ref)

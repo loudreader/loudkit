@@ -49,7 +49,23 @@ public enum SpeechText {
                 text.precomposedStringWithCanonicalMapping, language: language ?? "en"))
         // Before the symbol pass, which would otherwise read a tag's angle
         // brackets as comparison operators and its attributes as text.
+        out = spaceComparisons(out)
         out = dropMarkupTags(out)
+        if out.contains("&") {
+            out = out.replacingOccurrences(of: #"&#(?:0*39|[xX]0*27);"#, with: "'", options: .regularExpression)
+            for (entity, value) in [("&apos;", "'"), ("&quot;", "\""), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "), ("&amp;", "&")] {
+                out = out.replacingOccurrences(of: entity, with: value)
+            }
+        }
+        out = out.replacingOccurrences(of: #"(^|[^\p{L}\p{N}_.,])(\.)([0-9])"#, with: "$10$2$3", options: .regularExpression)
+        out = out.replacingOccurrences(of: #"(^|[\x09-\x0D\x20\x85\p{Z}(\[{«‹„“‘≈=+−$£€¥₹*/:<>-])(,)([0-9])"#, with: "$10$2$3", options: .regularExpression)
+        if Numbers.supportedLanguages.contains(language ?? "en") {
+            out = compactGroupedNumbers(out, language: language ?? "en")
+        }
+        if language == "pl" {
+            // The superscript in m² identifies the unit before numeral folding.
+            out = PolishQuantities.expand(out)
+        }
         // Before the symbol table: see the Python reference. Every pass
         // downstream asks "is this a digit" and the five ports spell it four
         // ways, so folding first means all of them see ASCII.
@@ -132,14 +148,78 @@ public enum SpeechText {
     /// leaves its `!` behind as a sentence-final exclamation. A tag is replaced
     /// by a space rather than by nothing, because two block tags meeting back
     /// to back are two paragraphs and not one glued word.
+    private static let pairedComparison = try! NSRegularExpression(pattern: #"(^|[^\p{L}\p{N}_])([\p{L}\p{N}_]+)([ \t]*)(?:<|&lt;)[ \t]*([\p{L}\p{N}_]+[ \t]+(?:[Oo][Rr]|[Aa][Nn][Dd]|lub|albo|i|oder|und|ou|et|o|y|e|of|en|eller|og|och|tai|ja)[ \t]+)([\p{L}\p{N}_]+)[ \t]*(?:>|&gt;)(=?)([ \t]*)([-+]?[\p{L}\p{N}_])"#)
+
+    private static func spaceComparisons(_ text: String) -> String {
+        let source = text as NSString
+        var result = ""
+        var copied = 0
+        for m in pairedComparison.matches(in: text, range: NSRange(location: 0, length: source.length)) {
+            func part(_ index: Int) -> String { source.substring(with: m.range(at: index)) }
+            if (m.range(at: 3).length > 0 || m.range(at: 7).length > 0) && part(2) != part(5) { continue }
+            result += source.substring(with: NSRange(location: copied, length: m.range.location - copied))
+            result += "\(part(1))\(part(2)) < \(part(4))\(part(5)) >\(part(6)) \(part(8))"
+            copied = NSMaxRange(m.range)
+        }
+        return copied == 0 ? text : result + source.substring(from: copied)
+    }
+
+    private static let htmlTagName = #"[A-Za-z][A-Za-z0-9-]*(?::[A-Za-z][A-Za-z0-9-]*)?"#
+    private static let htmlSpace = #"[ \t\r\n\f]"#
+    private static let htmlAssignment = #"[^ \t\r\n\f"'<>/=]+\#(htmlSpace)*=\#(htmlSpace)*"#
+    private static let htmlQuoted = #"(?:"[^"]*"|'[^']*')"#
+    private static let htmlUnquoted = #"[^ \t\r\n\f"'<>\x60]+"#
+    private static let htmlBoolean = #"(?:allowfullscreen|async|autofocus|autoplay|checked|controls|default|defer|disabled|download|exact|formnovalidate|hidden|inert|ismap|itemscope|loop|multiple|muted|nomodule|novalidate|nowrap|open|playsinline|popover|readonly|required|reversed|selected|v-cloak)"#
+    private static let htmlAttribute = #"(?:\#(htmlBoolean)|\#(htmlAssignment)(?:\#(htmlQuoted)\#(htmlAssignment))*(?:\#(htmlQuoted)|\#(htmlUnquoted)))"#
     private static let markupTag = try! NSRegularExpression(
-        pattern: "</?[A-Za-z!][^<>]*>")
+        pattern: #"</?(?:![^<>]*|\#(htmlTagName)(?:\#(htmlSpace)+\#(htmlAttribute))*\#(htmlSpace)*/?)>"#, options: .caseInsensitive)
 
     static func dropMarkupTags(_ text: String) -> String {
         guard text.contains("<") else { return text }
         let ns = text as NSString
         return markupTag.stringByReplacingMatches(
             in: text, range: NSRange(location: 0, length: ns.length), withTemplate: " ")
+    }
+
+    // Match the whole run before checking group widths. Taking just the valid
+    // prefix of "1 234 56" would change its magnitude.
+    private static let spacedDigits = try! NSRegularExpression(
+        pattern: #"(?<![0-9])[0-9]+(?:[ \u00A0\u2009\u202F][0-9]+)+"#)
+
+    private static let countAfterPrice = try! NSRegularExpression(pattern: #"(?i)^[ \t]+(?:times|days|weeks|months|years|hours|minutes|seconds|items|units)\b"#)
+
+    private static func compactGroupedNumbers(_ text: String, language: String) -> String {
+        let ns = text as NSString
+        var output = ""
+        var copiedThrough = 0
+        for match in spacedDigits.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            let start = match.range.location
+            let end = NSMaxRange(match.range)
+            let before = Numbers.scalarAt(ns, start - 1)
+            let after = Numbers.scalarAt(ns, end)
+            if [before, after].compactMap({ $0 }).contains(where: { isLetterOrDigit($0) || $0 == "_" }) {
+                continue
+            }
+            if before == "." || before == ",", let digit = Numbers.scalarAt(ns, start - 2),
+               (0x30...0x39).contains(digit.value) { continue }
+
+            let digits = ns.substring(with: match.range)
+            let groups = digits.split(whereSeparator: { $0.isWhitespace })
+            guard groups[0].count <= 3, groups.dropFirst().allSatisfy({ $0.count == 3 }) else { continue }
+            if !digits.unicodeScalars.contains(where: { $0.value > 127 }) {
+                // Ordinary grouping spaces already work in the number pass.
+                // A prefixed price needs the whole amount before the mark moves.
+                if language == "en", groups.count == 2, groups[1].first != "0", countAfterPrice.firstMatch(in: text, options: .anchored, range: NSRange(location: end, length: ns.length - end)) != nil { continue }
+                let mark = start - (before.map { whiteSpace.contains($0) } == true ? 2 : 1)
+                guard let symbol = Numbers.scalarAt(ns, mark), currencyPrefixSymbols.contains(String(symbol)),
+                      Numbers.scalarAt(ns, mark - 1).map(isLetter) != true else { continue }
+            }
+            output += ns.substring(with: NSRange(location: copiedThrough, length: start - copiedThrough))
+            output += groups.joined()
+            copiedThrough = end
+        }
+        guard copiedThrough > 0 else { return text }
+        return output + ns.substring(from: copiedThrough)
     }
 
     // MARK: symbols
@@ -249,6 +329,14 @@ public enum SpeechText {
         return amount.replacingOccurrences(of: ".", with: separator)
     }
 
+    private static func priceWithoutScale(_ amount: String, word: String, language: String) -> String {
+        if language == "en", ["1", "1.0", "1.00"].contains(amount),
+           ["dollars", "pounds", "euros"].contains(word) {
+            return "1 " + word.dropLast()
+        }
+        return priced(amount, language: language) + " " + word
+    }
+
     /// Marks that make the number beside them a price, whichever side they sit
     /// on. `¢` is here and not in `currencyPrefixSymbols` because nobody writes
     /// `¢49`, it is a suffix in every convention, which is precisely why the
@@ -349,15 +437,14 @@ public enum SpeechText {
                 let suffix = Self.group(m, 2, ns)
                 let said = Self.scaleAfter(
                     amount, suffix: suffix, spelled: Self.group(m, 3, ns), language: language)
-                let priced = Self.priced(amount, language: language)
                 if !suffix.isEmpty, said.isEmpty {
                     // A scale this language has no noun for. The suffix stays
                     // written, which is what it did before the amount moved.
-                    rebuilt += priced + " " + word + suffix
+                    rebuilt += Self.priced(amount, language: language) + " " + word + suffix
                 } else if said.isEmpty {
-                    rebuilt += priced + " " + word
+                    rebuilt += priceWithoutScale(amount, word: word, language: language)
                 } else {
-                    rebuilt += priced + " " + said + " " + word
+                    rebuilt += Self.priced(amount, language: language) + " " + said + " " + word
                 }
                 cursor = m.range.location + m.range.length
             }
@@ -383,8 +470,8 @@ public enum SpeechText {
             for m in re.matches(in: out, range: NSRange(location: 0, length: ns.length)) {
                 rebuilt += ns.substring(
                     with: NSRange(location: cursor, length: m.range.location - cursor))
-                rebuilt += Self.priced(ns.substring(with: m.range(at: 1)), language: language)
-                    + " " + word
+                rebuilt += priceWithoutScale(
+                    ns.substring(with: m.range(at: 1)), word: word, language: language)
                 cursor = m.range.location + m.range.length
             }
             rebuilt += ns.substring(from: cursor)

@@ -456,12 +456,9 @@ jobs:
           python-version: "3.12"
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
-          # govulncheck reports the standard library of the toolchain it runs
-          # on, so the audit runs on a Go release that still gets security
-          # fixes, at its newest patch rather than whatever the image cached.
-          # 1.25 stopped getting them when 1.27 shipped; the module's own
-          # floor (`go 1.25.0` in go/go.mod) is a separate question.
-          go-version: "1.26"
+          # govulncheck scans the standard library linked by this compiler.
+          # The separate Go matrix exercises the oldest supported language version.
+          go-version: stable
           check-latest: true
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
@@ -577,7 +574,7 @@ jobs:
   parity:
     name: parity (hosted macOS, pinned public release)
     runs-on: macos-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     # Also on pull requests from this repository, which is the change: it ran
     # only on `main` and on demand, so every weights regression reached `main`
     # before anything measured it -- the one job that can catch a weights
@@ -657,15 +654,10 @@ jobs:
           python -m venv .venv
           # `audio` is file I/O; the enrollment path imports torchaudio from
           # the separate `enroll` extra and is exercised later in this job.
-          #
-          # torch is pinned to the version the reference tokens were measured
-          # with (IDENTITY-CONTRACT.md, measurement rule 4: every reference
-          # result records its torch version). The free-run streams in
-          # tests/data/reference were re-based on 2.14.x; torch 2.15.0 flips a
-          # sampled token in sentence 2 on CPU while the teacher-forced gate
-          # still passes. Moving this pin is a re-baseline decision, not a
-          # dependency bump.
-          .venv/bin/pip install -e ".[dev,hub,torch,audio,enroll,coreml,onnx]" "torch==2.14.1"
+          # Exact free-running tokens are measured against the numerical runtimes
+          # recorded in docs/parity-measured.md. Upgrade them with a parity measurement.
+          .venv/bin/pip install -e ".[dev,hub,torch,audio,enroll,coreml,onnx]" \
+            "torch==2.13.0" "onnxruntime==1.29.0"
 
       - name: Fetch and verify the pinned public release
         run: |
@@ -869,7 +861,9 @@ jobs:
           # The LOUDKIT_* paths come from the "Resolve the asset paths" step
           # above, through $GITHUB_ENV, so this step and the Python and Swift
           # steps before it all measure the same checkpoint.
-          (cd go && go test ./...)
+          # Each weighted Go package loads full ONNX sessions on the 7 GB runner.
+          # Run one package at a time and bound its complete set of renders.
+          (cd go && go test -p 1 -timeout 30m ./...)
           (cd rust && cargo test && cargo test -- --ignored)
           (cd js && npm ci --silent && npm run test:all)
 
@@ -888,7 +882,7 @@ jobs:
           export LOUDKIT_ONNX_DIR="$LOUDKIT_FUSION_ONNX_DIR"
           export LOUDKIT_FIXTURE="$PWD/tests/data/conformance/vectors_fusion_mtp2.json"
           .venv/bin/pytest tests/test_conformance.py -k fused -q
-          (cd go && go test ./conformance -run TestEngineConformance -count=1)
+          (cd go && go test -timeout 30m ./conformance -run TestEngineConformance -count=1)
           (cd rust && cargo test fusion_engine_conformance -- --ignored)
           (cd js && npm run test:fixture)
 
@@ -953,7 +947,7 @@ jobs:
         run: python -m pytest tests/test_release.py -m "not requires_torch" -q
 
       # The one check that cannot be made statically: whether the command the
-      # README prints is sufficient on a machine that has nothing. Both extras
+      # README prints is sufficient on a machine that has nothing. These extras
       # reach `loudkit.load()`, but each transport imports only its own stack.
       # An extra that resolves but cannot import its transport or the default
       # backend is a documented install that does not work — the failure a
@@ -966,7 +960,7 @@ jobs:
         run: |
           set -euo pipefail
           WHEEL=$(ls /tmp/lk-dist/*.whl)
-          for extra in server mcp; do
+          for extra in server grpc mcp; do
             rm -rf "/tmp/venv-$extra"
             python -m venv "/tmp/venv-$extra"
             "/tmp/venv-$extra/bin/pip" install --quiet --upgrade pip
@@ -975,6 +969,8 @@ jobs:
               "${WHEEL}[$extra]"
             if [ "$extra" = server ]; then
               probe='import loudkit.transports.http'
+            elif [ "$extra" = grpc ]; then
+              probe='import loudkit.transports.grpc; import loudkit.proto.loudkit_pb2_grpc'
             else
               probe='import loudkit.transports.mcp; import mcp.server.mcpserver'
             fi

@@ -458,7 +458,7 @@ pub struct TextConfig {
 impl Default for TextConfig {
     fn default() -> Self {
         Self {
-            recipe: "funnel-6".to_string(),
+            recipe: "funnel-10".to_string(),
             grammar: crate::numbers::grammar_digest(),
         }
     }
@@ -1766,7 +1766,7 @@ impl Engine {
         // respelling changes the length ("download" -> "dałnloud"), so a budget
         // computed first would be a budget for text the engine never speaks.
         let prepared = speechtext::speech_text(text, language);
-        let chunks = chunking::split_text(&prepared, &self.config.chunking);
+        let chunks = chunking::split_text_for_language(&prepared, &self.config.chunking, language);
         if chunks.is_empty() {
             return Err("nothing to speak".to_string());
         }
@@ -1959,7 +1959,7 @@ impl Engine {
     ) -> Result<Synthesis, String> {
         let mut audio: Vec<f32> = Vec::new();
         let mut tokens: Vec<usize> = Vec::new();
-        let mut mel: Vec<f32> = Vec::new();
+        let mut mels = Vec::new();
         let mut spans: Vec<ChunkSpan> = Vec::new();
         let mut hit_token_cap = false;
         let mut from_options = o.cancel();
@@ -1971,7 +1971,7 @@ impl Engine {
         self.chunks(text, v, o, cancel, &mut |chunk| {
             audio.extend_from_slice(chunk.audio);
             tokens.extend_from_slice(chunk.tokens);
-            mel = append_mel_along_time(std::mem::take(&mut mel), chunk.mel);
+            mels.push(chunk.mel.to_vec());
             // ORed across chunks: one truncated chunk truncates the
             // passage, which is the fact a caller of the joined waveform
             // needs.
@@ -1992,7 +1992,7 @@ impl Engine {
             audio,
             sample_rate: self.config.sample_rate,
             tokens,
-            mel,
+            mel: join_mels(&mels),
             chunks,
             hit_token_cap,
         })
@@ -2120,27 +2120,14 @@ pub fn resolve_language<'a>(language: Option<&'a str>, v: &'a voice::Profile) ->
     &v.language
 }
 
-/// Concatenate two row-major `[MEL_BINS, frames]` mels along the TIME axis.
-///
-/// Appending the flat buffers end to end, the obvious thing, is not
-/// concatenation: after the first chunk the next chunk's bin 0 lands after the
-/// previous chunk's bin 79, so every row but the first is wrong. The audio is
-/// unaffected (it is vocoded per chunk) but the mel is the diagnostic people
-/// reach for when two backends disagree, and a mis-shaped one sends them
-/// looking in the wrong place.
-fn append_mel_along_time(dst: Vec<f32>, src: &[f32]) -> Vec<f32> {
-    if dst.is_empty() {
-        return src.to_vec();
-    }
-    let dst_frames = dst.len() / MEL_BINS;
-    let src_frames = src.len() / MEL_BINS;
-    let frames = dst_frames + src_frames;
-    let mut out = vec![0.0f32; MEL_BINS * frames];
-    for b in 0..MEL_BINS {
-        out[b * frames..b * frames + dst_frames]
-            .copy_from_slice(&dst[b * dst_frames..(b + 1) * dst_frames]);
-        out[b * frames + dst_frames..(b + 1) * frames]
-            .copy_from_slice(&src[b * src_frames..(b + 1) * src_frames]);
+/// Join row-major spectrograms by copying each bin into its final position.
+fn join_mels(parts: &[Vec<f32>]) -> Vec<f32> {
+    let mut out = Vec::with_capacity(parts.iter().map(Vec::len).sum());
+    for bin in 0..MEL_BINS {
+        for part in parts {
+            let frames = part.len() / MEL_BINS;
+            out.extend_from_slice(&part[bin * frames..(bin + 1) * frames]);
+        }
     }
     out
 }
@@ -2296,10 +2283,7 @@ mod tests {
             }
             m
         }
-        let joined = append_mel_along_time(
-            append_mel_along_time(Vec::new(), &chunk(3, 0)),
-            &chunk(2, 100),
-        );
+        let joined = join_mels(&[chunk(3, 0), chunk(2, 100)]);
         assert_eq!(joined.len(), MEL_BINS * 5);
         for b in 0..MEL_BINS {
             let want: Vec<f32> = [0, 1, 2, 100, 101]

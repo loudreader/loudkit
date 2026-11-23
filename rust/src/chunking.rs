@@ -29,6 +29,8 @@
 /// Must equal `loudkit.frontend.chunking.CHARS_PER_TOKEN`.
 pub const CHARS_PER_TOKEN: f64 = 0.5;
 
+const PROSE_SEPARATORS: [&str; 5] = [". ", "! ", "? ", "; ", ", "];
+
 /// The two spellings of [`ChunkConfig::cap_resplit`].
 ///
 /// [`split_text`] budgets characters against a constant, and a speaker slower
@@ -156,10 +158,7 @@ impl Default for ChunkConfig {
             enabled: true,
             max_tokens: 255,
             prefix_tokens: 6,
-            split_on: [". ", "! ", "? ", "; ", ", "]
-                .iter()
-                .map(|s| (*s).to_string())
-                .collect(),
+            split_on: PROSE_SEPARATORS.iter().map(|s| (*s).to_string()).collect(),
             // The surveyed union, sorted. It must equal
             // `loudkit.config.ChunkConfig.abbreviations`.
             abbreviations: [
@@ -188,9 +187,8 @@ fn is_ascii_word(b: u8) -> bool {
 /// Whether the candidate at byte offset `at` is a period inside a sentence
 /// rather than the end of one.
 ///
-/// `look` is the search window plus one character, because the test below reads
-/// the character *after* the separator and the latest candidate can end the
-/// window exactly.
+/// `look` includes the character after the separator, even when the
+/// separator ends at the edge of the search window.
 ///
 /// Gated on the period: `"! "` and `"? "` end sentences and `"; "` and `", "` do
 /// not end them at all, so neither is ever in doubt. The whole question is about
@@ -212,7 +210,10 @@ fn holds(look: &str, at: usize, sep: &str, cfg: &ChunkConfig) -> bool {
     }
     // Or the token in front of the period is a listed abbreviation. Entries
     // carry no period of their own: the period belongs to the separator.
-    let boundary = &look[..at];
+    listed_abbreviation(&look[..at], cfg)
+}
+
+fn listed_abbreviation(boundary: &str, cfg: &ChunkConfig) -> bool {
     for abbreviation in &cfg.abbreviations {
         if !boundary.ends_with(abbreviation.as_str()) {
             continue;
@@ -235,84 +236,250 @@ pub fn estimate_tokens(text: &str) -> usize {
 /// Split `text` into pieces that each fit one window, in order, together
 /// covering the input. Never empty for non-empty input.
 ///
-/// Indexed by `char`, not by byte: a byte-indexed cut lands inside a multi-byte
-/// character and produces invalid UTF-8: the shape of bug the ports have had
-/// before.
+/// The window budget counts Unicode scalar values. All slices start and
+/// end at UTF-8 character boundaries.
 #[must_use]
 pub fn split_text(text: &str, cfg: &ChunkConfig) -> Vec<String> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
+    split_text_for_language(text, cfg, "en")
+}
+
+/// Plan a passage using its resolved narration language.
+#[must_use]
+pub fn split_text_for_language(text: &str, cfg: &ChunkConfig, language: &str) -> Vec<String> {
+    let prose = cfg.split_on == PROSE_SEPARATORS;
+    let whitespace = prose_space;
+    let mut rest = text.trim_matches(whitespace);
+    if rest.is_empty() {
         return Vec::new();
     }
-    if !cfg.enabled || estimate_tokens(trimmed) <= cfg.max_tokens {
-        return vec![trimmed.to_string()];
+    if !cfg.enabled {
+        return vec![rest.to_string()];
     }
 
     let budget = cfg.budget();
-    let mut chunks: Vec<String> = Vec::new();
-    let mut rest: Vec<char> = trimmed.chars().collect();
-
-    while !rest.is_empty() {
-        if rest.len() <= budget {
-            chunks.push(rest.iter().collect::<String>().trim().to_string());
-            break;
-        }
-        let head: String = rest[..(budget + 1).min(rest.len())].iter().collect();
-        // One character past the window, and used only by `holds`: the latest
-        // candidate can end the window exactly, and the test reads the
-        // character after it. The search itself stays inside the budget.
-        let look: String = rest[..(budget + 2).min(rest.len())].iter().collect();
-        // `None` is no cut found, and so is `Some(0)`: a cut of zero leaves
-        // `rest` unchanged and spins the loop, so the fallbacks treat the two
-        // the same way.
-        let mut cut: Option<usize> = None;
-        // Strongest separator first, and within a separator the LATEST break,
-        // so chunks run as long as they may rather than as short as they can.
-        for sep in &cfg.split_on {
-            let mut found = head.rfind(sep.as_str());
-            // A period inside a sentence is not a boundary, so the search keeps
-            // walking back through this separator's own occurrences before it
-            // gives up and tries a weaker one. Searching `head[..at]` skips an
-            // occurrence overlapping the held one, which no separator here can
-            // have.
-            while let Some(at) = found {
-                if at == 0 || !holds(&look, at, sep, cfg) {
-                    break;
-                }
-                found = head[..at].rfind(sep.as_str());
-            }
-            if let Some(at) = found {
-                if at > 0 {
-                    cut = Some(head[..at].chars().count() + sep.chars().count());
-                    break;
-                }
-            }
-        }
-        if cut.is_none() {
-            // No punctuation in a whole window's worth of text. Break at the
-            // last word boundary; it will be heard, and that is the point.
-            // WORD_BOUNDARIES, not U+0020: NBSP survives the funnel and is
-            // ordinary in real prose, so text whose every space is
-            // non-breaking found no boundary here and got cut mid-word.
-            if let Some(at) = head.rfind(WORD_BOUNDARIES) {
-                cut = Some(head[..at].chars().count());
-            }
-        }
-        // No usable cut is one unbroken token longer than a window.
-        let cut = cut.filter(|&at| at > 0).unwrap_or(budget).max(1);
-
-        chunks.push(rest[..cut].iter().collect::<String>().trim().to_string());
-        rest = rest[cut..]
-            .iter()
-            .copied()
-            .collect::<String>()
-            .trim_start()
-            .chars()
-            .collect();
+    let mut chunks = Vec::new();
+    while let Some((budget_end, next)) = rest.char_indices().nth(budget) {
+        let hard_cut = if budget_end == 0 {
+            next.len_utf8()
+        } else {
+            budget_end
+        };
+        let head = &rest[..budget_end + next.len_utf8()];
+        let cut = if prose {
+            prose_cut(rest, cfg, budget, budget_end, head, language)
+        } else {
+            custom_cut(rest, head, cfg)
+        };
+        let cut = cut.filter(|&at| at > 0).unwrap_or(hard_cut);
+        chunks.push(rest[..cut].trim_end_matches(whitespace).to_owned());
+        rest = rest[cut..].trim_start_matches(whitespace);
     }
-
-    chunks.retain(|c| !c.is_empty());
+    if !rest.is_empty() {
+        chunks.push(rest.to_owned());
+    }
     chunks
+}
+
+/// Preserve the exact precedence and spelling of caller-defined separators.
+fn custom_cut(rest: &str, head: &str, cfg: &ChunkConfig) -> Option<usize> {
+    for sep in &cfg.split_on {
+        let mut found = head.rfind(sep);
+        while let Some(at) = found {
+            if at == 0 {
+                break;
+            }
+            if !holds(rest, at, sep, cfg) {
+                return Some(at + sep.len());
+            }
+            found = head[..at].rfind(sep);
+        }
+    }
+    head.rfind(WORD_BOUNDARIES)
+}
+
+fn prose_space(c: char) -> bool {
+    c.is_whitespace() || ('\u{001c}'..='\u{001f}').contains(&c)
+}
+
+fn closing_mark(c: char) -> bool {
+    matches!(
+        c,
+        '"' | '\'' | '”' | '’' | '»' | '›' | '“' | '‘' | '«' | '‹' | ')' | ']' | '}'
+    )
+}
+
+/// A period before an uppercase surname may be an initial even when absent
+/// from the abbreviation table. EOF is always available as a sentence end.
+fn held_period(before: &str, after: &str, cfg: &ChunkConfig) -> bool {
+    if cfg.mid_sentence_period != HOLD_MID_SENTENCE_PERIOD {
+        return false;
+    }
+    let Some(next) = after.trim_start_matches(prose_space).as_bytes().first() else {
+        return false;
+    };
+    if next.is_ascii_lowercase() || listed_abbreviation(before, cfg) {
+        return true;
+    }
+    let Some((&last, prior)) = before.as_bytes().split_last() else {
+        return false;
+    };
+    last.is_ascii_uppercase()
+        && last != b'I'
+        && next.is_ascii_uppercase()
+        && prior.last().is_none_or(|b| !b.is_ascii_alphanumeric())
+}
+
+fn prose_cut(
+    rest: &str,
+    cfg: &ChunkConfig,
+    budget: usize,
+    budget_end: usize,
+    head: &str,
+    language: &str,
+) -> Option<usize> {
+    let allowance = if cfg.max_tokens == 255 && cfg.cap_resplit == WORD_CAP_RESPLIT {
+        24
+    } else {
+        0
+    };
+    let limit = budget.saturating_add(allowance);
+    let mut sentence = None;
+    let mut nearby = None;
+    let mut pauses = 0;
+    let mut clause = None;
+    let mut comma = None;
+    for (index, (at, mark)) in rest.char_indices().take(limit).enumerate() {
+        if !matches!(mark, '.' | '!' | '?' | ';' | ':' | ',' | '–' | '\u{2014}') {
+            continue;
+        }
+        let mut end = at + mark.len_utf8();
+        if matches!(mark, '–' | '\u{2014}')
+            && !(rest[..at].ends_with(prose_space) && rest[end..].starts_with(prose_space))
+        {
+            continue;
+        }
+        let mut count = index + 1;
+        for c in rest[end..]
+            .chars()
+            .take(limit - count)
+            .take_while(|&c| closing_mark(c))
+        {
+            end += c.len_utf8();
+            count += 1;
+        }
+        let after = &rest[end..];
+        if !after.is_empty() && !after.starts_with(prose_space) {
+            continue;
+        }
+        if matches!(mark, '.' | '!' | '?') {
+            if mark == '.' && held_period(&rest[..at], after, cfg) {
+                continue;
+            }
+            if end <= budget_end {
+                sentence = Some(end);
+            } else if nearby.is_none() {
+                nearby = Some(end);
+            }
+        } else if end <= budget_end && (budget < 64 || count.saturating_mul(4) >= budget) {
+            if budget >= 64
+                && after.len() <= 96
+                && after.chars().count() <= 24
+                && after
+                    .split(prose_space)
+                    .filter(|word| !word.is_empty())
+                    .count()
+                    == 1
+            {
+                continue;
+            }
+            if mark == ',' {
+                comma = Some(end);
+                pauses += 1;
+            } else {
+                clause = Some(end);
+                pauses += 1;
+            }
+        }
+    }
+    sentence
+        .or(nearby.filter(|_| pauses < 2))
+        .or(clause)
+        .or(comma)
+        .or_else(|| prose_word_cut(rest, head, cfg, budget, language))
+}
+
+/// A small last fragment sounds like a new utterance. Balance the two parts
+/// only when that tail actually exists; counting an entire chapter per chunk
+/// would make the splitter quadratic again.
+fn prose_word_cut(
+    rest: &str,
+    head: &str,
+    cfg: &ChunkConfig,
+    budget: usize,
+    language: &str,
+) -> Option<usize> {
+    let limit = budget.saturating_add(budget.div_ceil(4));
+    let length = rest.chars().take(limit).count();
+    let balance = budget >= 64 && length < limit;
+    let mut best = None;
+    let mut best_distance = usize::MAX;
+    let mut last = None;
+    for (index, (at, ch)) in head.char_indices().enumerate() {
+        if at == 0 || !WORD_BOUNDARIES.contains(&ch) || rest[..at].ends_with(WORD_BOUNDARIES) {
+            continue;
+        }
+        last = Some(at);
+        let left = &rest[..at];
+        if left
+            .strip_suffix('.')
+            .is_some_and(|before| held_period(before, &rest[at..], cfg))
+        {
+            continue;
+        }
+        let distance = (2 * index).abs_diff(length);
+        if !balance || distance < best_distance {
+            best = Some(at);
+            best_distance = distance;
+        }
+    }
+    if language.eq_ignore_ascii_case("en") && budget >= 64 {
+        if let Some(at) = best {
+            if let Some(before) = conjunction_start(rest, at, budget) {
+                return Some(before);
+            }
+        }
+    }
+    best.or(last)
+}
+
+// When the ordinary split leaves "while | the children followed", carry the
+// conjunction into the clause it introduces, provided its window still fits.
+fn conjunction_start(rest: &str, at: usize, budget: usize) -> Option<usize> {
+    let (left, word) = rest[..at].rsplit_once(WORD_BOUNDARIES)?;
+    if !matches!(
+        word,
+        "although" | "because" | "unless" | "whereas" | "while"
+    ) || left.chars().count() * 4 < budget
+    {
+        return None;
+    }
+    let subject = rest[at..].trim_start_matches(prose_space);
+    if word == "while"
+        && !["the", "they", "we", "she", "he", "it", "you"]
+            .iter()
+            .any(|s| {
+                subject
+                    .strip_prefix(s)
+                    .is_some_and(|tail| tail.is_empty() || tail.starts_with(WORD_BOUNDARIES))
+            })
+    {
+        return None;
+    }
+    let before = at - word.len();
+    if subject.chars().nth(budget).is_none() && rest[before..].chars().nth(budget).is_some() {
+        return None;
+    }
+    Some(before)
 }
 
 /// Characters [`split_in_half`] may cut on, written out rather than tested for.
@@ -371,7 +538,10 @@ pub fn split_in_half(text: &str) -> Option<(String, String)> {
     let (_, at) = best?;
     let first: String = chars[..at].iter().collect();
     let second: String = chars[at..].iter().collect();
-    let (first, second) = (first.trim().to_string(), second.trim().to_string());
+    let (first, second) = (
+        first.trim_matches(prose_space).to_string(),
+        second.trim_matches(prose_space).to_string(),
+    );
     // Trimming can empty a half the scan thought was interior, on input whose
     // boundary run is all whitespace. `split_text` trims before this is ever
     // called, so the engine cannot reach it, but this is public and a caller
@@ -385,6 +555,15 @@ pub fn split_in_half(text: &str) -> Option<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_separators_trim_the_same_controls_as_prose() {
+        let cfg = ChunkConfig {
+            split_on: vec!["|".to_string()],
+            ..ChunkConfig::default()
+        };
+        assert_eq!(split_text("\u{001c}hello\u{001f}", &cfg), vec!["hello"]);
+    }
 
     /// The splitter must cut where the shared fixture says.
     ///
@@ -403,7 +582,10 @@ mod tests {
 
         for case in cases {
             let cfg = ChunkConfig {
-                cap_resplit: WORD_CAP_RESPLIT.to_string(),
+                cap_resplit: case["cap_resplit"]
+                    .as_str()
+                    .unwrap_or(WORD_CAP_RESPLIT)
+                    .to_string(),
                 enabled: true,
                 max_tokens: case["max_tokens"].as_u64().unwrap() as usize,
                 prefix_tokens: case["prefix_tokens"].as_u64().unwrap() as usize,
@@ -427,9 +609,35 @@ mod tests {
                 .iter()
                 .map(|v| v.as_str().unwrap().to_string())
                 .collect();
-            let got = split_text(case["text"].as_str().unwrap(), &cfg);
+            let got = split_text_for_language(
+                case["text"].as_str().unwrap(),
+                &cfg,
+                case["language"].as_str().unwrap_or("en"),
+            );
             assert_eq!(got, want, "config {}", case["config"]);
         }
+    }
+
+    #[test]
+    fn multibyte_windows_keep_character_budgets_and_custom_separators() {
+        let cfg = ChunkConfig {
+            max_tokens: 8, // four characters
+            split_on: vec!["。 ".into()],
+            ..Default::default()
+        };
+        let text = "🦀猫。 \u{2003}żółć🙂".repeat(3);
+        assert_eq!(
+            split_text(&text, &cfg),
+            [
+                "🦀猫。",
+                "żółć",
+                "🙂🦀猫。",
+                "żółć",
+                "🙂🦀猫。",
+                "żółć",
+                "🙂"
+            ]
+        );
     }
 
     /// Shared arithmetic, not a tuning knob: a port that picks a different
@@ -498,7 +706,7 @@ mod tests {
         // heard worse.
         const NORRELL: &str = "Mr. Norrell, who had been waiting in the hall for the better \
                                part of an hour, said nothing at all to either of them about \
-                               what he had seen there.";
+                               what he had seen there the evening before he left town.";
         assert!(split_text(NORRELL, &ChunkConfig::default())[0].ends_with("hour,"));
     }
 }

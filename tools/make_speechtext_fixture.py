@@ -63,6 +63,63 @@ DISPUTED: list[tuple[str, str | None, str]] = [
 ]
 
 CASES: list[tuple[str, str | None, str | None]] = [
+    ("For T<Tc: M = M0 + 1. For T>Tc: M = 0.", "en", None),
+    ("while i<n: i = i + 1. Stop when i>n.", "en", None),
+    ('<a download href="f.pdf">File</a><div popover>Ready</div>', "en", None),
+    ('<Route exact path="/"><div v-cloak>Ready</div></Route>', "en", None),
+    ("while i<n value=i + 1 then i>n.", "en", None),
+    ("«,5» et „,5“.", "fr", None),
+    ("Enter <username or email> below.", "en", None),
+    ("<p>Answer &lt;yes or no&gt; below.</p>", "en", None),
+    ("git checkout <branch name> first", "en", None),
+    ('<button @click="go">Run</button><div *ngIf="x">now</div>', "en", None),
+    ('<input [value]="v"><a href=page.php?id=3>Ready</a>', "en", None),
+    ('<a href="x"class="y">Ready</a>', "en", None),
+    ("They raised $10 000 days before.", "en", None),
+    ("I saw the Dr. Later we left.", "en", None),
+    ("5%,10%", "en", None),
+    ("x²<a or b>c", "en", None),
+    ("if a<b then c>d", "en", None),
+    ("jeśli x<min lub x>max", "pl", None),
+    ("x<a oder x>b", "de", None),
+    ("i<len or i>=cap", "en", None),
+    ("x<a and x>-5", "en", None),
+    ('Say ".5". Compare 5%,10% and f(x),5.', "en", None),
+    ("At ≈.5%, compare [.75, 1) and =.25 with release v1.25.", "en", None),
+    ("A\u0085,5 kg; B\u00a0,5 kg; C\u001c,5 kg.", "de", None),
+    ("À ≈,5% du total.", "fr", None),
+    ("We paid $5 100 times and the receipt showed $1 234.", "en", None),
+    ("She can&#039;t swim; he can&#X0027;t either. &amp;#039;", "en", None),
+    ('<details open><a\n href="help" title="a > b">Read more</a></details>', "en", None),
+    (
+        "Check x&lt;low or x&gt;high and x <low or x> high. I saw the Dr. Afterwards we left.",
+        "en",
+        None,
+    ),
+    ("Wait -.25 seconds. Pay $.50 at .75%.", "en", None),
+    ("<p>Pat can&#39;t swim &amp; Lee can.</p>", "en", None),
+    ("Return false if x<low or x>high.", "en", None),
+    ("Bei ,75% bleiben.", "de", None),
+    ("We met Prof. Michael Evans and Dr. Élodie Roy at 9:05.", "en", None),
+    ("Send Mr. Jones, Mrs. Watson and Ms. Zhou a letter.", "en", None),
+    ("Oak Dr. Then turn at St. James Road. A.Dr. Dee stayed behind.", "en", None),
+    ("742 Evergreen Dr. Alice turned onto Oak Dr. South before meeting Dr. Chen.", "en", None),
+    ("Bring apples etc. and pears, etc. She left. “Books etc.” “Next!”", "en", None),
+    ("Pens, etc., are included. Books etc.", "en", None),
+    ("The price is $1, €1.00 or 1.0£. Another $1 million or $1.05.", "en", None),
+    ("At 09:05:30, 9:10 and 9:00.", "en", None),
+    ("Find Dr. Smith at 9:05.", None, None),
+    ("Wybierz 2 z 3 ofert. Wybierz 1 z 10 opcji.", "pl", None),
+    ("Masz 2 nowe wiadomości. Zaznacz 2 z 4 pozycji. Wskaż 1 z 5 plików.", "pl", None),
+    ("1 zł, 2 zł, 5 zł, 21 zł, 24 zł i 112 zł.", "pl", None),
+    ("0,01 zł; 0,02 zł; 0,12 zł; 12,50 zł; 12,00 zł.", "pl", None),
+    ("Cena biletu to 22zł. Do zapłaty: 12,05 zł.", "PL", None),
+    ("Zwrot: −0,5 zł. Razem: 2\u00a0000\u202fzł.", "pl", None),
+    ("1 kg, 2 kg, 12 m², 22 m² i 2000 zł.", "pl", None),
+    ("0 kg, 3,5 kg, 1,25 m² i 2,00 kg.", "pl", None),
+    ("1\u202f234\u00a0567,50 zł. 001kg, AK2kg, v1.2kg, 5kgowy, 14,123 zł.", "pl", None),
+    ("2 z 3. Wybierz 2 z 3 produktów. 1,2 wiadomości. 2 kg i 22 zł.", "en", None),
+    ("2 z 3. Wybierz 2 z 3 produktów. 1,2 wiadomości.", "pl", None),
     # --- the funnel, language-independent -------------------------------
     ("Hello there.", "en", None),
     ("Zero\u200bwidth\u200cand\ufeffsoft\u00adhyphen", "en", None),
@@ -245,10 +302,7 @@ CASES: list[tuple[str, str | None, str | None]] = [
     (
         "It is 9:05am now.",
         "en",
-        "a minute under ten reads as a plain cardinal, *nine five*, in all "
-        "twelve. English says *nine oh five* and the word for that zero is not "
-        "a cardinal, so it is a per-language grammar entry rather than a "
-        "boundary rule, and this case pins what the funnel says today",
+        "English reads the leading zero in a nonzero minute below ten as oh.",
     ),
     (
         "Meet at 11:30AM sharp.",
@@ -982,6 +1036,17 @@ CASES: list[tuple[str, str | None, str | None]] = [
         "letters left glued to the last of them",
     ),
     ("+48 123 456 789 and +12345678", "pl", None),
+    ("£1 234 or $1\u202f234.56; keep\u00a0together.", "en", None),
+    ("J’ai dépensé 1\u202f234,56 €.", "fr", None),
+    ("Die Auflage beträgt 12\u2009345 Bücher.", "de", None),
+    ("Hay 1\u2009234\u2009567 habitantes.", "es", None),
+    ("Hanno percorso 12\u00a0345 chilometri.", "it", None),
+    ("Temos 1\u202f234 lugares.", "pt", None),
+    ("Er zijn 1\u00a0234 bomen.", "nl", None),
+    ("Det bor 1\u2009234 personer här.", "sv", None),
+    ("Der er 12\u202f345 besøgende.", "da", None),
+    ("W badaniu uczestniczyło 12\u00a0345 osób.", "pl", None),
+    ("V1.2\u202f345, A1\u2009234, 12\u202f345X, 1234\u00a0567, 2\u200933.", "en", None),
 ]
 
 
@@ -989,6 +1054,33 @@ CASES: list[tuple[str, str | None, str | None]] = [
 # same places, because a different split is a different set of joins and a
 # different reading.
 CHUNK_CASES: list[str] = [
+    "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, "
+    "tu jest nasz pies, tam jest nasz kot, a tu nasz stół, dobrze?",
+    "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, "
+    "tu jest nasz pies, tam jest nasz kot, a tu jest nasz stół i nasz nowy dach.",
+    # Real sentence ends beyond the estimate, close-quoted dialogue, and
+    # compulsory clause splits all affect which speech stream the next word uses.
+    "The old railway carried grain from farms across the valley and the drivers stopped "
+    "each morning beside a small spring high in the hills. The next train is due at noon.",
+    "The bright afternoon sunlight filtered through the branches of the old chestnut tree "
+    "above the narrow path that the children followed every morning on their way to the "
+    "little school beside the river.",
+    "On the trail, we watched the river wind slowly through the valley while the children "
+    "followed the tracks of an animal they had never seen before.",
+    "On the trail, we watched the wide river wind slowly through the valley while the "
+    "children followed the tracks of a wild animal they had never seen before.",
+    "“Have you seen the blue folder?” She walked to the opposite end of the room where "
+    "she could finally talk to her colleague without disturbing the rest of the team.",
+    "Ask L. Jones about the report because she wrote it after interviewing everyone "
+    "who examined the building before the fire at the end of August.",
+    "„Wie spät ist es?“\nAuf dem Rückweg gingen wir durch den Park und an den Geschäften "
+    "vorbei bis zu der kleinen Station am anderen Ende der Stadt.",
+    "Il demanda «Qui est là?»\nLa voisine prit le temps de regarder par la fenêtre "
+    "avant de rejoindre ses enfants dans la cuisine au bout du couloir.",
+    "There was only one reasonable choice: follow the road across the valley and hope "
+    "that the last bus would stop beside the old stone bridge before nightfall.",
+    "The cabinet was locked \u2014 even the spare key would not turn \u2014 and the locksmith "
+    "would have to return with another set of tools before the shop could open.",
     "One. Two. Three.",
     "A single sentence that is comfortably shorter than one window.",
     " ".join(f"Sentence number {i} runs on for a while." for i in range(1, 12)),

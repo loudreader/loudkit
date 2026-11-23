@@ -279,6 +279,25 @@ class VoiceProfile:
         return int(value)
 
     @classmethod
+    def _read_header(cls, metadata: Mapping[str, str], name: str) -> dict[str, object]:
+        header = json.loads(metadata.get("voice", "{}"))
+        if not isinstance(header, dict):
+            raise ValueError(
+                f"{name}: voice header is a {type(header).__name__}, expected a JSON object"
+            )
+        version = cls._header_int(header, name, "format_version", 0)
+        if version != VOICE_FORMAT_VERSION:
+            raise ValueError(
+                f"{name}: voice format version {version}, "
+                f"this build reads {VOICE_FORMAT_VERSION}"
+            )
+        return header
+
+    @classmethod
+    def _header_language(cls, header: Mapping[str, object], name: str) -> str:
+        return cls._header_str(header, name, "language", "en")
+
+    @classmethod
     def load(cls, path: str | Path) -> VoiceProfile:
         """Read a profile written by :meth:`save`."""
         from safetensors import safe_open
@@ -292,22 +311,7 @@ class VoiceProfile:
             )
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         with safe_open(str(path), framework="numpy") as f:
-            meta: Mapping[str, str] = f.metadata() or {}
-            header = json.loads(meta.get("voice", "{}"))
-            if not isinstance(header, dict):
-                # External data: a JSON list or string here would otherwise
-                # surface as an AttributeError from inside a getter, where
-                # every other malformed header is a ValueError.
-                raise ValueError(
-                    f"{path.name}: voice header is a {type(header).__name__}, "
-                    "expected a JSON object"
-                )
-            version = cls._header_int(header, path.name, "format_version", 0)
-            if version != VOICE_FORMAT_VERSION:
-                raise ValueError(
-                    f"{path.name}: voice format version {version}, "
-                    f"this build reads {VOICE_FORMAT_VERSION}"
-                )
+            header = cls._read_header(f.metadata() or {}, path.name)
             return cls(
                 name=cls._header_str(header, path.name, "name", path.stem)[:_MAX_NAME_CHARS],
                 speaker_embedding=f.get_tensor("speaker_embedding"),
@@ -323,7 +327,7 @@ class VoiceProfile:
                     header, path.name, "source_sample_rate", 24_000
                 ),
                 source_sha256=digest,
-                language=cls._header_str(header, path.name, "language", "en"),
+                language=cls._header_language(header, path.name),
                 # Absent means the profile predates the field, and every one of
                 # those was cut from the first ten seconds.
                 enrolment=cls._header_str(

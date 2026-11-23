@@ -239,6 +239,8 @@ class TestProbeCorpusIsWellFormed:
             for item in items:
                 out = speech_text(item["text"], language)
                 assert out.strip(), f"{language}: funnel emptied {item['text']!r}"
+                if "expected_spoken" in item:
+                    assert out == item["expected_spoken"], (language, item["class"])
 
 
 class TestTheFunnelSpellsItsCharacterClasses:

@@ -198,6 +198,23 @@ def _packed_estimator_digest(ckpt: Checkpoint) -> str | None:
 
 _RECORD_KEYS = ("checkpoint_sha256", "algorithm_fingerprint", "euler_steps", "estimator_sha256")
 
+# Text preparation and chunk boundaries are decided before the graphs run.
+# These exports of each model differ only in that host-side recipe.
+_PREVIOUS_GRAPH_FINGERPRINTS = {
+    "4a2918bb653ce531": (
+        "7cd75498ad4e7531",
+        "b99ab84725b40e91",
+        "f171bcc07df48436",
+        "82c2c12d6e725542",
+    ),  # base
+    "ccaeab4e92d9edc1": (
+        "e5303ba243087222",
+        "e800f3bbb7eb6b4e",
+        "06d8ccb48891899e",
+        "62d674008ef832fd",
+    ),  # turbo
+}
+
 
 def check_export_record(
     assets: Path,
@@ -267,7 +284,13 @@ def check_export_record(
     engine_keys = ("checkpoint_sha256", "algorithm_fingerprint", "euler_steps")
     got = tuple(agreed[k] for k in engine_keys)
     want = (ckpt.file_digest, algorithm.fingerprint(), algorithm.euler_steps)
-    if got != want:
+    digest, fingerprint, steps = want
+    accepted_fingerprints = (fingerprint, *_PREVIOUS_GRAPH_FINGERPRINTS.get(fingerprint, ()))
+    if (
+        agreed["checkpoint_sha256"] != digest
+        or agreed["algorithm_fingerprint"] not in accepted_fingerprints
+        or agreed["euler_steps"] != steps
+    ):
         raise ValueError(
             f"{assets} was exported from a different engine than the one loading "
             f"it:\n  {block}: {dict(zip(engine_keys, got, strict=True))}\n"

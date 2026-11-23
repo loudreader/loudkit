@@ -16,7 +16,7 @@ import "testing"
 // stays written.
 func TestTwoAmountsSideBySideStayTwoAmounts(t *testing.T) {
 	for _, c := range []struct{ text, lang, want string }{
-		{"$1$2$3", "en", "one dollars2 dollars3 dollars"},
+		{"$1$2$3", "en", "one dollar2 dollars3 dollars"},
 		{"$5$10", "en", "five dollars10 dollars"},
 		{"$5$10", "pt", "cinco dólares10 dólares"},
 		{"€1€2", "de", "eins Euro2 Euro"},

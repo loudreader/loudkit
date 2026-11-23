@@ -731,6 +731,13 @@ async function sha256(path: string): Promise<string> {
 /** The tool that writes the record, and what a refusal tells the reader to run. */
 const EXPORT_TOOL = "tools/export_onnx.py";
 
+// Text preparation and chunk planning run on the host. Both models still
+// accept the graphs exported under earlier host recipes for the same model.
+const COMPATIBLE_GRAPH_EXPORTS = new Map([
+  ["4a2918bb653ce531", ["7cd75498ad4e7531", "b99ab84725b40e91", "f171bcc07df48436", "82c2c12d6e725542"]],
+  ["ccaeab4e92d9edc1", ["e5303ba243087222", "e800f3bbb7eb6b4e", "06d8ccb48891899e", "62d674008ef832fd"]],
+]);
+
 /**
  * The fields that make one export's identity, in the order a message prints
  * them. The first three are the engine the graphs were traced against; the
@@ -806,7 +813,11 @@ export async function checkExportRecord(
   // identity; a caller asking for none has nothing to disagree with.
   if (agreed === undefined) return;
   const want = [quote(await sha256(checkpointPath)), quote(fingerprint), String(eulerSteps)];
-  if (!same(agreed.slice(0, 3), want)) {
+  const recordedFingerprint = agreed[1];
+  const fingerprintMatches =
+    recordedFingerprint === want[1] ||
+    COMPATIBLE_GRAPH_EXPORTS.get(fingerprint)?.some((prior) => quote(prior) === recordedFingerprint);
+  if (agreed[0] !== want[0] || !fingerprintMatches || agreed[2] !== want[2]) {
     throw new Error(
       `${assets} was exported from a different engine than the one loading it:\n` +
         `  graphs: ${fields(agreed.slice(0, 3))}\n` +
@@ -1408,7 +1419,7 @@ async function fetchRelease(
   say: (message: string) => void,
   options: DownloadOptions
 ): Promise<string> {
-  const tree = await listRepo(repo, revision, endpoint, token, options.signal);
+  const tree = await listRepo(repo, commit, endpoint, token, options.signal);
   const sizes = new Map(tree.filter((e) => e.type === "file").map((e) => [e.path, listedSize(e)]));
   for (const path of sizes.keys()) {
     const why = rejectedName(path);
@@ -1435,7 +1446,7 @@ async function fetchRelease(
       const step = `[${index + 1}/${wanted.length}]`;
       let announced = -1;
       await fetchFile(
-        `${endpoint}/${repo}/resolve/${encodeURIComponent(revision)}/${path}`,
+        `${endpoint}/${repo}/resolve/${encodeURIComponent(commit)}/${path}`,
         target,
         path,
         token,

@@ -32,6 +32,7 @@ from ..frontend.chunking import CHARS_PER_TOKEN, estimate_tokens
 from ..frontend.speechtext import speech_text
 from ..models.timestretch import MAX_SPEED, MIN_SPEED
 from ..synthesis import (
+    STREAMABLE_FORMATS,
     AudioFormat,
     Rendered,
     VoiceLibrary,
@@ -48,7 +49,6 @@ from .limits import (
     over_cap,
 )
 from .resolve import algorithm_override, open_release
-from .schemas import _STREAMABLE
 
 __all__ = ["build_server", "serve"]
 
@@ -571,13 +571,13 @@ def build_server(  # noqa: PLR0915 - one server: its bounds and its four methods
             # whole stream and each MP3 chunk carries its own encoder delay,
             # so a per-chunk container names bytes that are not what they say.
             audio_format = request.audio_format or "wav"
-            if audio_format not in _STREAMABLE:
+            if audio_format not in STREAMABLE_FORMATS:
                 _fail(
                     context,
                     grpc.StatusCode.INVALID_ARGUMENT,
                     f"audio_format {audio_format!r} cannot be streamed: a container "
                     "is one continuous stream, not one payload per chunk. Streamable "
-                    f"formats are {', '.join(sorted(_STREAMABLE))}; use Synthesize "
+                    f"formats are {', '.join(sorted(STREAMABLE_FORMATS))}; use Synthesize "
                     "for the rest.",
                 )
                 return

@@ -1,107 +1,57 @@
-# Preprocess: turning text into something the model has seen
+# Preparing text for narration
 
-The first stage of `preprocess → tts → postprocess`. It narrows the gap between
-what a person writes and what the checkpoint was trained on.
+The model reads graphemes. Before synthesis, the text frontend turns written
+forms such as prices, clock times and dates into words in the voice's language.
+The engine prepares the whole passage, then plans the chunks it can generate.
+Postprocessing runs on generated speech tokens and can trim or retry a bad
+window. To inspect the words going into narration, use `loudkit text`.
 
-The model reads **graphemes**. It has no phoneme layer and no lexicon. A
-character the training transcripts did not contain arrives as an embedding the
-model barely trained, or does not arrive at all.
+```sh
+loudkit text --language en 'At 9:05, Prof. Jones paid $1.'
+# At nine oh five, Professor Jones paid one dollar.
+```
 
----
+English is the first language to check when changing narration rules. Changes
+to shared text handling also need examples in the other shipped languages.
+Compare the prepared words across SDKs and use recordings to evaluate timing
+and pronunciation. [Evaluation protocol](evaluation.md)
 
-## The failure it exists for
+| Input | Language | Prepared words |
+| --- | --- | --- |
+| `He bought pens, etc. She followed.` | en | He bought pens, etcetera. She followed. |
+| `1.00€, $1.01, and $1 million.` | en | one euro, one point zero one dollars, and one million dollars. |
+| `1 234,56 €` | fr | mille deux cent trente-quatre virgule cinq six euros |
+| `12 m²` | pl | dwanaście metrów kwadratowych |
 
-The typical failure is a number that goes missing, not one that is
-mispronounced. A checkpoint trained on normalised transcripts has never seen
-`45`. Peer systems show the effect: StyleTTS2's symbol table contains no
-digits, and F5-TTS maps every unknown character to a space. Neither reports it,
-and the sentence comes out with a hole where the number was.
-
-Number expansion is therefore the first job of this layer, ahead of anything to
-do with pronunciation quality.
-
----
+In the French example the thousands separator is a narrow no-break space.
+Recognizing the full group before moving the currency mark preserves the
+amount in typeset text.
 
 ## The stages, in order, and why that order
 
 ```
-NFC  →  foreign digits  →  invisibles  →  markup tags  →  numerals
-     →  symbols  →  footnotes  →  Roman numerals  →  acronyms  →  dates
-     →  ordinals  →  abbreviations  →  times  →  numbers  →  punctuation
-     →  respelling  →  collapse
+NFC → fold foreign digits → remove invisible characters and markup tags
+    → recognize grouped numbers and Polish quantity phrases → fold numeral symbols
+    → expand symbols → drop footnotes → expand Roman numerals and acronyms
+    → dates → ordinals → abbreviations → clock times → numbers
+    → filter punctuation → language-specific respelling → tidy spacing and clause marks
 ```
 
-Every stage runs in all five implementations. The reference is `speech_text`
-in `python/loudkit/frontend/speechtext.py`; the per-symbol notes are in
-[text-funnel.md](text-funnel.md).
-
-**NFC first, before any pass inspects a character.** Unicode lets the same
-character arrive two ways: Polish `ą` as U+0105 or as `a` + U+0328, Danish `å`
-as U+00E5 or `a` + U+030A. The regexes, lexicon lookups and character classes
-below are written against the composed form. Without NFC, a decomposed spelling
-reaches them as a base letter followed by a combining mark, and they miss it.
-The tokenizer applies its own NFKD later; NFC here is for the rules.
-
-**Foreign digits beside NFC.** Arabic-Indic and Extended Arabic-Indic digits,
-their decimal and grouping separators, and the Arabic percent sign fold to the
-language's own spelling, so every later pass sees one form. `٣٫١٤` reads
-*three point one four* in English and *drei Komma eins vier* in German.
-
-**Invisibles next.** Zero-width joiners, format characters and the soft hyphen
-are not whitespace by Unicode's rules, so no later pass removes them. A
-grapheme model would read them as characters inside the word, which makes a
-word no training text contains.
-
-**Markup tags before symbols.** The symbol pass would read a tag's angle
-brackets as comparison operators and its attributes as text. `<p>Hello</p>`
-reads *Hello*.
-
-**Numerals before symbols.** `fold_numerals` turns superscripts, vulgar
-fractions, circled and Roman numerals and non-Latin digits into text the later
-passes read. See [Numerals](#numerals).
-
-**Symbols while the digits are still digits.** `£250` reads as *two hundred and
-fifty pounds*. The mark is written in front and spoken behind, so the amount
-must still sit next to its symbol.
-
-**Footnotes, then Roman numerals, then acronyms.** Footnote markers go before
-any number pass, because a dropped `[12]` must not become words first. Roman
-numerals run before the acronym pass, which would spell `IV` letter by letter.
-
-**Dates, ordinals, abbreviations, times, then numbers.** Dates run first
-because the clock pattern and the digit-run pattern each match part of
-`12.03.2026`. Ordinals run before numbers, which would expand `1st` and leave
-the suffix behind. All of them run before punctuation, which turns a minus sign
-after a space into a space: `-5` would lose its sign.
-
-**Punctuation last of the rewriting passes.** Prosodic marks stay: `. , ! ? ; :`,
-dashes, the ellipsis, quotation marks, parentheses, apostrophes, `¿` and `¡`.
-They are the model's main cue for a question contour or a clause break. Every
-other symbol becomes a space, except a numeric separator between digits and a
-`-` or `+` inside a token.
-
-**Respelling.** Polish only: English words in Polish text are rewritten the way
-a Polish reader says them.
-
-**Collapse runs, not pairs.** A run of clause marks folds to one mark, so `...`
-becomes `.` in one pass. A pair rule would not be idempotent: regex
-substitution does not overlap its matches, so `...` would become `..` on one
-pass and `.` on the next.
+The order preserves clues that would otherwise disappear. For instance,
+a currency mark still identifies the amount in `£250` when the frontend
+moves *pounds* behind it. Dropping `[12]` before general number expansion
+keeps a footnote out of the narration. Parsing the date before the clock
+keeps a German date such as `12.03.2026` together. Sentence punctuation then
+informs both the chunk planner and the model.
 
 ---
 
 ## Numbers
 
-`loudkit.frontend.numbers` verbalizes integers and decimals in all twelve
-languages it has grammars for. That set differs from the ten languages the
-voices ship for. The grammars are written in this repository instead of taken
-from a library, for two reasons.
-
-The widely used Python library for number words is LGPL-2.1, which this kit
-cannot carry into every embedding it is meant for. It also has **no case or
-gender machinery for Polish at all**: one nominative form per numeral, while
-the same release ships six-case declension for Russian. Polish needs agreement
-most, so the dependency would have to be replaced for that language anyway.
+All twelve text languages have grammar tables for integers and decimals.
+The voice roster covers ten of them. Gender, plural forms, and word order
+depend on the language and the construction. A successful check of isolated
+cardinal numbers tells us little about how a unit or a price reads in prose.
 
 ### The grammar is data; only the interpreter is code
 
@@ -144,10 +94,12 @@ fixture. A Python-only pass would make them produce different text while the
 fingerprint declares they agree, which is the defect class the fingerprint
 exists to catch.
 
-`TextConfig.recipe` is `FUNNEL_PORTED` (`"funnel-6"`) in every implementation,
-unconditionally. There is no opt-in. The `divergent` block in
-`tests/data/conformance/speechtext.json` holds no cases: every case sits in
-`cases`, where all five implementations are held to it.
+**All four are ported now.** `TextConfig.recipe` is `FUNNEL_PORTED`
+(`"funnel-10"`, shared by text preparation and chunk planning),
+unconditionally, in every implementation. There is no opt-in and
+no `FUNNEL_EXTENDED`. The `divergent` block in
+`tests/data/conformance/speechtext.json` is empty of cases and says so. What
+used to sit there moved into `cases`, where every implementation is held to it.
 
 ---
 
@@ -192,24 +144,28 @@ built in memory without a language, or a header hand-edited to `""`.
 
 The chain's output is checked against an **allowlist**: the twelve ids
 `loudkit.frontend.numbers.supported_languages()` reports, which is the roster in
-`models/data/numbers.json` that all five implementations load. Anything else is
-refused, and the refusal names the twelve.
+`models/data/numbers.json` that all five implementations already load. Anything
+else is refused, and the refusal names the twelve.
+Use a base language ID such as `en` or `fr`. Regional tags such as `fr-FR`
+are rejected by the CLI and the tokenizer.
 
-The tokenizer's vocabulary carries tags for 31 languages, so a tag alone proves
-nothing. `encode(text, "bg")` would turn Cyrillic into ids the model reads as
-sounds it was never trained to make, with no error and plausible audio in the
-wrong language. `zh`, `ja`, `he`, `ko` and `ru` are named separately in the
-message, because their upstream pipeline needs model-based preprocessing this
-frontend does not carry, and the caller can act on that.
+It was a blacklist of `zh`, `ja`, `he`, `ko`, `ru`, the five whose upstream
+pipeline needs model-based preprocessing this frontend does not carry. But the
+tokenizer's vocabulary carries tags for 31 languages, so a blacklist accepted
+the other 26. `encode(text, "bg")` NFKD-mangled Cyrillic into ids the model
+reads as sounds it was never trained to make: no error, plausible audio, wrong
+language. That is the failure this layer exists to prevent, arriving through the
+language argument instead of through the text. The five are still named
+separately in the message, because *why* they are refused is information the
+caller can act on.
 
 ---
 
 ## Properties as well as cases
 
-The conformance fixture pins what the funnel does to 217 specific strings.
-`tests/test_funnel_properties.py` checks four properties on sample prose in
-every language. They catch a different class of defect: a rule that quietly
-drops something, where a case catches a rule that is wrong.
+The shared conformance fixture checks concrete text expansions. Property
+tests exercise additional inputs to catch character loss or repeated changes
+to text that has already passed through the frontend.
 
 | property | what it prevents |
 |---|---|
@@ -228,10 +184,9 @@ gives *traj*.
 
 ## What this layer refuses to read
 
-The rule underneath this section: **a token is read whole or left written,
-never half.** A half-expanded number, a name with a letter missing, or the
-wrong currency is a confident wrong answer, and nothing in the audio says so.
-A token left written goes to the model as written.
+These rules guard against partially rewriting an identifier or assigning
+the wrong currency to a number. “Left written” describes the prepared text.
+The model can still pronounce that text poorly or skip part of it.
 
 This was checked by ear, because a refusal hands the reading to the model, and
 for some inputs the half-expansion might sound better. Both directions were
@@ -246,187 +201,173 @@ name, and the audio gives no sign that the `ü` and the `3` are missing.
 
 | Input | What happens | Why |
 |---|---|---|
-| `iOS18`, `r123`, `5x3`, `1e6` | left written | A digit run touching a word on either side is part of that word. Expanding the digits alone would give *iOSeighteen*, *fivex3* or *onee6*: a word welded to a number. |
-| `v1.2.3`, `Ver.2` | left written | An identifier can put a dot between its letters and its digits, so the glue test walks back over word characters, dots and commas until it finds a letter. |
-| `1.2.3`, `192.168.0.1`, `18.08.2026` (en) | left written | A dotted run with more than one separator is not a quantity. English marks dotted numeric dates as ambiguous (US and UK order day and month differently), so the date pass leaves them all, and a wrong month is worse than heard digits. |
-| `1e+3`, `2.5E+1`, `1e-3` | left written | The exponent's sign is part of the token, so the whole run is refused. |
-| `x200 000`, `200 000x` | left written | A grouped run needs a boundary at both ends. Reading only the part that fits would leave `200` spoken and `000` glued to the letter, or the reverse. |
-| `+1 202 555 0199` | digit by digit | A plus followed by eight or more digits is a telephone number. |
-| `Müller123`, `żelazny2024` (pl) | left written | The Polish code speller spells all of a token or none of it. `ü` has no letter name in its table, so spelling the rest would drop it and change the name. Tokens over eight characters are also left written. `R2` is spelled (*er dwa*). |
-| `R$3,14`, `HK$5` | `$` dropped, letters kept, amount read (*R three point one four*, *aitch-kay five*) | A currency mark with a letter in front is one the symbol table cannot name. `R$` is the Brazilian real; matching the `$` alone would say "dollars". |
-| `14.30` in en | a decimal (*fourteen point three zero*) | `H.mm` is a clock time only in languages whose decimal separator is a comma, which is the other eleven. The grammar file records the separator, so English `$0.49` stays a price. |
-| `24:30` | not a time: each side read as a number, colon kept (*twenty-four:thirty*) | 24 is an hour only with a zero minute (ISO 8601 writes end of day as `24:00`). |
-| `[12]`, `💩`, `©®™` | removed; the engine raises `NothingToSpeakError` (a `ValueError`) | The funnel removes all three and leaves empty text. Empty text must not reach the tokenizer, which would still produce audio. |
+| `iOS18`, `r123`, `5x3`, `1e6` | left written | A digit run touching a word on either side is part of that word. *iOSeighteen* is not a reading of anything, and expanding one side only gave *fivex3* and *onee6*: a word welded to a digit. |
+| `v1.2.3`, `Ver.2` | left written | The lookbehind sees one character, and an identifier can put a dot between its letters and its digits. Answered by walking back over word characters, dots and commas until a letter appears. |
+| `1.2.3`, `192.168.0.1`, `18.08.2026` (en) | left written | A dotted run no convention resolves. English field order is unrecoverable (`3/12` is March twelfth to half the English-speaking world), and a wrong month is worse than heard digits. |
+| `1e+3`, `2.5E+1`, `1e-3` | left written | The exponent's sign is part of the token, so the whole run is refused rather than read up to it. |
+| `x200 000`, `200 000x` | left written | A grouped run needs a boundary at both ends. Reading the part that fits left `200` spoken and `000` behind it, or the reverse. |
+| `+1 202 555 0199` | digit by digit | A run of unequal groups is not a grouped number. Read as one it came out "one billion … nineteen" with a bare "9" trailing. |
+| `Müller123`, `żelazny2024` | left written | The Polish code speller spells all of a token or none: a character with no letter name was dropped in silence, so `ü` vanished and the name changed. Also refused past eight characters. Spelling `R2` is how a reader says it; spelling an eleven-character identifier is a wall nobody follows. |
+| `R$3,14`, `HK$5` | mark dropped, amount read as a decimal | A currency mark with a letter in front is one this table cannot name. `R$` is the Brazilian real; matching the `$` alone said "Dollar". Losing a symbol is a smaller lie than naming the wrong money. |
+| `14.30` in en | a decimal | `H.mm` is a clock in the eleven languages whose decimal separator is a comma, and a decimal in English. The grammar file already knows which is which, and reading `$0.49` as "zero forty-nine" was the cost of not asking it. |
+| `24:30` | In English, *twenty-four:thirty* | The clock rule only accepts hour 24 with minute 00. Ordinary number expansion can still read the individual values. |
+| `[12]`, `💩`, `©®™` | Empty prepared text | Synthesis raises `NothingToSpeakError` when these are the entire input. |
 
-Two inputs are read, not refused. Arabic-Indic digits (`١٢٣`, `٣٫١٤`) fold to
-ASCII beside NFC and read as numbers in all twelve languages. A correctly
-grouped `1 234 567` reads as a cardinal. The refusals above are about runs that
-only *look* grouped.
+Two of these are *not* refusals. Arabic-Indic digits (`١٢٣`, `٣٫١٤`) are
+**read**, folded to ASCII beside NFC, because they are digits, and eleven of the
+twelve languages used to pass them through untouched while Polish read them.
+`1 234 567` grouped correctly is read as a cardinal. The recognized group
+separators include regular space, no-break space (U+00A0), thin space
+(U+2009) and narrow no-break space (U+202F).
 
-### Where a run of digits ends
+### Where a run of digits ends, and what is still not settled
 
-The five implementations run two kinds of regex engine. Python's, JavaScript's
-and Swift's backtrack. Go's `regexp` (RE2) and Rust's `regex` crate do not:
-where Python retries an alternative, they take the longest prefix that fits.
-The rules below make both kinds answer the same.
+Go and Rust use RE2, which does not backtrack, so where Python's engine retries
+an alternative they take the longest prefix that fits. Everything below is that
+difference or a consequence of it.
 
-**The target rule: a maximal run of digits and separators that does not reduce
-to a single readable number is left written.** It decides where the token
-*ends*, which is the question the two engine kinds answer differently. The
-exceptions still open are listed under [Open questions](#open-questions).
+**The target rule, stated once and applied five times: a maximal run of digits
+and separators that does not reduce to a single readable number is left
+written.** It is a decision about where the token *ends*, not a guard bolted
+onto either implementation's current behaviour. Where the token ends is the
+question the two engine families answer differently.
 
-**Where a token ends.** A space is part of a number where it groups thousands:
-an ASCII digit immediately before it and three ASCII digits after. Anywhere
-else it ends a token. Each token is then decided on its own: all of it read, or
-all of it left written.
+**Where a token ends, in one rule with one asymmetry.** A space is part of a
+number where it groups thousands: a digit immediately before it and three digits
+after. Anywhere else it ends a token. Each token is then decided on its own: all
+of it read, or all of it left written.
 
-**The fourth digit.** The walk that runs *forward* out of a match
-(`_starts_a_group`) crosses a space in front of `0023` as readily as one in
-front of `000`: it asks only whether three digits start there. A ragged group
-is the reason the pattern refused to bind the run, and the forward walk
-finishes that run. So `1 0023R` is one token, glued to the `R`, and is left
-written. The walk that runs *backward* (`_continues_a_group`) asks for exactly
-three digits, with no fourth behind them, because there the group is the match
-itself and its width is already fixed. So in `e3 1000` it does not cross the
-space, and `1000` reads (*ettusen* in Swedish). Both helpers are in
-`python/loudkit/frontend/numbers.py`. `1 234 5672.5E+1` is left written the
-same way.
+The asymmetry is the fourth digit. The walk that runs *forward* out of a match
+crosses a space in front of `0023` as readily as one in front of `000`. A ragged
+group is precisely why the pattern refused to bind the run, and the forward walk
+is there to finish what the pattern would not. The walk that runs *backward*
+does not cross it, because there the group is the match itself and its width is
+already fixed. In the reference these are `_starts_a_group` and
+`_continues_a_group` in `python/loudkit/frontend/numbers.py`.
 
-Measured over 4800 generated sentences: allowing a fourth digit in both walks
-changes 60 readings, and 56 of them are losses, because the backward walk then
-steps out of one token into the next. Allowing it forwards only changes 20:
-four numbers that went unsaid are read, and sixteen ragged runs are left
-written instead of read half way.
+**Boundary behavior.** `1 0023R` matched
+the `1`, read *en*, and left `0023R` written. That is half a run spoken with the
+rest welded to a letter, the class the right-hand guard exists to stop. The
+engines that do not backtrack never had it: they bind `1 002` greedily, find the
+`R` behind it, and refuse the whole run. A backtracking engine reaches the same
+answer by asking the looser question forwards. Same family:
+`1 234 5672.5E+1`, which used to say *en* and *tohundrede og fireogtredive*
+before giving up.
 
-**Width.** `_starts_a_group` requires three characters as well as three digits.
-`text[i:i+3].isdigit()` alone is true of a one-character slice, so a lone digit
-would pass for a group: in `R2 2` the backward walk would cross the space,
-reach the `R`, and refuse a number nothing is glued to. `R2 2` reads
-*R2 two*.
+The other direction is why the clause stays there. Dropping it in both walks was
+measured over 4800 generated sentences: 60 readings change and **56 are
+losses**, because the walk then steps out of one token and into the next.
+`e3 1000` stops saying *ettusen*: `1000` is four digits with no thousands group,
+and the walk crosses an ordinary space to find the `e` of an exponent it shares
+nothing with. Asked forwards only, 20 readings change: four are numbers that had
+gone unsaid, sixteen are ragged runs no longer read half way.
 
-**ASCII digits.** The walks test ASCII digits, the class the digit-run pattern
-matches. `str.isdigit` is also true of `²` and of every Unicode decimal digit.
+**Closed with it: the width check, which the reference had wrong and three ports
+had right.** `text[i:i+3].isdigit()` is True of a one-character slice, so a lone
+digit passed for a thousands group: in `R2 2` and `R2 12` the backward walk
+crossed the space, reached the `R`, and refused a number nothing was glued to.
 
-**Three digits forwards.** The forward walk crosses a thousands space only when
-three digits follow. So in `1000 5.1e+3` it does not walk into the exponent
-two tokens away: `1000` reads *one thousand* and `5.1e+3` stays written.
+**And the walks now ask about ASCII digits.** `str.isdigit` is true of `²` and
+of every Unicode decimal digit, none of which the digit-run pattern can match,
+so in `R² 200` the `²` counted as the digit behind a grouping space and
+swallowed the number after it. The other three ports test ASCII.
 
-**Dotted separators.** `200 0003.14` and `1 00012.03.2026` reach a fraction or
-a date, not a letter. All five implementations read them the same way in all
-twelve languages; the readings are listed under
-[Open questions](#open-questions).
+A forward walk had the same rule as the backward one and did not use it. It
+crossed a thousands space whenever *a digit* followed, which walked out of one
+number and into the next. `1000 5.1e+3` therefore refused the `1000`: the walk
+found the `e` of an exponent two tokens away and called the whole thing one
+glued token. Four of the fuzzer's Go divergences were exactly that, with Go
+right and this side wrong. Three digits and not fewer is what stops it, and that
+half of the rule is unchanged.
 
-**Word classes.** The five implementations use one definition for each
-character class (see [One class question](#one-class-question-asked-the-same-way-five-times)).
-Fixture cases pin the points where runtime classes differ:
+**Closed with it: runs whose separators are dots.** `200 0003.14` and
+`1 00012.03.2026` reach a fraction or a date rather than a letter. The ports
+used to read different halves of them: one said the whole thing digit by digit,
+another stopped at the decimal point and wrote the rest. All five now agree on
+both, in all twelve languages.
 
-- A combining mark is not a word character. ICU's `\w`, which Swift's
-  `NSRegularExpression` uses, includes combining marks. `a̬123` reads its
-  number in all five.
-- A letter is `\p{L}`. The Rust `regex` crate's `[:alpha:]` is ASCII even in
-  Unicode mode. In `zł€ 000 000` the `ł` is a letter, so the `€` does not open
-  an amount.
-- The acronym splitter splits on code points, as Python's `\W+` does, not on
-  grapheme clusters, which Swift's `Character` walks.
+**Language-specific word classes.** The divergences that
+outlived the space fix were not about digits at all. Each was a port reading
+Unicode through whatever word class its regex engine handed it:
 
-`spell_acronyms` makes the initialism decision while the neighbouring words are
-still visible. The Polish respeller does not spell acronyms a second time. So
-`CIA CIA`, a run of capitals and therefore read as emphasis, stays *CIA CIA*.
+- ICU's `\w` counts a combining mark as a word character, so Swift alone refused
+  `a̬123`.
+- The `regex` crate's `[:alpha:]` is ASCII even in Unicode mode, so Rust alone
+  took the `€` in `zł€ 000 000` for a bare euro sign.
+- Swift's acronym splitter walked `Character`, which is a grapheme cluster,
+  where Python's `\W+` splits on code points.
 
-**Fuzzing.** `tools/fuzz_parity.py` compares the five funnels on generated
-sentences. Measured: twenty seeds, 8000 sentences, no divergence. In CI the
-`fuzz-parity` job runs seeds 1 and 2 (300 cases each) for Go, Rust and JS, and
-a divergence fails the build. Swift is not in that Linux job: `LoudKitText`
-imports CryptoKit and OSLog, and `LoudKit` imports CoreML, none of which exist
-on Linux. The macOS `swift` job fuzzes Swift with the same two seeds.
+The fourth was not a class but a rule the reference had **deleted** and four
+ports had kept. `spell_acronyms` owns the initialism decision. The Polish
+respeller in Go, Rust, JS and Swift was still spelling acronyms a second time
+with no view of the surrounding capitals, so `CIA CIA`, a run and therefore
+emphasis, came out *ce-i-a ce-i-a*.
 
-### Open questions
+`tools/fuzz_parity.py` is green on twenty seeds and eight thousand generated
+sentences across all five implementations, so the fuzz-parity job in `ci.yml`
+gates rather than reports. Swift is not in the Linux command -- `LoudKitText`
+imports CryptoKit and OSLog and `LoudKit` imports CoreML, none of which exist on
+that runner -- so it is fuzzed by the macOS `swift` job instead. It used to be
+fuzzed "before merge", meaning by hand, and this page said so as though that
+were a gate; four of the first seven seeds were red at the time.
 
-These readings are the same in all five implementations, so the fuzzer, which
-compares the implementations with each other, cannot flag them:
-
-- `200 0003.14` reads *two hundred zero zero zero three point one four*. The
-  maximal run does not reduce to a single readable number, so the target rule
-  says it should stay written, as `200 0001e-3` does.
-- `1 00012.03.2026` reads *one 00012.03.2026*: half the run is read.
-- `R² 200` reads *R two thousand two hundred*. The numeral fold turns `²` into a
-  separate `2`, and `2 200` is a valid thousands group.
-
-Deciding the first means deciding whether digit-by-digit is a *reading* or a
-*refusal*. That needs a listening test; a parity gate cannot answer it.
+**One question the rule does not answer yet.** It is a question about the rule
+rather than a divergence. `200 0003.14` reads *two hundred zero zero zero three
+point one four* in all five. The maximal run there does not reduce to a single
+readable number, so the rule as stated above argues it should be left written
+the way `200 0001e-3` is. The ports read it digit by digit instead. That is
+consistent across the five and so invisible to the fuzzer, which compares them
+against each other. Deciding it means deciding whether digit-by-digit is a
+*reading* or a *refusal*, and that choice belongs with the ear tests rather than
+with a parity gate.
 
 ## The periods this layer leaves written
 
-The abbreviation stage expands only the unambiguous entries: a wrong expansion
-is worse than a spelled abbreviation. `e.g.` becomes *for example*, and its
-period goes with it. `St.` is Saint or Street, so it stays written, and its
-period reaches the next stage.
-
-That next stage is the splitter, which breaks long text at `. ` because a full
-stop is the least audible place to break. A period that closes a title is not
-a full stop. Without a rule, `"But Mr. Smith went home"` splits off the chunk
-`"But Mr."`: seven characters, its own utterance, its own derived seed, and a
-token ceiling proportional to seven characters. Over a 9920-row rendered census
-it is the only chunk that hit that ceiling.
-
-**The period rule lives in the splitter, not in this layer.** The funnel could
-hold these phrases together in two ways, and both are worse:
-
-* **Expand them.** That is the stage above, and it refuses these entries by
-  name. Adding `St.` to it to fix a chunk boundary would trade an audible
-  boundary for a wrong word.
-* **Mark them.** A marker character survives into the string the tokenizer
-  reads, so it either reaches the model or needs stripping in five
-  implementations. The funnel's output is read aloud, so it must stay plain
-  text.
-
-Where a window ends depends on the token budget, and no other stage needs to
-know it. So the splitter decides.
+An abbreviation expander can turn `e.g.` into *for example*. For `St.`,
+there are at least two ordinary spoken readings, *Saint* and *Street*.
+The planner can keep an abbreviation with its following word even when the
+frontend has insufficient context to expand it.
 
 ### What the splitter tests
 
-Two conditions, and one of them is a list. Both apply only to a period: the
-splitter treats `!` and `?` as sentence ends and `;` and `,` as clause marks,
-so the question is only about the one mark written for two jobs.
+For the standard punctuation policy, a period can be held when the preceding
+word is in `ChunkConfig.abbreviations`, when an initial precedes a capitalized
+word, or when the next word starts with an ASCII lowercase letter. The latter
+also covers ellipses collapsed to a single period. Final punctuation can
+include a closing quote or bracket. `ChunkConfig.mid_sentence_period="break"`
+allows a cut at an otherwise held period.
 
-1. **The next character is an ASCII lowercase letter.** A new sentence rarely
-   starts in lower case. This condition catches what this layer produces:
-   `speech_text` maps an ellipsis to `...` and then folds a run of `[.,;:]` to
-   one mark, so `"grzeja sie... cieplem"` reaches the splitter as
-   `"grzeja sie. cieplem"`. It is the main cause in Polish, which has no
-   abbreviation cuts at all, and no abbreviation list reaches it.
-2. **The text up to the period ends with a listed abbreviation**, at a word
-   boundary: the character in front of the match is absent, or is not an ASCII
-   letter or digit. `NASA.` ends in `A`, and `A` is a listed initial, so the
-   guard is what keeps that one breaking.
+The planner also considers how much of the sentence would remain after the
+cut. This matters when a conservative text-length estimate places the final
+word of a sentence in a separate render. [Full chunk selection and recovery
+rules](text-funnel.md#loudkitfrontendchunkingpy)
 
-The list is `ChunkConfig.abbreviations`. `ChunkConfig.mid_sentence_period`
-selects `"hold"` (the two conditions above, the default) or `"break"` (every
-period is a boundary), so a pack can name the rule it was measured under. Both
-fields are hashed into the algorithm fingerprint.
+### Evidence behind the original abbreviation list
 
-**The thirteen single-letter entries earn their place.** They hold a period
-after any lone capital, which is what an initial looks like. That is the same
-shape as the "short capitalised token" rule the survey rejected for wrongly
-holding 57 genuine sentence ends, so it was measured. On five English
-Gutenberg books (1087 paragraph-sized passages), dropping all thirteen raises
-chunks that end on a dangling initial from 5 to 47 and lowers chunks that end
-on a comma from 3019 to 3009: 42 dangling initials prevented against 10 comma
-cuts caused. Per letter, only `D` (+36 dangling initials if dropped), `S` (+5)
-and `J` (+1) change anything on this corpus. The other ten are inert on it and
-may matter on prose it does not contain. A comma cut counts for more than its
-number: a chunk that ends on a comma invites an overlong pause, which is why
-`split_in_half` does not seek commas.
+**The thirteen single-letter entries pay for themselves, and the arithmetic is
+worth stating because their cost is easy to find and their benefit is not.**
+They hold a period after any lone capital, which is what an initial looks like,
+and a review reasonably objected that this is the same shape as the
+"short capitalised token" rule the survey rejected for wrongly holding 57
+genuine sentence ends. Measured on five English Gutenberg books, 1087
+paragraph-sized passages: dropping all thirteen takes chunks that end on a
+dangling initial from 5 to 47, and chunks that end on a comma from 3019 to
+3009. Forty-two prevented against ten caused. Per letter, only `D` (+36
+dangling initials if dropped), `S` (+5) and `J` (+1) do anything on this
+corpus; the other ten are inert here, so they cost nothing and may earn their
+place on prose this corpus does not contain. A comma cut matters more than its
+count suggests -- it is the seam class `cap_resplit` exists to avoid -- which is
+why the trade is written out rather than assumed.
 
 ### Two traps for anyone amending the rule
 
-**Numbers are already expanded.** `speech_text("Der 2. Weltkrieg", "de")` gives
-`"Der zwei. Weltkrieg"`. The splitter never sees the digit, so a condition
-keyed on a digit in front of the period is dead code in this pipeline. (The
-number pass reads the cardinal *zwei*; see [Ordinals](#known-difficulties).)
+**Check what the number pass emits.** `speech_text("Der 2. Weltkrieg", "de")` gives
+`"Der zwei. Weltkrieg"`. The splitter never sees the digit, so a condition keyed
+on a digit in front of the period is dead code in this pipeline.
 
-**`expand_abbreviations` is case sensitive.** A sentence-initial `Bijv.`,
-`F.eks.`, `T.ex.` or `Etc.` is not expanded and does reach the splitter.
+**A word expansion can affect the sentence boundary.** English `etc.` keeps
+its final period at the end of a passage or before a capitalized next sentence.
+For other abbreviations, check what `loudkit text` actually hands the splitter.
 
 ### Why the tests are ASCII
 
@@ -447,18 +388,12 @@ Surveyed over 1200 passages in ten languages, 4973 chunks:
 | `"break"` | 59 | 98 | 144 |
 | `"hold"` | 1 | 93 | 150 |
 
-The six added word breaks are the cost. The alternative, taking a held period
-when a window has no other punctuation, saves those six and costs seven period
-breaks, five of which leave a title dangling at the end of a chunk. A word
-break is joined with a carried prefix, so the sentence continues across the
-join. A false full stop is read as a full stop, with the closing fall and the
-pause.
-
-The list is the surveyed union plus `Dr` and `St`, which that corpus did not
-contain and English prose does. On 24 books of it, chunks ending on `Mr.`,
-`Mrs.`, `Dr.` or `St.` go from 4115 to 29, and chunks of 12 characters or fewer
-from 2273 to 1946. The 29 that remain are the word-boundary fallback, which is a
-separate decision.
+In that survey, falling back to a held period saved six word breaks but
+introduced seven breaks at a period, five of which left a title at the end of
+a chunk. The list was extended with `Dr` and `St` for English prose. In
+the corresponding 24-book comparison, chunks ending on `Mr.`, `Mrs.`,
+`Dr.` or `St.` fell from 4,115 to 29. These counts describe that earlier
+policy and corpus.
 
 ## Out of scope
 
@@ -472,9 +407,9 @@ against a pronunciation-dictionary gold standard is in the mid-teens for
 English and German. It is also GPL-3.0. The common alternative is an optional
 inline pronunciation override.
 
-**Prosody and break prediction.** Published phrase-break prediction stays under
-60% phrase-level F1. The funnel keeps the prosodic punctuation instead, which
-carries much of this signal.
+**Learned prosody prediction.** Chunk planning uses the prepared punctuation
+and a word-boundary fallback. The model determines the timing and intonation
+within each rendered window.
 
 **POS tagging as a stage.** It pays off mainly as a homograph feature, and the
 measured end-to-end contribution of homograph handling in a full front-end is
@@ -553,10 +488,10 @@ lexicon. That also pins the *Unicode version* the fold uses: two builds that
 hash the same file fold the same characters the same way, whatever Unicode
 their runtime carries.
 
-**A folded numeral goes through the later passes as its ASCII text.** `Ⅳ`
-becomes `IV`, and the Roman-numeral pass reads *four*. Fractions differ from
-typed text: the fold writes `½` as `1÷2`, which reads *one divided by two*,
-while a typed `1/2` has no fraction bar and reads *one two*.
+For a fraction glyph, the fold preserves its mathematical meaning by passing
+the numerator, division symbol and denominator to the language rules. A typed
+slash can also denote a date or a path. See the English examples under
+[Known difficulties](#known-difficulties).
 
 The fold leaves category `Lo` alone. Ideographic numerals such as `一` and `十`
 are letters, and a pass keyed on numeric type would delete a language's
@@ -599,60 +534,59 @@ three.
 
 ### What still reaches the model unread
 
-A digit glued to a letter stays written: `iOS18` stays `iOS18`, and
-`12.03.2026一二三` keeps its digits. A run glued to a word is part of that word,
-in all five implementations, and the model reads it as written.
+A digit glued to a letter stays written. For example, `iOS18` stays
+`iOS18` in the prepared text, and
+`12.03.2026一二三` keeps its digits. That is deliberate and long-standing — a
+run glued to a word is part of that word — and it is now at least the same
+deliberate answer in all five.
 
 ## Known difficulties
 
-Each of these needs something this repository does not have, and no guess
-ships in its place.
+**Recipe fractions and metric units.** In English, `1/2 cup` prepares as
+*one two cup*, while `½ cup` prepares as *one divided by two cup*. Write
+*half a cup* when that is the intended reading. English `2 kg` leaves
+`kg` in the prepared text, and `12 m²` becomes *twelve m two*. French
+similarly yields *deux kg* and *douze m deux*. Supplying expanded units is
+the reliable option for those cases. Polish has dedicated quantity rules for
+these units. Check the actual language and construction with `loudkit text`.
 
-**Polish grammatical case.** The grammar has Polish gender forms
-(*dwa / dwie / dwaj*), and the fixture tests them. It does not select case.
-`w 2026 roku` needs the locative *w dwa tysiące dwudziestym szóstym roku*; the
-funnel reads *w dwa tysiące dwadzieścia sześć roku*. From 5 up, a numeral
-governs the genitive plural while it makes the whole phrase neuter singular.
-**Selecting the case requires the syntactic role of the number in its
-sentence**, which means a morphological tagger: a different component with a
-different failure mode. The published recipe is a tagger plus a transducer
-plus an inflected lexicon. The API has a `gender` argument and no `case`
-argument; a `case` argument would take the same shape. Dates are the exception,
-because the date rule fixes the case: `5 maja 2026` reads *piątego maja dwa
-tysiące dwudziestego szóstego*.
+**Polish grammatical case.** Gendered number forms and selected case-sensitive
+constructions have dedicated rules. Broader case selection depends on syntax. `w 2026 roku` needs
+the locative *w dwa tysiące dwudziestym szóstym roku*, and 5-and-above governs
+the genitive plural while making the whole phrase neuter singular. **Selecting
+the case requires knowing the syntactic role of the number in its sentence**,
+which means a morphological tagger. That is a different component with a
+different failure mode, and it cannot be a lookup table. The published recipe is
+a tagger plus a transducer plus an inflected lexicon. The seam for it exists:
+the `gender` argument is the same shape a `case` argument would take.
 
 **Years.** `1892` is *eighteen ninety-two* as a year and *one thousand eight
-hundred and ninety-two* as a quantity, and **nothing in a bare number says
-which**. The funnel reads a bare number as a quantity. Inside a recognised date
-the year follows the language's year rule: `May 5, 1892` reads *May fifth
-eighteen ninety-two*.
+hundred and ninety-two* as a quantity, and **nothing in the string says which**.
+Deciding needs context the funnel does not have. A wrong guess is an
+unrecoverable error in the literature's sense, because it conveys a different
+number. The number is currently read as a quantity, which is at least never
+absurd.
 
-**Ordinals.** German `3.` is *dritte*, and its ending depends on the preceding
-preposition or article: `am 5. Mai` is *fünften*, `der 5. Mai` is *fünfte*.
-Inside a date the funnel selects the ending from the word in front
-(`oblique_triggers` in `numbers.json`: `am`, `vom`, `zum`, `seit`, `bis`,
-`den`, `ab`). Outside a date it does not: `zum 3. Mal` reads *zum drei. Mal*.
-Open WFST grammars for German emit all five endings as alternatives and leave
-the choice to a language model. The missing component is the same as for
-Polish case.
+**Ordinals.** German `3.` is *dritte*, and its ending is selected by the
+preceding preposition or article: `am 5. Mai` is *fünften*, `der 5. Mai` is
+*fünfte*. The best open WFST grammar for German emits all five endings as
+alternatives and defers the choice to a language model. Same problem as Polish
+case, same missing component.
 
-**Ambiguous dates and colloquial times.** The date rules are per language and
-implemented: English, German, Danish, Polish, Finnish, Norwegian and Swedish
-take ordinal days; Dutch, Spanish and Portuguese take cardinal ones (`5 de
-mayo` is *cinco de mayo*); French and Italian take a cardinal except for the
-first. What stays open is **ambiguous input**: `3/14` is a date in one
-convention, a fraction in another and a ratio in a third. Resolving it needs a
-locale the funnel is not told, so `3/14` reads *three fourteen*. Clock times
-read as hour and minute; the funnel does not produce colloquial forms such as
-Dutch `half drie` (2:30).
+**Dates and times.** The rules are known and per-language. English and German
+take ordinal days. Spanish, Portuguese, French and Italian take cardinal ones
+(`5 de mayo` is *cinco*, not *quinto*). Dutch `half drie` is 2:30, not 3:30.
+What blocks them is not the rules but **the ambiguity of the input**: `3/14` is
+a date in one convention, a fraction in another, and a ratio in a third.
+Resolving that needs a locale the funnel is not currently told.
 
-**Danish, Dutch and Portuguese verification.** These three grammars were
-written from reference descriptions and pass the fixture, but no native speaker
-has checked them, and the literature covers Danish and Dutch thinly. Danish
-numerals are vigesimal (*tres* for 60, *halvfjerds* for 70), and a widely used
-library writes *treds* for 60, which is wrong in every number that contains it.
-**Have a native speaker check these three before any public claim about
-them.** An hour each is enough.
+**Native-speaker verification.** The Danish, Dutch and Portuguese grammars were written
+from reference descriptions and are internally consistent, but they have not
+been verified by native speakers, and the literature covers Danish and Dutch
+particularly thinly. The Danish numerals are vigesimal (*tres* for 60,
+*halvfjerds* for 70), and at least one widely-used library ships *treds* for 60,
+which is wrong in every number containing it. Native-speaker review complements
+shared text fixtures in every language.
 
 **Portuguese variant.** European and Brazilian Portuguese diverge in ways
 spelling does not mark, and the number grammar here is European (*dezasseis*,
