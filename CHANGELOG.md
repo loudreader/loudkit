@@ -4,8 +4,6 @@ Notable changes, in the format [Keep a Changelog](https://keepachangelog.com)
 describes. [docs/reference/COMPATIBILITY.md](docs/reference/COMPATIBILITY.md)
 defines versioning and what counts as a breaking change.
 
-## [Unreleased]
-
 ## [0.1.2] - 2026-11-23
 
 The base algorithm fingerprint moves from `7cd75498ad4e7531` to
