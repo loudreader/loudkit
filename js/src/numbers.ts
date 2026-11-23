@@ -43,6 +43,8 @@ interface Grammar {
   unitTensJoiner: string;
   timeInfix: string;
   abbreviations: [string, string][];
+  titleAbbreviations: Record<string, string>;
+  titlePattern?: RegExp;
   tensJoinerExceptions: Record<number, string>;
   hundredJoiner: string;
   scaleJoinerOnRoundHundreds: boolean;
@@ -60,6 +62,8 @@ interface Grammar {
 
  
 function parseGrammar(e: any): Grammar {
+  const titleAbbreviations: Record<string, string> = e.title_abbreviations ?? {};
+  const titles = Object.keys(titleAbbreviations).map(escapeRegex).join("|");
   return {
     ones: e.ones ?? [],
     teens: e.teens ?? [],
@@ -84,6 +88,14 @@ function parseGrammar(e: any): Grammar {
     abbreviations: Object.entries((e.abbreviations ?? {}) as Record<string, string>).sort(
       (a, b) => b[0].length - a[0].length // longest first: fr.o.m. stays whole
     ),
+    titleAbbreviations,
+    // Capture the following capitalized name so the replacement can exclude
+    // sentence starters, including "Dr. Then" at the end of an address.
+    titlePattern: titles ? new RegExp(
+      "(?<![\\p{L}\\p{N}_.])(?:" + titles + ")" +
+      "(?=[ \\t\\u00a0\\u202f]+(?=\\p{Uppercase})([\\p{L}\\p{Nl}\\p{No}]+))",
+      "gu"
+    ) : undefined,
     tensJoinerExceptions: e.tens_joiner_exceptions ?? {},
     hundredJoiner: e.hundred_joiner ?? "",
     scaleJoinerOnRoundHundreds: e.scale_joiner_on_round_hundreds ?? false,
@@ -219,6 +231,68 @@ function scaleWord(count: number, forms: string[]): string {
   return forms[2];
 }
 
+// Consume even unmarked numbers once. Requiring the suffix makes a long
+// digit-only identifier retry the entire rest of the run at every digit.
+const PL_QUANTITY = /([0-9]+(?:[ \u00a0\u202f][0-9]{3})*)(?:,([0-9]+))?(?:[ \t\u00a0\u202f]*(zł|kg|m²))?/gu;
+const PL_SELECTION = /(?<![\p{L}\p{N}_])([Ww]ybierz|[Zz]aznacz|[Ww]skaż) +([1-9]) +z +(10|[2-9]) +(?:(ofert|opcji|pozycji|propozycji|wiadomości)|(produktów|plików|biletów|elementów))(?![\p{L}\p{N}_])/gu;
+const PL_MESSAGES = /(?<![\p{L}\p{N}_])([Mm]asz) +2( +(?:nowe +)?wiadomości)(?![\p{L}\p{N}_])/gu;
+
+const PL_QUANTITY_FORMS: Record<string, string[]> = {
+  "zł": ["złoty", "złote", "złotych"],
+  "kg": ["kilogram", "kilogramy", "kilogramów"],
+  "m²": ["metr kwadratowy", "metry kwadratowe", "metrów kwadratowych"],
+};
+const PL_GROSZ_FORMS = ["grosz", "grosze", "groszy"];
+const PL_SELECTION_TOTAL = [
+  "dwóch", "trzech", "czterech", "pięciu", "sześciu", "siedmiu",
+  "ośmiu", "dziewięciu", "dziesięciu",
+];
+
+/** Prepare these while the unit and the written decimal precision are intact.
+ * The ordinary number pass below then speaks the digits in every replacement.
+ */
+export function expandPolishQuantities(text: string): string {
+  const phrases = text.replace(PL_SELECTION, (
+    _match: string, verb: string, count: string, total: string,
+    feminine: string | undefined, masculine: string | undefined,
+  ) => {
+    let selected = count;
+    if (feminine && count === "1") selected = "jedną";
+    if (feminine && count === "2") selected = "dwie";
+    return [verb, selected, "z", PL_SELECTION_TOTAL[Number(total) - 2], feminine ?? masculine].join(" ");
+  }).replace(PL_MESSAGES, "$1 dwie$2");
+  return phrases.replace(PL_QUANTITY, (
+    original: string,
+    integer: string,
+    fraction: string | undefined,
+    unit: string | undefined,
+    offset: number,
+    source: string,
+  ) => {
+    if (!unit) return original;
+    // Test the edges of the complete match; retrying inside a refused digit
+    // run would turn a piece of an identifier or version into a price.
+    const before = source.slice(Math.max(0, offset - 3), offset);
+    const after = source.slice(offset + original.length, offset + original.length + 2);
+    if (/(?:[\p{L}\p{N}_]|[0-9][.,])$/u.test(before) || /^[\p{L}\p{N}_]/u.test(after))
+      return original;
+    const groups = integer.split(/[ \u00a0\u202f]/u);
+    const digits = groups.join("");
+    if ((groups.length > 1 && groups[0].length > 3) || digits.length > 9 || /^0\d/u.test(digits))
+      return original;
+    if (fraction && fraction.length > (unit === "zł" ? 2 : 6)) return original;
+
+    const count = Number(digits);
+    const whole = digits + " " + scaleWord(count, PL_QUANTITY_FORMS[unit]);
+    if (!fraction || Number(fraction) === 0) return whole;
+    if (unit !== "zł")
+      return digits + "," + fraction + (unit === "kg" ? " kilograma" : " metra kwadratowego");
+    const cents = Number(fraction.padEnd(2, "0"));
+    const grosze = String(cents) + " " + scaleWord(cents, PL_GROSZ_FORMS);
+    return count === 0 ? grosze : whole + " i " + grosze;
+  });
+}
+
 function hundredsGroup(value: number, g: Grammar, gender: string): string {
   const count = Math.floor(value / 100);
   const rest = value % 100;
@@ -288,7 +362,7 @@ function belowHundred(
  * The funnel's code version, bumped when the passes change what they emit for
  * text they already handled. A new language or table moves the digest instead.
  */
-export const TEXT_RECIPE = "funnel-6";
+export const TEXT_RECIPE = "funnel-10";
 
 /**
  * First 16 hex characters of the SHA-256 of the grammar file followed by the
@@ -881,6 +955,7 @@ export function expandTimes(text: string, language: string): string {
     if (g.timeInfix) words.push(g.timeInfix);
     // A zero minute is dropped from `14:00` and kept in `14:00:45`, where
     // dropping it would move the seconds into the minutes' place.
+    if (language === "en" && minute > 0 && minute < 10) words.push("oh");
     if (minute !== 0 || seconds !== 0) words.push(cardinal(minute, language));
     if (seconds !== 0) words.push(cardinal(seconds, language));
     const spoken = words.join(" ");
@@ -918,6 +993,15 @@ function asciiLetterAt(text: string, at: number): boolean {
   return (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a);
 }
 
+const SENTENCE_STARTERS = new Set(["I", "He", "She", "We", "They", "It", "The", "This", "That", "Then", "Later", "Afterwards", "Afterward"]);
+const STREET_DIRECTIONS = new Set([
+  "North", "South", "East", "West", "Northeast", "Northwest", "Southeast", "Southwest",
+  "NE", "NW", "SE", "SW",
+]);
+const STREET_ADDRESS = /(?<![A-Za-z0-9])[0-9]{1,7}(?:[ \t]{1,4}[A-Z][A-Za-z'-]{0,24}){1,4}[ \t]{1,4}$/u;
+// Keep the stop across closing and opening quotes, as in: etc.” “Next ...
+const AFTER_ETC = /^[”’"')\]]*(?:\p{White_Space}*$|\p{White_Space}+[“‘"'([]?\p{Uppercase})/u;
+
 /**
  * The authority-listed abbreviations, written out, see the Python module.
  *
@@ -934,14 +1018,29 @@ function asciiLetterAt(text: string, at: number): boolean {
  */
 export function expandAbbreviations(text: string, language: string): string {
   const g = GRAMMARS[language];
-  if (g === undefined || g.abbreviations.length === 0) return text;
+  if (g === undefined) return text;
   let out = text;
+  if (g.titlePattern) {
+    out = out.replace(g.titlePattern, (matched, name: string, offset: number) => {
+      if (SENTENCE_STARTERS.has(name)) return matched;
+      if (matched === "Dr.") {
+        // The address pattern spans at most 127 ASCII characters before Dr.
+        const before = out.slice(Math.max(0, offset - 160), offset);
+        if (STREET_DIRECTIONS.has(name) || STREET_ADDRESS.test(before)) return matched;
+      }
+      return g.titleAbbreviations[matched];
+    });
+  }
   for (const [written, spoken] of g.abbreviations) {
     const re = new RegExp(
       `(?<![\\p{L}\\p{N}_.])${escapeRegex(written)}(?![\\p{L}\\p{N}_.])`,
       "gu"
     );
-    out = out.replace(re, () => spoken);
+    out = out.replace(re, (matched, offset: number, source: string) =>
+      language === "en" && written === "etc." && AFTER_ETC.test(source.slice(offset + matched.length))
+        ? spoken + "."
+        : spoken
+    );
   }
   return out;
 }

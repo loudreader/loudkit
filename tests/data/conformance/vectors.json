@@ -505,6 +505,7 @@
      179,
      79,
      3,
+     2,
      33,
      109,
      32,
@@ -521,6 +522,57 @@
      248,
      77,
      61,
+     9
+    ]
+   },
+   {
+    "text": "The train  \r\n  rolled\t past the oldbridge.",
+    "language": "en",
+    "ids": [
+     708,
+     42,
+     2,
+     144,
+     137,
+     2,
+     89,
+     84,
+     49,
+     2,
+     29,
+     233,
+     2,
+     42,
+     2,
+     28,
+     79,
+     2,
+     243,
+     83,
+     112,
+     9
+    ]
+   },
+   {
+    "text": "Un train\n\t longe le fleuve.",
+    "language": "fr",
+    "ids": [
+     634,
+     97,
+     2,
+     144,
+     137,
+     2,
+     25,
+     47,
+     112,
+     2,
+     64,
+     2,
+     19,
+     64,
+     34,
+     76,
      9
     ]
    },
@@ -660,8 +712,8 @@
   }
  },
  "algorithm": {
-  "fingerprint": "7cd75498ad4e7531",
-  "canonical_form": "{\"algorithm\":{\"chunking\":{\"abbreviations\":[\"A\",\"B\",\"Cpn\",\"D\",\"Dr\",\"F\",\"H\",\"Hr\",\"I\",\"J\",\"K\",\"M\",\"Mr\",\"Mrs\",\"R\",\"S\",\"St\",\"T\",\"V\",\"Vors\",\"dr\",\"mrs\",\"prof\",\"\\u015bw\"],\"cap_resplit\":\"word\",\"enabled\":true,\"max_tokens\":255,\"mid_sentence_period\":\"hold\",\"prefix_tokens\":6,\"split_on\":[\". \",\"! \",\"? \",\"; \",\", \"]},\"edge_fade_seconds\":\"0.02\",\"euler_grid\":null,\"euler_steps\":2,\"guidance\":\"single_path\",\"guidance_rate\":\"0.0\",\"postprocess\":{\"ceiling_slack_tokens\":40,\"ceiling_speech_per_text_token\":\"4.0\",\"desperation_band_floor\":12,\"desperation_band_ratio\":\"2.6\",\"desperation_min_keep_per_text_token\":\"1.7\",\"desperation_min_text_tokens\":10,\"desperation_speech_per_text_token\":\"4.5\",\"dropout_min_tokens\":25,\"echo_strong_eos_probability\":\"0.1\",\"echo_strong_max_tail\":30,\"echo_strong_min_position_pct\":68,\"echo_weak_eos_probability\":\"0.003\",\"echo_weak_max_tail\":16,\"echo_weak_min_position_pct\":85,\"ended_tail_blip_max\":2,\"ended_tail_keep\":5,\"ended_tail_silence_run\":6,\"ended_tail_word_max\":10,\"filler_max_speech_after_run\":10,\"filler_min_eos_probability\":\"0.05\",\"mode\":\"trim\",\"pacing_tolerance\":\"1.6\",\"quiet_render_ids\":[1458,1461,1488,1701,1704,1707,1716,1731,1785,1788,1869,1947,1950,1951,1959,1978,2028,2031,2040,2058,2076,2112,2139,3645,3648,3651,3704,3888,3894,4188,5838,6081,6183,6537],\"repetition_max_period\":12,\"repetition_min_cycles\":3,\"repetition_min_span\":24,\"repetition_resume\":\"condemn\",\"repetition_silence\":\"acoustic\",\"retry_max_attempts\":2,\"silence_render_ids\":[4137,4215,4218,4299,6162,6324,6405,6486],\"stall_run_tokens\":25,\"trailing_filler_threshold\":\"0.7\",\"trailing_silence_run_tokens\":12},\"recipe_version\":\"loudkit-1\",\"sample_rate\":24000,\"sampling\":{\"max_new_tokens\":255,\"min_p\":\"0.05\",\"min_tokens_floor\":10,\"min_tokens_text_ratio\":\"1.2\",\"repetition_penalty\":\"1.2\",\"silence_token_ids\":[1731,1821,1822,1824,1975,2058,2068,3190,3377,3918,3927,3928,3930,4008,4009,4011,4012,4137,4146,4161,4171,4173,4174,4218,4245,4251,4252,4254,4255,4260,4282],\"temperature\":\"0.8\"},\"speech_vocab_size\":8194,\"start_speech_token\":6561,\"stop_speech_token\":6562,\"text\":{\"grammar\":\"71ad748c2caf97dd\",\"recipe\":\"funnel-6\"},\"token_rate_hz\":\"25.0\",\"window\":{\"max_speech_tokens\":255,\"pad_token_id\":4254,\"static_length\":255,\"static_prompt_tokens\":238}},\"schema\":1}",
+  "fingerprint": "4a2918bb653ce531",
+  "canonical_form": "{\"algorithm\":{\"chunking\":{\"abbreviations\":[\"A\",\"B\",\"Cpn\",\"D\",\"Dr\",\"F\",\"H\",\"Hr\",\"I\",\"J\",\"K\",\"M\",\"Mr\",\"Mrs\",\"R\",\"S\",\"St\",\"T\",\"V\",\"Vors\",\"dr\",\"mrs\",\"prof\",\"\\u015bw\"],\"cap_resplit\":\"word\",\"enabled\":true,\"max_tokens\":255,\"mid_sentence_period\":\"hold\",\"prefix_tokens\":6,\"split_on\":[\". \",\"! \",\"? \",\"; \",\", \"]},\"edge_fade_seconds\":\"0.02\",\"euler_grid\":null,\"euler_steps\":2,\"guidance\":\"single_path\",\"guidance_rate\":\"0.0\",\"postprocess\":{\"ceiling_slack_tokens\":40,\"ceiling_speech_per_text_token\":\"4.0\",\"desperation_band_floor\":12,\"desperation_band_ratio\":\"2.6\",\"desperation_min_keep_per_text_token\":\"1.7\",\"desperation_min_text_tokens\":10,\"desperation_speech_per_text_token\":\"4.5\",\"dropout_min_tokens\":25,\"echo_strong_eos_probability\":\"0.1\",\"echo_strong_max_tail\":30,\"echo_strong_min_position_pct\":68,\"echo_weak_eos_probability\":\"0.003\",\"echo_weak_max_tail\":16,\"echo_weak_min_position_pct\":85,\"ended_tail_blip_max\":2,\"ended_tail_keep\":5,\"ended_tail_silence_run\":6,\"ended_tail_word_max\":10,\"filler_max_speech_after_run\":10,\"filler_min_eos_probability\":\"0.05\",\"mode\":\"trim\",\"pacing_tolerance\":\"1.6\",\"quiet_render_ids\":[1458,1461,1488,1701,1704,1707,1716,1731,1785,1788,1869,1947,1950,1951,1959,1978,2028,2031,2040,2058,2076,2112,2139,3645,3648,3651,3704,3888,3894,4188,5838,6081,6183,6537],\"repetition_max_period\":12,\"repetition_min_cycles\":3,\"repetition_min_span\":24,\"repetition_resume\":\"condemn\",\"repetition_silence\":\"acoustic\",\"retry_max_attempts\":2,\"silence_render_ids\":[4137,4215,4218,4299,6162,6324,6405,6486],\"stall_run_tokens\":25,\"trailing_filler_threshold\":\"0.7\",\"trailing_silence_run_tokens\":12},\"recipe_version\":\"loudkit-1\",\"sample_rate\":24000,\"sampling\":{\"max_new_tokens\":255,\"min_p\":\"0.05\",\"min_tokens_floor\":10,\"min_tokens_text_ratio\":\"1.2\",\"repetition_penalty\":\"1.2\",\"silence_token_ids\":[1731,1821,1822,1824,1975,2058,2068,3190,3377,3918,3927,3928,3930,4008,4009,4011,4012,4137,4146,4161,4171,4173,4174,4218,4245,4251,4252,4254,4255,4260,4282],\"temperature\":\"0.8\"},\"speech_vocab_size\":8194,\"start_speech_token\":6561,\"stop_speech_token\":6562,\"text\":{\"grammar\":\"51b9a5c04ddb180b\",\"recipe\":\"funnel-10\"},\"token_rate_hz\":\"25.0\",\"window\":{\"max_speech_tokens\":255,\"pad_token_id\":4254,\"static_length\":255,\"static_prompt_tokens\":238}},\"schema\":1}",
   "euler_grid": [
    0.0,
    0.2928932188134524,

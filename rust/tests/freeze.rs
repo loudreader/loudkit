@@ -15,11 +15,11 @@ use loudkit::checkpoint::Checkpoint;
 use loudkit::engine::EngineConfig;
 use loudkit::fingerprint::{canonical_form, fingerprint};
 
-/// `7cd75498ad4e7531` is the algorithm this build implements, recorded in
+/// `4a2918bb653ce531` is the algorithm this build implements, recorded in
 /// CHANGELOG.md and in the conformance vectors. A published voice records the
 /// fingerprint it was rendered under, which is a fact about that artefact and
 /// does not move with this one.
-const SHIPPED_FINGERPRINT: &str = "7cd75498ad4e7531";
+const SHIPPED_FINGERPRINT: &str = "4a2918bb653ce531";
 
 /// The manifest 0.1.1 ships, as `tools/amend_manifest.py` writes it over the
 /// values the packed checkpoint already carried.

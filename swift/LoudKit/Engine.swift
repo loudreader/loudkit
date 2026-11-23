@@ -200,17 +200,16 @@ public final class Engine {
         let algorithm = try checkpoint.algorithm()
         let assets = coremlAssets ?? checkpoint.coremlAssetsURL
         try checkpoint.verifyCoreMLExport(at: assets, algorithm: algorithm)
-        func package(_ stem: String) throws -> URL { try stageURL(in: assets, stem) }
         func units(_ u: ExecutionConfig.ComputeUnits) -> MLComputeUnitsWrapper { .init(u) }
 
         let frontend = try TextFrontend(tokenizerURL: checkpoint.tokenizerURL)
         let generator = try TokenGenerator(checkpoint: checkpoint, config: algorithm)
         let encoder = try MLHelpers.loadModel(
-            packageURL: package("flow_encoder"), computeUnits: units(execution.encoderComputeUnits).value)
+            "flow_encoder", in: assets, computeUnits: units(execution.encoderComputeUnits).value)
         let estimator = try MLHelpers.loadModel(
-            packageURL: package("flow_estimator"), computeUnits: units(execution.estimatorComputeUnits).value)
+            "flow_estimator", in: assets, computeUnits: units(execution.estimatorComputeUnits).value)
         let hift = try MLHelpers.loadModel(
-            packageURL: package("vocoder"), computeUnits: units(execution.vocoderComputeUnits).value)
+            "vocoder", in: assets, computeUnits: units(execution.vocoderComputeUnits).value)
         let melDecoder = try MelDecoder(
             config: algorithm, encoder: encoder, estimator: estimator,
             spkWeight: try checkpoint.store.floats("s3gen.flow.spk_embed_affine_layer.weight"),
@@ -234,14 +233,13 @@ public final class Engine {
             throw LoudKitError.asset("engine was not built by Engine.load: no checkpoint to rebuild from")
         }
         func units(_ u: ExecutionConfig.ComputeUnits) -> MLComputeUnitsWrapper { .init(u) }
-        func package(_ stem: String) throws -> URL { try Self.stageURL(in: assetsURL, stem) }
         let checkpoint = try Checkpoint(url: checkpointURL)
         let encoder = try MLHelpers.loadModel(
-            packageURL: package("flow_encoder"), computeUnits: units(execution.encoderComputeUnits).value)
+            "flow_encoder", in: assetsURL, computeUnits: units(execution.encoderComputeUnits).value)
         let estimator = try MLHelpers.loadModel(
-            packageURL: package("flow_estimator"), computeUnits: units(execution.estimatorComputeUnits).value)
+            "flow_estimator", in: assetsURL, computeUnits: units(execution.estimatorComputeUnits).value)
         let hift = try MLHelpers.loadModel(
-            packageURL: package("vocoder"), computeUnits: units(execution.vocoderComputeUnits).value)
+            "vocoder", in: assetsURL, computeUnits: units(execution.vocoderComputeUnits).value)
         let melDecoder = try MelDecoder(
             config: algorithm, encoder: encoder, estimator: estimator,
             spkWeight: try checkpoint.store.floats("s3gen.flow.spk_embed_affine_layer.weight"),
@@ -284,25 +282,9 @@ public final class Engine {
     public func enroll(contentsOf url: URL, name: String = "", language: String = "en")
         async throws -> VoiceProfile {
         let bundle = try release("the enrollment packages")
+        let recording = try AudioFile.read(url)
         try await bundle.fetchCloning()
-        return try bundle.enroller().enroll(contentsOf: url, name: name, language: language)
-    }
-
-    /// A stage may be present as the exported .mlpackage or as the
-    /// precompiled .mlmodelc only (an app bundle ships the compiled form and
-    /// skips the on-device CoreML compile). The package wins when both exist,
-    /// and `MLHelpers.loadModel` then compiles it into a temporary directory on
-    /// every load: the compiled sibling is used only when it is the one form
-    /// present, so a package and a compiled copy of the same stem cannot drift
-    /// apart unnoticed.
-    private static func stageURL(in assets: URL, _ stem: String) throws -> URL {
-        for ext in ["mlpackage", "mlmodelc"] {
-            let url = assets.appendingPathComponent("\(stem).\(ext)")
-            if FileManager.default.fileExists(atPath: url.path) { return url }
-        }
-        throw LoudKitError.asset(
-            "\(stem).mlpackage/.mlmodelc not found in \(assets.path): "
-            + "export with tools/export_coreml.py")
+        return try bundle.enroller().enroll(recording, from: url, name: name, language: language)
     }
 
     /// One line for a log: what this engine computes, then where it runs.
@@ -597,6 +579,8 @@ public final class Engine {
         public let mel: [Float]
         /// Frames in `mel`, since `mel` is flat.
         public let melFrames: Int
+        /// Time spent generating, decoding and vocoding this window.
+        public let timings: StageTimings
         /// What the artifact detectors concluded about this chunk. Per chunk
         /// rather than aggregated because chunks fail independently: one
         /// hallucinated tail among six clean ones is the case worth seeing.
@@ -656,7 +640,7 @@ public final class Engine {
         // respelling changes the length ("download" -> "dałnloud"), so a budget
         // computed first would be a budget for text the engine never speaks.
         let prepared = SpeechText.prepared(text, languageId: language)
-        let chunks = Chunking.splitText(prepared, config: algorithm.chunking)
+        let chunks = Chunking.splitText(prepared, config: algorithm.chunking, language: language)
         if chunks.isEmpty { throw LoudKitError.shape("nothing to speak") }
 
         let prefixLength = algorithm.chunking.prefixTokens
@@ -695,6 +679,7 @@ public final class Engine {
         }
 
         var qi = 0
+        var tokenStart = Date()
         while qi < queue.count {
             let part = queue[qi]
             let index = part.index
@@ -735,10 +720,12 @@ public final class Engine {
             // Discarded, not rendered: see `synthesizeWindow`.
             if shouldCancel?() == true { throw LoudKitError.cancelled }
 
+            let melStart = Date()
             let speech = generated.tokens
             let (mel, frames) = try melDecoder.decode(
                 tokens: speech, voice: voice, seed: Self.derive(chunkSeed, Self.streamFlow))
             if shouldCancel?() == true { throw LoudKitError.cancelled }
+            let audioStart = Date()
             let rendered = try vocoder.synthesize(
                 mel: mel, frames: frames, seed: Self.derive(chunkSeed, Self.streamVocoder))
             // Applied per chunk and last, see `synthesize`. Per chunk rather
@@ -756,13 +743,16 @@ public final class Engine {
             let keepGoing = try onChunk(
                 Chunk(
                     index: index, text: chunk, audio: audio, tokens: speech, mel: mel,
-                    melFrames: frames, inspection: generated.inspection,
+                    melFrames: frames, timings: StageTimings(tokens: melStart.timeIntervalSince(tokenStart),
+                        mel: audioStart.timeIntervalSince(melStart), audio: Date().timeIntervalSince(audioStart)),
+                    inspection: generated.inspection,
                     hitTokenCap: generated.hitCap,
                     // Timed on the stretched audio, so a caller who plays the
                     // chunk gets spans that match what they hear.
                     timing: Timing.timeline(
                         [ChunkSpan(text: chunk, samples: audio.count, tokens: speech.count)],
                         sampleRate: algorithm.sampleRate)[0]))
+            tokenStart = Date()
             if !keepGoing { break }
             qi += 1
         }
@@ -787,12 +777,15 @@ public final class Engine {
         var frames = 0
         var inspections: [Postprocess.Inspection] = []
         var spans: [ChunkSpan] = []
-        let t0 = Date()
+        var tokenTime = 0.0, melTime = 0.0, audioTime = 0.0
 
         try chunks(
             text, voice: voice, seed: seed, language: language, speed: speed,
             previousTokens: previousTokens, shouldCancel: shouldCancel)
         { chunk in
+            tokenTime += chunk.timings.tokens
+            melTime += chunk.timings.mel
+            audioTime += chunk.timings.audio
             audio.append(contentsOf: chunk.audio)
             tokens.append(contentsOf: chunk.tokens)
             inspections.append(chunk.inspection)
@@ -810,12 +803,11 @@ public final class Engine {
             return true
         }
 
-        let elapsed = Date().timeIntervalSince(t0)
         let mel = Self.joinMelsAlongTime(melParts, frames: frames)
         return Result(
             audio: audio, tokens: tokens, mel: mel, melFrames: frames, seed: seed,
             sampleRate: algorithm.sampleRate,
-            timings: StageTimings(tokens: elapsed, mel: 0, audio: 0),
+            timings: StageTimings(tokens: tokenTime, mel: melTime, audio: audioTime),
             algorithmFingerprint: algorithm.fingerprint(),
             hitTokenCap: hitCapAnywhere,
             inspections: inspections,

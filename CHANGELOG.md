@@ -4,6 +4,43 @@ Notable changes, in the format [Keep a Changelog](https://keepachangelog.com)
 describes. [docs/reference/COMPATIBILITY.md](docs/reference/COMPATIBILITY.md)
 defines versioning and what counts as a breaking change.
 
+## [Unreleased]
+
+The base algorithm fingerprint moves from `7cd75498ad4e7531` to
+`4a2918bb653ce531`. The turbo fingerprint moves from `e5303ba243087222` to
+`ccaeab4e92d9edc1`. The preceding `funnel-7` development build used
+`b99ab84725b40e91` and `e800f3bbb7eb6b4e` respectively. The SDK now
+applies the `funnel-10` narration and chunk-planning rules.
+
+The default chunk planner keeps a nearby sentence ending with its sentence,
+recognizes punctuation before a closing quote, and balances a short remainder
+when a sentence needs two windows. The English frontend can read titles
+before a name and the shared number pass keeps thousands together when the
+input uses a grouping space. [Text preparation](docs/design/preprocess.md)
+
+The text frontend reads Polish prices in złoty and grosz, inflects kilograms
+and square metres, and handles the numerals in phrases such as “Wybierz 2 z
+3 ofert”. The 0.1.1 model weights, ONNX and CoreML graphs, and voice profiles
+work with the new frontend. Reproducing a previous reading requires the SDK
+build that produced it.
+
+- Python `write_wav` and `Result.save` require a `.wav` destination. Use an
+  explicit audio encoder when exporting another format.
+- Sentence extension now respects repeated in-budget pauses. HTML boolean
+  attributes, escaped comparisons and count phrases such as `$5 100 times`
+  have dedicated narration regressions.
+- Leading decimals such as `.75%` and `-.25` retain their value in all SDKs.
+  HTML apostrophes and compact comparisons retain their spoken meaning.
+- Downloads fetch files by resolved commit. A failed Python backend preflight
+  preserves the installed release. Go accepts local directories named after
+  the model aliases.
+- Turbo continuation matches across unary and streamed synthesis. Server WAVs
+  embed provenance inside RIFF. Python rejects invalid enrollment clips before
+  resolving weights, and the HTTP voice list filters unreadable profiles.
+- Long-form Go and Rust synthesis joins spectrograms in linear time. Node
+  skips vocoding after cancellation during mel decoding. Swift reports each
+  stage duration and Python accounts for overlapping work in playback speed.
+
 
 ## [0.1.1] - 2026-09-10
 

@@ -444,7 +444,7 @@ func TestResplitPlan(t *testing.T) {
 		}
 		prepared := c["prepared"].(string)
 		windows := c["windows"].([]interface{})
-		texts := chunking.SplitText(prepared, cfg)
+		texts := chunking.SplitTextForLanguage(prepared, cfg, c["language"].(string))
 
 		tail := func(w map[string]interface{}) []int {
 			all := toInts(w["tokens"])

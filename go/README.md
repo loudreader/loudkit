@@ -23,6 +23,9 @@ If the library is somewhere else, for example in the unpacked archive, set
 `LOUDKIT_ONNXRUNTIME_LIB` to the library file. Distribution packages such as
 `libonnxruntime-dev` can be older than 1.28.
 
+Use a current, security-patched Go toolchain for production builds. The Hub
+client uses the HTTP and TLS implementations linked from your Go standard library.
+
 ```bash
 mkdir hello && cd hello
 go mod init hello

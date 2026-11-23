@@ -8,10 +8,13 @@
  * Python reference: `loudkit/frontend/textconfig.py`.
  */
 
-import grammarData from "../data/numbers.json" with { type: "json" };
+import { readFileSync } from "node:fs";
 
 /** Language rules, cardinals, months, ordinals, letter names, unit words. */
 export const GRAMMAR_URL = new URL("../data/numbers.json", import.meta.url);
+const grammarData = JSON.parse(readFileSync(GRAMMAR_URL, "utf8")) as {
+  languages?: Record<string, any>;
+};
 
 /**
  * The Polish English-respelling lexicon: 110k entries, 6.5 MB.
@@ -38,5 +41,5 @@ export const NUMERALS_URL = new URL("../data/numerals.json", import.meta.url);
  * them would be longer than the four readers put together.
  */
 export function grammarLanguages(): Record<string, any> {
-  return (grammarData as { languages: Record<string, any> }).languages ?? {};
+  return grammarData.languages ?? {};
 }

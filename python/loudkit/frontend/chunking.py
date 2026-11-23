@@ -5,6 +5,8 @@ See ``docs/design/text-funnel.md``.
 
 from __future__ import annotations
 
+import re
+
 from ..config import ChunkConfig
 
 __all__ = ["split_text", "split_in_half", "estimate_tokens", "CHARS_PER_TOKEN"]
@@ -53,22 +55,155 @@ def _holds(look: str, at: int, sep: str, config: ChunkConfig) -> bool:
 
     # Or the token in front of the period is a listed abbreviation. Entries
     # carry no period of their own, the period belongs to the separator.
-    boundary = look[:at]
+    return _listed_abbreviation(look, 0, at, config)
+
+
+def _listed_abbreviation(text: str, start: int, dot: int, config: ChunkConfig) -> bool:
     for abbreviation in config.abbreviations:
-        if not boundary.endswith(abbreviation):
-            continue
-        before = len(boundary) - len(abbreviation)
-        if before > 0 and _is_ascii_word(boundary[before - 1]):
-            continue  # the tail of a longer word, not a word of its own
-        return True
+        if text.endswith(abbreviation, start, dot):
+            before = dot - len(abbreviation)
+            if before == start or not _is_ascii_word(text[before - 1]):
+                return True
     return False
 
 
-def split_text(text: str, config: ChunkConfig) -> list[str]:
+# Only the standard separator policy interprets punctuation in its prose context.
+# An explicitly ordered custom list keeps its literal matching semantics.
+_PROSE_SEPARATORS = (". ", "! ", "? ", "; ", ", ")
+_PUNCTUATION = re.compile(r"""[.!?;:,–\u2014]["'”’»›“‘«‹)\]}]*""")
+_MAX_SENTENCE_OVERRUN = 24
+_CLAUSE_END = re.compile(r"(?:although|because|unless|whereas|while)\Z")
+_WHILE_SUBJECT = re.compile(r"(?:the|they|we|she|he|it|you)(?=[ \t\n\r\u00a0\u2007\u202f]|$)")
+
+
+def _next_word(text: str, end: int) -> int:
+    while end < len(text) and text[end].isspace():
+        end += 1
+    return end
+
+
+def _held_period(text: str, start: int, dot: int, following: int, config: ChunkConfig) -> bool:
+    if config.mid_sentence_period != "hold" or following == len(text):
+        return False
+    if "a" <= text[following] <= "z":
+        return True
+    if (
+        dot > start
+        and (dot == start + 1 or not _is_ascii_word(text[dot - 2]))
+        and "A" <= text[dot - 1] <= "Z"
+        and text[dot - 1] != "I"
+        and "A" <= text[following] <= "Z"
+    ):
+        return True
+    return _listed_abbreviation(text, start, dot, config)
+
+
+def _prose_cut(
+    text: str, start: int, budget: int, overrun: int, config: ChunkConfig, language: str
+) -> int:
+    """Return the next absolute cut. The token window is the final authority on fit."""
+    limit = start + budget
+    sentence = extension = clause = comma = 0
+    pauses = 0
+    for mark in _PUNCTUATION.finditer(text, start, min(len(text), limit + overrun)):
+        end = mark.end()
+        if end < len(text) and not text[end].isspace():
+            continue
+        i = mark.start()
+        char = text[i]
+        if char in ".!?":
+            if char == "." and _held_period(text, start, i, _next_word(text, end), config):
+                continue
+            if end <= limit:
+                sentence = end
+            elif not extension:
+                extension = end
+        elif end <= limit and (budget < 64 or (end - start) * 4 >= budget):
+            if budget >= 64 and len(text) - end <= 24 and len(text[end:].split()) == 1:
+                continue
+            if char == ",":
+                comma = end
+                pauses += 1
+            elif char in ";:" or (
+                i > start
+                and text[i - 1].isspace()
+                and i + 1 < len(text)
+                and text[i + 1].isspace()
+            ):
+                clause = end
+                pauses += 1
+    return (
+        sentence
+        or (extension if pauses < 2 else 0)
+        or clause
+        or comma
+        or _word_cut(text, start, budget, config, language)
+    )
+
+
+def _word_cut(text: str, start: int, budget: int, config: ChunkConfig, language: str) -> int:
+    # A right-edge cut on a nearly full final window can leave just one word
+    # to be rendered as an entire utterance. Balance this pair inside the budget.
+    remaining = len(text) - start
+    balance = budget >= 64 and (remaining - budget) * 4 < budget
+    limit = start + budget
+    best = latest = 0
+    for i in range(start + 1, limit + 1):
+        if text[i] not in WORD_BOUNDARIES or text[i - 1] in WORD_BOUNDARIES:
+            continue
+        latest = i
+        if text[i - 1] == "." and _held_period(text, start, i - 1, _next_word(text, i), config):
+            continue
+        distance = abs(2 * (i - start) - remaining)
+        if not balance or not best or distance < abs(2 * (best - start) - remaining):
+            best = i
+    cut = best or latest or limit
+    if language == "en" and budget >= 64 and best:
+        return _english_clause_cut(text, start, cut, budget)
+    return cut
+
+
+def _english_clause_cut(text: str, start: int, cut: int, budget: int) -> int:
+    # "through the valley while | the children followed" loses the clause
+    # before its subject. Move only this last word, keeping both windows viable.
+    final_word = _CLAUSE_END.search(text, max(start, cut - len("although")), cut)
+    if (
+        final_word
+        and final_word.start() > start
+        and text[final_word.start() - 1] in WORD_BOUNDARIES
+    ):
+        before = final_word.start()
+        subject = _next_word(text, cut)
+        if (
+            (before - start - 1) * 4 >= budget
+            and (len(text) - subject > budget or len(text) - before <= budget)
+            and (final_word[0] != "while" or _WHILE_SUBJECT.match(text, subject))
+        ):
+            return before
+
+    return cut
+
+
+def _literal_cut(text: str, start: int, budget: int, config: ChunkConfig) -> int:
+    """Honor custom separator order and take the latest literal match at each priority."""
+    head = text[start : start + budget + 1]
+    look = text[start : start + budget + 2]  # The period guard reads one character further.
+    for sep in config.split_on:
+        found = head.rfind(sep)
+        while found > 0 and _holds(look, found, sep, config):
+            found = head.rfind(sep, 0, found)
+        if found > 0:
+            return start + found + len(sep)
+    gap = max(head.rfind(b) for b in WORD_BOUNDARIES)
+    return start + (gap if gap > 0 else max(1, budget))
+
+
+def split_text(text: str, config: ChunkConfig, language: str = "en") -> list[str]:
     """Split ``text`` into pieces that each fit one window.
 
     See ``docs/design/text-funnel.md``.
     """
+    language = language.lower()
     text = text.strip()
     if not text:
         return []
@@ -88,12 +223,7 @@ def split_text(text: str, config: ChunkConfig) -> list[str]:
         else budget
     )
     chunks: list[str] = []
-    # An index into `text`, not a shrinking copy of it. Cutting the remainder
-    # away each round copied the whole tail once per chunk, so the work grew
-    # with the square of the text: 0.2 s for 1 MB, 12 s for 8 MB, all of it
-    # before the first token is generated. The two slices below are one window
-    # each, so the walk is linear and 8 MB now costs 0.6 s. The chunks are the
-    # same chunks; `tests/test_chunking.py` holds them against the fixture.
+    # Keep indices into the original text so splitting a chapter requires one forward pass.
     at = 0
     end = len(text)
 
@@ -103,40 +233,19 @@ def split_text(text: str, config: ChunkConfig) -> list[str]:
             chunks.append(text[at:].strip())
             break
 
-        head = text[at : at + this_budget + 1]
-        # One character past the window, and used only by `_holds`: the latest
-        # candidate can end the window exactly, and the test reads the
-        # character after it. The search itself stays inside the budget.
-        look = text[at : at + this_budget + 2]
-        cut = -1
-        # Strongest separator first, and within a separator the LATEST break, so
-        # chunks run as long as they may rather than as short as they can.
-        for sep in config.split_on:
-            found = head.rfind(sep)
-            # A period inside a sentence is not a boundary, so the search keeps
-            # walking back through this separator's own occurrences before it
-            # gives up and tries a weaker one. Searching `head[:found]` skips an
-            # occurrence overlapping the held one, which no separator here can
-            # have.
-            while found > 0 and _holds(look, found, sep, config):
-                found = head.rfind(sep, 0, found)
-            if found > 0:
-                cut = found + len(sep)
-                break
-        if cut <= 0:
-            # No punctuation in a whole window's worth of text.
-            cut = max(head.rfind(b) for b in WORD_BOUNDARIES)
-        if cut <= 0:
-            cut = this_budget  # one unbroken run longer than the budget: mid-word
-        # Never zero: a cut of 0 leaves `rest` unchanged and the loop spins
-        # forever. ChunkConfig refuses a max_tokens that small, so this is the
-        # second line of defence, for a config built some other way.
-        cut = max(cut, 1)
-
-        chunks.append(text[at : at + cut].strip())
-        at += cut
-        while at < end and text[at].isspace():
-            at += 1
+        if config.split_on == _PROSE_SEPARATORS:
+            overrun = (
+                _MAX_SENTENCE_OVERRUN
+                if config.max_tokens == 255
+                and (chunks or first_budget_tokens in (None, config.max_tokens))
+                and config.cap_resplit == "word"
+                else 0
+            )
+            cut = _prose_cut(text, at, this_budget, overrun, config, language)
+        else:
+            cut = _literal_cut(text, at, this_budget, config)
+        chunks.append(text[at:cut].strip())
+        at = _next_word(text, cut)
 
     return [c for c in chunks if c]
 

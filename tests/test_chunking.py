@@ -77,6 +77,80 @@ class TestSplitText:
         assert all(c for c in chunks)
 
 
+class TestNarrationBoundaries:
+    RAILWAY = (
+        "The old railway carried grain from farms across the valley and the drivers stopped "
+        "each morning beside a small spring high in the hills."
+    )
+    TRAIL = (
+        "On the trail, we watched the river wind slowly through the valley while the children "
+        "followed the tracks of an animal they had never seen before."
+    )
+
+    def test_complete_sentence_just_past_the_estimate_stays_together(self) -> None:
+        assert len(self.RAILWAY) == 136
+        cfg = ChunkConfig()
+        assert split_text(self.RAILWAY, cfg) == [self.RAILWAY]
+        assert len(self.TRAIL) == 145
+        assert split_text(self.TRAIL, cfg) == [self.TRAIL]
+        tail = "The next train is due at noon."
+        assert split_text(self.RAILWAY + " " + tail, cfg) == [self.RAILWAY, tail]
+
+    def test_only_a_real_sentence_end_can_extend_the_standard_budget(self) -> None:
+        # At the scan limit a period followed by another letter is inside a
+        # word, and a period followed by a still-unclosed quote cannot be cut.
+        for suffix in ["com and the next few words.", "” and the next few words."]:
+            s = "a" * 150 + "." + suffix
+            assert len(split_text(s, ChunkConfig())[0]) == 127
+        for cfg in (ChunkConfig(cap_resplit="off"), ChunkConfig(first_chunk_max_tokens=254)):
+            assert len(split_text(self.RAILWAY, cfg)) > 1
+        assert len(split_text(self.RAILWAY, ChunkConfig(max_tokens=253))) > 1
+
+    def test_later_real_sentence_end_wins_across_punctuation_kinds(self) -> None:
+        s = (
+            "Wait. Which platform? “Over there!” "
+            + "Words continue down the railway line. " * 8
+        )
+        chunks = split_text(s, ChunkConfig(max_tokens=75))
+        assert chunks[0] == "Wait. Which platform? “Over there!”"
+
+    @pytest.mark.parametrize("quoted", ["“Ready?”", "«Prêts!»", "„Fertig!“", '("Yes.")'])
+    def test_quoted_sentences_and_line_boundaries(self, quoted: str) -> None:
+        s = quoted + "\nThe next sentence carries on without any more punctuation " * 4
+        chunks = split_text(s, ChunkConfig(max_tokens=50))
+        assert chunks[0] == quoted
+
+    def test_midpoint_does_not_leave_the_english_clause_on_the_previous_chunk(self) -> None:
+        s = self.TRAIL.replace("the river", "the wide river").replace(
+            "an animal", "a wild animal"
+        )
+        chunks = split_text(s, ChunkConfig(), "en")
+        assert chunks == [s.split(" while ")[0], "while " + s.split(" while ")[1]]
+        assert split_text(s, ChunkConfig(), "EN") == chunks
+        assert split_text(s, ChunkConfig(), "nl")[0].endswith("while")
+
+    def test_long_unpunctuated_sentence_keeps_every_word(self) -> None:
+        s = (
+            "The bright afternoon sunlight filtered through the branches of the old "
+            "chestnut tree above the narrow path that the children followed every "
+            "morning on their way to the little school beside the river."
+        )
+        chunks = split_text(s, ChunkConfig(), "en")
+        assert len(chunks) == 2
+        assert all(len(chunk) <= 127 for chunk in chunks)
+        assert " ".join(chunks) == s
+
+    def test_custom_separators_keep_their_literal_priority(self) -> None:
+        s = "He said “Ready?” " + "they carried the books: across the station " * 5
+        cfg = ChunkConfig(max_tokens=64, split_on=("; ",))
+        assert split_text(s, cfg)[0] == "He said “Ready?” they carried"
+
+    def test_initials_are_protected_during_fallback_at_word_gap(self) -> None:
+        s = "The witness spoke to L.  Jones about the train that left the station before dawn."
+        chunks = split_text(s, ChunkConfig(max_tokens=50))
+        assert chunks[0] == "The witness spoke to"
+
+
 class TestEstimate:
     def test_estimate_is_an_upper_bound_in_spirit(self) -> None:
         assert estimate_tokens("") == 1
@@ -284,6 +358,9 @@ class TestMidSentencePeriods:
             "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda "
             "mu, nu xi omicron pi rho, sigma tau upsilon phi chi psi omega."
         )
+        # The complete sentence has to genuinely exceed one window and its
+        # bounded sentence-end lookahead for a comma cut to be necessary.
+        text = text.removesuffix(".") + " and several more words still to come."
         cfg = ChunkConfig()
         assert split_text(text, cfg) == split_text(
             text, ChunkConfig(mid_sentence_period="break")
@@ -307,7 +384,7 @@ class TestMidSentencePeriods:
         text = (
             "Mr. Norrell, who had been waiting in the hall for the better part "
             "of an hour, said nothing at all to either of them about what he "
-            "had seen there."
+            "had seen there the evening before he left town."
         )
         assert split_text(text, ChunkConfig())[0].endswith("hour,")
 
@@ -320,7 +397,11 @@ class TestMidSentencePeriods:
         word break is joined with a carried prefix and keeps its contour; a
         false full stop is read as one.
         """
-        chunks = split_text(self.TITLE, ChunkConfig())
+        # Give it enough text that the finished sentence cannot fit the
+        # lookahead or leave a short final remainder to balance.
+        chunks = split_text(
+            self.TITLE[:-1] + " on the long journey through the mountains.", ChunkConfig()
+        )
         assert chunks[0].endswith("of")  # a word boundary, not "Mr."
 
     def test_the_guard_on_the_character_in_front(self) -> None:

@@ -35,6 +35,22 @@ var recordKeys = [...]string{
 // agrees there and a refusal reads the same in both.
 type identity [len(recordKeys)]string
 
+// The text and chunking changes since funnel-6 run before inference. A graph
+// exported under either previous frontend still implements its own model.
+var previousExportFingerprints = map[string][]string{
+	"4a2918bb653ce531": {"7cd75498ad4e7531", "b99ab84725b40e91", "f171bcc07df48436", "82c2c12d6e725542"}, // loudr-1
+	"ccaeab4e92d9edc1": {"e5303ba243087222", "e800f3bbb7eb6b4e", "06d8ccb48891899e", "62d674008ef832fd"}, // loudr-1-turbo
+}
+
+func matchesExportFingerprint(recorded, current string) bool {
+	for _, previous := range previousExportFingerprints[current] {
+		if recorded == quote(previous) {
+			return true
+		}
+	}
+	return recorded == quote(current)
+}
+
 // VerifyExport refuses a graph set whose members did not come from one export
 // of this checkpoint.
 //
@@ -85,12 +101,13 @@ func (c *Checkpoint) VerifyExport(assets string, algorithm config.AlgorithmConfi
 	if err != nil {
 		return err
 	}
+	fingerprint := config.Fingerprint(algorithm)
 	want := identity{
 		quote(fileDigest),
-		quote(config.Fingerprint(algorithm)),
+		quote(fingerprint),
 		strconv.Itoa(algorithm.EulerSteps),
 	}
-	if agreed[0] != want[0] || agreed[1] != want[1] || agreed[2] != want[2] {
+	if agreed[0] != want[0] || !matchesExportFingerprint(agreed[1], fingerprint) || agreed[2] != want[2] {
 		return fmt.Errorf("%s was exported from a different engine than the one loading "+
 			"it:\n  graphs: %s\n  checkpoint: %s\nRe-export against %s",
 			assets, engineFields(agreed), engineFields(want), filepath.Base(c.path))

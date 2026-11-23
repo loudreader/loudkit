@@ -83,7 +83,33 @@ static OPERATOR_RUN: LazyLock<Regex> = LazyLock::new(|| {
 /// exclamation. A tag is replaced by a space rather than by nothing, because
 /// two block tags meeting back to back are two paragraphs and not one glued
 /// word.
-static MARKUP_TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"</?[A-Za-z!][^<>]*>").unwrap());
+static NUMERIC_APOSTROPHE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"&#(?:0*39|[xX]0*27);").unwrap());
+static PAIRED_COMPARISON: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(^|[^\p{L}\p{N}_])([\p{L}\p{N}_]+)([ \t]*)(?:<|&lt;)[ \t]*([\p{L}\p{N}_]+[ \t]+(?:[Oo][Rr]|[Aa][Nn][Dd]|lub|albo|i|oder|und|ou|et|o|y|e|of|en|eller|og|och|tai|ja)[ \t]+)([\p{L}\p{N}_]+)[ \t]*(?:>|&gt;)(=?)([ \t]*)([-+]?[\p{L}\p{N}_])",
+    )
+    .unwrap()
+});
+static LEADING_DOT: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(^|[^\p{L}\p{N}_.,])(\.)([0-9])").unwrap());
+static LEADING_COMMA: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(^|[\x09-\x0D\x20\x85\p{Z}(\[{«‹„“‘≈=+−$£€¥₹*/:<>-])(,)([0-9])").unwrap()
+});
+static MARKUP_TAG: LazyLock<Regex> = LazyLock::new(|| {
+    const TAG_NAME: &str = r#"[A-Za-z][A-Za-z0-9-]*(?::[A-Za-z][A-Za-z0-9-]*)?"#;
+    const SPACE: &str = r#"[ \t\r\n\f]"#;
+    let assignment = format!(r#"[^ \t\r\n\f"'<>/=]+{SPACE}*={SPACE}*"#);
+    const QUOTED: &str = r#"(?:"[^"]*"|'[^']*')"#;
+    const UNQUOTED: &str = r#"[^ \t\r\n\f"'<>\x60]+"#;
+    const BOOLEAN: &str = r#"(?:allowfullscreen|async|autofocus|autoplay|checked|controls|default|defer|disabled|download|exact|formnovalidate|hidden|inert|ismap|itemscope|loop|multiple|muted|nomodule|novalidate|nowrap|open|playsinline|popover|readonly|required|reversed|selected|v-cloak)"#;
+    let attribute =
+        format!(r#"(?:{BOOLEAN}|{assignment}(?:{QUOTED}{assignment})*(?:{QUOTED}|{UNQUOTED}))"#);
+    Regex::new(&format!(
+        r#"(?i)</?(?:![^<>]*|{TAG_NAME}(?:{SPACE}+{attribute})*{SPACE}*/?)>"#
+    ))
+    .unwrap()
+});
 
 // `$` and `£` before a number read as a prefix in writing and a SUFFIX in
 // speech: "$5" is "five dollars", not "dollars five". The wording comes from
@@ -187,6 +213,18 @@ fn priced(amount: &str, language: &str) -> String {
     amount.to_string()
 }
 
+fn plain_price(amount: &str, word: &str, language: &str) -> String {
+    if language == "en" && matches!(amount, "1" | "1.0" | "1.00") {
+        match word {
+            "dollars" => return "1 dollar".into(),
+            "pounds" => return "1 pound".into(),
+            "euros" => return "1 euro".into(),
+            _ => {}
+        }
+    }
+    format!("{} {word}", priced(amount, language))
+}
+
 static PLAIN_DECIMAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9]+\.[0-9]+$").unwrap());
 
 fn drop_markup_tags(text: &str) -> String {
@@ -194,6 +232,67 @@ fn drop_markup_tags(text: &str) -> String {
         return text.to_string();
     }
     MARKUP_TAG.replace_all(text, " ").to_string()
+}
+
+const GROUP_SPACES: [char; 4] = [' ', '\u{00a0}', '\u{2009}', '\u{202f}'];
+static SPACED_DIGITS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[0-9]+(?:[ \x{00A0}\x{2009}\x{202F}][0-9]+)+").unwrap());
+
+fn currency_before_amount(prefix: &str) -> bool {
+    let mut before = prefix.chars().rev();
+    let mut mark = before.next();
+    if mark.is_some_and(|ch| WHITE_SPACE.contains(ch)) {
+        mark = before.next();
+    }
+    mark.is_some_and(|ch| CURRENCY_PREFIXES.contains(&ch)) && !before.next().is_some_and(is_letter)
+}
+
+/// Compact the grouped integer before a currency symbol can split its amount.
+/// The whole run has to fit; a prefix of a phone number or an identifier cannot qualify.
+static COUNT_AFTER_PRICE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^[ \t]+(?:times|days|weeks|months|years|hours|minutes|seconds|items|units)\b")
+        .unwrap()
+});
+
+fn compact_grouped_digits(text: String, language: &str) -> String {
+    let mut out = String::new();
+    let mut copied = 0;
+    let is_word = |ch| ch == '_' || crate::unicode::is_letter_or_digit(ch);
+    for run in SPACED_DIGITS.find_iter(&text) {
+        let prefix = &text[..run.start()];
+        let mut previous = prefix.chars().rev();
+        let before = previous.next();
+        if before.is_some_and(is_word)
+            || text[run.end()..].chars().next().is_some_and(is_word)
+            || (matches!(before, Some('.' | ','))
+                && previous.next().is_some_and(|c| c.is_ascii_digit()))
+        {
+            continue;
+        }
+        let digits = run.as_str();
+        let mut groups = digits.split(GROUP_SPACES);
+        if groups.next().unwrap().len() > 3 || !groups.all(|group| group.len() == 3) {
+            continue;
+        }
+        if digits.is_ascii()
+            && (!currency_before_amount(prefix)
+                || (language == "en"
+                    && digits
+                        .split_once(' ')
+                        .is_some_and(|(_, tail)| tail.len() == 3 && !tail.starts_with('0'))
+                    && COUNT_AFTER_PRICE.is_match(&text[run.end()..])))
+        {
+            continue;
+        }
+        out.push_str(&text[copied..run.start()]);
+        out.extend(digits.chars().filter(char::is_ascii_digit));
+        copied = run.end();
+    }
+    if copied == 0 {
+        return text;
+    }
+    out.push_str(&text[copied..]);
+    out
 }
 
 /// Whether a Unicode White_Space character stands at `at`, or ends the text.
@@ -431,14 +530,18 @@ fn say_amounts(text: &str, pattern: &Regex, word: &str, language: &str) -> Strin
             ""
         };
         let said = scale_after(amount.as_str(), suffix, spelled, language);
-        out.push_str(&priced(amount.as_str(), language));
-        out.push(' ');
-        if said.is_empty() {
+        if spelled.is_empty() && suffix.is_empty() {
+            out.push_str(&plain_price(amount.as_str(), word, language));
+        } else if said.is_empty() {
+            out.push_str(&priced(amount.as_str(), language));
+            out.push(' ');
             out.push_str(word);
             // A scale this language has no noun for. The suffix stays written,
             // which is what it did before the amount was moved.
             out.push_str(suffix);
         } else {
+            out.push_str(&priced(amount.as_str(), language));
+            out.push(' ');
             out.push_str(&said);
             out.push(' ');
             out.push_str(word);
@@ -481,7 +584,7 @@ fn speak_symbols(text: &str, language_id: &str) -> String {
         }
         out = re
             .replace_all(&out, |c: &regex::Captures| {
-                format!("{} {word}", priced(&c[1], language_id))
+                plain_price(&c[1], &word, language_id)
             })
             .to_string();
     }
@@ -682,7 +785,8 @@ pub fn speech_text(text: &str, language_id: &str) -> String {
     // indicate it. `loudkit.frontend.speechtext.speech_text` and Swift's
     // `LexicalRespelling.applied` carry the same lowercasing for the same
     // reason.
-    let language_id = &language_id.to_lowercase();
+    let language = language_id.to_lowercase();
+    let language_id = if language.is_empty() { "en" } else { &language };
     // NFC first, before anything inspects a character: the same opening pass
     // the Python funnel runs.
     //
@@ -702,7 +806,38 @@ pub fn speech_text(text: &str, language_id: &str) -> String {
     let mut out = strip_invisibles(&normalised);
     // Before the symbol pass, which would otherwise read a tag's angle brackets
     // as comparison operators and its attributes as text.
+    out = PAIRED_COMPARISON
+        .replace_all(&out, |m: &regex::Captures<'_>| {
+            if (!m[3].is_empty() || !m[7].is_empty()) && m[2] != m[5] {
+                return m[0].to_owned();
+            }
+            format!(
+                "{}{} < {}{} >{} {}",
+                &m[1], &m[2], &m[4], &m[5], &m[6], &m[8]
+            )
+        })
+        .into_owned();
     out = drop_markup_tags(&out);
+    if out.contains('&') {
+        out = NUMERIC_APOSTROPHE
+            .replace_all(&out, "'")
+            .replace("&apos;", "'")
+            .replace("&quot;", "\"")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&");
+    }
+    out = LEADING_DOT.replace_all(&out, "${1}0${2}${3}").into_owned();
+    out = LEADING_COMMA
+        .replace_all(&out, "${1}0${2}${3}")
+        .into_owned();
+    if language_id.is_empty() || UNIT_WORDS.contains_key(language_id) {
+        out = compact_grouped_digits(out, language_id);
+    }
+    if language_id == "pl" && out.bytes().any(|b| b.is_ascii_digit()) {
+        out = crate::polish_quantities::expand(&out);
+    }
     // Before the symbol table: see the Python reference. Every pass downstream
     // asks "is this a digit" and the five ports spell it four ways, so folding
     // first means all of them see ASCII.

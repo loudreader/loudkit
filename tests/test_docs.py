@@ -827,12 +827,8 @@ def test_the_production_fingerprint_is_pinned_in_one_value_everywhere() -> None:
         REPO
         / "docs"
         / "reference"
-        / "COMPATIBILITY.md": r"loudr-1 fingerprint is\s+`([0-9a-f]{16})`",
+        / "COMPATIBILITY.md": r"The current base fingerprint is `([0-9a-f]{16})`",
         REPO / "docs" / "platforms" / "apple.md": r"the same fingerprint, `([0-9a-f]{16})`",
-        # The release note that tells a reader their audio changed. It names
-        # the value they are moving *to*, so only the second of the pair is
-        # checked here; the first is 0.1.0's and is deliberately historical.
-        REPO / "CHANGELOG.md": r"The fingerprint moves: `[0-9a-f]{16}` -> `([0-9a-f]{16})`",
     }
     stale = {}
     for path, pattern in pinned.items():
@@ -846,6 +842,15 @@ def test_the_production_fingerprint_is_pinned_in_one_value_everywhere() -> None:
         f"these pin a fingerprint other than the golden {golden}: {stale}. "
         "Regenerate the fixture, then update every copy."
     )
+
+    # Previous release entries retain the fingerprints they shipped with.
+    # Only the newest entry describes what a caller gets from this build.
+    entry = (REPO / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ", 2)[1]
+    turbo = json.loads(
+        (REPO / "tests/data/conformance/vectors_fusion_mtp2.json").read_text(encoding="utf-8")
+    )["algorithm"]["fingerprint"]
+    for fingerprint in (golden, turbo):
+        assert f"`{fingerprint}`" in entry
 
 
 def test_the_headline_speed_figures_are_quoted_from_one_page() -> None:

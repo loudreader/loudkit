@@ -76,6 +76,7 @@ __all__ = [
     "backend_for_device",
     "download",
     "is_repo_id",
+    "list_voice_languages",
     "list_voices",
     "read_receipt",
     "receipt_hit",
@@ -417,22 +418,47 @@ def resolve_voice_encoder(ref: str, *, revision: str | None = None) -> Path:
     return path
 
 
-def list_voices(*, repo: str, revision: str | None = None) -> tuple[str, ...]:
-    """The voice names a release holds, sorted. Reads the repo's file list
-    rather than downloading anything; a directory is read off disk."""
+def _voice_listing(repo: str, revision: str | None) -> tuple[tuple[str, ...], Path | None]:
+    """Sorted names and, for a local or offline listing, their release directory."""
     local = _release_tree(repo)
     if local is not None:
-        return _voice_names(local)
+        return _voice_names(local), local
     hub = _hub()
     try:
         files: list[str] = hub.list_repo_files(repo_id=repo, revision=revision)
-    except Exception as exc:  # mapped by name, like every other fetch
-        friendly = _friendly_hub_error(exc, repo, revision)
-        if friendly is None:
+    except Exception as exc:
+        # Hub 0.x uses requests, 1.x and later use httpx. HTTP errors such as
+        # a missing repo or revision must never silently turn into cache hits.
+        offline = {
+            "ConnectionError",
+            "Timeout",
+            "TimeoutError",
+            "TransportError",
+            "OfflineModeIsEnabled",
+            "LocalEntryNotFoundError",
+        }
+        if not any(cls.__name__ in offline for cls in type(exc).__mro__):
+            friendly = _friendly_hub_error(exc, repo, revision)
+            if friendly is not None:
+                raise friendly from exc
             raise
-        raise friendly from exc
+        try:
+            cached = Path(
+                hub.snapshot_download(
+                    repo_id=repo,
+                    revision=revision,
+                    local_files_only=True,
+                    allow_patterns=[f"{VOICE_DIR}/*{VOICE_SUFFIX}"],
+                )
+            )
+        except Exception as cache_error:
+            raise FileNotFoundError(
+                f"{repo}@{revision or 'main'}: offline and no voice listing is cached. "
+                "Connect once to fetch the release or pass a local release directory."
+            ) from cache_error
+        return _voice_names(cached), cached
     prefix = f"{VOICE_DIR}/"
-    return tuple(
+    names = tuple(
         sorted(
             name[len(prefix) : -len(VOICE_SUFFIX)]
             for name in files
@@ -440,6 +466,52 @@ def list_voices(*, repo: str, revision: str | None = None) -> tuple[str, ...]:
             if name.startswith(prefix) and name.endswith(VOICE_SUFFIX) and name.count("/") == 1
         )
     )
+    return names, None
+
+
+def list_voices(*, repo: str, revision: str | None = None) -> tuple[str, ...]:
+    """List voice names without opening profiles or loading the model."""
+    return _voice_listing(repo, revision)[0]
+
+
+def list_voice_languages(*, repo: str, revision: str | None = None) -> dict[str, str]:
+    """Read the enrollment language from each voice header, using range reads on a cold hub."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from safetensors import safe_open
+
+    from .voice import VoiceProfile
+
+    names, root = _voice_listing(repo, revision)
+    hub = _hub() if root is None else None
+    paths: dict[str, Path | None] = {}
+    for name in names:
+        filename = f"{name}{VOICE_SUFFIX}"
+        if root is not None:
+            paths[name] = _voice_in_tree(root, name, filename)
+        else:
+            paths[name] = _cached_file(hub, repo, revision, f"{VOICE_DIR}/{filename}")
+
+    def read_language(name: str) -> str:
+        filename = f"{name}{VOICE_SUFFIX}"
+        path = paths[name]
+        if path is not None:
+            with safe_open(str(path), framework="numpy") as profile:
+                metadata = profile.metadata() or {}
+        else:
+            assert hub is not None  # a local release's paths always exist
+            metadata = hub.parse_safetensors_file_metadata(
+                repo_id=repo, filename=f"{VOICE_DIR}/{filename}", revision=revision
+            ).metadata
+        header = VoiceProfile._read_header(metadata, filename)
+        return VoiceProfile._header_language(header, filename)
+
+    if all(paths.values()):
+        return {name: read_language(name) for name in names}
+    # A cold release needs one range request per voice. Keep their round trips
+    # concurrent while preserving the sorted order of a local listing.
+    with ThreadPoolExecutor(max_workers=6) as readers:
+        return dict(zip(names, readers.map(read_language, names), strict=True))
 
 
 # ------------------------------------------------------------- the receipt
@@ -677,17 +749,18 @@ def download(
                 return local_dir
             if receipt.commit == commit:
                 return local_dir
-        # A stale receipt must not outlive the files it vouched for.
-        (local_dir / RECEIPT_NAME).unlink(missing_ok=True)
+    fetch_revision = commit or revision
     # What the repo says about itself is read before a byte of weights moves:
     # the same order the four ports keep, and the one place in Python that
     # still fetched first and judged after.
-    _refuse_before_fetching(hub, repo, revision, backend)
+    _refuse_before_fetching(hub, repo, fetch_revision, backend)
+    if local_dir is not None:
+        (local_dir / RECEIPT_NAME).unlink(missing_ok=True)
     try:
         root = Path(
             hub.snapshot_download(
                 repo_id=repo,
-                revision=revision,
+                revision=fetch_revision,
                 allow_patterns=list(allow),
                 ignore_patterns=list(ignore) or None,
                 local_dir=str(local_dir) if local_dir else None,

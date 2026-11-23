@@ -1043,7 +1043,7 @@ public enum LoudKitError: Error, CustomStringConvertible, LocalizedError {
 public struct TextConfig: Sendable, Equatable {
     /// Bumped when the funnel's passes change what they emit for text they
     /// already handled. A new language or table moves `grammar` on its own.
-    public var recipe: String = "funnel-6"
+    public var recipe: String
     /// Digest of the three shared funnel data files, in the order
     /// `numbers.json`, `pl_en_respell.json`, `numerals.json`. See
     /// `Numbers.grammarDigest`.
@@ -1051,7 +1051,7 @@ public struct TextConfig: Sendable, Equatable {
 
     /// Both halves default to what this build is, so the common construction
     /// describes the funnel that is actually going to run.
-    public init(recipe: String = "funnel-6", grammar: String = Numbers.grammarDigest) {
+    public init(recipe: String = "funnel-10", grammar: String = Numbers.grammarDigest) {
         self.recipe = recipe
         self.grammar = grammar
     }

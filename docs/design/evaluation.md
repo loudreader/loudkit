@@ -3,6 +3,46 @@
 Five tiers, cheapest first. Each tier states what it measures and what it
 misses.
 
+## English sentence breaks
+
+> On the trail, we watched the river wind slowly through the valley while the
+> children followed the tracks of an animal they had never seen before.
+
+The previous planner sent “On the trail,” and “before.” to the model as
+separate utterances. The revised planner keeps this sentence together.
+Both recordings use the same published base checkpoint, the English voice
+`joe`, seed 7, normal speed and the Python CPU backend.
+[Before](../voices/preview/audio/narration/joe-trail-before.opus) ·
+[After](../voices/preview/audio/narration/joe-trail-after.opus)
+
+| Check | Before | After |
+| --- | ---: | ---: |
+| Rendered chunks | 3 | 1 |
+| Quiet interval between “seen” and “before” | 1,040 ms | 110 ms |
+| Duration | 8.72 s | 6.36 s |
+| Words recovered by Whisper small | 26 of 26 | 26 of 26 |
+
+The quiet interval is the longest consecutive run of 10 ms frames below
+−45 dBFS RMS in the source WAV between the two word centers located by
+Whisper. The published clips are Opus copies. To reproduce the current
+reading, pass the quoted sentence to `loudkit speak` with `--device cpu
+--voice joe --language en --seed 7` and the base checkpoint revision
+`7516673ee74ab2228ffc4e99223d296d8904d7ff`. The new render used 159 of the
+model’s 255 available speech tokens.
+
+Across the [400 English reading passages](../../tests/data/judge/reading-en.json),
+the default planner produced 1,538 chunks, down from 1,672. Previously 11
+joins fell after a word without a punctuation mark and left only one or two
+words in the next chunk. The new plan produced zero such joins. This count
+measures text boundaries across the corpus. The audio measurements above
+apply to Joe reading the quoted sentence at seed 7.
+
+Longer sentences can still require a fresh model window. The continuation
+can introduce an audible pause even when the app queues both chunks without
+a playback gap. A trial that cropped silence tokens also changed the next
+window’s generation. The production fix adjusts where the reader splits
+the text and preserves the model’s pauses within the audio.
+
 ## Tier 0: conformance fixtures in CI
 
 The conformance fixtures cover text preparation, numbers (hand-written cases
@@ -111,3 +151,8 @@ Uses here:
   (see `tests/data/conformance/numbers_cldr.json`).
 
 The transcriptions are SAMPA, not IPA. Plan the mapping before you use them.
+
+For Polish, the [paired product samples](../voices/polish-product/README.md)
+let a reviewer compare both shipped voices on the same five short app messages.
+The release record separates the written expansion, an independent ASR
+transcript and the native listener's judgment of the actual recording.

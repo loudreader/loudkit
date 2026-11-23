@@ -1,10 +1,19 @@
 //! Text to text-tokens, a bit-parity port of `loudkit.frontend.text`:
 //! lowercase, NFKD, a language tag, spaces to `[SPACE]`, then BPE.
 
+use std::sync::LazyLock;
+
+use regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::numbers::supported_languages;
 use crate::tokenizer::{self, SPACE};
+
+// A wrapped line and its indentation represent one word boundary.
+static WRAPPED_SPACE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r" *[\t-\r\x{85}\x{2028}\x{2029}][ \t-\r\x{85}\x{2028}\x{2029}]*")
+        .expect("static whitespace pattern")
+});
 
 /// Refused languages whose refusal has a *specific* reason worth stating: their
 /// upstream pipeline wants Cangjie codes, kana conversion, diacritisation, jamo
@@ -63,6 +72,7 @@ impl Frontend {
         // matches them greedily, so "he [sigh]ed" would make the model sigh. The
         // language tag added below is the one bracket that belongs.
         let normalised = normalised.replace(['[', ']'], " ");
+        let normalised = WRAPPED_SPACE.replace_all(&normalised, " ");
         let tagged = format!("[{lang}]{normalised}").replace(' ', SPACE);
         Ok(self.tokenizer.encode(&tagged))
     }

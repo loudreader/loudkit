@@ -16,6 +16,7 @@ import test from "node:test";
 
 import { Engine } from "../engine.js";
 import { Enroller, type Enrolled } from "../enroll.js";
+import { encodeWav } from "../wav.js";
 
 /** What `Enroller.enroll` hands back, at the smallest size that is still one. */
 const ENROLLED: Enrolled = {
@@ -47,14 +48,14 @@ function releaseDir(): string {
  * `speechPosition.test.ts` does it: widening the engine's surface to reach
  * private state would be a production change made for one assertion.
  */
-function harness(dir: string): Engine {
+function harness(dir: string, repo?: string): Engine {
   const engine = Object.create(Engine.prototype) as Engine;
   const stub = () => ({ close: () => Promise.resolve() });
   Object.assign(engine as unknown as Record<string, unknown>, {
     dir,
     onnxDir: join(dir, "onnx"),
     onnxProvider: "cpu",
-    repo: undefined,
+    repo,
     // The six synthesis graphs `close` hands back; nothing here runs them.
     cond: stub(),
     prefill: stub(),
@@ -65,6 +66,24 @@ function harness(dir: string): Engine {
   });
   return engine;
 }
+
+test("invalid recordings fail before enrollment graphs are fetched or opened", async (t) => {
+  const fetch = t.mock.method(globalThis, "fetch", () => { throw new Error("unexpected fetch"); });
+  const load = t.mock.method(Enroller, "load", () => { throw new Error("unexpected graph load"); });
+  const dir = mkdtempSync(join(tmpdir(), "loudkit-enroll-"));
+  try {
+    const engine = harness(dir, "loudreader/loudr-1");
+    await assert.rejects(engine.enroll(join(dir, "missing.wav")), { code: "ENOENT" });
+    await assert.rejects(engine.enroll(new Uint8Array(4)), /no RIFF\/WAVE header/);
+    const samples = new Float32Array(24_000);
+    await assert.rejects(engine.enroll(samples), /need their sample rate/);
+    await assert.rejects(engine.enroll(samples, { sampleRate: 24_000 }), /recording is silent/);
+    assert.equal(fetch.mock.callCount(), 0);
+    assert.equal(load.mock.callCount(), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("two concurrent first enrollments open one set of graphs", async (t) => {
   const dir = releaseDir();
@@ -86,10 +105,12 @@ test("two concurrent first enrollments open one set of graphs", async (t) => {
 
   try {
     const engine = harness(dir);
-    const samples = new Float32Array(24_000);
+    const wav = encodeWav(new Float32Array(24_000).fill(0.25), 24_000);
+    const path = join(dir, "a.wav");
+    writeFileSync(path, wav);
     const [first, second] = await Promise.all([
-      engine.enroll(samples, { name: "a", sampleRate: 24_000 }),
-      engine.enroll(samples, { name: "b", sampleRate: 24_000 }),
+      engine.enroll(path),
+      engine.enroll(wav, { name: "b" }),
     ]);
     assert.equal(opened, 1, "the three enrollment graphs were opened twice");
     assert.equal(first.name, "a");
@@ -119,7 +140,7 @@ test("a failed load is not cached, so the next call retries", async (t) => {
 
   try {
     const engine = harness(dir);
-    const samples = new Float32Array(24_000);
+    const samples = new Float32Array(24_000).fill(0.25);
     await assert.rejects(engine.enroll(samples, { sampleRate: 24_000 }), /no such graph/);
     const profile = await engine.enroll(samples, { name: "b", sampleRate: 24_000 });
     assert.equal(profile.name, "b");

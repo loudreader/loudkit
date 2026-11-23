@@ -58,12 +58,16 @@ extension Enrollment.Enroller {
     /// from the prompt, which holds about 9.5 seconds.
     public func enroll(contentsOf url: URL, name: String = "", language: String = "en")
         throws -> VoiceProfile {
-        let (samples, sampleRate) = try AudioFile.read(url)
-        let enrolled = try enroll(samples, sampleRate: sampleRate)
+        try enroll(AudioFile.read(url), from: url, name: name, language: language)
+    }
+
+    func enroll(_ recording: (samples: [Float], sampleRate: Int), from url: URL,
+                name: String, language: String) throws -> VoiceProfile {
+        let enrolled = try enroll(recording.samples, sampleRate: recording.sampleRate)
         return VoiceProfile(
             enrolled,
             name: name.isEmpty ? url.deletingPathExtension().lastPathComponent : name,
-            language: language, sourceSampleRate: sampleRate)
+            language: language, sourceSampleRate: recording.sampleRate)
     }
 }
 

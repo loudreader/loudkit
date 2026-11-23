@@ -1,0 +1,65 @@
+{
+  "recognizer": "openai-whisper small",
+  "software_version": "20250625",
+  "model_sha256": "9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794",
+  "decode_settings": {
+    "language": "pl",
+    "task": "transcribe",
+    "temperature": 0.0,
+    "fp16": false,
+    "condition_on_previous_text": false,
+    "initial_prompt": null
+  },
+  "clips": [
+    {
+      "file": "gosia/pl_03_ticket-price.wav",
+      "wav_sha256": "14a34cb2e2d96a064100f4c6396a8cf5a7b62503a5a9344da85c84b92ac8ff91",
+      "text": " Senamilet Tutu 22 zł."
+    },
+    {
+      "file": "gosia/pl_04_invoice-balance.wav",
+      "wav_sha256": "37f4e78ad3590d7d7db8102bb5c26e3882ebfffe4db517df130e32efabec89f9",
+      "text": " Do zapłaty 12 zł i 5 groszy."
+    },
+    {
+      "file": "gosia/pl_05_offer-selection.wav",
+      "wav_sha256": "de53e2446a1c8b60f230f8fc4c6c037dd9524c53c60d6f2f0fde9e9e43ef0e66",
+      "text": " wybierz dwie z trzech ofert."
+    },
+    {
+      "file": "gosia/pl_06_notification-count.wav",
+      "wav_sha256": "f0f0def3c5a594c1f4ffc242a99451b911cb0d589361794b5844b77bc425477d",
+      "text": " Masz pięć nowych wiadomości."
+    },
+    {
+      "file": "gosia/pl_07_invoice-number.wav",
+      "wav_sha256": "454bbab902c5097267450f561b7ec9a862c682e2f5f8ac3d5c0e9048b38f047b",
+      "text": " Faktura nr 15 jest gotowa."
+    },
+    {
+      "file": "darkman/pl_03_ticket-price.wav",
+      "wav_sha256": "87f27cc8bafec151f53091383e55d85656c2692cc0c0d185726cf78815e676e8",
+      "text": " Cena biletu to 22 zł."
+    },
+    {
+      "file": "darkman/pl_04_invoice-balance.wav",
+      "wav_sha256": "bbc338bbfdb4b4c204a8d09104acbebacf6894e294d257f2d410de96de8d8254",
+      "text": " Do zapłaty – 12 zł i 5 groszy."
+    },
+    {
+      "file": "darkman/pl_05_offer-selection.wav",
+      "wav_sha256": "40511e649c0d26c1cd9773499d31c531496922e577ef025c7e17e5eaeafd5976",
+      "text": " Wybierz dwie stszech ofert."
+    },
+    {
+      "file": "darkman/pl_06_notification-count.wav",
+      "wav_sha256": "b58f9d8856437a9c9d1131e4158c0323a65b5d61a819a5e3aa1fd64794b43883",
+      "text": " Masz pięć nowych wiadomości."
+    },
+    {
+      "file": "darkman/pl_07_invoice-number.wav",
+      "wav_sha256": "faf6bbb4ef9c69a43a07337372a27a426ee688de058c70a340a8e0ce55ef9c07",
+      "text": " Faktura numer 15 jest gotowa."
+    }
+  ]
+}

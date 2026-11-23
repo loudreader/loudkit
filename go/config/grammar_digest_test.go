@@ -6,7 +6,7 @@ func TestGrammarDigestMatchesTheReference(t *testing.T) {
 	// The digest is of this port's own embedded copy. If it differs from the
 	// Python reference the data has drifted, which is the whole reason it is
 	// hashed into the fingerprint.
-	const reference = "71ad748c2caf97dd"
+	const reference = "51b9a5c04ddb180b"
 	if got := GrammarDigest(); got != reference {
 		t.Errorf("grammar digest = %s, reference = %s: this port's numbers.json has drifted", got, reference)
 	}

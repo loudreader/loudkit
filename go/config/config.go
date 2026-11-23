@@ -907,7 +907,7 @@ type TextConfig struct {
 // TextRecipe is the funnel's code version, bumped when the passes change what
 // they emit for text they already handled. A new language or a new table moves
 // Grammar on its own and needs no bump here.
-const TextRecipe = "funnel-6"
+const TextRecipe = "funnel-10"
 
 // GrammarDigest is the first 16 hex characters of the SHA-256 of the embedded
 // numbers.json, then pl_en_respell.json, then numerals.json: computed once,

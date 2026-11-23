@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -131,13 +132,15 @@ func (c Config) Validate() error {
 	return nil
 }
 
+var proseSeparators = []string{". ", "! ", "? ", "; ", ", "}
+
 // Production is the shipping chunking recipe.
 func Production() Config {
 	return Config{
 		Enabled:      true,
 		MaxTokens:    255,
 		PrefixTokens: 6,
-		SplitOn:      []string{". ", "! ", "? ", "; ", ", "},
+		SplitOn:      slices.Clone(proseSeparators),
 		// The surveyed union, sorted. It must equal
 		// loudkit.config.ChunkConfig.abbreviations.
 		Abbreviations: []string{
@@ -213,7 +216,12 @@ func EstimateTokens(text string) int {
 // character and produces invalid UTF-8, which is the shape of bug this port
 // has had before.
 func SplitText(text string, cfg Config) []string {
-	trimmed := strings.TrimSpace(text)
+	return SplitTextForLanguage(text, cfg, "en")
+}
+
+// SplitTextForLanguage applies the prose rules for the spoken language.
+func SplitTextForLanguage(text string, cfg Config, language string) []string {
+	trimmed := strings.TrimFunc(text, chunkSpace)
 	if trimmed == "" {
 		return nil
 	}
@@ -223,72 +231,38 @@ func SplitText(text string, cfg Config) []string {
 
 	budget := int(float64(cfg.MaxTokens) * CharsPerToken)
 	var chunks []string
+	language = strings.ToLower(language)
+	prose := slices.Equal(cfg.SplitOn, proseSeparators)
+	var abbreviations [][]rune
+	if prose {
+		for _, abbreviation := range cfg.Abbreviations {
+			abbreviations = append(abbreviations, []rune(abbreviation))
+		}
+	}
 	rest := []rune(trimmed)
 
 	for len(rest) > 0 {
 		if len(rest) <= budget {
-			chunks = append(chunks, strings.TrimSpace(string(rest)))
+			chunks = append(chunks, strings.TrimFunc(string(rest), chunkSpace))
 			break
 		}
-		head := string(rest[:budget+1])
-		// One rune past the window, and used only by holds: the latest
-		// candidate can end the window exactly, and the test reads the
-		// character after it. The search itself stays inside the budget.
-		lookEnd := budget + 2
-		if lookEnd > len(rest) {
-			lookEnd = len(rest)
-		}
-		look := string(rest[:lookEnd])
-		cut := -1
-		// Strongest separator first, and within a separator the LATEST break,
-		// so chunks run as long as they may rather than as short as they can.
-		for _, sep := range cfg.SplitOn {
-			at := strings.LastIndex(head, sep)
-			// A period inside a sentence is not a boundary, so the search
-			// keeps walking back through this separator's own occurrences
-			// before it gives up and tries a weaker one. Searching head[:at]
-			// skips an occurrence overlapping the held one, which no separator
-			// here can have.
-			for at > 0 && holds(look, at, sep, cfg) {
-				at = strings.LastIndex(head[:at], sep)
-			}
-			if at > 0 {
-				cut = len([]rune(head[:at])) + len([]rune(sep))
-				break
-			}
-		}
-		if cut <= 0 {
-			// No punctuation in a whole window's worth of text. Break at the
-			// last word boundary. WordBoundaries, not U+0020: NBSP survives
-			// the funnel and is ordinary in real prose, so it counts as a
-			// boundary here like an ordinary space.
-			best := -1
-			for _, b := range WordBoundaries {
-				if at := strings.LastIndex(head, string(b)); at > best {
-					best = at
-				}
-			}
-			if best >= 0 {
-				cut = len([]rune(head[:best]))
-			}
-		}
-		if cut <= 0 {
-			cut = budget // one unbroken token longer than a window: mid-word
+		var cut int
+		if prose {
+			cut = proseCut(rest, budget, cfg, abbreviations, language)
+		} else {
+			cut = configuredCut(rest, budget, cfg)
 		}
 		// Never zero: a cut of 0 leaves rest unchanged and the loop spins.
 		if cut < 1 {
 			cut = 1
 		}
-		chunks = append(chunks, strings.TrimSpace(string(rest[:cut])))
-		// TrimLeftFunc(unicode.IsSpace), not a four-character cutset: Python
-		// uses lstrip() and Rust trim_start(), both of which strip ALL Unicode
-		// whitespace. An NBSP left at the head of `rest` was charged against
-		// the next chunk's budget and then removed from the chunk itself by
-		// TrimSpace, so every split after the first one drifted: 28 of 218
-		// shared cases, typically ending in a one-character chunk that becomes
-		// its own utterance with its own derived seed. NBSP is ordinary in
-		// real prose ("10 000", French punctuation, typeset copy).
-		rest = []rune(strings.TrimLeftFunc(string(rest[cut:]), unicode.IsSpace))
+		chunks = append(chunks, strings.TrimFunc(string(rest[:cut]), chunkSpace))
+		// Whitespace after a cut does not count against the next budget.
+		// Advance over it in the existing rune slice to keep long passages linear.
+		rest = rest[cut:]
+		for len(rest) > 0 && chunkSpace(rest[0]) {
+			rest = rest[1:]
+		}
 	}
 
 	out := chunks[:0]
@@ -298,6 +272,191 @@ func SplitText(text string, cfg Config) []string {
 		}
 	}
 	return out
+}
+
+// proseCut tries to finish a sentence before choosing a weaker pause.
+// All positions below are rune offsets within the remaining text.
+func proseCut(rest []rune, budget int, cfg Config, abbreviations [][]rune, language string) int {
+	limit := budget
+	if cfg.MaxTokens == 255 && cfg.CapResplit == WordCapResplit {
+		limit = min(len(rest), budget+24)
+	}
+	sentence, extended, clause, comma := 0, 0, 0, 0
+	pauses := 0
+	for i, mark := range rest[:limit] {
+		if !strings.ContainsRune(".!?;:,–\u2014", mark) {
+			continue
+		}
+		end := i + 1
+		for end < limit && isCloser(rest[end]) {
+			end++
+		}
+		if end < len(rest) && !chunkSpace(rest[end]) {
+			continue
+		}
+		switch mark {
+		case '.', '!', '?':
+			if mark == '.' && periodHeld(rest, i, end, cfg, abbreviations) {
+				continue
+			}
+			if end <= budget {
+				sentence = end
+			} else if extended == 0 {
+				extended = end
+			}
+		default:
+			if end > budget || (budget >= 64 && end*4 < budget) {
+				continue
+			}
+			if budget >= 64 && len(rest)-end <= 24 && len(strings.FieldsFunc(string(rest[end:]), chunkSpace)) == 1 {
+				continue
+			}
+			if mark == ',' {
+				comma = end
+				pauses++
+			} else if mark == ';' || mark == ':' ||
+				i > 0 && chunkSpace(rest[i-1]) && i+1 < len(rest) && chunkSpace(rest[i+1]) {
+				clause = end
+				pauses++
+			}
+		}
+	}
+	if pauses >= 2 {
+		extended = 0
+	}
+	for _, candidate := range [...]int{sentence, extended, clause, comma} {
+		if candidate > 0 {
+			return candidate
+		}
+	}
+
+	return wordCut(rest, budget, cfg, abbreviations, language)
+}
+
+func wordCut(rest []rune, budget int, cfg Config, abbreviations [][]rune, language string) int {
+	// Keep both sides substantial when a greedy word break would leave a
+	// short tail. Twice the gap offset compares distances without rounding.
+	balance := budget >= 64 && (len(rest)-budget)*4 < budget
+	latest, best, bestDistance := 0, 0, 0
+	for i := 1; i <= budget; i++ {
+		if !isWordBoundary(rest[i]) || isWordBoundary(rest[i-1]) {
+			continue
+		}
+		latest = i
+		if rest[i-1] == '.' && periodHeld(rest, i-1, i, cfg, abbreviations) {
+			continue
+		}
+		distance := 2*i - len(rest)
+		if distance < 0 {
+			distance = -distance
+		}
+		if best == 0 || !balance || distance < bestDistance {
+			best, bestDistance = i, distance
+		}
+	}
+	if best > 0 {
+		if language == "en" && budget >= 64 {
+			return attachConjunction(rest, best, budget)
+		}
+		return best
+	}
+	if latest > 0 {
+		return latest
+	}
+	return budget
+}
+
+// Keep an English clause opener with the clause it introduces. For "while",
+// require a subject so phrases such as "for a little while" keep their break.
+func attachConjunction(text []rune, cut, budget int) int {
+	start := cut
+	for start > 0 && cut-start < len("although") && !isWordBoundary(text[start-1]) {
+		start--
+	}
+	if start == 0 || !isWordBoundary(text[start-1]) || (start-1)*4 < budget {
+		return cut
+	}
+	word := string(text[start:cut])
+	switch word {
+	case "although", "because", "unless", "whereas", "while":
+	default:
+		return cut
+	}
+	next := cut
+	for next < len(text) && chunkSpace(text[next]) {
+		next++
+	}
+	if len(text)-next <= budget && len(text)-start > budget {
+		return cut
+	}
+	if word == "while" {
+		end := next
+		for end < len(text) && end-next <= len("they") && !isWordBoundary(text[end]) {
+			end++
+		}
+		switch string(text[next:end]) {
+		case "the", "they", "we", "she", "he", "it", "you":
+		default:
+			return cut
+		}
+	}
+	return start
+}
+
+func isCloser(r rune) bool {
+	return strings.ContainsRune("\"'”’»›“‘«‹)]}", r)
+}
+
+// chunkSpace mirrors str.isspace() used for punctuation in the reference.
+func chunkSpace(r rune) bool {
+	return unicode.IsSpace(r) || 0x1c <= r && r <= 0x1f
+}
+
+func periodHeld(text []rune, period, end int, cfg Config, abbreviations [][]rune) bool {
+	if cfg.MidSentencePeriod != HoldMidSentencePeriod {
+		return false
+	}
+	for end < len(text) && chunkSpace(text[end]) {
+		end++
+	}
+	if end == len(text) {
+		return false
+	}
+	next := text[end]
+	if next >= 'a' && next <= 'z' {
+		return true
+	}
+	asciiWord := func(r rune) bool { return r < 128 && isASCIIWord(byte(r)) }
+	for _, abbr := range abbreviations {
+		start := period - len(abbr)
+		if start >= 0 && (start == 0 || !asciiWord(text[start-1])) && slices.Equal(text[start:period], abbr) {
+			return true
+		}
+	}
+	if period == 0 || (period >= 2 && asciiWord(text[period-2])) {
+		return false
+	}
+	initial := text[period-1]
+	return initial >= 'A' && initial <= 'Z' && initial != 'I' && next >= 'A' && next <= 'Z'
+}
+
+// configuredCut keeps the caller's separator order and literal matches.
+func configuredCut(rest []rune, budget int, cfg Config) int {
+	head := string(rest[:budget+1])
+	look := string(rest[:min(len(rest), budget+2)])
+	for _, sep := range cfg.SplitOn {
+		for at := strings.LastIndex(head, sep); at > 0; at = strings.LastIndex(head[:at], sep) {
+			if !holds(look, at, sep, cfg) {
+				return len([]rune(head[:at+len(sep)]))
+			}
+		}
+	}
+	for i := budget; i > 0; i-- {
+		if isWordBoundary(rest[i]) {
+			return i
+		}
+	}
+	return budget
 }
 
 // WordBoundaries are the characters SplitInHalf may cut on, written out rather
@@ -361,8 +520,8 @@ func SplitInHalf(text string) (string, string, bool) {
 	if best < 0 {
 		return "", "", false
 	}
-	first := strings.TrimSpace(string(runes[:best]))
-	second := strings.TrimSpace(string(runes[best:]))
+	first := strings.TrimFunc(string(runes[:best]), chunkSpace)
+	second := strings.TrimFunc(string(runes[best:]), chunkSpace)
 	// Trimming can empty a half the scan thought was interior, on input whose
 	// boundary run is all whitespace. SplitText trims before this is ever
 	// called, so the engine cannot reach it, but this is exported and a caller

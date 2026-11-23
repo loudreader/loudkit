@@ -5,10 +5,17 @@ that the test suite measures are in [Parity, measured](../parity-measured.md).
 
 ## The recipe in force: `loudkit-1`
 
-Production fingerprint `7cd75498ad4e7531`. Python, Swift, Go, Rust and
+Production fingerprint `4a2918bb653ce531`. Python, Swift, Go, Rust and
 TypeScript compute it independently and agree. `loudr-1-turbo` runs the same
 recipe in the `fusion_mtp2` decode mode with one Euler step. Its fingerprint is
-`e5303ba243087222`, and the same five implementations agree on it.
+`ccaeab4e92d9edc1`, and the same five implementations agree on it.
+
+Both fingerprints include `funnel-10`, the host code that prepares narration
+and chooses which words the model reads together. Each SDK applies that code
+when it loads a base or turbo checkpoint. The encoder, generator and renderer
+still accept the same inputs, so existing exports of each model work with the
+new host. To reproduce a `funnel-6`, `funnel-7`, `funnel-8` or `funnel-9` reading, retain its SDK
+build along with the checkpoint, voice and seed.
 
 `recipe_version` names the parts of the algorithm that live in code: the
 sampling rule, the window framing, the joins and the artifact detectors. Their

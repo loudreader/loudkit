@@ -14,8 +14,8 @@ from typing import Any
 
 __all__ = ["TextConfig", "grammar_digest", "grammar_languages", "FUNNEL_PORTED"]
 
-FUNNEL_PORTED = "funnel-6"
-"""Which text funnel this build runs, hashed into the algorithm fingerprint.
+FUNNEL_PORTED = "funnel-10"
+"""Code version of text preparation and chunk planning, hashed into the algorithm fingerprint.
 
 See ``docs/design/text-funnel.md``.
 """

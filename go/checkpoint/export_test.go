@@ -178,6 +178,27 @@ func TestVerifyExportHoldsTheRecordToTheCheckpoint(t *testing.T) {
 	}
 }
 
+func TestExportFingerprintMatchesOnlyItsOwnReleasedGraphSet(t *testing.T) {
+	const base, base7, base6 = "4a2918bb653ce531", "b99ab84725b40e91", "7cd75498ad4e7531"
+	const turbo, turbo7, turbo6 = "ccaeab4e92d9edc1", "e800f3bbb7eb6b4e", "e5303ba243087222"
+	for _, tc := range []struct {
+		current, recorded string
+		want              bool
+	}{
+		{base, "f171bcc07df48436", true}, {base, "82c2c12d6e725542", true}, {base, "06d8ccb48891899e", false},
+		{base, base, true}, {base, base6, true}, {base, base7, true},
+		{base, turbo6, false}, {base, turbo7, false},
+		{turbo, "06d8ccb48891899e", true}, {turbo, "62d674008ef832fd", true}, {turbo, "f171bcc07df48436", false},
+		{turbo, turbo, true}, {turbo, turbo6, true}, {turbo, turbo7, true},
+		{turbo, base6, false}, {turbo, base7, false},
+		{base6, base, false}, {"custom", base6, false}, {"custom", "", false},
+	} {
+		if got := matchesExportFingerprint(quote(tc.recorded), tc.current); got != tc.want {
+			t.Errorf("current %s, graph %s: got %t, want %t", tc.current, tc.recorded, got, tc.want)
+		}
+	}
+}
+
 // A field the record was written before, and one it carries as null, are the
 // same answer: neither turns a set that agrees into a mixed one.
 func TestVerifyExportReadsARecordWrittenBeforeAFieldExisted(t *testing.T) {

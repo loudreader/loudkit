@@ -36,6 +36,7 @@ public enum Numbers {
         let unitTensJoiner: String
         let timeInfix: String
         let abbreviations: [(String, String)]
+        let titleAbbreviations: [(key: String, value: String)]
         let tensJoinerExceptions: [Int64: String]
         let hundredJoiner: String
         let scaleJoinerOnRoundHundreds: Bool
@@ -185,6 +186,8 @@ public enum Numbers {
                 abbreviations: ((e["abbreviations"] as? [String: String]) ?? [:])
                     .sorted { $0.key.count > $1.key.count }  // longest first
                     .map { ($0.key, $0.value) },
+                titleAbbreviations: ((e["title_abbreviations"] as? [String: String]) ?? [:])
+                    .sorted { $0.key < $1.key },
                 tensJoinerExceptions: intKeys(e["tens_joiner_exceptions"]),
                 hundredJoiner: e["hundred_joiner"] as? String ?? "",
                 scaleJoinerOnRoundHundreds: e["scale_joiner_on_round_hundreds"] as? Bool ?? false,
@@ -268,7 +271,7 @@ public enum Numbers {
         return "\(head)\(link)\(compose(rest, g, gender, asMultiplier: false))"
     }
 
-    private static func scaleWord(_ count: Int64, _ forms: [String]) -> String {
+    static func scaleWord(_ count: Int64, _ forms: [String]) -> String {
         if forms.count == 1 || count == 1 { return forms[0] }
         // singular / plural: Million / Millionen
         if forms.count == 2 { return forms[1] }
@@ -547,6 +550,7 @@ public enum Numbers {
             // A zero minute is dropped from `14:00` and kept in `14:00:45`,
             // where dropping it would move the seconds into the minutes' place.
             if minute != 0 || seconds != 0, let said = cardinal(minute, language: language) {
+                if language == "en", (1...9).contains(minute) { words.append("oh") }
                 words.append(said)
             }
             if seconds != 0, let said = cardinal(seconds, language: language) {
@@ -612,8 +616,23 @@ public enum Numbers {
 
     /// The authority-listed abbreviations, written out, see the Python module.
     public static func expandAbbreviations(_ text: String, language: String) -> String {
-        guard let g = grammars[language], !g.abbreviations.isEmpty else { return text }
+        guard let g = grammars[language] else { return text }
         var out = text
+        let leftBoundary = #"(?<![\p{L}\p{N}_.])"#
+        let sentenceStarters = "I|He|She|We|They|It|The|This|That|Then|Later|Afterwards|Afterward"
+        let directions = "North|South|East|West|Northeast|Northwest|Southeast|Southwest|NE|NW|SE|SW"
+        // The bounded lookbehind recognizes "742 Evergreen Dr." without
+        // scanning the whole preceding passage for every candidate.
+        let streetAddress = #"(?<!(?<![A-Za-z0-9])[0-9]{1,7}(?:[ \t]{1,4}[A-Z][A-Za-z'-]{0,24}){1,4}[ \t]{1,4})"#
+        for (written, spoken) in g.titleAbbreviations {
+            guard out.range(of: written, options: .literal) != nil else { continue }
+            let excluded = written == "Dr." ? sentenceStarters + "|" + directions : sentenceStarters
+            let nextName = #"(?=[ \t\u00A0\u202F]+(?!(?:"# + excluded
+                + #")(?!\p{L}))(?=\p{L})\p{Uppercase})"#
+            let pattern = leftBoundary + (written == "Dr." ? streetAddress : "")
+                + NSRegularExpression.escapedPattern(for: written) + nextName
+            out = out.replacingOccurrences(of: pattern, with: spoken, options: .regularExpression)
+        }
         for (written, spoken) in g.abbreviations {
             // The boundaries are looked at, not consumed. A pattern that eats
             // the character on either side leaves the next occurrence with no
@@ -623,8 +642,15 @@ public enum Numbers {
             //
             // The word class is spelled out for the reason `digitRun` gives:
             // ICU's `\w` counts a combining mark and no other port does.
-            let pattern = "(?<![\\p{L}\\p{N}_.])" + NSRegularExpression.escapedPattern(for: written)
+            let pattern = leftBoundary + NSRegularExpression.escapedPattern(for: written)
                 + "(?![\\p{L}\\p{N}_.])"
+            if language == "en", written == "etc." {
+                // This period also closes the sentence before a capitalized
+                // continuation or at the end, including inside a quotation.
+                let sentenceEnd = #"(?=[”’"')\]]*(?:\s*\z|\s+[“‘"'(\[]?\p{Uppercase}))"#
+                out = out.replacingOccurrences(
+                    of: pattern + sentenceEnd, with: spoken + ".", options: .regularExpression)
+            }
             out = out.replacingOccurrences(
                 of: pattern, with: spoken, options: .regularExpression)
         }

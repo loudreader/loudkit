@@ -318,7 +318,7 @@ async function longForm(
       continue;
     }
     const wantTexts = c.chunks.map((chunk) => chunk.text);
-    const gotTexts = splitText(prepared, engine.config.chunking);
+    const gotTexts = splitText(prepared, engine.config.chunking, c.language);
     if (gotTexts.length !== wantTexts.length || gotTexts.some((t, i) => t !== wantTexts[i])) {
       console.log(
         `long_form ${c.name}: FAIL (the split moved, so every chunk below ` +

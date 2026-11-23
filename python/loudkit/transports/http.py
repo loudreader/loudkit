@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Generator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -24,8 +25,10 @@ from ..engine import Engine, validate_speech_tokens
 from ..errors import CancelledError, UnsupportedLanguageError, VoiceNotFoundError, error_code
 from ..models.timestretch import MAX_SPEED, MIN_SPEED
 from ..synthesis import (
+    STREAMABLE_FORMATS,
     Rendered,
     VoiceLibrary,
+    _voice_file_stamp,
     fold_continuation,
     render_bytes,
     render_stream_chunks,
@@ -48,7 +51,6 @@ from .schemas import (
     _MISSING_EXTRA,
     _OPENAI_FORMATS,
     _OPENAI_UNSUPPORTED,
-    _STREAMABLE,
     OpenAISpeechRequest,
     SpeakRequest,
     _audio_headers,
@@ -130,7 +132,13 @@ def build_app(  # noqa: PLR0915 - routes + a per-route lock; linear and explicit
     if warm:
         warm_engine(engine, voices)
 
-    app = FastAPI(title="loudkit", version=_version())
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        # Validate installed profiles before the server accepts readiness probes.
+        await anyio.to_thread.run_sync(usable_voice_names)
+        yield
+
+    app = FastAPI(title="loudkit", version=_version(), lifespan=lifespan)
 
     @app.exception_handler(StarletteHTTPException)
     async def _with_code(_request: Any, exc: StarletteHTTPException) -> JSONResponse:
@@ -221,17 +229,45 @@ def build_app(  # noqa: PLR0915 - routes + a per-route lock; linear and explicit
             async with stream_lease(self._release):
                 await super().__call__(scope, receive, send)
 
+    voice_status: dict[str, tuple[tuple[int, ...], bool]] = {}
+    voice_status_lock = threading.Lock()
+
+    def usable_voice_names() -> list[str]:
+        # Keep one verdict per installed profile; a replacement changes its stamp.
+        # Serializing catalog scans prevents concurrent probes parsing the same file.
+        with voice_status_lock:
+            names = voices.names()
+            for removed in voice_status.keys() - set(names):
+                del voice_status[removed]
+            usable = []
+            for name in names:
+                try:
+                    stamp = _voice_file_stamp(voices.root / f"{name}.safetensors")
+                    cached = voice_status.get(name)
+                    if cached is None or cached[0] != stamp:
+                        try:
+                            voices.load(name)
+                        except ValueError:
+                            valid = False
+                        else:
+                            valid = True
+                        voice_status[name] = (stamp, valid)
+                    if voice_status[name][1]:
+                        usable.append(name)
+                except OSError:
+                    # A mount can change between listing, stat and open.
+                    voice_status.pop(name, None)
+            return usable
+
     @app.get("/health", response_model=None)
     def health() -> Response:
-        """The resolved algorithm and execution, 503 once the engine has
-        wedged, and 503 while a render has held it longer than
-        ``_SLOW_RENDER_S``."""
+        """Report readiness of the engine and its mounted voice library."""
         body: dict[str, object] = {
             "status": "ok",
             "algorithm": engine.algorithm.describe(),
             "execution": engine.execution.describe(),
             "fingerprint": engine.algorithm.fingerprint(),
-            "voices": voices.names(),
+            "voices": [],
         }
         wedged = engine.wedged
         if wedged is not None:
@@ -250,11 +286,17 @@ def build_app(  # noqa: PLR0915 - routes + a per-route lock; linear and explicit
                 body["status"] = "stuck"
                 body["synthesis_age_seconds"] = round(stuck_for, 1)
                 return JSONResponse(body, status_code=503, headers={"Retry-After": "30"})
-        return JSONResponse(body)
+        available = usable_voice_names()
+        body["voices"] = available
+        if available:
+            return JSONResponse(body)
+        body["status"] = "no_usable_voice"
+        body["detail"] = "Add a readable loudkit profile to the configured voice directory."
+        return JSONResponse(body, status_code=503)
 
     @app.get(f"{_API_PREFIX}/voices")
     def list_voices() -> dict[str, list[str]]:
-        return {"voices": voices.names()}
+        return {"voices": usable_voice_names()}
 
     @app.post(f"{_API_PREFIX}/synthesize", response_model=None)
     async def synthesize(  # noqa: PLR0915 - one linear route; the ladder is the contract
@@ -434,13 +476,13 @@ def build_app(  # noqa: PLR0915 - routes + a per-route lock; linear and explicit
         except ValueError as exc:
             raise _refuse(422, exc) from exc
 
-        if req.format not in _STREAMABLE:
+        if req.format not in STREAMABLE_FORMATS:
             raise HTTPException(
                 status_code=422,
                 detail=(
                     f"format {req.format!r} cannot be streamed: a container is one "
                     "continuous stream, not one payload per chunk. Streamable "
-                    f"formats are {', '.join(sorted(_STREAMABLE))}; use "
+                    f"formats are {', '.join(sorted(STREAMABLE_FORMATS))}; use "
                     f"{_API_PREFIX}/synthesize for the rest."
                 ),
             )

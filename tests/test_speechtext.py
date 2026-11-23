@@ -630,6 +630,27 @@ class TestTheReadingsWrittenByHand:
     check that the code arrived at it.
     """
 
+    @pytest.mark.parametrize(
+        ("text", "spoken"),
+        [
+            ("Wybierz 2 z 3 ofert.", "Wybierz dwie z trzech ofert."),
+            ("Zaznacz 1 z 4 propozycji.", "Zaznacz jedną z czterech propozycji."),
+            ("Wskaż 2 z 10 biletów.", "Wskaż dwa z dziesięciu biletów."),
+            ("Masz 2 nowe wiadomości.", "Masz dwie nowe wiadomości."),
+            ("12,50 zł", "dwanaście złotych i pięćdziesiąt groszy"),
+            ("0,01zł", "jeden grosz"),
+            ("0,0 zł", "zero złotych"),
+            ("1,02 zł", "jeden złoty i dwa grosze"),
+            ("22,12 zł", "dwadzieścia dwa złote i dwanaście groszy"),
+            ("2\u202f000 zł", "dwa tysiące złotych"),
+            ("2 kg i 12 m²", "dwa kilogramy i dwanaście metrów kwadratowych"),
+            ("1,5 kg", "jeden przecinek pięć kilograma"),
+            ("Pozostały 2 dni.", "Pozostały dwa dni."),
+        ],
+    )
+    def test_polish_product_readings(self, text: str, spoken: str) -> None:
+        assert speech_text(text, "pl") == spoken
+
     def test_the_ascii_comparison_operators_are_spoken(self) -> None:
         # Deleted, silently, in ordinary technical prose: "if latency two
         # hundred ms" states the opposite condition as readily as the one
@@ -797,3 +818,74 @@ class TestTheReadingsWrittenByHand:
 
         for language in supported_languages():
             assert cardinal(1776, language) in speech_text("In 1776 he wrote it.", language)
+
+    @pytest.mark.parametrize("space", ["\u00a0", "\u2009", "\u202f"])
+    def test_typographic_grouping_preserves_the_value(self, space: str) -> None:
+        from loudkit.frontend.numbers import cardinal, supported_languages
+
+        for language in supported_languages():
+            assert speech_text(f"12{space}345{space}678", language) == cardinal(
+                12_345_678, language
+            )
+        assert (
+            speech_text(f"£1{space}234", "en")
+            == "one thousand two hundred and thirty-four pounds"
+        )
+        assert speech_text(f"1{space}234,56 €", "fr") == (
+            "mille deux cent trente-quatre virgule cinq six euros"
+        )
+        assert speech_text(f"keep{space}together", "en") == f"keep{space}together"
+
+    def test_plain_spaces_in_a_prefixed_price(self) -> None:
+        assert speech_text("£ 1 234", "en") == speech_text("£1234", "en")
+
+
+@pytest.mark.parametrize("language", ["en", "de", "fr", "es", "pl"])
+@pytest.mark.parametrize("value", [".75%", "-.25", "$.50"])
+def test_leading_decimal_preserves_magnitude(language, value):
+    assert speech_text(value, language) == speech_text(value.replace(".", "0."), language)
+
+
+def test_markup_entities_and_technical_comparisons():
+    assert speech_text("<p>Pat can&#39;t swim &amp; Lee can.</p>", "en") == speech_text(
+        "Pat can't swim and Lee can.", "en"
+    )
+    assert speech_text("Return false if x<low or x>high.", "en") == speech_text(
+        "Return false if x < low or x > high.", "en"
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "equivalent"),
+    [
+        ("Enter <username or email> below.", "Enter username or email below."),
+        ("<p>Answer &lt;yes or no&gt; below.</p>", "Answer yes or no below."),
+        ("git checkout <branch name> first", "git checkout branch name first"),
+        ('<button @click="go">Run</button><div *ngIf="x">now</div>', "Run now"),
+        ('<input [value]="v"><a href=page.php?id=3>Ready</a>', "Ready"),
+        ('<a href="x"class="y">Ready</a>', "Ready"),
+        ("They raised $10 000 days before.", "They raised ten thousand dollars days before."),
+        ("5%,10%", "five percent,ten percent"),
+        ("x²<a or b>c", "x² < a or b > c"),
+        ("if a<b then c>d", "if a b then c d"),
+        ('Say ".5".', 'Say "0.5".'),
+        ("For T<Tc: M = M0 + 1. For T>Tc: M = 0.", "For T Tc: M = M0 + 1. For T Tc: M = 0."),
+        ("while i<n: i = i + 1. Stop when i>n.", "while i n: i = i + 1. Stop when i n."),
+        ('<a download href="f.pdf">File</a><div popover>Ready</div>', "File Ready"),
+        ('<Route exact path="/"><div v-cloak>Ready</div></Route>', "Ready"),
+        ("while i<n value=i + 1 then i>n.", "while i n value=i + 1 then i n."),
+        ("At ≈.5%.", "At ≈0.5%."),
+        ("Use [.75, 1).", "Use [0.75, 1)."),
+        ("We paid $5 100 times.", "We paid five dollars one hundred times."),
+        ("She can&#039;t swim and he can&#X0027;t.", "She can't swim and he can't."),
+        ('<details open><a\n href="help" title="a > b">Help</a></details>', "Help"),
+        ("x&lt;low or x&gt;high", "x < low or x > high"),
+        ("x <low or x> high", "x < low or x > high"),
+    ],
+)
+def test_review_narration_preserves_meaning(text, equivalent):
+    assert speech_text(text, "en") == speech_text(equivalent, "en")
+
+
+def test_title_at_sentence_end_keeps_its_stop():
+    assert speech_text("I saw the Dr. Later we left.", "en") == "I saw the Dr. Later we left."

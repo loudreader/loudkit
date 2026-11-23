@@ -14,8 +14,7 @@ final class EnrollmentTests: XCTestCase {
         }
         let ckpt = Fixture.checkpointURL
         let dir = ckpt.deletingLastPathComponent().appendingPathComponent("coreml")
-        return FileManager.default.fileExists(
-            atPath: dir.appendingPathComponent("s3_tokenizer.mlpackage").path) ? dir : nil
+        return LoudKit.isPackage(dir.appendingPathComponent("s3_tokenizer.mlpackage")) ? dir : nil
     }
 
     private static func requireCoreml() throws -> URL {

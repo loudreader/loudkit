@@ -89,6 +89,14 @@ public final class Checkpoint {
     public var coremlAssetsURL: URL {
         url.deletingLastPathComponent().appendingPathComponent("coreml")
     }
+
+    // Text and chunk planning changed before inference. CoreML packages
+    // from either previous frontend still implement their own model.
+    private static let previousExportFingerprints: [String: Set<String>] = [
+        "4a2918bb653ce531": ["7cd75498ad4e7531", "b99ab84725b40e91", "f171bcc07df48436", "82c2c12d6e725542"], // loudr-1
+        "ccaeab4e92d9edc1": ["e5303ba243087222", "e800f3bbb7eb6b4e", "06d8ccb48891899e", "62d674008ef832fd"], // loudr-1-turbo
+    ]
+
     /// The renderer packages must describe this checkpoint and algorithm.
     func verifyCoreMLExport(at assets: URL, algorithm: AlgorithmConfig) throws {
         let record = assets.appendingPathComponent("export.json")
@@ -101,6 +109,7 @@ public final class Checkpoint {
             throw LoudKitError.asset("\(record.path): unreadable export record")
         }
         let digest = try LoudKit.fileSHA256(url)
+        let fingerprint = algorithm.fingerprint()
         let keys = ["checkpoint_sha256", "algorithm_fingerprint", "euler_steps", "estimator_sha256"]
         var agreed: NSDictionary?
         for stem in ["flow_encoder", "flow_estimator", "vocoder"] {
@@ -113,7 +122,8 @@ public final class Checkpoint {
             }
             agreed = identity
             guard entry["checkpoint_sha256"] as? String == digest,
-                  entry["algorithm_fingerprint"] as? String == algorithm.fingerprint(),
+                  let recorded = entry["algorithm_fingerprint"] as? String,
+                  recorded == fingerprint || Self.previousExportFingerprints[fingerprint]?.contains(recorded) == true,
                   (entry["euler_steps"] as? NSNumber)?.intValue == algorithm.eulerSteps else {
                 throw LoudKitError.asset("\(record.path): renderer was exported from a different engine")
             }

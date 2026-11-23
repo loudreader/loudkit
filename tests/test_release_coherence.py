@@ -122,8 +122,7 @@ def _manifest_versions() -> dict[str, str]:
 
 def _changelog_head() -> tuple[str, str]:
     """``(version, date)`` from the top ``## [x.y.z] — date`` heading."""
-    text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(r"^## \[([^\]]+)\]\s*[—–-]\s*(\S+)", text, re.MULTILINE)
+    match = re.match(r"^## \[([^\]]+)\]\s*[—–-]\s*(\S+)", _changelog_head_line())
     assert match, "CHANGELOG.md has no `## [version] — date` heading to read"
     return match.group(1), match.group(2)
 
@@ -217,10 +216,10 @@ def test_a_prepared_release_is_stable_dated_and_unbannered() -> None:
 
 
 def _changelog_head_line() -> str:
-    """The whole top ``## [...]`` line, banner wording included."""
+    """The first release heading after any pending changes, including banner wording."""
     text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(r"^## \[.*$", text, re.MULTILINE)
-    assert match, "CHANGELOG.md has no `## [...]` heading"
+    match = re.search(r"^## \[(?!Unreleased\]).*$", text, re.MULTILINE)
+    assert match, "CHANGELOG.md has no release heading"
     return match.group(0)
 
 

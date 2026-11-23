@@ -7,7 +7,18 @@ import Foundation
 /// functions; a cross-language waveform difference is arithmetic.
 
 enum MLHelpers {
-    static func loadModel(packageURL: URL, computeUnits: MLComputeUnits) throws -> MLModel {
+    /// Use the exported package when both forms exist. App bundles may ship
+    /// each synthesis or enrollment stage precompiled.
+    static func stageURL(_ stem: String, in directory: URL) throws -> URL {
+        for ext in ["mlpackage", "mlmodelc"] {
+            let url = directory.appendingPathComponent("\(stem).\(ext)")
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        throw LoudKitError.asset("\(stem).mlpackage/.mlmodelc not found in \(directory.path)")
+    }
+
+    static func loadModel(_ stem: String, in directory: URL, computeUnits: MLComputeUnits) throws -> MLModel {
+        let packageURL = try stageURL(stem, in: directory)
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
         if packageURL.pathExtension == "mlmodelc" {

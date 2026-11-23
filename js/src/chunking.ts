@@ -7,19 +7,23 @@
  * splits fall is audible: a break at a full stop is inaudible, a break
  * mid-clause is not. That makes it an algorithm-layer decision rather than a
  * caller's convenience, which is why it lives in `AlgorithmConfig` and has to
- * be identical in every port. The rule is simple: break at the strongest
- * punctuation available, as late as possible.
+ * be identical in every port. Prose keeps sentence endings with their closing
+ * punctuation. Custom separator lists retain their literal order.
  * Python reference: `loudkit/frontend/chunking.py`.
  */
 import type { ChunkConfig } from "./types.js";
 
-/** Unicode White_Space, the class the four other ports strip. */
-const WS = "\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000";
-const LEADING_WS_RE = new RegExp(`^[${WS}]+`, "u");
-const TRIM_WS_RE = new RegExp(`^[${WS}]+|[${WS}]+$`, "gu");
+/** Whitespace stripped by the reference (Python str.isspace). */
+function isSpace(char: string): boolean {
+  return /\p{White_Space}/u.test(char) || (char >= "\u001c" && char <= "\u001f");
+}
 
 function trimWhitespace(text: string): string {
-  return text.replace(TRIM_WS_RE, "");
+  let start = 0;
+  let end = text.length;
+  while (start < end && isSpace(text[start])) start++;
+  while (end > start && isSpace(text[end - 1])) end--;
+  return text.slice(start, end);
 }
 
 /**
@@ -109,84 +113,203 @@ function holds(look: string, at: number, sep: string, config: ChunkConfig): bool
   return false;
 }
 
-/**
- * Split `text` into pieces that each fit one window, in order, together
- * covering the input. Never empty for non-empty input.
- */
-export function splitText(text: string, config: ChunkConfig): string[] {
-  const trimmed = trimWhitespace(text);
-  if (!trimmed) return [];
-  if (!config.enabled || estimateTokens(trimmed) <= config.maxTokens) return [trimmed];
+export const PROSE_SEPARATORS = [". ", "! ", "? ", "; ", ", "] as const;
+const CLOSERS = "\"'”’»›“‘«‹)]}";
 
-  const budget = Math.floor(config.maxTokens * CHARS_PER_TOKEN);
-  const chunks: string[] = [];
-  // Indexed by code point, not by UTF-16 unit, as Rust indexes by `char` and
-  // Go by rune, both with a comment saying a byte-indexed cut "produces
-  // invalid UTF-8, the shape of bug the ports have had before". JS never got
-  // that fix: `slice` on UTF-16 units cuts a surrogate pair in half, and the
-  // lone surrogate goes straight to `frontend.encode()`. Measured over 218
-  // shared cases: 31 produced chunks containing lone surrogates.
-  let rest = [...trimmed];
+function nextWord(chars: string[], at: number): number {
+  while (at < chars.length && isSpace(chars[at])) at++;
+  return at;
+}
 
-  while (rest.length > 0) {
-    if (rest.length <= budget) {
-      chunks.push(trimWhitespace(rest.join("")));
+/** The full lookahead distinguishes a name or a lowercase continuation from a new sentence. */
+function heldPeriod(
+  chars: string[], start: number, dot: number, following: number,
+  config: ChunkConfig, abbreviations: string[][]
+): boolean {
+  if (config.midSentencePeriod !== "hold" || following === chars.length) return false;
+  const next = chars[following];
+  if (next >= "a" && next <= "z") return true;
+  if (dot > start && (dot === start + 1 || !isAsciiWord(chars[dot - 2].charCodeAt(0)))) {
+    const initial = chars[dot - 1];
+    if (initial >= "A" && initial <= "Z" && initial !== "I" && next >= "A" && next <= "Z") {
+      return true;
+    }
+  }
+  return abbreviations.some((abbr) => {
+    const first = dot - abbr.length;
+    return first >= start && (first === start || !isAsciiWord(chars[first - 1].charCodeAt(0)))
+      && abbr.every((char, offset) => chars[first + offset] === char);
+  });
+}
+
+function proseCut(
+  chars: string[], start: number, budget: number, config: ChunkConfig, abbreviations: string[][],
+  language: string
+): number {
+  const limit = start + budget;
+  // The production window can attempt the remainder of a nearly complete sentence.
+  // If generation actually fills the window, the engine retries it in halves.
+  const overrun = config.maxTokens === 255 && config.capResplit === "word" ? 24 : 0;
+  const stop = Math.min(chars.length, limit + overrun);
+  let sentence = 0;
+  let extension = 0;
+  let pauses = 0;
+  let clause = 0;
+  let comma = 0;
+  for (let i = start; i < stop; i++) {
+    const mark = chars[i];
+    if (!".!?;:,–\u2014".includes(mark)) continue;
+    let end = i + 1;
+    while (end < stop && CLOSERS.includes(chars[end])) end++;
+    if (end < chars.length && !isSpace(chars[end])) continue;
+    if (".!?".includes(mark)) {
+      if (mark === "." && heldPeriod(chars, start, i, nextWord(chars, end), config, abbreviations)) {
+        continue;
+      }
+      if (end <= limit) sentence = end;
+      else if (!extension) extension = end;
+    } else if (end <= limit && (budget < 64 || (end - start) * 4 >= budget)) {
+      if (budget >= 64 && chars.length - end <= 24 &&
+          chars.slice(end).filter((c, i) => !isSpace(c) && (i === 0 || isSpace(chars[end + i - 1]))).length === 1) continue;
+      const spacedDash = i > start && isSpace(chars[i - 1]) && i + 1 < chars.length && isSpace(chars[i + 1]);
+      if (mark === ",") {
+        comma = end;
+        pauses++;
+      }
+      else if (mark === ";" || mark === ":" || spacedDash) {
+        clause = end;
+        pauses++;
+      }
+    }
+  }
+  return sentence || (pauses < 2 && extension) || clause || comma ||
+    proseWordCut(chars, start, budget, config, abbreviations, language);
+}
+
+function proseWordCut(
+  chars: string[], start: number, budget: number, config: ChunkConfig, abbreviations: string[][],
+  language: string
+): number {
+  const limit = start + budget;
+  // Balance two windows if the greedy word cut would leave only a tiny final utterance.
+  const remaining = chars.length - start;
+  const balance = budget >= 64 && (remaining - budget) * 4 < budget;
+  let best = 0;
+  let latest = 0;
+  let bestDistance = Infinity;
+  for (let i = start + 1; i <= limit; i++) {
+    if (!WORD_BOUNDARIES.has(chars[i]) || WORD_BOUNDARIES.has(chars[i - 1])) continue;
+    latest = i;
+    if (chars[i - 1] === "." && heldPeriod(chars, start, i - 1, nextWord(chars, i), config, abbreviations)) {
+      continue;
+    }
+    const distance = Math.abs(2 * (i - start) - remaining);
+    if (!balance || distance < bestDistance) {
+      best = i;
+      bestDistance = distance;
+    }
+  }
+  if (best && budget >= 64 && language === "en") {
+    return englishClauseCut(chars, start, best, budget);
+  }
+  return best || latest || limit;
+}
+
+const CONJUNCTIONS = ["although", "because", "unless", "whereas", "while"];
+const WHILE_SUBJECTS = ["the", "they", "we", "she", "he", "it", "you"];
+
+/** All literal words in the clause rules are ASCII. Offsets in chars count Unicode scalars. */
+function startsWithPhrase(chars: string[], at: number, phrase: string): boolean {
+  const end = at + phrase.length;
+  return (end === chars.length || WORD_BOUNDARIES.has(chars[end])) &&
+    chars.slice(at, end).join("") === phrase;
+}
+
+function englishClauseCut(chars: string[], start: number, cut: number, budget: number): number {
+  // "through the valley while | the children followed" breaks the clause after its first word.
+  for (const word of CONJUNCTIONS) {
+    const before = cut - word.length;
+    if (before <= start || !WORD_BOUNDARIES.has(chars[before - 1])) continue;
+    if (chars.slice(before, cut).join("") !== word) continue;
+    const subject = nextWord(chars, cut);
+    const wouldOverflow = chars.length - subject <= budget && chars.length - before > budget;
+    if ((before - start - 1) * 4 >= budget && !wouldOverflow &&
+        (word !== "while" || WHILE_SUBJECTS.some((w) => startsWithPhrase(chars, subject, w)))) {
+      return before;
+    }
+  }
+
+  return cut;
+}
+
+function literalCut(chars: string[], start: number, budget: number, config: ChunkConfig): number {
+  const head = chars.slice(start, start + budget + 1).join("");
+  // One code point past the window, and used only by `holds`: the latest
+  // candidate can end the window exactly, and the test reads the character
+  // after it. The search itself stays inside the budget.
+  const look = head + (chars[start + budget + 1] ?? "");
+  let cut = -1;
+  // Strongest separator first, and within a separator the LATEST break, so
+  // chunks run as long as they may rather than as short as they can.
+  // `lastIndexOf` returns a UTF-16 offset, so it is converted back to a code
+  // point count before advancing through `chars`.
+  for (const sep of config.splitOn) {
+    let at = head.lastIndexOf(sep);
+    // A period inside a sentence is not a boundary, so the search keeps
+    // walking back through this separator's own occurrences before it gives
+    // up and tries a weaker one. Searching `head.slice(0, at)` skips an
+    // occurrence overlapping the held one, which no separator here can have.
+    while (at > 0 && holds(look, at, sep, config)) {
+      at = head.slice(0, at).lastIndexOf(sep);
+    }
+    if (at > 0) {
+      cut = [...head.slice(0, at)].length + [...sep].length;
       break;
     }
-    const head = rest.slice(0, budget + 1).join("");
-    // One code point past the window, and used only by `holds`: the latest
-    // candidate can end the window exactly, and the test reads the character
-    // after it. The search itself stays inside the budget.
-    const look = rest.slice(0, budget + 2).join("");
-    let cut = -1;
-    // Strongest separator first, and within a separator the LATEST break, so
-    // chunks run as long as they may rather than as short as they can.
-    // `lastIndexOf` returns a UTF-16 offset, so it is converted back to a code
-    // point count before it is used as an index into `rest`.
-    for (const sep of config.splitOn) {
-      let at = head.lastIndexOf(sep);
-      // A period inside a sentence is not a boundary, so the search keeps
-      // walking back through this separator's own occurrences before it gives
-      // up and tries a weaker one. Searching `head.slice(0, at)` skips an
-      // occurrence overlapping the held one, which no separator here can have.
-      while (at > 0 && holds(look, at, sep, config)) {
-        at = head.slice(0, at).lastIndexOf(sep);
-      }
-      if (at > 0) {
-        cut = [...head.slice(0, at)].length + [...sep].length;
-        break;
-      }
-    }
-    if (cut <= 0) {
-      // No punctuation in a whole window's worth of text. Break at the last
-      // word boundary; it will be heard, and that is the point.
-      // WORD_BOUNDARIES, not U+0020: NBSP survives the funnel and is ordinary
-      // in real prose, so text whose every space is non-breaking would find
-      // no boundary here and be cut mid-word.
-      let at = -1;
-      for (const b of WORD_BOUNDARIES) {
-        const found = head.lastIndexOf(b);
-        if (found > at) at = found;
-      }
-      if (at > 0) cut = [...head.slice(0, at)].length;
-    }
-    if (cut <= 0) {
-      cut = budget; // one unbroken token longer than a window: mid-word
-    }
-    // Never zero: a cut of 0 leaves `rest` unchanged and the loop spins
-    // forever.
-    cut = Math.max(cut, 1);
-
-    // `WS_RE`, not `trim()` and `/\s/`: ECMAScript excludes U+0085 NEL from
-    // both, and the other four ports strip it. A NEL left on the front of the
-    // remainder is charged against the *next* chunk's budget, so the boundaries
-    // drift and words are cut mid-word -- measured, 51 of 500 fuzz cases split
-    // differently here than in Python, Rust, Go and Swift, every one of them a
-    // NEL.
-    chunks.push(trimWhitespace(rest.slice(0, cut).join("")));
-    rest = [...rest.slice(cut).join("").replace(LEADING_WS_RE, "")];
   }
-  return chunks.filter((c) => c.length > 0);
+  if (cut <= 0) {
+    // No punctuation in a whole window's worth of text. Break at the last
+    // word boundary; it will be heard, and that is the point.
+    // WORD_BOUNDARIES, not U+0020: NBSP survives the funnel and is ordinary
+    // in real prose, so text whose every space is non-breaking found no
+    // boundary here and got cut mid-word.
+    let at = -1;
+    for (const b of WORD_BOUNDARIES) {
+      const found = head.lastIndexOf(b);
+      if (found > at) at = found;
+    }
+    if (at > 0) cut = [...head.slice(0, at)].length;
+  }
+  if (cut <= 0) {
+    cut = budget; // one unbroken token longer than a window: mid-word
+  }
+  return start + Math.max(cut, 1);
+}
+
+/** Plan windows in Unicode code points, matching every other SDK. */
+export function splitText(text: string, config: ChunkConfig, language = "en"): string[] {
+  const trimmed = trimWhitespace(text);
+  if (!trimmed) return [];
+  const budget = Math.max(1, Math.floor(config.maxTokens * CHARS_PER_TOKEN));
+  if (!config.enabled || trimmed.length <= budget) return [trimmed];
+  const chars = [...trimmed];
+  const prose = config.splitOn.length === PROSE_SEPARATORS.length &&
+    config.splitOn.every((sep, i) => sep === PROSE_SEPARATORS[i]);
+  const abbreviations = config.abbreviations.map((abbr) => [...abbr]);
+  const lang = language.toLowerCase();
+  const chunks: string[] = [];
+  for (let start = 0; start < chars.length;) {
+    if (chars.length - start <= budget) {
+      chunks.push(chars.slice(start).join(""));
+      break;
+    }
+    const end = prose
+      ? proseCut(chars, start, budget, config, abbreviations, lang)
+      : literalCut(chars, start, budget, config);
+    chunks.push(trimWhitespace(chars.slice(start, end).join("")));
+    start = nextWord(chars, end);
+  }
+  return chunks.filter((chunk) => chunk.length > 0);
 }
 
 /**

@@ -405,10 +405,11 @@ The contract, in the order a request meets it:
 * Every reply states its `sample_rate`. wav, flac, ogg, mp3 and opus also record
   it in their headers. Raw `pcm16` frames have no header, so read the rate from
   this field.
-* Chunk `continuation` is cumulative. Each chunk carries the passage's tail up
-  to that chunk. To continue after the last chunk you received, pass its value.
-  The final chunk's value equals the `continuation` of `Synthesize` for the same
-  request.
+* **Use the returned `continuation` to chain requests.** Single-token
+  decoding accumulates a prefix across short chunks. Turbo returns complete
+  decoder pairs from the most recent acoustic window. A very short final
+  window can therefore yield a shorter prefix. The final streamed value
+  matches the unary response for the same synthesis windows.
 
 Running the HTTP server and the gRPC server over one engine in one process is
 not supported. Each transport holds its own single-flight lease, and nothing

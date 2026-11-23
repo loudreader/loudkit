@@ -76,7 +76,12 @@
     "pl": [
       {"class": "morpheme-digraph", "text": "Odznaka zamarzła, a on nie chciał marznąć."},
       {"class": "nasal-context", "text": "Dąb stał przy tęczy, wziął gęś pod rękę."},
-      {"class": "respell-false-positive", "text": "Pan Novak i pani Water byli w Radomiu."}
+      {"class": "respell-false-positive", "text": "Pan Novak i pani Water byli w Radomiu."},
+      {"class": "ticket-price", "text": "Cena biletu to 22 zł.", "expected_spoken": "Cena biletu to dwadzieścia dwa złote."},
+      {"class": "invoice-balance", "text": "Do zapłaty: 12,05 zł.", "expected_spoken": "Do zapłaty: dwanaście złotych i pięć groszy."},
+      {"class": "offer-selection", "text": "Wybierz 2 z 3 ofert.", "expected_spoken": "Wybierz dwie z trzech ofert."},
+      {"class": "notification-count", "text": "Masz 5 nowych wiadomości.", "expected_spoken": "Masz pięć nowych wiadomości."},
+      {"class": "invoice-number", "text": "Faktura numer 15 jest gotowa.", "expected_spoken": "Faktura numer piętnaście jest gotowa."}
     ],
     "en": [
       {"class": "heteronym", "text": "He will read what she read; the lead pipe took the lead."},

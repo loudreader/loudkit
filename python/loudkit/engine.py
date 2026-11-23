@@ -286,7 +286,7 @@ class Engine:
         prepared = speech_text(text, language)
         if not prepared.strip():
             raise NothingToSpeakError("nothing to speak")
-        chunks = split_text(prepared, self.algorithm.chunking)
+        chunks = split_text(prepared, self.algorithm.chunking, language)
         carry = self._carry_from(previous_tokens)
 
         if len(chunks) == 1:
