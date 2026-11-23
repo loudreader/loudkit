@@ -79,6 +79,9 @@ final class EndToEndConformanceTests: XCTestCase {
             // The any-length path agrees: chunk 0 draws the caller's seed, so
             // a text that fits one window renders the same tokens both ways.
             let whole = try engine.synthesize(text, voice: voice, seed: seed, language: language)
+            XCTAssertGreaterThan(whole.timings.tokens, 0)
+            XCTAssertGreaterThan(whole.timings.mel, 0)
+            XCTAssertGreaterThan(whole.timings.audio, 0)
             XCTAssertEqual(whole.tokens, wantTokens, "\(name): synthesize against the fixture")
 
             let melMeta = kase["mel"] as! [String: Any]

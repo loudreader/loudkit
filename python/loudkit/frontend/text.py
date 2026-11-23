@@ -5,6 +5,7 @@ See ``docs/design/text-funnel.md``.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from pathlib import Path
 
@@ -18,6 +19,9 @@ from .numbers import supported_languages
 __all__ = ["GraphemeTextFrontend"]
 
 _SPACE = "[SPACE]"
+# A wrapped line and its indentation represent one word boundary. Starting
+# at the first space of a run keeps long lines of literal spaces linear.
+_WRAPPED_SPACE = re.compile(r"(?<! ) *[\t-\r\x85\u2028\u2029][ \t-\r\x85\u2028\u2029]*")
 
 _NEEDS_MODEL_PREPROCESSING = frozenset({"zh", "ja", "he", "ko", "ru"})
 """Refused languages whose refusal has a *specific* reason worth stating.
@@ -86,6 +90,7 @@ class GraphemeTextFrontend:
         normalised = unicodedata.normalize("NFKD", text.lower())
         # Square brackets never reach the tokenizer from user text.
         normalised = normalised.replace("[", " ").replace("]", " ")
+        normalised = _WRAPPED_SPACE.sub(" ", normalised)
         tagged = f"[{lang}]{normalised}".replace(" ", _SPACE)
         ids = self._tokenizer.encode(tagged).ids
         return np.asarray(ids, dtype=np.int64)

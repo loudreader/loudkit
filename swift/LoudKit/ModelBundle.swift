@@ -247,11 +247,12 @@ extension Engine {
     /// `LoudKit.cacheDirectory(repo:)` and kept there. Every load goes
     /// through `LoudKit.download`, whose receipt makes the second one free.
     /// Progress goes to stderr unless `progress` is given.
+    /// An empty revision follows `main` online and allows the cached revision offline.
     ///
     /// Anything that exists on disk is a path; `org/name` is a repo id;
     /// anything else is a path that does not exist, and the error says so.
     public static func load(_ ref: String,
-                            revision: String = "main",
+                            revision: String = "",
                             execution: ExecutionConfig = ExecutionConfig(),
                             progress: (@Sendable (LoudKit.DownloadProgress) -> Void)? = nil
     ) async throws -> Engine {

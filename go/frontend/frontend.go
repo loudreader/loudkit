@@ -6,6 +6,7 @@ package frontend
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -17,6 +18,11 @@ import (
 )
 
 const space = "[SPACE]"
+
+// A line break or tab together with its indentation is one spoken word boundary.
+const wrapSeparators = `\t-\r\x{85}\x{2028}\x{2029}`
+
+var wrappedSpace = regexp.MustCompile(` *[` + wrapSeparators + `][ ` + wrapSeparators + `]*`)
 
 // needsModelPreprocessing names the refused languages whose refusal has a
 // specific reason worth stating: their upstream pipeline wants Cangjie codes,
@@ -111,6 +117,7 @@ func (f *Frontend) Encode(text, language string) ([]int, error) {
 	// matches them greedily, so "he [sigh]ed" would make the model sigh. The
 	// language tag added below is the one bracket that belongs.
 	normalised = strings.NewReplacer("[", " ", "]", " ").Replace(normalised)
+	normalised = wrappedSpace.ReplaceAllString(normalised, " ")
 	tagged := "[" + lang + "]" + strings.ReplaceAll(normalised, " ", space)
 	return f.tokenizer.Encode(tagged), nil
 }

@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import struct
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,6 +140,13 @@ def build_manifest(
     }
 
 
+def _wav_output_path(path: str | Path) -> Path:
+    output = Path(path)
+    if output.suffix.lower() != ".wav":
+        raise ValueError(f"loudkit writes WAV audio. Use a .wav extension for {output}.")
+    return output
+
+
 def write_wav(
     path: str | Path,
     audio: Waveform,
@@ -166,39 +174,33 @@ def write_wav(
     target and renamed onto it, so a render that dies halfway leaves the
     previous file or none.
     """
+    path = _wav_output_path(path)
     import soundfile as sf
 
-    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    # The suffix is kept: soundfile picks the container from it.
-    tmp = path.with_name(f".{path.stem}.partial{path.suffix}")
-    try:
-        sf.write(str(tmp), audio, sample_rate)
-        if not manifest:
-            os.replace(tmp, path)
-            return path
-        payload = _riff_audio_payload(tmp.read_bytes())
-        claim = build_manifest(
-            audio=payload,
-            algorithm_fingerprint=algorithm_fingerprint,
-            recipe_version=recipe_version,
-            seed=seed,
-            sample_rate=sample_rate,
-            voice=voice,
-            language=language,
-            text=text,
-            speed=speed,
-            version=version,
-            voice_sha256=voice_sha256,
-            checkpoint_sha256=checkpoint_sha256,
-            backend=backend,
-            execution=execution,
-        )
-        tmp.write_bytes(_with_provenance_chunk(tmp.read_bytes(), manifest_bytes(claim)))
+    with tempfile.TemporaryDirectory(dir=path.parent, prefix=".loudkit-wav-") as staging:
+        tmp = Path(staging) / "audio.wav"
+        sf.write(str(tmp), audio, sample_rate, format="WAV", subtype="PCM_16")
+        if manifest:
+            wav = tmp.read_bytes()
+            claim = build_manifest(
+                audio=_riff_audio_payload(wav),
+                algorithm_fingerprint=algorithm_fingerprint,
+                recipe_version=recipe_version,
+                seed=seed,
+                sample_rate=sample_rate,
+                voice=voice,
+                language=language,
+                text=text,
+                speed=speed,
+                version=version,
+                voice_sha256=voice_sha256,
+                checkpoint_sha256=checkpoint_sha256,
+                backend=backend,
+                execution=execution,
+            )
+            tmp.write_bytes(with_provenance_chunk(wav, manifest_bytes(claim)))
         os.replace(tmp, path)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
     return path
 
 
@@ -217,7 +219,7 @@ the correct behaviour for metadata only loudkit understands.
 """
 
 
-def _with_provenance_chunk(data: bytes, box: bytes) -> bytes:
+def with_provenance_chunk(data: bytes, box: bytes) -> bytes:
     """``data`` with ``box`` added as a provenance chunk, and RIFF resized.
 
     After the audio, so a player that streams the file reaches the samples
@@ -262,16 +264,8 @@ def _find_trailing_boxes(data: bytes) -> bytes:
     """
     if len(data) < 12 or data[:4] != b"RIFF":
         return b""
-    offset = 12
-    while offset + 8 <= len(data):
-        chunk_id = data[offset : offset + 4]
-        size = struct.unpack_from("<I", data, offset + 4)[0]
-        # Chunks are word-aligned: an odd size is followed by a pad byte that
-        # is not counted in it. The same step Go, JS and Rust walk with.
-        offset += 8 + size + (size & 1)
-        if chunk_id == b"data":
-            return data[offset:]
-    return b""
+    end = 8 + struct.unpack_from("<I", data, 4)[0]
+    return data[end:]
 
 
 def read_provenance(path: str | Path) -> dict[str, object] | None:

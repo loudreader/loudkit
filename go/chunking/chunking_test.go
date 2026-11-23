@@ -11,6 +11,7 @@ import (
 )
 
 type chunkCase struct {
+	Language          string   `json:"language"`
 	Config            string   `json:"config"`
 	MaxTokens         int      `json:"max_tokens"`
 	PrefixTokens      int      `json:"prefix_tokens"`
@@ -46,14 +47,19 @@ func TestSplitTextMatchesTheSharedFixture(t *testing.T) {
 	}
 
 	for _, c := range payload.Chunking {
-		got := SplitText(c.Text, Config{
+		language := c.Language
+		if language == "" {
+			language = "en"
+		}
+		got := SplitTextForLanguage(c.Text, Config{
 			Enabled:           true,
 			MaxTokens:         c.MaxTokens,
 			PrefixTokens:      c.PrefixTokens,
 			SplitOn:           c.SplitOn,
 			Abbreviations:     c.Abbreviations,
 			MidSentencePeriod: c.MidSentencePeriod,
-		})
+			CapResplit:        WordCapResplit,
+		}, language)
 		if len(got) != len(c.Chunks) {
 			t.Fatalf("%s: %d chunks, want %d\n got: %q\nwant: %q",
 				c.Config, len(got), len(c.Chunks), got, c.Chunks)
@@ -169,7 +175,7 @@ func TestMidSentencePeriodsAreNotBoundaries(t *testing.T) {
 	// Every sentence end in the window is held, so the split falls through to
 	// the latest comma. A comma break is heard; a chunk of "Mr." is heard worse.
 	const norrell = "Mr. Norrell, who had been waiting in the hall for the better part " +
-		"of an hour, said nothing at all to either of them about what he had seen there."
+		"of an hour, said nothing at all to either of them about what he had seen there the previous afternoon."
 	if got := SplitText(norrell, Production()); !strings.HasSuffix(got[0], "hour,") {
 		t.Fatalf("the search did not fall through to a weaker separator: %q", got)
 	}
@@ -195,6 +201,68 @@ func TestWordBoundaryFallback(t *testing.T) {
 		if !slices.Contains(words, last) {
 			t.Fatalf("cut mid-word: %q", last)
 		}
+	}
+}
+
+func TestSplitTextAcrossUnicodeWhitespace(t *testing.T) {
+	cfg := Production()
+	cfg.MaxTokens = 8 // four runes per window
+	const passage = "A🙂. \u2003\u202f\u0085śółć\t🐈abc\n"
+	chunks := SplitText(strings.Repeat(passage, 256), cfg)
+	want := []string{"A🙂.", "śółć", "🐈abc"}
+	if len(chunks) != 256*len(want) {
+		t.Fatalf("got %d chunks", len(chunks))
+	}
+	for i, got := range chunks {
+		if got != want[i%len(want)] {
+			t.Fatalf("chunk %d: got %q, want %q", i, got, want[i%len(want)])
+		}
+	}
+}
+
+func TestOnlyRepairableProseWindowsMayExtend(t *testing.T) {
+	const text = "The birds that had spent the winter in the quiet fields beyond the river flew low across the water and disappeared into the trees."
+	cfg := Production()
+	if got := SplitText(text, cfg); !slices.Equal(got, []string{text}) {
+		t.Fatalf("closing words should fit in one repairable window: %q", got)
+	}
+	cfg.CapResplit = OffCapResplit
+	if got := SplitText(text, cfg); len(got) != 2 || strings.Join(got, " ") != text {
+		t.Fatalf("unrepairable windows must respect the estimate: %q", got)
+	}
+	cfg = Production()
+	cfg.SplitOn = []string{"! ", ". "}
+	if got := SplitText(text, cfg); len(got) != 2 || got[1] != "trees." {
+		t.Fatalf("custom splitters retain their literal budget: %q", got)
+	}
+}
+
+func TestEnglishConjunctionStartsItsClause(t *testing.T) {
+	const text = "On the trail, we watched the river wind slowly through the valley while the children followed the tracks of an animal they had never seen before."
+	cfg := Production()
+	cfg.CapResplit = OffCapResplit // Force a word break to exercise the language-specific rule.
+	for _, tc := range []struct{ language, start string }{
+		{"en", "while the children"}, {"EN", "while the children"}, {"de", "the children"},
+	} {
+		chunks := SplitTextForLanguage(text, cfg, tc.language)
+		if len(chunks) != 2 || !strings.HasPrefix(chunks[1], tc.start) || strings.Join(chunks, " ") != text {
+			t.Errorf("%s: %q", tc.language, chunks)
+		}
+	}
+}
+
+func BenchmarkSplitTextLongPassage(b *testing.B) {
+	const sentence = "Żółw idzie\u00a0powoli. Pani dr. Kowalska czyta książkę. "
+	cfg := Production()
+	for _, repeats := range []int{1024, 2048} {
+		passage := strings.Repeat(sentence, repeats)
+		b.Run(fmt.Sprint(repeats), func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(passage)))
+			for b.Loop() {
+				SplitText(passage, cfg)
+			}
+		})
 	}
 }
 

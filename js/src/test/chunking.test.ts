@@ -118,7 +118,7 @@ test("the re-split plan matches the shared fixture", () => {
     // re-split on the window rather than on any cap.
     const cfg = { ...PRODUCTION_CHUNKING, maxTokens: c.window as number };
     assert.equal(cfg.capResplit, "word", "the fixture pins the law");
-    const texts = splitText(c.prepared, cfg);
+    const texts = splitText(c.prepared, cfg, c.language);
     const windows = c.windows;
 
     const tail = (w: any): number[] =>
@@ -167,4 +167,36 @@ test("a NEL at either edge is stripped, as the other four ports strip it", () =>
   // Python's `strip()` removes it and the other three ports strip it too.
   assert.deepEqual(splitText("\u0085hello world\u0085", PRODUCTION_CHUNKING), ["hello world"]);
   assert.deepEqual(splitInHalf("\u0085aaaa bbbb\u0085"), ["aaaa", "bbbb"]);
+});
+
+test("a book-length passage is ready for streaming without repeatedly copying the tail", () => {
+  // Each sentence fills a window; the extra NEL after the separator starts
+  // the next window. Astral letters count as one position in both windows.
+  const sentence = "𠮷".repeat(116) + ".";
+  const text = (sentence + " \u0085").repeat(4096);
+  const started = performance.now();
+  const chunks = splitText(text, PRODUCTION_CHUNKING);
+  const elapsed = performance.now() - started;
+  assert.equal(chunks.length, 4096);
+  assert.ok(chunks.every((chunk) => chunk === sentence));
+  assert.ok(elapsed < 5000, `splitting before the first audio chunk took ${elapsed.toFixed(0)} ms`);
+});
+
+test("only the production repair policy can try a whole sentence beyond the estimate", () => {
+  const text = "The birds that had spent the winter in the quiet fields beyond the river flew low across the water and disappeared into the trees.";
+  assert.deepEqual(splitText(text, PRODUCTION_CHUNKING), [text]);
+  const strict = splitText(text, { ...PRODUCTION_CHUNKING, capResplit: "off" });
+  assert.equal(strict.length, 2);
+  assert.ok(strict.every((part) => part.length <= 127));
+  assert.equal(strict.join(" "), text);
+});
+
+test("an English conjunction stays with its subject only when reading English", () => {
+  const first = "On the trail, we watched the river wind slowly through the valley";
+  const rest = "while the children followed the tracks of an animal they had never seen before.";
+  const text = first + " " + rest;
+  const strict = { ...PRODUCTION_CHUNKING, capResplit: "off" as const };
+  assert.deepEqual(splitText(text, PRODUCTION_CHUNKING), [text]);
+  assert.deepEqual(splitText(text, strict, "EN"), [first, rest]);
+  assert.equal(splitText(text, strict, "fr")[0], first + " while");
 });

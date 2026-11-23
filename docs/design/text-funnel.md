@@ -11,9 +11,65 @@ the runtime docstrings point here. These notes are not user documentation.
 
 ### `module`
 
-`TextConfig.recipe` and the grammar digest put what this package does into the
-algorithm fingerprint. What the digest covers, and what it does not, is under
-`textconfig.py` below.
+The production window holds up to 255 speech tokens, about ten seconds.
+The planner estimates a target of 127 Unicode code points of prepared text.
+Planning happens before generation, so the actual fit also depends on the
+speaker and the text.
+
+With the standard separator list, the planner takes the latest sentence end
+within that target. A closing quote or bracket stays with its sentence, even
+when a line break follows it. If the standard 255-token window has no such end
+and overflow recovery is enabled, the planner may finish a sentence up to 24
+code points beyond the estimate. When two or more eligible clause marks or commas
+fall inside the target, it takes an in-budget pause. A shorter explicit first-window budget keeps
+its original limit. The generator still enforces the model's actual token cap.
+Six English sentences of 144–151 characters completed in 186–249 tokens
+across two model and voice combinations. In one case the speaker needed 249
+of the available 255, so a longer or slower reading can still need a split.
+[English audio comparison](evaluation.md#english-sentence-breaks)
+
+For a longer sentence the planner first looks for a semicolon, colon or spaced
+dash, then a comma. For a target of at least 64 characters, it skips a clause
+mark in the first quarter that would turn a short introduction into a separate
+utterance. If only word boundaries are available, it usually uses the latest
+suitable space. When that would leave a final piece shorter than one quarter
+of the target, it chooses a word boundary near the middle of the remaining
+text. In English, a word cut can move back one word to keep a clause opener
+with the clause it introduces, as in *while the children followed*. A word
+longer than a whole window can still require a mid-word cut.
+
+When `mid_sentence_period` is `hold`, an abbreviation, an initial before a name,
+or a following ASCII lowercase letter can keep a period inside a sentence.
+The final mark of the passage is a possible sentence end. A custom `split_on`
+list retains its literal separators and their specified priority. Both streamed
+and joined synthesis use the same planned chunks.
+
+
+### `split_in_half`
+
+``split_text``'s estimate is conservative but not a guarantee: it budgets
+characters against a constant, and a speaker slower than that constant
+fills the window before the text runs out. With `cap_resplit="word"`, a chunk that fills
+the model window is discarded and generated again as two shorter pieces. A
+shorter generation ceiling alone does not trigger the retry. A half that fills
+the window again can still be truncated. In a previous ten-language render
+study, 54 of 9,920 chunks reached a cap and 30 were still speaking when it
+closed. Restricting the count to the window cap gave 51 and 27 respectively.
+
+The boundary is the nearest *word* break, and punctuation is not sought.
+The reason is mechanical rather than comparative: a comma is an instruction
+to pause, this model has no pause-duration prior, and fed one it overshoots
+-- the same mechanism as every other defect in this campaign, arriving
+through the chunker. The arm that measured punctuation against word
+boundaries was retracted with the harness that produced it, which seeded
+the second half from the next chunk's stream; the re-measurement compared
+only this law against no law, so the figures that once stood here have no
+un-retracted source. Not sought is not avoided: the nearest word break can
+follow a comma.
+
+Returns ``None`` when there is no word boundary to use, which is a single
+unbroken run of characters. Such a chunk cannot be helped by splitting it,
+and mangling a word to fit is worse than the truncation.
 
 Import the passes from their submodules (`loudkit.frontend.numbers`,
 `loudkit.frontend.speechtext`, ...). The package `__init__` imports nothing,
@@ -251,11 +307,10 @@ there.
 
 ### `expand_ordinals`
 
-Only English has ordinal suffixes in the grammar (`st`, `nd`, `rd`, `th`). For
-the other eleven languages the suffix list is empty and the pass does nothing,
-so French `1er` stays written. The pass runs before the number pass, which
-would expand the digits and leave the suffix stuck to them (*onest*,
-*twenty-twond*).
+The regular reading is the hour and minute with their language's infix,
+for example *vierzehn Uhr dreißig* or *fourteen thirty*. In English,
+`9:05` becomes *nine oh five*, `9:00` becomes *nine*, and `9:10`
+becomes *nine ten*. The hour is sufficient for a zero minute.
 
 A value the tables cannot say is left as written, suffix included.
 
@@ -265,12 +320,39 @@ A value the tables cannot say is left as written, suffix included.
 
 ### `module`
 
-`CIA` is *see-eye-ay* in an English render and *ce-i-a* in a Polish one: each
-is what that language says. The engine is grapheme-based with a single language
-tag per utterance, so the letter name is written in the target language's own
-orthography. English `see` reads as /siː/ under English letter-to-sound rules,
-and Polish `ce` reads as /t͡sɛ/ under Polish ones. Either spelling inside the
-other language's render produces the wrong sounds.
+:func:`speech_text` is the funnel for **all twelve supported languages**: the
+engine calls it on every synthesis, whatever the language tag. The
+price and quantity rules for Polish and its pronunciation lexicon run only
+for that language.
+
+This module was called `polish.py` until 0.1.1, which is where it started and
+not what it does. The name outlived the scope by eleven languages, and a
+reader looking for the funnel had no reason to open a file named after one of
+them. `speechtext` is what the four ports already call their copies -
+`speechtext.rs`, `speechtext.go`, `speechText.ts`, `SpeechText.swift`, so the
+five now agree on the name as well as on the bytes.
+
+The shipped engine reads text through a two-stage funnel before tokenising:
+:func:`speech_text` scrubs the raw text (invisible characters, symbols,
+footnote markers, punctuation) in every language, then, for Polish,
+:func:`lexical_respelling` rewrites English words embedded in Polish the way a
+Polish reader says them ("download" → "dałnloud", "deadline'u" → "dedlajnu"),
+numbers to Polish cardinals, and acronyms/code tokens to spelled-out Polish
+letter names.
+
+The engine is grapheme-based with ONE language tag per utterance, so a Polish
+render reads "download" with Polish letter-to-sound rules and mangles it.
+Respelling won the ear test over inline ``[en]`` tag switching: "dałnloud" is
+not a hack, it is how the word actually sounds in a Polish sentence, accent
+included. This is the same promise as everywhere else in this library, the
+Swift and Python engines must read the same text identically, and this module
+is the Python half of that contract.
+
+Dictionary-first and ONLY dictionary: a rule-based English G2P bolted on here
+would misfire on real Polish words, and the cost of a false positive (mangling
+native text) is far higher than the cost of a miss. Inflections ride as
+suffixes: Poles decline these words ("maila", "deadline'u"), so matching is
+stem + known Polish ending, with apostrophe forms handled.
 
 The tables are per language, because letter names are orthography-specific
 (Polish `FBI` is *ef-be-i*). A render with no table would reach the model with
@@ -305,6 +387,60 @@ whole. A text that is one capitalised token, `synthesize("GPT")`, is spelled:
 there is no run to read emphasis from, and the call has exactly the shape of
 "say this acronym".
 
+One rule for one class. A number character this layer has no ASCII
+spelling for, a superscript, a vulgar fraction, a circled or Roman
+numeral, a digit from any script but Latin, used to be *deleted* by the
+punctuation pass, and while it was still there it sat inside the word:
+every "is this a word character" test in the five ports is ``\w``,
+``\p{N}`` or ``str.isdigit()``, and all three admit ``No``. So ``²9`` was
+one token, the number matcher declined it, and a bare ``9`` reached the
+model.
+
+Deleting was the earlier answer and it was the wrong one. Text that
+silently does not arrive is the failure this layer exists to prevent:
+``Add ½ cup`` read as *add cup*, ``Chapter Ⅶ`` as *chapter*, ``5०3`` as a
+pair of bare digits. Nothing is dropped now.
+
+Two mechanisms, because Unicode gives two, and **both are read out of
+`models/data/numerals.json`**, which character is a numeral as much as
+what it reads as:
+
+* **A decimal digit of any script** (``Nd``) becomes the ASCII digit of the
+  same value, so ``５9`` is fifty-nine and ``5०3`` is five hundred and
+  three. The value is the distance from the digit's block zero, and the
+  zeros are in the table.
+* **Every other number character** (``No``, ``Nl``) becomes the text the
+  table names: ``²`` → ``2``, ``½`` → ``1/2``, ``③`` → ``3``, ``Ⅳ`` →
+  ``IV``. ASCII for all but 27 of the 1,151 entries: those decompose to CJK
+  ideographs, ten of them parenthesised (``〸`` → ``十``, ``㈠`` → ``(一)``),
+  and leave the fold as the characters they mean, because there is nothing
+  more ASCII to say about them.
+
+Asking the table rather than the runtime is what makes the fingerprint mean
+something. `unicodedata.category` is whatever Unicode the interpreter
+bundles: on 15.0 (Python 3.12) ``Add \U00010D41 cups`` deleted the digit and
+read *add cups*, and on 16.0 (Python 3.14) the same build, reporting the
+same digest, left it written. Neither said *one*, the two disagreed, and
+the CI matrix runs both. A funnel that reads its Unicode from the process
+it happens to be in cannot promise a reading at all.
+
+A ``No``/``Nl`` expansion is separated from an adjacent **alphanumeric**
+and from nothing else. Without that, ``²9`` folds to ``29`` and reads as
+twenty-nine, a number that is not in the text; with a space everywhere
+instead, ``Chapter Ⅶ.`` becomes ``Chapter VII .`` and the sentence loses
+its end. A folded ``Nd`` is never separated, it is a digit replacing a
+digit and belongs to the run it was already in.
+
+A Roman numeral glyph such as `Ⅳ` reaches the Roman-numeral stage as `IV`.
+A fraction glyph carries enough information to mark division explicitly.
+The fold converts the slash in its table entry to `÷`, which the symbol
+pass then speaks in the selected language. A literal slash in running text
+can have other meanings and does not receive this conversion.
+
+``Lo`` is untouched: ideographic numerals, ``一``, ``十``, are letters,
+and the table carries no entry for them, so a pass keyed on numeric type
+rather than on the general category cannot replace a language's numerals
+with spaces here.
 
 ### `spell_acronym`
 
@@ -333,12 +469,10 @@ funnel still leaves some digits written on purpose; see `expand`.
 The widely used Python library for number words is LGPL-2.1, which this kit
 cannot carry into every embedding it is meant for.
 
-That library also has **no case or gender machinery for Polish at all**: one
-nominative form per numeral, while the same release ships six-case declension
-for Russian. Polish needs agreement most (a published measurement puts a
-morphology-blind normaliser at about 30% against about 91% for a
-morphology-aware one), so the dependency would have to be replaced for that
-language anyway.
+The [stage order](preprocess.md#the-stages-in-order-and-why-that-order)
+shows which passes need the original characters. Prices must still carry
+their digits when the currency word is selected. A footnote must disappear
+before the same digits would be expanded as part of the sentence.
 
 #### How it is organised
 
@@ -367,7 +501,19 @@ grammars' own reference works describe them, it keeps the interpreter small
 enough to port exactly, and a listed form can be checked by eye against a
 dictionary.
 
-#### What it does not do
+The tokenizer lowercases the prepared text and applies NFKD. A wrapped
+line and its indentation become a single word boundary, including tab,
+CRLF, NEL and Unicode line or paragraph separators. This preserves the
+space between *train* and *rolled* in a line-wrapped book. Literal ASCII
+spaces otherwise keep their existing behavior. The tokenizer adds the
+language tag, encodes spaces as `[SPACE]`, then runs BPE.
+
+The speech funnel that scrubs raw text before tokenising, invisible
+characters, symbols, footnote markers, punctuation, and (for Polish) English
+respelling, lives in :mod:`loudkit.frontend.speechtext` and is applied by the
+engine, mirroring the Swift backend's call to ``SpeechText.prepared``. This
+module is the tokenizer and only the tokenizer, so the conformance fixture's
+frontend vectors keep testing it in isolation.
 
 Nothing here reads context. A numeral's case in Polish, or its gender in
 Spanish, is a property of the *sentence*, not of the number. `cardinal` and
@@ -715,7 +861,75 @@ Three scopes exist in this language set. The CLDR differential test found them:
 - the default: everywhere. Spanish: *treinta y una*.
 
 
-## `loudkit/frontend/speechtext.py`
+A predicate would be shorter and the five ports do not agree on one: measured,
+Python's `str.isspace()` treats U+001C-U+001F as whitespace where the other
+four do not, and JS alone KEEPS U+0085 where the other four strip it. Swift
+alone strips U+200B, JS alone strips U+FEFF; the funnel removes both before
+the splitter sees them, but U+0085 and U+001C-U+001F survive it. A
+disagreement there is a different split point, which is different audio for
+the same text and seed. A hand-written tuple cannot drift.
+
+The funnel does not remove these. NBSP in particular is ordinary in real prose
+-- "10 000", French punctuation, typeset copy -- and `split_text` says so where
+it strips leading whitespace, so a capped chunk whose only boundaries are NBSP
+still splits.
+
+
+#### `CHARS_PER_TOKEN`
+
+Measured on the reference voice across English, Polish (after the respelling
+funnel) and German: 0.53-0.64 characters of prepared text per speech token,
+consistent with ~25 speech tokens/s at ~14-16 characters/s of narration. The
+old constant (3.2) was the inverse unit mistake, it let a chunk carry ~816
+characters, which the generator turned into ~1300 tokens against a 255-token
+window, silently dropping the tail of every over-long chunk.
+
+The initial estimate uses 0.5 characters per token. A conservative estimate
+reduces the risk of reaching the model cap, but an unnecessary split gives
+the model an extra opportunity to pause.
+
+**It is a budget, not a guarantee.**
+Measured over 9920 rendered chunks in ten languages, 54 overran the window
+anyway. Only one voice on the roster reads below the constant (soren, 0.481);
+of the 54, just 17 carry enough characters to need more than 255 tokens at
+their own voice's median pace. The rest are chunks that should have fitted and
+did not, because the model did not emit a stop token in time, a mean cannot
+bound a variance. Nor does overflowing cost a `ValueError`: the generator stops
+at the cap mid-word and the remainder is simply never spoken, which is why
+`ChunkConfig.cap_resplit` exists and why `split_in_half` is in this module.
+
+
+#### `_holds` reads ASCII lowercase only
+
+A period followed by a lowercase word is mid-sentence, which is what catches
+the ellipsis the funnel folds to a single period and no abbreviation list
+reaches. ASCII only, measured rather than assumed: over 2253 periods in ten
+languages, four are followed by a word starting with a non-ASCII lowercase
+letter, and reading the whole Unicode Lowercase property instead moves one
+passage in 1200. Not worth four ports disagreeing about what `islower` means.
+
+
+#### `split_text` breaks at a word boundary
+
+The planner uses a word boundary when it finds no suitable punctuation.
+The production policy above also balances a short final remainder. `WORD_BOUNDARIES`, not U+0020: NBSP survives
+the funnel and is ordinary in real prose, and text whose every space is
+non-breaking (HTML where `&nbsp;` won) would otherwise find no boundary and be
+cut mid-word.
+
+
+### `loudkit/frontend/dates.py`
+
+
+#### `module` reads only dates with a year
+
+`12.03.2026` is a date because the year makes it one. The yearless `12.3.`
+that German, Danish, Finnish and Norwegian also write is deliberately not
+matched: its closing period is indistinguishable from a sentence's, so `Die
+Zahl ist 3.5.` would read as *dritte Mai* in ten of the twelve languages. With
+no evidence in the string to separate the two readings, the text is left
+alone. A yearless date written with a month name still reads, because the
+name is the evidence.
 
 
 ### `module`
@@ -1109,7 +1323,10 @@ spaces too, so a direct caller gets the same protection. The one tag that
 belongs, the language tag, is added after.
 
 
-## `loudkit/frontend/textconfig.py`
+All five SDKs expand acronyms before tokenization lowercases the text.
+Roman numerals in recognized contexts are already expanded at this point.
+For example, a chapter number can become a cardinal before its Roman
+letters are considered as an acronym.
 
 
 ### `module`
@@ -1143,76 +1360,216 @@ for a release that is allowed to move them.
 
 ### `grammar_digest`
 
-Hashed as raw bytes, not as parsed JSON. Two files that differ only in
-whitespace produce the same speech, but they are not the same file, and
-"the ports ship byte-identical data" is a simpler contract to check than "the
-ports ship semantically equivalent data".
-
-Raw bytes work only while the files hold nothing but data. A prose note inside
-a hashed file would move this digest, and `algorithm_fingerprint` with it, on
-an edit that changes no audio, and would re-pin five ports. The prose lives
-beside the data (`numbers.about.md`, `numerals.provenance.json`), unhashed and
-not copied to the ports, and `test_the_hashed_data_files_carry_no_prose` keeps
-it there.
+`str.isdigit()` is true of `No` characters (`²`, `③`), so `²9` would be one
+token that `int()` refuses and the symbol pass then reduces to a bare `9`
+nothing verbalises. A bare digit reaching a grapheme model is the outcome this
+layer exists to prevent, and it is not audible as a failure. Nd is what
+`int()` accepts and what `unicode.IsDigit`, `char::is_numeric` with Nd and
+`\p{Nd}` mean in the four ports, so it is the definition they can all agree
+on.
 
 
-### `FUNNEL_PORTED`
+#### `_respell_words` measures a dotted run whole
 
-The current value is `"funnel-6"`. It keeps two builds that read the same text
-into different words from reporting the same fingerprint. Bump it when a pass
-changes what the funnel emits for text it already handled. A new language or a
-new table moves `grammar` on its own and needs no bump; an edit to
-`pl_respell_rules.json` does need one. There is no `funnel-3` in any released
-build. [CHANGELOG.md](../../CHANGELOG.md) lists what each value changed.
-
-What each pass covers under `funnel-6`, in order, in all five implementations:
-
-1. NFC: one composed spelling for every later rule.
-2. Foreign digits: Arabic-Indic and Extended Arabic-Indic digits, their
-   separators (per language) and the Arabic percent sign, to ASCII.
-3. Invisibles: zero-width and format characters and the soft hyphen, removed.
-4. Markup tags: a tag, comment or declaration becomes a space (`<p>Hello</p>`
-   reads *Hello*).
-5. Numeral folding: superscripts, vulgar fractions (as division), circled and
-   Roman numeral characters, and decimal digits of every script, from
-   `numerals.json`.
-6. Symbols: currency before or after an amount, with a scale between amount
-   and currency word; the comparison operators `<` `>` `<=` `>=` `!=` `==` with
-   whitespace on both sides; other symbols from `unit_words` in the render's
-   language.
-7. Footnote markers: removed.
-8. Roman numerals: I, V and X only, 2 to 39, the range of chapter, act,
-   volume, war and regnal numbers (`Chapter IV`, `World War II`). Every
-   two-letter initialism that is also a valid numeral needs L, C, D or M
-   (`CD`, `CV`, `DC`, `MC`, `MD`, `XL`, `CM`), and so does `MIX`.
-9. Acronyms: two to five capitals spelled in the render language; runs of
-   capitals left as emphasis.
-10. Dates: ISO, dotted, slashed and month-name forms, bounded by a word boundary
-    at both ends (`2026-03-04x` and `x25/03/2026` are not dates). The ISO `T`
-    between a date and a time becomes a space (`2026-03-04T10:00`). The English
-    day-first reading does not repeat an article already in the sentence (`See
-    the 3 April minutes` reads *See the third of April minutes*).
-11. Ordinals: English digit suffixes (`1st`).
-12. Abbreviations: the unambiguous entries per language, case sensitive.
-13. Clock times: `H:mm`, `H:mm:ss` and, outside English, `H.mm`, with the
-    language's infix; a letter after the time is a separate word (`3:45pm`).
-14. Numbers: cardinals and decimals, grouped thousands, telephone numbers
-    (a plus and at least eight digits, bounded at both ends) digit by digit,
-    identifiers left written.
-15. Punctuation: prosodic marks kept, other symbols to spaces.
-16. Respelling: Polish only.
-17. Collapse: a run of clause marks to one.
-
-A bare year does not read as a year: `In 1776 he wrote it.` reads *one thousand
-seven hundred and seventy-six* in English, and the other languages read it as a
-cardinal too. The year reading belongs to a written date, where the month says
-the digits are a year.
+The decision belongs to the run, not to its first pair. Two groups is a
+decimal: "dwa przecinek pięć". Three or more is a version, an address or a
+date, and is left exactly as written; reading the first pair gives "jeden
+przecinek dwa" with a stray ".trzy" behind it. The same holds when the run
+starts with a token that has a letter in it: `v1.2.3` is a version whether or
+not its first group is all digits. `numbers.expand` declines these whole by
+the same rule, and this second reader of digits has to agree with it.
 
 
-### `recipe`
+### `loudkit/frontend/text.py`
 
-Every implementation runs the same passes under one recipe value. A build
-whose passes differ while it reports the same recipe would give divergent
-readings of `12.03.2026`, `1st`, `CIA` or a decomposed `ą` under one
-fingerprint. The recipe is a marker a maintainer moves by hand, so the shared
-conformance fixture is what checks that the passes agree.
+
+#### `encode` refuses bracket tokens
+
+The vocabulary holds 117 bracket tokens: the language tags, and paralinguistic
+events like [sigh], [gasp], [UH] trained into the base model. The tokenizer
+matches them greedily, so "he [sigh]ed" would emit control token 611 and the
+model would sigh. The funnel destroys brackets on the engine path; `encode`
+refuses them too, so the guarantee is structural for anyone calling it
+directly. The one tag that belongs is the language tag, added after.
+
+
+### `loudkit/frontend/textconfig.py`
+
+
+#### `FUNNEL_PORTED`
+
+Not a feature name, a **contract marker**. Two builds that read the same text
+into different words must not report the same sixteen hex digits, and this is
+the field that keeps them apart. It moves when a pass changes what the funnel
+emits for text it already handled, and only then.
+
+The ordered [list of stages](preprocess.md#the-stages-in-order-and-why-that-order)
+applies across all five implementations.
+
+What each bump was:
+
+`funnel-1` -> `funnel-2`
+NFC, acronym spelling, dates and ordinals had landed in Python alone and
+stayed there while all five reported `funnel-1`: one fingerprint over four
+different funnels. `funnel-2` is the funnel with all of them, in all five.
+
+`funnel-2` -> `funnel-4`
+One family, closed in one move: **every character class the five ports
+disagreed about**. They had drifted independently and each disagreement was
+audible.
+
+* *Numerals.* A superscript, a vulgar fraction, a circled or Roman numeral,
+a digit from any script but Latin, all were deleted by the punctuation
+pass, and while they were still there they sat *inside* the word, because
+`\w`, `\p{N}` and `str.isdigit()` all admit `No`. So `²9` was one token,
+the number matcher declined it, and a bare `9` reached the model.
+:func:`~loudkit.frontend.speechtext.fold_numerals` now turns each of them
+into something a reader says aloud, and nothing is dropped.
+* *Letters.* Rust and Swift tested the **Alphabetic** property where the
+other three tested `\p{L}`, wider by the circled letters, the
+Other_Alphabetic marks and the letter numbers. Swift's copy put a bare
+digit in front of the model for `ⓐ-1`; Rust's kept characters the other
+four removed. Swift also read `CharacterSet.letters`, which Foundation
+answers wrongly above the BMP: it omits all 6,145 Tangut ideographs, so
+that text was deleted, and `subtracting(.nonBaseCharacters)` silently
+fails for astral scalars, so 1,162 combining marks leaked through.
+* *Whitespace.* `\s` was four different sets. ECMAScript's excludes U+0085
+NEL, Go's hand-expanded class omitted U+000B, CPython's uniquely admits
+U+001C-U+001F. Go read a footnote marker *aloud* when its separator was a
+non-breaking or thin space, which is ordinary French and German
+typography; JS split chunks in different places, because a NEL left on
+the front of the remainder is charged against the next chunk's budget.
+:data:`~loudkit.frontend.speechtext.WHITE_SPACE` is the one written-down
+set every pattern now uses.
+
+There is no `funnel-3` in any released build. It named the first third of
+this family, the `No`/`Nl` half of the numeral fix, and was superseded
+inside the same release, before a tag existed. Numbering a partial fix was
+the mistake; a marker should move once per audible change to the funnel,
+and this was one change.
+
+`funnel-4` -> `funnel-5`
+The clock pass wrote its words against the letters that followed the
+digits. `3:45pm` read *three forty-fivepm*, one word to a listener, where
+`3:45 pm` read correctly: a space in the source, which the reading does not
+otherwise depend on, was deciding whether the meridiem was a word. Two
+rules close it, and both are about the same boundary. The reading is
+followed by a space when an ASCII letter stands where the written time
+ended, so the glued and spaced forms produce the same output. And the
+written infix is taken whether or not a space precedes it, so German
+`14:30Uhr` reads *vierzehn Uhr dreißig* rather than saying the infix twice.
+
+Text with a digit or a separator after the time is untouched: the guards
+that tell `14:30` from the `12.03` inside a date are the same guards. So is
+a letter *before* the time, which `Meet at a14:30.` pins.
+
+`funnel-5` -> `funnel-6`
+One family, and it is the family every caller meets: **meaning carried by a
+mark the funnel had no rule for.** Each of these deleted or corrupted
+something the writer wrote, in prose nobody would call unusual.
+
+* *Comparison operators.* `≤` and `≥` had words and `<=` and `>=` did not,
+so `if latency > 200 ms` read *if latency two hundred ms* -- a condition
+with its relation removed, which states the opposite as readily as the one
+written. Six ASCII spellings are read now, `<` `>` `<=` `>=` `!=` `==`, and
+only with whitespace on both sides: the spacing is the evidence that the
+mark is an operator rather than markup, an emoticon or a glued token. `-`,
+`/`, `.` and `+` stay silent, because each is a hyphen, a path, a decimal
+and a sign far more often than an operator.
+* *Markup.* A tag's name reached the model as a word, `<p>Hello</p>` read
+*p Hello p*, and an HTML comment left its `!` behind as a sentence-final
+exclamation. A tag becomes a space rather than nothing, so two block tags
+meeting are two paragraphs rather than one glued word.
+* *Roman numerals.* Spelled letter by letter: `Chapter IV` read *Chapter
+eye-vee* and `World War II` read *World War eye-eye*, inside a book reader.
+The pass reads I, V and X only, which is 2 to 39 -- chapter, act, volume,
+war and regnal numbers -- and that boundary is the whole rule rather than a
+narrowing of it: every two-letter initialism that is also a valid numeral
+needs L, C, D or M (`CD`, `CV`, `DC`, `MC`, `MD`, `XL`, `CM`), and so does
+`MIX`.
+* *Fractions.* `½` read *one two*, two numbers instead of a value. A slash
+inside a **spelled numeral** is a fraction bar the character itself
+asserts, so it becomes `÷` and takes the word the grammar already has. A
+typed `1/2` is left alone: `24/7` and `and/or` are ordinary prose that
+reads correctly, and `4/7` is a date to half the world.
+* *Prices.* The magnitude sat on the wrong side of the currency word.
+`$2.5M` read *two point five dollarsM* and `$5 million` read *five dollars
+million*. Both shapes are one defect -- a scale written after the amount
+and before the mark that moved -- and both read `amount, scale, currency`
+now. The abbreviating letter is only read beside a currency mark, which is
+what makes it unambiguous: a bare `5m` is five metres as readily.
+* *Dates.* The English day-first reading supplies an article the sentence
+may already carry, so `See the 3 April minutes` read *See the the third of
+April minutes*. The prefix now reads what stands before it, which is the
+same question `am`/`den`/`vom` already ask for German.
+* *Clock times.* `10:30:45` kept its colons, so a literal colon reached the
+acoustic model. The colon form takes seconds; the dotted form does not,
+because `10.30.45` is a version string as readily as a timestamp. A zero
+minute is spoken where seconds follow it, or the seconds move into the
+minutes' place; a zero seconds field is dropped, saying nothing the minute
+has not said.
+* *ISO datetimes.* `2026-03-04T10:00` read *…twenty twenty-sixTten*: the
+field separator is not a letter and glued itself to the last word of the
+date. It is taken with the date and becomes the space that keeps the two
+readings apart.
+* *Where a date and a telephone number end.* A run that continues into a
+letter is an identifier, and every guard on the three numeric date forms
+named the digits and the separators and admitted the letter: `2026-03-04x`
+read *…twenty twenty-sixx* and `x25/03/2026` invented a date out of the
+middle of a token. The E.164 rule had no guard at all, so `+12345678abc`
+said eight digits and left the letters glued to the last of them. All four
+are bounded by a word boundary now, at both ends, which is the guard the
+dotted form already carried behind it and the one the digit run answers to.
+
+A bare year is **not** in this family and did not move. `In 1776 he wrote
+it.` reads one thousand seven hundred and seventy-six in all twelve
+languages, none of them excepted: the year reading belongs to a written
+date, where the month says a year is what the digits are, and nothing in a
+bare four-digit run says so.
+
+`funnel-6` -> `funnel-7`
+
+Polish prices with a `zł` suffix use złoty and grosz forms. For example,
+`12,50 zł` reads *dwanaście złotych i pięćdziesiąt groszy*. The same pass
+inflects kilograms and square metres from the quantity, while the superscript
+in `m²` still identifies the unit. In supported phrases the surrounding words
+determine case and gender. `Wybierz 2 z 3 ofert` reads *Wybierz dwie z trzech
+ofert*. Bare numbers continue through the ordinary number rules.
+
+`funnel-7` -> `funnel-8`
+
+This host recipe covers both the words passed to the tokenizer and the
+boundaries used to split a passage. English titles before names, sentence-final
+`etc.`, clock minutes and singular currency units have more specific readings.
+Grouped numerals retain their value across common typographic spaces.
+The tokenizer preserves word separation at line wraps. With the standard
+separator policy, the planner recognizes closing punctuation, can reach a
+nearby sentence ending, and balances a final pair of windows when the
+ordinary cut would leave a short fragment. These rules run before the
+exported model graphs. [Identity contract](../reference/IDENTITY-CONTRACT.md)
+
+
+`funnel-8` -> `funnel-9`
+
+A leading decimal after a comparison or opening bracket keeps its value.
+English count phrases such as “$5 100 times” keep the price separate from
+the count. The markup pass handles boolean and multiline attributes, quoted
+attribute values, escaped comparisons and zero-padded apostrophe references.
+The planner limits sentence extension in passages with multiple internal pauses.
+
+`funnel-9` -> `funnel-10`
+
+Angle-bracket placeholders keep their words. Paired comparisons use their
+operands and spacing to distinguish mathematical notation from instructions.
+Boolean HTML attributes and assigned framework attributes are skipped.
+Leading decimal commas require an opening delimiter, operator or whitespace.
+A zero-padded thousands group stays part of a price before a count word.
+A clause break that would isolate one short final word yields to an earlier cut.
+
+#### `recipe`
+
+Every implementation runs the same passes under one recipe value; that is
+the state in which this field's promise holds. A build whose passes differ
+while reporting the same recipe would cover divergent readings of
+``12.03.2026``, ``1st``, ``CIA`` or a decomposed ``ą`` under one
+fingerprint, the failure :data:`FUNNEL_PORTED` exists to prevent.

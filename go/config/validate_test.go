@@ -133,7 +133,7 @@ func TestTheShippedManifestStillLoads(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("the shipped 0.1.1 manifest is refused by its own validator: %v", err)
 	}
-	if got := Fingerprint(cfg); got != "7cd75498ad4e7531" {
+	if got := Fingerprint(cfg); got != "4a2918bb653ce531" {
 		t.Errorf("the shipped manifest reads as %s", got)
 	}
 }

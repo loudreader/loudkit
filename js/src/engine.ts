@@ -17,7 +17,7 @@ import { basename, join } from "node:path";
 
 import { Checkpoint } from "./checkpoint.js";
 import { splitInHalf, splitText } from "./chunking.js";
-import { Enroller, asSamples, profileFrom } from "./enroll.js";
+import { Enroller, asSamples, profileFrom, validateReferenceAudio } from "./enroll.js";
 import {
   InvalidTokensError,
   LoudkitError,
@@ -544,6 +544,8 @@ export class Engine {
     options: { name?: string; language?: string; sampleRate?: number } = {}
   ): Promise<VoiceProfile> {
     const dir = this.release("the enrollment graphs");
+    const { audio, sampleRate } = asSamples(source, options.sampleRate);
+    validateReferenceAudio(audio, sampleRate);
     await ensureCloning(dir, this.repo);
     // Assigned before the await, so a second call that arrives while the first
     // is still loading waits on the same graphs rather than opening its own.
@@ -555,7 +557,6 @@ export class Engine {
       this.enrolling = undefined;
       throw err;
     }
-    const { audio, sampleRate } = asSamples(source, options.sampleRate);
     const enrolled = await enroller.enroll(audio, sampleRate);
     const name =
       options.name ?? (typeof source === "string" ? basename(source, ".wav") : "voice");
@@ -1176,7 +1177,7 @@ export class Engine {
     // changes the length ("download" -> "dałnloud"), so a budget computed
     // first would be a budget for text the engine never speaks.
     const prepared = speechText(text, lang);
-    const chunks = splitText(prepared, this.config.chunking);
+    const chunks = splitText(prepared, this.config.chunking, lang);
     if (chunks.length === 0) throw new NothingToSpeakError("nothing to speak");
 
     const prefixLen = this.config.chunking.prefixTokens;
@@ -1276,6 +1277,7 @@ export class Engine {
       // phase and the render.
       if (shouldCancel?.()) throw new CancelledError();
       const mel = await this.decodeMel(chunkTokens, voice, deriveSeed(chunkSeed, 1));
+      if (shouldCancel?.()) throw new CancelledError();
       const rendered = await this.vocode(mel, deriveSeed(chunkSeed, 2));
       // The stretch is the last stage, after the detectors have judged this
       // chunk's pacing against its text; see {@link Engine.synthesize}.

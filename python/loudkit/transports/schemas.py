@@ -104,12 +104,6 @@ _OPENAI_FORMATS: dict[str, AudioFormat] = {
 _OPENAI_UNSUPPORTED = ("aac",)
 """Refused by name: libsndfile has no AAC encoder, so this server has none."""
 
-_STREAMABLE: frozenset[str] = frozenset({"wav", "pcm16", "flac"})
-"""Formats a chunk can be delivered in on its own. An Ogg bitstream's state
-spans the whole stream, Vorbis and Opus alike, and each separately encoded MP3
-chunk carries its own encoder delay into the join, so a per-chunk container
-would lie about what the bytes are."""
-
 _CODE_BY_STATUS = {
     400: "invalid_request",
     404: "invalid_request",

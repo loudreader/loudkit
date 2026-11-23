@@ -13,6 +13,7 @@ import threading
 from collections.abc import Callable, Generator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import replace
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -51,6 +52,7 @@ def joined(
     Through the raising form of the stream: a cancelled passage has no answer,
     and joining the chunks that finished would be silent truncation.
     """
+    start = perf_counter()
     parts = list(
         engine._stream(
             text,
@@ -81,6 +83,7 @@ def joined(
             sum(p.timings.tokens for p in parts),
             sum(p.timings.mel for p in parts),
             sum(p.timings.audio for p in parts),
+            elapsed=perf_counter() - start,
         ),
         hit_token_cap=any(p.hit_token_cap for p in parts),
         inspections=tuple(i for p in parts for i in p.inspections),

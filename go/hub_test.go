@@ -214,14 +214,14 @@ func (f *fakeRepo) handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		treePrefix := "/api/models/" + f.repo + "/tree/"
 		revisionPrefix := "/api/models/" + f.repo + "/revision/"
-		filePrefix := "/" + f.repo + "/resolve/main/"
+		f.mu.Lock()
+		sha := f.commit
+		f.mu.Unlock()
+		filePrefix := "/" + f.repo + "/resolve/" + sha + "/"
 		switch {
 		case strings.HasPrefix(r.URL.Path, revisionPrefix):
-			f.mu.Lock()
-			commit := f.commit
-			f.mu.Unlock()
-			_ = json.NewEncoder(w).Encode(map[string]any{"sha": commit, "siblings": []any{}})
-		case strings.HasPrefix(r.URL.Path, treePrefix):
+			_ = json.NewEncoder(w).Encode(map[string]any{"sha": sha, "siblings": []any{}})
+		case r.URL.Path == treePrefix+sha:
 			type entry struct {
 				Type string `json:"type"`
 				Path string `json:"path"`
@@ -1285,5 +1285,17 @@ func TestOfflineRefusesACacheThatIsNotThePin(t *testing.T) {
 	// An unpinned call is not a pinned one: it takes whatever the cache holds.
 	if got, err := DownloadWith("someone/loudr-1", dir, quiet()); err != nil || got != dir {
 		t.Errorf("an unpinned call was refused: %q, %v", got, err)
+	}
+}
+
+func TestLocalDirectoryWinsOverModelAlias(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.Mkdir("loudr-1", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, fromAlias := Load("loudr-1")
+	_, fromPath := Load("./loudr-1")
+	if fromAlias == nil || fromPath == nil || strings.TrimPrefix(fromPath.Error(), "./") != fromAlias.Error() {
+		t.Fatalf("local load: %v vs %v", fromAlias, fromPath)
 	}
 }

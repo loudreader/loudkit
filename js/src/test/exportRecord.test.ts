@@ -77,6 +77,31 @@ test("a record naming this engine loads", async () => {
   });
 });
 
+test("funnel-10 accepts complete sets of the same model's historical graphs", async () => {
+  await scratch(async ({ dir, checkpoint, digest }) => {
+    for (const [current, funnel6, funnel7, funnel8, funnel9, other, steps] of [
+      ["4a2918bb653ce531", "7cd75498ad4e7531", "b99ab84725b40e91", "f171bcc07df48436", "82c2c12d6e725542", "e5303ba243087222", 2],
+      ["ccaeab4e92d9edc1", "e5303ba243087222", "e800f3bbb7eb6b4e", "06d8ccb48891899e", "62d674008ef832fd", "7cd75498ad4e7531", 1],
+    ] as const) {
+      const verify = () => checkExportRecord(dir, checkpoint, {}, current, steps, GRAPHS);
+      const entry = { ...matching(digest), algorithm_fingerprint: funnel6, euler_steps: steps };
+      const newer = { ...entry, algorithm_fingerprint: funnel7 };
+      writeRecord(dir, entry);
+      await verify();
+      for (const historical of [funnel7, funnel8, funnel9]) {
+        writeRecord(dir, { ...entry, algorithm_fingerprint: historical });
+        await verify();
+      }
+      writeRecord(dir, entry, newer);
+      await assert.rejects(verify, /mixed graph set/);
+      writeRecord(dir, { ...entry, algorithm_fingerprint: other });
+      await assert.rejects(verify, /different engine/);
+      writeRecord(dir, { ...entry, euler_steps: steps + 1 });
+      await assert.rejects(verify, /different engine/);
+    }
+  });
+});
+
 test("a set exported before the record still loads", async () => {
   await scratch(async (fixture) => {
     // The rule and its reason: refusing here would strand exactly the releases

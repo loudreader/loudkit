@@ -172,12 +172,7 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: ada), Data(repeating: 0xEE, count: 256))
     }
 
-    /// Offline, a pin is answered by the bytes it names or by nothing.
-    ///
-    /// A caller asking for one revision and getting another is the failure a
-    /// pin exists to prevent, so the receipt's own commit and ref are what the
-    /// request is held to. `main` is this port's unpinned request, because
-    /// `revision` defaults to it and cannot be told from one a caller wrote.
+    /// Exercise an explicitly named revision and the unpinned default offline.
     func testTheHubOutOfReachRefusesACacheThatIsNotThePin() async throws {
         _ = try await StubHub.download(to: root)
         StubHub.offline = true
@@ -204,7 +199,17 @@ final class DownloadTests: XCTestCase {
             XCTAssertTrue("\(error)".contains("cannot be resolved without it"), "\(error)")
         }
 
-        // The default is not a pin: it takes whatever the cache holds.
+        try LoudKit.writeReceipt(root, repo: StubHub.repo, revision: "v0.1.1", commit: StubHub.commit)
+        do {
+            _ = try await LoudKit.download(StubHub.fetch(revision: "main"), to: root, progress: nil)
+            XCTFail("a tagged receipt answered an explicit request for main")
+        } catch let error as LoudKitError {
+            XCTAssertTrue("\(error)".contains("cannot be resolved without it"), "\(error)")
+        }
+        let atTag = try await LoudKit.download(StubHub.fetch(revision: "v0.1.1"), to: root, progress: nil)
+        XCTAssertEqual(atTag, root)
+
+        // Omitting the revision lets the same tagged receipt satisfy an offline request.
         let unpinned = try await StubHub.download(to: root)
         XCTAssertEqual(unpinned, root)
     }
@@ -754,7 +759,7 @@ enum StubHub {
     }
 
     /// A fetch that goes through the stub rather than the network.
-    static func fetch(cloning: Bool = false, revision: String = "main") -> LoudKit.Fetch {
+    static func fetch(cloning: Bool = false, revision: String = "") -> LoudKit.Fetch {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
         return LoudKit.Fetch(repo: repo, revision: revision, cloning: cloning,
@@ -845,11 +850,11 @@ final class StubProtocol: URLProtocol {
             let body = (try? JSONSerialization.data(withJSONObject: ["sha": StubHub.commit])) ?? Data()
             return (200, body, ["Content-Type": "application/json"])
         }
-        let treePrefix = "/api/models/\(StubHub.repo)/tree/main"
+        let treePrefix = "/api/models/\(StubHub.repo)/tree/\(StubHub.commit)"
         if path == treePrefix || path == treePrefix + "/" {
             return listing(url)
         }
-        let resolvePrefix = "/\(StubHub.repo)/resolve/main/"
+        let resolvePrefix = "/\(StubHub.repo)/resolve/\(StubHub.commit)/"
         guard path.hasPrefix(resolvePrefix) else { return (404, Data(), [:]) }
         let name = String(path.dropFirst(resolvePrefix.count))
         guard let body = StubHub.files[name] else { return (404, Data(), [:]) }
@@ -876,7 +881,7 @@ final class StubProtocol: URLProtocol {
         var headers = ["Content-Type": "application/json"]
         if end < all.count {
             headers["Link"] =
-                "<\(StubHub.endpoint)/api/models/\(StubHub.repo)/tree/main"
+                "<\(StubHub.endpoint)/api/models/\(StubHub.repo)/tree/\(StubHub.commit)"
                 + "?recursive=1&cursor=\(end)>; rel=\"next\""
         }
         return (200, body, headers)

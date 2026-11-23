@@ -295,6 +295,9 @@ class Grammar:
     stay out on purpose, because a wrong expansion is worse than a spelled
     abbreviation."""
 
+    title_abbreviations: tuple[tuple[str, str], ...]
+    """Titles expanded only when a capitalized name follows."""
+
     unit_words: tuple[tuple[str, str], ...]
     """Per-language wording for currency and measure symbols: ``$`` is
     *dólares* to a Spanish render and *Dollar* to a German one. Per language and
@@ -420,6 +423,7 @@ class Grammar:
                     key=lambda kv: -len(kv[0]),
                 )
             ),
+            title_abbreviations=tuple(raw.get("title_abbreviations", {}).items()),
             unit_words=tuple(
                 sorted((str(k), str(v)) for k, v in raw.get("unit_words", {}).items())
             ),
@@ -603,6 +607,97 @@ def _scale_word(count: int, forms: tuple[str, ...]) -> str:
     if 2 <= last <= 4 and not 12 <= last_two <= 14:
         return forms[1]
     return forms[2]
+
+
+_PL_QUANTITY = re.compile(
+    r"([0-9]+(?:[ \u00a0\u202f][0-9]{3})*)(?:,([0-9]+))?"
+    r"(?:[ \t\u00a0\u202f]*(zł|kg|m²))?"
+)
+_PL_GROUP_SPACE = re.compile(r"[ \u00a0\u202f]")
+_PL_UNIT_FORMS = {
+    "kg": ("kilogram", "kilogramy", "kilogramów", "kilograma"),
+    "m²": ("metr kwadratowy", "metry kwadratowe", "metrów kwadratowych", "metra kwadratowego"),
+}
+_PL_FEMININE_CHOICES = ("ofert", "opcji", "pozycji", "propozycji", "wiadomości")
+_PL_CHOICE_NOUNS = "|".join(
+    (*_PL_FEMININE_CHOICES, "produktów", "plików", "biletów", "elementów")
+)
+_PL_CHOICE = re.compile(
+    r"(?<!\w)([Ww]ybierz|[Zz]aznacz|[Ww]skaż) +([1-9]) +z +(10|[2-9])"
+    rf" +({_PL_CHOICE_NOUNS})(?!\w)"
+)
+_PL_GENITIVE = (
+    "dwóch",
+    "trzech",
+    "czterech",
+    "pięciu",
+    "sześciu",
+    "siedmiu",
+    "ośmiu",
+    "dziewięciu",
+    "dziesięciu",
+)
+_PL_MESSAGES = re.compile(r"(?<!\w)([Mm]asz) +2( +(?:nowe +)?wiadomości)(?!\w)")
+
+
+def _polish_price(digits: str, fraction: str) -> str:
+    count = int(digits)
+    major = f"{digits} {_scale_word(count, ('złoty', 'złote', 'złotych'))}"
+    cents = int(fraction.ljust(2, "0"))
+    if not cents:
+        return major
+    minor = f"{cents} {_scale_word(cents, ('grosz', 'grosze', 'groszy'))}"
+    return f"{major} i {minor}" if count else minor
+
+
+def _polish_quantity(match: re.Match[str]) -> str:
+    written, fraction, unit = match.groups()
+    if unit is None:
+        return match[0]
+    text, end, start = match.string, match.end(), match.start()
+    if (
+        (start > 0 and (text[start - 1].isalnum() or text[start - 1] == "_"))
+        or (end < len(text) and (text[end].isalnum() or text[end] == "_"))
+        or (start >= 2 and text[start - 1] in ".," and _is_ascii_digit(text[start - 2]))
+    ):
+        return match[0]
+    groups = _PL_GROUP_SPACE.split(written)
+    digits = "".join(groups)
+    fraction = fraction or ""
+    if (
+        len(digits) > 9
+        or (len(groups) > 1 and len(groups[0]) > 3)
+        or (len(digits) > 1 and digits.startswith("0"))
+        or len(fraction) > (2 if unit == "zł" else 6)
+    ):
+        return match[0]
+    if unit == "zł":
+        return _polish_price(digits, fraction)
+    forms = _PL_UNIT_FORMS[unit]
+    if fraction.strip("0"):
+        return f"{digits},{fraction} {forms[3]}"
+    return f"{digits} {_scale_word(int(digits), forms[:3])}"
+
+
+def expand_polish_quantities(text: str) -> str:
+    """Resolve the case of explicitly named units and countable feminine nouns.
+
+    Keep ambiguous bare numbers for the ordinary cardinal/identifier rules.
+    The optional unit consumes unlabelled digit runs whole in a single scan.
+    """
+
+    def choice(match: re.Match[str]) -> str:
+        verb, count, total, noun = match.groups()
+        selected = (
+            {"1": "jedną", "2": "dwie"}.get(count, count)
+            if noun in _PL_FEMININE_CHOICES
+            else count
+        )
+        return f"{verb} {selected} z {_PL_GENITIVE[int(total) - 2]} {noun}"
+
+    text = _PL_CHOICE.sub(choice, text)
+    text = _PL_MESSAGES.sub(r"\1 dwie\2", text)
+    return _PL_QUANTITY.sub(_polish_quantity, text)
 
 
 def _hundreds_group(value: int, g: Grammar, gender: str | None) -> str:
@@ -1093,9 +1188,8 @@ def expand_times(text: str, language: str) -> str:
         parts = [cardinal(hour, language)]
         if grammar.time_infix:
             parts.append(grammar.time_infix)
-        # 14:05 keeps its zero spoken where the minute is under ten in
-        # languages without an infix, "fourteen oh five" territory, but
-        # the plain cardinal is never *wrong*, only plainer, so it ships.
+        if language == "en" and 0 < minute < 10:
+            parts.append("oh")
         # A zero minute is dropped from `14:00` and kept in `14:00:45`, where
         # dropping it would move the seconds into the minutes' place.
         if minute or seconds:
@@ -1114,6 +1208,45 @@ def expand_times(text: str, language: str) -> str:
     return out
 
 
+_SENTENCE_STARTERS = {
+    "I",
+    "He",
+    "She",
+    "We",
+    "They",
+    "It",
+    "The",
+    "This",
+    "That",
+    "Then",
+    "Later",
+    "Afterwards",
+    "Afterward",
+}
+_COMPASS_DIRECTIONS = {
+    "North",
+    "South",
+    "East",
+    "West",
+    "Northeast",
+    "Northwest",
+    "Southeast",
+    "Southwest",
+    "NE",
+    "NW",
+    "SE",
+    "SW",
+}
+# A house number and up to four street-name words before "Dr.". The bounded
+# lookback keeps a list of addresses linear in the size of the input.
+_STREET_ADDRESS = re.compile(
+    r"(?<![A-Za-z0-9])[0-9]{1,7}(?:[ \t]{1,4}[A-Z][A-Za-z'-]{0,24}){1,4}[ \t]{1,4}\Z"
+)
+_TITLE_NAME = r"(?=[ \t\u00a0\u202f]+(.))"
+# A closing quote may sit between the abbreviation and the end of its sentence.
+_AFTER_ETC = re.compile(r"""[”’"')\]]*(?:[^\S\x1c-\x1f]*\Z|[^\S\x1c-\x1f]+[“‘"'(\[]?(.))""")
+
+
 def expand_abbreviations(text: str, language: str) -> str:
     """The authority-listed abbreviations, written out.
 
@@ -1123,16 +1256,46 @@ def expand_abbreviations(text: str, language: str) -> str:
     would otherwise become prosodic stops and break the sentence mid-phrase.
     """
     grammar = _grammars().get(language)
-    if grammar is None or not grammar.abbreviations:
+    if grammar is None:
         return text
     out = text
+    for written, spoken in grammar.title_abbreviations:
+        pattern = r"(?<![\w.])" + re.escape(written) + _TITLE_NAME
+
+        def _title(match: re.Match[str], replacement: str = spoken) -> str:
+            first = match.start(1)
+            text = match.string
+            if not (text[first].isalpha() and text[first].isupper()):
+                return match.group(0)
+            end = first + 1
+            while end < len(text) and text[end].isalpha():
+                end += 1
+            name = text[first:end]
+            title = match.group(0)
+            if title == "Dr." and (
+                name in _COMPASS_DIRECTIONS
+                or _STREET_ADDRESS.search(text, max(0, match.start() - 160), match.start())
+            ):
+                return title
+            return title if name in _SENTENCE_STARTERS else replacement
+
+        out = re.sub(pattern, _title, out)
+
     for written, spoken in grammar.abbreviations:
         pattern = r"(?<![\w.])" + re.escape(written) + r"(?![\w.])"
 
         # `spoken` is data, so it goes through a callable: a backslash or
         # group reference inside it would otherwise be read as a replacement
         # template and corrupt the output.
-        def _substitute(_match: re.Match[str], _spoken: str = spoken) -> str:
+        def _substitute(
+            match: re.Match[str],
+            _spoken: str = spoken,
+            can_end_sentence: bool = language == "en" and written == "etc.",
+        ) -> str:
+            if can_end_sentence:
+                following = _AFTER_ETC.match(match.string, match.end())
+                if following and (following[1] is None or following[1].isupper()):
+                    return _spoken + "."
             return _spoken
 
         out = re.sub(pattern, _substitute, out)

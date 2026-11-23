@@ -63,7 +63,7 @@ let package = Package(
         // package. What ships is the measurement of what the ANE can do
         // (`docs/platforms/apple.md`), not the recipe for getting there.
         .target(name: "LoudKit", dependencies: ["LoudKitText"], path: "swift/LoudKit",
-                resources: [.copy("Resources")]),
+                resources: [.process("Resources")]),
         // Compile the quickstart from `swift/README.md` as an executable
         // target to check the documented API; it is not an exported product.
         .executableTarget(name: "Hello", dependencies: ["LoudKit"], path: "swift/Examples/Hello"),

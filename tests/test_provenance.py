@@ -365,19 +365,48 @@ class TestTheWriteIsAllOrNothing:
             "a partial file was left behind"
         )
 
-    def test_the_temp_name_keeps_the_extension(self, tmp_path) -> None:
-        """`soundfile` picks its format from the suffix.
+    @pytest.mark.parametrize("manifest", [False, True])
+    def test_wav_output_decodes_as_pcm16(self, tmp_path, audio, manifest) -> None:
+        import soundfile as sf
 
-        A temp file ending in `.partial` is one it refuses to write at all, and
-        `write_wav("x.flac", …)` has always produced FLAC by that same
-        mechanism — so the scratch name has to carry the suffix rather than
-        append to it.
-        """
-        import numpy as np
+        target = write_wav(tmp_path / "out.WAV", audio, 24_000, manifest=manifest)
+        with sf.SoundFile(target) as stream:
+            assert (stream.format, stream.subtype, stream.samplerate) == (
+                "WAV",
+                "PCM_16",
+                24_000,
+            )
+            np.testing.assert_allclose(stream.read(dtype="float32"), audio, atol=1.0 / 32768)
+        assert verify_provenance(target)[1] is manifest
 
-        from loudkit.provenance import write_wav
+    @pytest.mark.parametrize("manifest", [False, True])
+    @pytest.mark.parametrize("name", ["out.flac", "out.mp3", "out"])
+    def test_other_extensions_preserve_the_previous_file(
+        self, tmp_path, audio, manifest, name
+    ) -> None:
+        from loudkit.result import Result, StageTimings
 
-        target = tmp_path / "out.flac"
-        write_wav(target, np.zeros(2400, dtype=np.float32), **self._kwargs())
-        assert target.exists()
-        assert target.read_bytes()[:4] == b"fLaC"
+        target = tmp_path / name
+        target.write_bytes(b"existing recording")
+        result = Result(
+            audio=audio,
+            tokens=[],
+            mel=np.empty((80, 0), np.float32),
+            seed=0,
+            sample_rate=24_000,
+            timings=StageTimings(0, 0, 0),
+        )
+        with pytest.raises(ValueError, match=r"\.wav extension"):
+            result.save(target, include_provenance=manifest)
+        assert target.read_bytes() == b"existing recording"
+        assert list(tmp_path.iterdir()) == [target]
+
+
+def test_standard_info_chunk_after_audio_is_unmarked(tmp_path, audio):
+    path = write_wav(tmp_path / "title.wav", audio, 24_000, manifest=False)
+    data = bytearray(path.read_bytes())
+    info = b"INFOINAM" + struct.pack("<I", 6) + b"Hello\0"
+    data.extend(b"LIST" + struct.pack("<I", len(info)) + info)
+    struct.pack_into("<I", data, 4, len(data) - 8)
+    path.write_bytes(data)
+    assert read_provenance(path) is None

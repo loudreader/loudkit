@@ -814,6 +814,8 @@ impl Bundle {
     }
 
     /// [`Bundle::fetch_cloning`] with the revision or the mirror named.
+    /// A pinned fetch needs a bundle opened by repo id, even when the graphs
+    /// are present. For a directory of your own, use [`download_with`].
     ///
     /// # Errors
     ///
@@ -821,7 +823,17 @@ impl Bundle {
     #[cfg(feature = "download")]
     pub fn fetch_cloning_with(&self, options: &Options) -> Result<(), String> {
         if self.can_enroll() {
-            return Ok(());
+            if options.revision.is_empty() {
+                return Ok(());
+            }
+            if self.repo.is_none() {
+                return Err(format!(
+                    "{} was opened as a directory. To fetch enrollment graphs at {:?}, \
+                     use hub::download_with with the repo id and cloning: true.",
+                    self.root.display(),
+                    options.revision
+                ));
+            }
         }
         let Some(repo) = &self.repo else {
             return Err(self.no_cloning());
@@ -918,8 +930,9 @@ pub fn parse_sums(text: &str, origin: &str) -> Result<HashMap<String, String>, S
 /// What to fetch, and from where.
 #[cfg(feature = "download")]
 pub struct Options {
-    /// Branch, tag or commit. Pin it for anything reproducible: a moving
-    /// `main` is a moving model.
+    /// Branch, tag or commit. The default empty string requests `main`
+    /// online and accepts any verified copy of this repo offline.
+    /// An explicit `main` requires a receipt for that branch.
     pub revision: String,
     /// Add the three enrollment graphs, for cloning a voice from a recording.
     pub cloning: bool,
@@ -931,7 +944,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Options {
-            revision: "main".to_string(),
+            revision: String::new(),
             cloning: false,
             endpoint: std::env::var("HF_ENDPOINT")
                 .unwrap_or_else(|_| "https://huggingface.co".to_string()),
@@ -1005,20 +1018,13 @@ impl Cancel {
 /// branch cannot be resolved with no hub, but the receipt also records the ref
 /// it was fetched for, and asking for a different one cannot be satisfied from
 /// this directory either.
-///
-/// `main` is this port's unpinned request. [`Options::revision`] is a `String`
-/// whose default is `"main"`, so an omitted revision and an explicit one
-/// arrive here as the same value; the reference tells them apart. Reading it
-/// as a pin would refuse every default call over a cache fetched for a tag,
-/// which is the commoner shape and the one no caller pinned, so it is read as
-/// the absence it usually is.
 #[cfg(feature = "download")]
 fn refuse_a_cache_that_is_not_the_pin(
     root: &Path,
     receipt: &Receipt,
     revision: &str,
 ) -> Result<(), String> {
-    if revision.is_empty() || revision == "main" {
+    if revision.is_empty() {
         return Ok(());
     }
     let forty_hex = revision.len() == 40
@@ -1119,7 +1125,11 @@ pub fn download_cancellable(
     let root = dir.as_ref().to_path_buf();
     check_repo_id(repo)?;
     let base = options.endpoint.trim_end_matches('/');
-    let revision = &options.revision;
+    let revision = if options.revision.is_empty() {
+        "main"
+    } else {
+        &options.revision
+    };
 
     cancel.stop(repo)?;
     eprintln!("loudkit: resolving {repo} at {revision}");
@@ -1204,7 +1214,7 @@ pub fn download_cancellable(
             }
             eprint!("loudkit: [{}/{total}] {name} ", i + 1);
             let bytes = fetch_to(
-                &format!("{base}/{repo}/resolve/{revision}/{name}"),
+                &format!("{base}/{repo}/resolve/{commit}/{name}"),
                 &dest,
                 repo,
                 cancel,

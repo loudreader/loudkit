@@ -1575,6 +1575,40 @@ class TestALocalDirCarriesAReceipt:
 
     _REPO = "loudreader/loudr-1"
 
+    def test_revision_is_pinned_before_download(self, monkeypatch, tmp_path):
+        commit = "a" * 40
+        next_commit = "b" * 40
+
+        class MovingBranch(_LocalDirClient):
+            def model_info(self, **kwargs):
+                answer = super().model_info(**kwargs)
+                self.sha = next_commit
+                return answer
+
+            def snapshot_download(self, **kwargs):
+                assert self.sha == next_commit
+                assert kwargs["revision"] == commit
+                return super().snapshot_download(**kwargs)
+
+        target = tmp_path / "local"
+        client = MovingBranch(commit, tmp_path / "remote")
+        self._download(monkeypatch, client, target)
+        receipt = hub.read_receipt(target, self._REPO)
+        assert receipt is not None
+        assert receipt.commit == commit
+        client.sha = ConnectionError("offline")
+        assert self._download(monkeypatch, client, target, revision=commit) == target
+        assert (target / "voices/joe.safetensors").read_bytes() == b"joe"
+
+    def test_failed_backend_preflight_preserves_receipt(self, monkeypatch, tmp_path):
+        target = tmp_path / "local"
+        client = _LocalDirClient("a" * 40, tmp_path / "remote")
+        self._download(monkeypatch, client, target)
+        with pytest.raises(ValueError, match="onnx"):
+            hub.download(self._REPO, local_dir=target, backend="onnx")
+        client.sha = ConnectionError("offline")
+        assert self._download(monkeypatch, client, target) == target
+
     def _download(self, monkeypatch, client, target, revision=None):
         monkeypatch.setattr(hub, "_hub", lambda: client)
         return hub.download(self._REPO, local_dir=target, revision=revision)

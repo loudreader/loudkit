@@ -151,7 +151,7 @@ func DownloadContext(ctx context.Context, repo, dir string, f Fetch) (string, er
 	}
 	// A stale receipt must not outlive the files it vouched for.
 	os.Remove(filepath.Join(dir, receiptName))
-	listing, err := client.tree(ctx, repo, revision)
+	listing, err := client.tree(ctx, repo, commit)
 	if err != nil {
 		return "", err
 	}
@@ -190,7 +190,7 @@ func DownloadContext(ctx context.Context, repo, dir string, f Fetch) (string, er
 				return "", err
 			}
 			os.Remove(dest)
-			if err := client.fetch(ctx, repo, revision, file.Path, dest, file.Size); err != nil {
+			if err := client.fetch(ctx, repo, commit, file.Path, dest, file.Size); err != nil {
 				return "", err
 			}
 		}

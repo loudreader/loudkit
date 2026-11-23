@@ -83,8 +83,10 @@ var (
 
 // abbrevPattern is one abbreviation with its match already compiled.
 type abbrevPattern struct {
-	written *regexp.Regexp
-	spoken  string
+	written        *regexp.Regexp
+	spoken         string
+	title          bool
+	mayEndSentence bool
 }
 
 // grammarTables is the only reader of grammars.
@@ -164,10 +166,22 @@ func loadGrammars() {
 			})
 		}
 		tables[lang] = g
+		// Check Dr. for a street address before expanding other titles in that address.
+		titles := make([]string, 0, len(e.TitleAbbreviations))
+		for written := range e.TitleAbbreviations {
+			titles = append(titles, written)
+		}
+		sort.Strings(titles)
+		for _, written := range titles {
+			patterns[lang] = append(patterns[lang], abbrevPattern{
+				written: regexp.MustCompile(regexp.QuoteMeta(written)), spoken: e.TitleAbbreviations[written], title: true,
+			})
+		}
 		for _, entry := range g.Abbreviations {
 			patterns[lang] = append(patterns[lang], abbrevPattern{
-				written: regexp.MustCompile(regexp.QuoteMeta(entry.Written)),
-				spoken:  entry.Spoken,
+				written:        regexp.MustCompile(regexp.QuoteMeta(entry.Written)),
+				spoken:         entry.Spoken,
+				mayEndSentence: lang == "en" && entry.Written == "etc.",
 			})
 		}
 	}
@@ -1205,6 +1219,9 @@ func ExpandTimes(text, language string) string {
 		// A zero minute is dropped from `14:00` and kept in `14:00:45`, where
 		// dropping it would move the seconds into the minutes' place.
 		if minute != 0 || seconds != 0 {
+			if language == "en" && minute > 0 && minute < 10 {
+				words = append(words, "oh")
+			}
 			if said, err := Cardinal(minute, language, ""); err == nil {
 				words = append(words, said)
 			}
@@ -1337,12 +1354,61 @@ func expandAbbreviation(text string, p abbrevPattern) string {
 			// that is part of a word is part of the word.
 			continue
 		}
+		if p.title && !precedesName(text[:s[0]], text[s[0]:s[1]], text[s[1]:]) {
+			continue
+		}
 		b.WriteString(text[last:s[0]])
 		b.WriteString(p.spoken)
+		if p.mayEndSentence && afterSentenceEnd(text[s[1]:]) {
+			b.WriteByte('.')
+		}
 		last = s[1]
 	}
 	b.WriteString(text[last:])
 	return b.String()
+}
+
+var streetAddress = regexp.MustCompile(`(?:^|[^A-Za-z0-9])[0-9]{1,7}(?:[ \t]{1,4}[A-Z][A-Za-z'-]{0,24}){1,4}[ \t]{1,4}$`)
+
+func precedesName(prefix, title, tail string) bool {
+	name := strings.TrimLeft(tail, " \t\u00a0\u202f")
+	first, _ := utf8.DecodeRuneInString(name)
+	if len(name) == len(tail) || !unicode.IsUpper(first) {
+		return false
+	}
+	if end := strings.IndexFunc(name, func(r rune) bool { return !unicode.IsLetter(r) }); end >= 0 {
+		name = name[:end]
+	}
+	switch name {
+	case "I", "He", "She", "We", "They", "It", "The", "This", "That", "Then", "Later", "Afterwards", "Afterward":
+		return false
+	}
+	if title == "Dr." {
+		switch name {
+		case "North", "South", "East", "West", "Northeast", "Northwest", "Southeast", "Southwest", "NE", "NW", "SE", "SW":
+			return false
+		}
+		// The address syntax is ASCII and can match at most 128 bytes.
+		if len(prefix) > 160 {
+			prefix = prefix[len(prefix)-160:]
+		}
+		return !streetAddress.MatchString(prefix)
+	}
+	return true
+}
+
+// A final period in “etc.” can also close the surrounding sentence.
+func afterSentenceEnd(tail string) bool {
+	closed := strings.TrimLeft(tail, "”’\"')]")
+	next := strings.TrimLeftFunc(closed, unicode.IsSpace)
+	if next == "" {
+		return true
+	}
+	first, size := utf8.DecodeRuneInString(next)
+	if strings.ContainsRune("“‘\"'([", first) {
+		first, _ = utf8.DecodeRuneInString(next[size:])
+	}
+	return len(next) != len(closed) && unicode.IsUpper(first)
 }
 
 func wordOrDotBefore(text string, at int) bool {

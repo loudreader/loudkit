@@ -19,6 +19,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -95,13 +96,89 @@ var operatorRunRe = regexp.MustCompile(`<=|>=|!=|==|<|>`)
 // `<!-- ... -->` additionally leaves its `!` behind as a sentence-final
 // exclamation. A tag becomes a space rather than nothing, because two block
 // tags meeting back to back are two paragraphs and not one glued word.
-var markupTagRe = regexp.MustCompile(`</?[A-Za-z!][^<>]*>`)
+var pairedComparison = regexp.MustCompile(`(^|[^\p{L}\p{N}_])([\p{L}\p{N}_]+)([ \t]*)(?:<|&lt;)[ \t]*([\p{L}\p{N}_]+[ \t]+(?:[Oo][Rr]|[Aa][Nn][Dd]|lub|albo|i|oder|und|ou|et|o|y|e|of|en|eller|og|och|tai|ja)[ \t]+)([\p{L}\p{N}_]+)[ \t]*(?:>|&gt;)(=?)([ \t]*)([-+]?[\p{L}\p{N}_])`)
+var numericApostrophe = regexp.MustCompile(`&#(?:0*39|[xX]0*27);`)
+var markupEntities = strings.NewReplacer(
+	"&apos;", "'",
+	"&quot;", "\"",
+	"&lt;", "<",
+	"&gt;", ">",
+	"&nbsp;", " ",
+	"&amp;", "&",
+)
+var leadingDotRe = regexp.MustCompile(`(^|[^\p{L}\p{N}_.,])(\.)([0-9])`)
+var leadingCommaRe = regexp.MustCompile(`(^|[\x09-\x0D\x20\x85\p{Z}(\[{«‹„“‘≈=+−$£€¥₹*/:<>-])(,)([0-9])`)
+
+const htmlTagName = `[A-Za-z][A-Za-z0-9-]*(?::[A-Za-z][A-Za-z0-9-]*)?`
+const htmlSpace = `[ \t\r\n\f]`
+const htmlAssignment = `[^ \t\r\n\f"'<>/=]+` + htmlSpace + `*=` + htmlSpace + `*`
+const htmlQuoted = `(?:"[^"]*"|'[^']*')`
+const htmlUnquoted = `[^ \t\r\n\f"'<>\x60]+`
+const htmlBoolean = `(?:allowfullscreen|async|autofocus|autoplay|checked|controls|default|defer|disabled|download|exact|formnovalidate|hidden|inert|ismap|itemscope|loop|multiple|muted|nomodule|novalidate|nowrap|open|playsinline|popover|readonly|required|reversed|selected|v-cloak)`
+const htmlAttribute = `(?:` + htmlBoolean + `|` + htmlAssignment + `(?:` + htmlQuoted + htmlAssignment + `)*(?:` + htmlQuoted + `|` + htmlUnquoted + `))`
+
+var markupTagRe = regexp.MustCompile(`(?i)</?(?:![^<>]*|` + htmlTagName + `(?:` + htmlSpace + `+` + htmlAttribute + `)*` + htmlSpace + `*/?)>`)
 
 // `$` and `£` before a number read as a prefix in writing and a SUFFIX in
 // speech: "$5" is "five dollars", not "dollars five".
 // The wording comes from unitWords (numbers.json); this list only says which
 // symbols are written prefix. Ordered: these run in sequence over one string.
 var currencyPrefixes = []rune{'$', '£', '€', '¥', '₹'}
+
+const digitGroupSpaces = "\u00a0\u2009\u202f"
+
+var spacedDigitGroups = regexp.MustCompile(`[0-9]+(?:[ ` + digitGroupSpaces + `][0-9]+)+`)
+
+// compactDigitGroups handles typography before a prefix currency can consume
+// only the first group. Matching the whole run leaves ragged groups intact.
+var countAfterPrice = regexp.MustCompile(`(?i)^[ \t]+(?:times|days|weeks|months|years|hours|minutes|seconds|items|units)\b`)
+
+func compactDigitGroups(text, language string) string {
+	var out strings.Builder
+	last := 0
+	for _, span := range spacedDigitGroups.FindAllStringIndex(text, -1) {
+		start, end := span[0], span[1]
+		before, width := utf8.DecodeLastRuneInString(text[:start])
+		after, _ := utf8.DecodeRuneInString(text[end:])
+		if isLetterOrDigit(before) || before == '_' || isLetterOrDigit(after) || after == '_' {
+			continue
+		}
+		if start >= 2 && (before == '.' || before == ',') && isASCIIDigit(text[start-2]) {
+			continue
+		}
+		run := text[start:end]
+		if !strings.ContainsAny(run, digitGroupSpaces) {
+			// Plain spaces already work for ordinary numbers. Only fold them
+			// here when the amount starts with a recognized currency mark.
+			groups := strings.Split(run, " ")
+			if (language == "en" || language == "") && len(groups) == 2 && !strings.HasPrefix(groups[1], "0") && countAfterPrice.MatchString(text[end:]) {
+				continue
+			}
+			markEnd := start
+			if unicode.IsSpace(before) {
+				markEnd -= width
+			}
+			mark, size := utf8.DecodeLastRuneInString(text[:markEnd])
+			if !slices.Contains(currencyPrefixes, mark) || letterBefore(text, markEnd-size) {
+				continue
+			}
+		}
+		groups := strings.Fields(run)
+		if len(groups[0]) > 3 || slices.ContainsFunc(groups[1:], func(s string) bool { return len(s) != 3 }) {
+			continue
+		}
+		out.WriteString(text[last:start])
+		for _, digits := range groups {
+			out.WriteString(digits)
+		}
+		last = end
+	}
+	if last == 0 {
+		return text
+	}
+	out.WriteString(text[last:])
+	return out.String()
+}
 
 // currencySymbols also carries `¢`, which nobody writes in front of a number,
 // it is a suffix in every convention, which is why the prefix pass never saw it
@@ -266,6 +343,7 @@ type grammarLang struct {
 	UnitTensJoiner             string                       `json:"unit_tens_joiner"`
 	TimeInfix                  string                       `json:"time_infix"`
 	Abbreviations              map[string]string            `json:"abbreviations"`
+	TitleAbbreviations         map[string]string            `json:"title_abbreviations"`
 	TensJoinerExceptions       map[string]string            `json:"tens_joiner_exceptions"`
 	HundredJoiner              string                       `json:"hundred_joiner"`
 	ScaleJoinerOnRoundHundreds bool                         `json:"scale_joiner_on_round_hundreds"`
@@ -357,6 +435,9 @@ func Prepared(text, languageID string) string {
 	// and Swift's LexicalRespelling.applied carries the same .lowercased() and
 	// the same reason.
 	languageID = strings.ToLower(languageID)
+	if languageID == "" {
+		languageID = "en"
+	}
 	// NFC first, before anything inspects a character: the same opening pass
 	// the Python funnel runs.
 	//
@@ -376,7 +457,23 @@ func Prepared(text, languageID string) string {
 	out := stripInvisibles(FoldForeignDigits(norm.NFC.String(text), languageID))
 	// Before the symbol pass, which would otherwise read a tag's angle brackets
 	// as comparison operators and its attributes as text.
+	out = pairedComparison.ReplaceAllStringFunc(out, func(raw string) string {
+		parts := pairedComparison.FindStringSubmatch(raw)
+		if (parts[3] != "" || parts[7] != "") && parts[2] != parts[5] {
+			return raw
+		}
+		return parts[1] + parts[2] + " < " + parts[4] + parts[5] + " >" + parts[6] + " " + parts[8]
+	})
 	out = dropMarkupTags(out)
+	out = markupEntities.Replace(numericApostrophe.ReplaceAllString(out, "'"))
+	out = leadingDotRe.ReplaceAllString(out, "${1}0${2}${3}")
+	out = leadingCommaRe.ReplaceAllString(out, "${1}0${2}${3}")
+	if _, supported := unitWords[languageID]; supported || languageID == "" {
+		out = compactDigitGroups(out, languageID)
+	}
+	if languageID == "pl" {
+		out = normalizePolishQuantities(out)
+	}
 	// Before the symbol table: see the Python reference. Every pass downstream
 	// asks "is this a digit" and the five ports spell it four ways, so folding
 	// first means all of them see ASCII.
@@ -459,6 +556,16 @@ func priced(amount, language string) string {
 
 var plainDecimal = regexp.MustCompile(`^\d+\.\d+$`)
 
+func unscaledPrice(amount, word, language string) string {
+	if language == "en" && (amount == "1" || amount == "1.0" || amount == "1.00") {
+		switch word {
+		case "dollars", "pounds", "euros":
+			return "1 " + strings.TrimSuffix(word, "s")
+		}
+	}
+	return amount + " " + word
+}
+
 // speakPrefixCurrency rewrites every `$12.34` in text as "12.34 dollars", and
 // leaves one glued to the end of a word written.
 //
@@ -503,7 +610,7 @@ func speakPrefixCurrency(text string, re *regexp.Regexp, word, language string) 
 		case said != "":
 			b.WriteString(amount + " " + said + " " + word)
 		default:
-			b.WriteString(amount + " " + word)
+			b.WriteString(unscaledPrice(amount, word, language))
 		}
 		last = end
 	}
@@ -656,7 +763,7 @@ func speakSymbols(text, language string) string {
 		}
 		re := currencySuffixRe[sym]
 		out = re.ReplaceAllStringFunc(out, func(m string) string {
-			return priced(re.FindStringSubmatch(m)[1], language) + " " + word
+			return unscaledPrice(priced(re.FindStringSubmatch(m)[1], language), word, language)
 		})
 	}
 	for _, sym := range spokenSymbols {

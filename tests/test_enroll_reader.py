@@ -59,8 +59,8 @@ def test_a_file_is_read_at_its_native_rate(recorder, tmp_path) -> None:
 def test_stereo_is_averaged_not_dropped(recorder, tmp_path) -> None:
     import soundfile as sf
 
-    left = np.full(2400, 0.5, np.float32)
-    right = np.full(2400, -0.25, np.float32)
+    left = np.full(24_000, 0.5, np.float32)
+    right = np.full(24_000, -0.25, np.float32)
     path = tmp_path / "stereo.wav"
     sf.write(str(path), np.stack([left, right], axis=1), 24_000, subtype="FLOAT")
 
@@ -68,11 +68,11 @@ def test_stereo_is_averaged_not_dropped(recorder, tmp_path) -> None:
 
     ((samples, rate),) = recorder.calls
     assert rate == 24_000
-    np.testing.assert_allclose(samples, np.full(2400, 0.125, np.float32))
+    np.testing.assert_allclose(samples, np.full(24_000, 0.125, np.float32))
 
 
 def test_samples_are_taken_at_the_rate_the_caller_names(recorder, tmp_path) -> None:
-    wav = np.zeros(16_000, np.float32)
+    wav = np.full(16_000, 0.2, np.float32)
     loudkit.enroll(wav, str(tmp_path), name="me", sample_rate=16_000)
     ((_, rate),) = recorder.calls
     assert rate == 16_000
@@ -81,3 +81,13 @@ def test_samples_are_taken_at_the_rate_the_caller_names(recorder, tmp_path) -> N
 def test_a_missing_file_is_named(tmp_path) -> None:
     with pytest.raises(loudkit.AudioNotFoundError, match="nope.wav"):
         loudkit.enroll(str(tmp_path / "nope.wav"), str(tmp_path), name="me")
+
+
+def test_short_clip_is_rejected_before_weight_resolution(monkeypatch):
+    from loudkit import hub
+
+    monkeypatch.setattr(
+        hub, "resolve_enrollment_checkpoint", lambda *_a, **_kw: pytest.fail("fetched model")
+    )
+    with pytest.raises(ValueError, match="too short"):
+        loudkit.enroll(np.zeros(2400, np.float32), "loudreader/loudr-1", sample_rate=24_000)

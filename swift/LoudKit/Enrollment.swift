@@ -105,9 +105,8 @@ public enum Enrollment {
     /// far from the missing file, or reaches `centredPowerSpectra` as a zero
     /// `nfft`.
     static func table(_ name: String) throws -> [Float] {
-        guard let url = Bundle.module.url(
-            forResource: name, withExtension: "f32", subdirectory: "Resources"
-        ), let data = try? Data(contentsOf: url) else {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "f32"),
+              let data = try? Data(contentsOf: url) else {
             throw LoudKitError.asset(
                 "\(name).f32 is missing from the package resources; the enrollment "
                 + "filterbanks cannot be built without it")
@@ -415,14 +414,11 @@ public enum Enrollment {
         /// per voice and bit parity with the reference matters more than speed.
         public init(coremlDir: URL) throws {
             tokenizer = try MLHelpers.loadModel(
-                packageURL: coremlDir.appendingPathComponent("s3_tokenizer.mlpackage"),
-                computeUnits: .cpuOnly)
+                "s3_tokenizer", in: coremlDir, computeUnits: .cpuOnly)
             camp = try MLHelpers.loadModel(
-                packageURL: coremlDir.appendingPathComponent("camp.mlpackage"),
-                computeUnits: .cpuOnly)
+                "camp", in: coremlDir, computeUnits: .cpuOnly)
             ve = try MLHelpers.loadModel(
-                packageURL: coremlDir.appendingPathComponent("voice_encoder.mlpackage"),
-                computeUnits: .cpuOnly)
+                "voice_encoder", in: coremlDir, computeUnits: .cpuOnly)
         }
 
         /// An enrolled voice, before wrapping in a `VoiceProfile`.

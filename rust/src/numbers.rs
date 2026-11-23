@@ -46,7 +46,7 @@ pub struct Grammar {
     /// function of the written form and nothing else, so it belongs beside the
     /// table rather than in the pass that reads it once per abbreviation per
     /// call.
-    abbreviations: Vec<(Regex, String)>,
+    abbreviations: Vec<Abbreviation>,
     tens_joiner_exceptions: HashMap<i64, String>,
     hundred_joiner: String,
     scale_joiner_on_round_hundreds: bool,
@@ -60,6 +60,20 @@ pub struct Grammar {
     genders: HashMap<String, HashMap<i64, String>>,
     gender_scopes: HashMap<i64, String>,
     combining_ones: HashMap<i64, String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AbbreviationUse {
+    Ordinary,
+    EnglishListEnding,
+    TitleBeforeName,
+}
+
+#[derive(Debug, Clone)]
+struct Abbreviation {
+    pattern: Regex,
+    spoken: String,
+    usage: AbbreviationUse,
 }
 
 static GRAMMARS: LazyLock<HashMap<String, Grammar>> = LazyLock::new(|| {
@@ -113,24 +127,39 @@ static GRAMMARS: LazyLock<HashMap<String, Grammar>> = LazyLock::new(|| {
                 unit_tens_joiner: s(&e["unit_tens_joiner"]),
                 time_infix: s(&e["time_infix"]),
                 abbreviations: {
-                    let mut list: Vec<(String, String)> = e["abbreviations"]
-                        .as_object()
-                        .map(|m| {
-                            m.iter()
-                                .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    // Longest first, so fr.o.m. cannot be half-eaten.
-                    list.sort_by_key(|(w, _)| std::cmp::Reverse(w.len()));
+                    let mut list = Vec::new();
+                    for key in ["abbreviations", "title_abbreviations"] {
+                        if let Some(entries) = e[key].as_object() {
+                            for (written, value) in entries {
+                                if let Some(spoken) = value.as_str() {
+                                    let usage = if key == "title_abbreviations" {
+                                        AbbreviationUse::TitleBeforeName
+                                    } else if lang == "en" && written == "etc." {
+                                        AbbreviationUse::EnglishListEnding
+                                    } else {
+                                        AbbreviationUse::Ordinary
+                                    };
+                                    list.push((written, spoken, usage));
+                                }
+                            }
+                        }
+                    }
+                    // Evaluate Dr. against the original street wording before any
+                    // other title expands. Ordinary abbreviations use the longest first.
+                    list.sort_by_key(|&(written, _, usage)| match usage {
+                        AbbreviationUse::TitleBeforeName => (0, std::cmp::Reverse(0), written),
+                        _ => (1, std::cmp::Reverse(written.len()), written),
+                    });
                     list.into_iter()
-                        .map(|(written, spoken)| {
+                        .map(|(written, spoken, usage)| {
+                            let guard = r"[^\p{L}\p{N}_.]";
                             let pattern =
-                                format!(r"(^|[^\w.]){}($|[^\w.])", regex::escape(&written));
-                            (
-                                Regex::new(&pattern).expect("escaped pattern is valid"),
-                                spoken,
-                            )
+                                format!("(^|{guard}){}($|{guard})", regex::escape(written));
+                            Abbreviation {
+                                pattern: Regex::new(&pattern).expect("escaped pattern is valid"),
+                                spoken: spoken.into(),
+                                usage,
+                            }
                         })
                         .collect()
                 },
@@ -332,19 +361,19 @@ fn scale_group(value: i64, sc: &Scale, g: &Grammar, gender: &str) -> String {
     format!("{head}{link}{}", compose(rest, g, gender, false))
 }
 
-fn scale_word(count: i64, forms: &[String]) -> &str {
+pub(crate) fn scale_word<T: AsRef<str>>(count: i64, forms: &[T]) -> &str {
     if forms.len() == 1 || count == 1 {
-        return &forms[0];
+        return forms[0].as_ref();
     }
     if forms.len() == 2 {
         // singular / plural: Million / Millionen
-        return &forms[1];
+        return forms[1].as_ref();
     }
     let (last_two, last) = (count % 100, count % 10);
     if (2..=4).contains(&last) && !(12..=14).contains(&last_two) {
-        &forms[1]
+        forms[1].as_ref()
     } else {
-        &forms[2]
+        forms[2].as_ref()
     }
 }
 
@@ -1121,6 +1150,9 @@ pub fn expand_times(text: &str, language: &str) -> String {
         // A zero minute is dropped from `14:00` and kept in `14:00:45`, where
         // dropping it would move the seconds into the minutes' place.
         if minute != 0 || seconds != 0 {
+            if language == "en" && (1..10).contains(&minute) {
+                words.push("oh".into());
+            }
             if let Ok(said) = cardinal(minute, language, "") {
                 words.push(said);
             }
@@ -1211,8 +1243,8 @@ pub fn expand_abbreviations(text: &str, language: &str) -> String {
         return text.to_string();
     };
     let mut out = text.to_string();
-    for (re, spoken) in &g.abbreviations {
-        out = expand_abbreviation(&out, re, spoken);
+    for abbreviation in &g.abbreviations {
+        out = expand_abbreviation(&out, abbreviation);
     }
     out
 }
@@ -1222,17 +1254,18 @@ pub fn expand_abbreviations(text: &str, language: &str) -> String {
 /// The reference writes the boundaries as the zero-width `(?<![\w.])` and
 /// `(?![\w.])`. This engine has no lookaround, so the pattern matches the
 /// neighbouring characters instead, and a matched character is a character the
-/// next search cannot start on: consuming the trailing boundary takes the
-/// space that has to serve as the *following* occurrence's left boundary, and
-/// every second occurrence is left written, so `etc. etc.` reads as *et cetera
-/// etc.* Putting the trailing boundary character back before the next search
-/// makes the match zero-width where the reference's is.
-fn expand_abbreviation(text: &str, pattern: &Regex, spoken: &str) -> String {
+/// next search cannot start on: the scan resumed past the space that had to
+/// serve as the *following* occurrence's left boundary, and every second
+/// occurrence was left written. `etc. etc.` came out as *et cetera etc.* in
+/// English, `tzn. tzn.` as *to znaczy tzn.* in Polish, and so on in all twelve
+/// languages. Putting the trailing boundary character back before the next
+/// search makes the match zero-width where the reference's is.
+fn expand_abbreviation(text: &str, abbreviation: &Abbreviation) -> String {
     let mut out = String::with_capacity(text.len());
     let mut copied = 0;
     let mut at = 0;
     while at <= text.len() {
-        let Some(caps) = pattern.captures_at(text, at) else {
+        let Some(caps) = abbreviation.pattern.captures_at(text, at) else {
             break;
         };
         // Group 1 is the character before the abbreviation, group 2 the one
@@ -1240,10 +1273,81 @@ fn expand_abbreviation(text: &str, pattern: &Regex, spoken: &str) -> String {
         let lead = caps.get(1).expect("leading boundary group");
         let tail = caps.get(2).expect("trailing boundary group");
         out.push_str(&text[copied..lead.end()]);
-        out.push_str(spoken);
+        let written = &text[lead.end()..tail.start()];
+        let following = &text[tail.start()..];
+        match abbreviation.usage {
+            AbbreviationUse::TitleBeforeName
+                if !title_precedes_name(written, &text[..lead.end()], following) =>
+            {
+                out.push_str(written);
+            }
+            AbbreviationUse::EnglishListEnding if AFTER_LIST_END.is_match(following) => {
+                out.push_str(&abbreviation.spoken);
+                out.push('.');
+            }
+            _ => out.push_str(&abbreviation.spoken),
+        }
         copied = tail.start();
         at = tail.start();
     }
     out.push_str(&text[copied..]);
     out
+}
+
+static AFTER_LIST_END: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"^["')\]”’]*(?:\s*\z|\s+["'“‘(\[]?\p{Uppercase})"#).unwrap());
+
+static TITLE_NAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[ \t\u{00a0}\u{202f}]+(\p{L}+)").unwrap());
+
+static NUMBERED_STREET: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:^|[^A-Za-z0-9])[0-9]{1,7}(?:[ \t]{1,4}[A-Z][A-Za-z'-]{0,24}){1,4}[ \t]{1,4}\z")
+        .unwrap()
+});
+
+fn title_precedes_name(written: &str, before: &str, following: &str) -> bool {
+    let Some(caps) = TITLE_NAME.captures(following) else {
+        return false;
+    };
+    let word = &caps[1];
+    if written == "Dr." {
+        if matches!(
+            word,
+            "North"
+                | "South"
+                | "East"
+                | "West"
+                | "Northeast"
+                | "Northwest"
+                | "Southeast"
+                | "Southwest"
+                | "NE"
+                | "NW"
+                | "SE"
+                | "SW"
+        ) {
+            return false;
+        }
+        // The longest numbered street admitted by the pattern is under 135 characters.
+        let start = before.char_indices().rev().nth(159).map_or(0, |(i, _)| i);
+        if NUMBERED_STREET.is_match(&before[start..]) {
+            return false;
+        }
+    }
+    word.starts_with(char::is_uppercase)
+        && !matches!(
+            word,
+            "I" | "He"
+                | "She"
+                | "We"
+                | "They"
+                | "It"
+                | "The"
+                | "This"
+                | "That"
+                | "Then"
+                | "Later"
+                | "Afterwards"
+                | "Afterward"
+        )
 }

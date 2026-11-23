@@ -116,6 +116,8 @@ fn chunking_matches_the_shared_fixture() {
         split_on: Vec<String>,
         abbreviations: Vec<String>,
         mid_sentence_period: String,
+        language: Option<String>,
+        cap_resplit: Option<String>,
         chunks: Vec<String>,
     }
 
@@ -131,14 +133,16 @@ fn chunking_matches_the_shared_fixture() {
         "the fixture has no chunking cases; nothing was compared"
     );
 
-    use loudkit::chunking::{split_text, ChunkConfig, WORD_CAP_RESPLIT};
+    use loudkit::chunking::{split_text_for_language, ChunkConfig, WORD_CAP_RESPLIT};
 
     let mut bad = Vec::new();
     for case in &fixture.chunking {
         let cfg = ChunkConfig {
-            // Not a splitter input: `cap_resplit` decides what the engine does
-            // with a window that overran, so the fixture does not vary it.
-            cap_resplit: WORD_CAP_RESPLIT.to_string(),
+            cap_resplit: case
+                .cap_resplit
+                .as_deref()
+                .unwrap_or(WORD_CAP_RESPLIT)
+                .to_string(),
             enabled: true,
             max_tokens: case.max_tokens,
             prefix_tokens: case.prefix_tokens,
@@ -146,7 +150,8 @@ fn chunking_matches_the_shared_fixture() {
             abbreviations: case.abbreviations.clone(),
             mid_sentence_period: case.mid_sentence_period.clone(),
         };
-        let got = split_text(&case.text, &cfg);
+        let got =
+            split_text_for_language(&case.text, &cfg, case.language.as_deref().unwrap_or("en"));
         if got != case.chunks {
             bad.push(format!("{}: {:?} != {:?}", case.text, got, case.chunks));
         }
@@ -210,7 +215,7 @@ fn an_unspellable_year_comes_back_as_its_digits() {
 /// undone.
 #[test]
 fn adjacent_currency_amounts_stay_separate() {
-    assert_eq!(speech_text("$1$2$3", "en"), "one dollars2 dollars3 dollars");
+    assert_eq!(speech_text("$1$2$3", "en"), "one dollar2 dollars3 dollars");
     assert_eq!(speech_text("$5$10", "en"), "five dollars10 dollars");
     assert_eq!(speech_text("£3£4", "en"), "three pounds4 pounds");
     assert_eq!(speech_text("£3£4", "pl"), "trzy funtów4 funtów");
@@ -240,7 +245,7 @@ fn every_occurrence_of_an_abbreviation_is_written_out() {
         speech_text("np. np. np.", "pl"),
         "na przykład na przykład na przykład"
     );
-    assert_eq!(speech_text("etc. etc.", "en"), "etcetera etcetera");
+    assert_eq!(speech_text("etc. etc.", "en"), "etcetera etcetera.");
     assert_eq!(speech_text("z.B. z.B.", "de"), "zum Beispiel zum Beispiel");
     // The boundary itself is unchanged: two run together are not two
     // abbreviations, because neither stands at a word boundary.

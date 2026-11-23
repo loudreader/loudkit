@@ -60,6 +60,13 @@ the samples do not; every other format repeats byte for byte. See
 """
 
 
+STREAMABLE_FORMATS: frozenset[str] = frozenset({"wav", "pcm16", "flac"})
+"""Formats a chunk can be delivered in on its own. An Ogg bitstream's state
+spans the whole stream, Vorbis and Opus alike, and each separately encoded MP3
+chunk carries its own encoder delay into the join, so a per-chunk container
+would lie about what the bytes are."""
+
+
 _ENCODINGS: dict[str, tuple[str, str, str]] = {
     # format -> (soundfile format, soundfile subtype, media type)
     "wav": ("WAV", "PCM_16", "audio/wav"),
@@ -105,6 +112,12 @@ long')`, which is not a refusal any transport was catching.
 """
 
 
+def _voice_file_stamp(path: Path) -> tuple[int, ...]:
+    """Identify a profile revision, including an atomic replacement with the same mtime."""
+    info = path.stat()
+    return info.st_dev, info.st_ino, info.st_ctime_ns, info.st_mtime_ns, info.st_size
+
+
 @dataclass(frozen=True, slots=True)
 class VoiceLibrary:
     """Voices available to the server, resolved by name.
@@ -116,10 +129,10 @@ class VoiceLibrary:
 
     root: Path
 
-    _cache: dict[str, tuple[tuple[int, int], VoiceProfile]] = field(
+    _cache: dict[str, tuple[tuple[int, ...], VoiceProfile]] = field(
         default_factory=dict, repr=False, compare=False
     )
-    """name -> ((mtime_ns, size), profile). See :data:`_VOICE_CACHE_BYTES`.
+    """Profile and file revision by name. See :data:`_VOICE_CACHE_BYTES`.
 
     See ``docs/design/transports.md``.
     """
@@ -179,17 +192,18 @@ class VoiceLibrary:
                 available=available,
             )
 
-        # Keyed on (mtime_ns, size) rather than on the name alone: a voice re-enrolled
-        # under the same name has to be picked up on the next request, and on
-        # nanoseconds because an enrolment loop overwrites within one second.
-        info = path.stat()
-        stamp = (info.st_mtime_ns, info.st_size)
+        stamp = _voice_file_stamp(path)
         with self._lock:
             cached = self._cache.pop(name, None)
             if cached is not None and cached[0] == stamp:
                 self._cache[name] = cached  # reinserted: last position is most recent
                 return cached[1]
-        profile = VoiceProfile.load(path)
+        from safetensors import SafetensorError
+
+        try:
+            profile = VoiceProfile.load(path)
+        except (KeyError, SafetensorError) as exc:
+            raise ValueError(f"unreadable voice profile: {name!r}") from exc
         with self._lock:
             # A racing caller may have stored its own parse of the same file in
             # the meantime; last write wins, and both are the same voice.
@@ -367,8 +381,8 @@ def _continuation(engine: Engine, tokens: Sequence[int]) -> tuple[int, ...]:
     here. The slice is an algorithm value in two ways: how many ids, and where
     they start. Under ``fusion_mtp2`` the generator re-pairs a prefix from its
     own start, so a tail beginning on the second half of a pair fuses the right
-    tokens with the wrong partners. Handing back the engine's own carry is what
-    makes a client's join and an in-process join the same join.
+    tokens with the wrong partners. Turbo uses the last acoustic window.
+    Single-token responses preserve the passage tail across short windows.
     """
     wanted = engine.algorithm.chunking.prefix_tokens
     if wanted <= 0:
@@ -381,14 +395,14 @@ def fold_continuation(
 ) -> tuple[int, ...]:
     """The running continuation after one more streamed chunk.
 
-    A stream's ``done`` event carries the passage's tail, not the last chunk's,
-    because a final chunk shorter than the prefix carries fewer ids than the
-    passage does. Here rather than in each transport so the fold obeys the same
-    pair rule :func:`_continuation` obeys, in one place, for both streams.
+    Single-token decoding accumulates short chunks. Turbo starts a new pair
+    sequence in each acoustic window, so only that window supplies its carry.
     """
     wanted = engine.algorithm.chunking.prefix_tokens
     if wanted <= 0:
         return ()
+    if engine.algorithm.decode == "fusion_mtp2":
+        return chunk
     return tuple(carry_pair_aligned(engine.algorithm, tail + chunk, wanted))
 
 
@@ -475,9 +489,13 @@ def _rendered(
     data, media_type = _encode(frames, result.sample_rate, audio_format)
     provenance = _provenance(engine, result, voice, language or "", text, frames)
     if audio_format == "wav":
-        from .provenance import manifest_bytes
+        from .provenance import manifest_bytes, with_provenance_chunk
 
-        data = data + manifest_bytes(provenance)
+        data = with_provenance_chunk(data, manifest_bytes(provenance))
+    tokens = result.tokens
+    if engine.algorithm.decode == "fusion_mtp2" and result.chunks:
+        # Each window starts a fresh decoder pair, including after odd-length windows.
+        tokens = tokens[len(tokens) - result.chunks[-1].tokens :]
     return Rendered(
         data=data,
         media_type=media_type,
@@ -485,7 +503,7 @@ def _rendered(
         n_tokens=len(result.tokens),
         hit_token_cap=result.hit_token_cap,
         provenance=provenance,
-        continuation=_continuation(engine, result.tokens),
+        continuation=_continuation(engine, tokens),
     )
 
 

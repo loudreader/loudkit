@@ -4,6 +4,271 @@
  "note": "Expected output of SpeechText.prepared / speech_text for each (text, language). Every port must reproduce these exactly; a difference is a divergence, not a dialect.",
  "cases": [
   {
+   "text": "For T<Tc: M = M0 + 1. For T>Tc: M = 0.",
+   "language": "en",
+   "expected": "For T Tc: M M0 one. For T Tc: M zero."
+  },
+  {
+   "text": "while i<n: i = i + 1. Stop when i>n.",
+   "language": "en",
+   "expected": "while i n: i i one. Stop when i n."
+  },
+  {
+   "text": "<a download href=\"f.pdf\">File</a><div popover>Ready</div>",
+   "language": "en",
+   "expected": "File Ready"
+  },
+  {
+   "text": "<Route exact path=\"/\"><div v-cloak>Ready</div></Route>",
+   "language": "en",
+   "expected": "Ready"
+  },
+  {
+   "text": "while i<n value=i + 1 then i>n.",
+   "language": "en",
+   "expected": "while i n value i one then i n."
+  },
+  {
+   "text": "«,5» et „,5“.",
+   "language": "fr",
+   "expected": "«zéro virgule cinq» et „zéro virgule cinq“."
+  },
+  {
+   "text": "Enter <username or email> below.",
+   "language": "en",
+   "expected": "Enter username or email below."
+  },
+  {
+   "text": "<p>Answer &lt;yes or no&gt; below.</p>",
+   "language": "en",
+   "expected": "Answer yes or no below."
+  },
+  {
+   "text": "git checkout <branch name> first",
+   "language": "en",
+   "expected": "git checkout branch name first"
+  },
+  {
+   "text": "<button @click=\"go\">Run</button><div *ngIf=\"x\">now</div>",
+   "language": "en",
+   "expected": "Run now"
+  },
+  {
+   "text": "<input [value]=\"v\"><a href=page.php?id=3>Ready</a>",
+   "language": "en",
+   "expected": "Ready"
+  },
+  {
+   "text": "<a href=\"x\"class=\"y\">Ready</a>",
+   "language": "en",
+   "expected": "Ready"
+  },
+  {
+   "text": "They raised $10 000 days before.",
+   "language": "en",
+   "expected": "They raised ten thousand dollars days before."
+  },
+  {
+   "text": "I saw the Dr. Later we left.",
+   "language": "en",
+   "expected": "I saw the Dr. Later we left."
+  },
+  {
+   "text": "5%,10%",
+   "language": "en",
+   "expected": "five percent,ten percent"
+  },
+  {
+   "text": "x²<a or b>c",
+   "language": "en",
+   "expected": "x two less than a or b greater than c"
+  },
+  {
+   "text": "if a<b then c>d",
+   "language": "en",
+   "expected": "if a b then c d"
+  },
+  {
+   "text": "jeśli x<min lub x>max",
+   "language": "pl",
+   "expected": "jeśli eks mniejsze niż min lub eks większe niż meks"
+  },
+  {
+   "text": "x<a oder x>b",
+   "language": "de",
+   "expected": "x kleiner als a oder x größer als b"
+  },
+  {
+   "text": "i<len or i>=cap",
+   "language": "en",
+   "expected": "i less than len or i at least cap"
+  },
+  {
+   "text": "x<a and x>-5",
+   "language": "en",
+   "expected": "x less than a and x greater than minus five"
+  },
+  {
+   "text": "Say \".5\". Compare 5%,10% and f(x),5.",
+   "language": "en",
+   "expected": "Say \"zero point five\". Compare five percent,ten percent and f(x),five."
+  },
+  {
+   "text": "At ≈.5%, compare [.75, 1) and =.25 with release v1.25.",
+   "language": "en",
+   "expected": "At about zero point five percent, compare zero point seven five, one) and zero point two five with release v1.25."
+  },
+  {
+   "text": "A,5 kg; B ,5 kg; C\u001c,5 kg.",
+   "language": "de",
+   "expected": "Anull Komma fünf kg; B null Komma fünf kg; C,fünf kg."
+  },
+  {
+   "text": "À ≈,5% du total.",
+   "language": "fr",
+   "expected": "À environ zéro virgule cinq pour cent du total."
+  },
+  {
+   "text": "We paid $5 100 times and the receipt showed $1 234.",
+   "language": "en",
+   "expected": "We paid five dollars one hundred times and the receipt showed one thousand two hundred and thirty-four dollars."
+  },
+  {
+   "text": "She can&#039;t swim; he can&#X0027;t either. &amp;#039;",
+   "language": "en",
+   "expected": "She can't swim; he can't either. and zero three nine;"
+  },
+  {
+   "text": "<details open><a\n href=\"help\" title=\"a > b\">Read more</a></details>",
+   "language": "en",
+   "expected": "Read more"
+  },
+  {
+   "text": "Check x&lt;low or x&gt;high and x <low or x> high. I saw the Dr. Afterwards we left.",
+   "language": "en",
+   "expected": "Check x less than low or x greater than high and x less than low or x greater than high. I saw the Dr. Afterwards we left."
+  },
+  {
+   "text": "Wait -.25 seconds. Pay $.50 at .75%.",
+   "language": "en",
+   "expected": "Wait minus zero point two five seconds. Pay zero point five zero dollars at zero point seven five percent."
+  },
+  {
+   "text": "<p>Pat can&#39;t swim &amp; Lee can.</p>",
+   "language": "en",
+   "expected": "Pat can't swim and Lee can."
+  },
+  {
+   "text": "Return false if x<low or x>high.",
+   "language": "en",
+   "expected": "Return false if x less than low or x greater than high."
+  },
+  {
+   "text": "Bei ,75% bleiben.",
+   "language": "de",
+   "expected": "Bei null Komma sieben fünf Prozent bleiben."
+  },
+  {
+   "text": "We met Prof. Michael Evans and Dr. Élodie Roy at 9:05.",
+   "language": "en",
+   "expected": "We met Professor Michael Evans and Doctor Élodie Roy at nine oh five."
+  },
+  {
+   "text": "Send Mr. Jones, Mrs. Watson and Ms. Zhou a letter.",
+   "language": "en",
+   "expected": "Send Mister Jones, Missus Watson and Miz Zhou a letter."
+  },
+  {
+   "text": "Oak Dr. Then turn at St. James Road. A.Dr. Dee stayed behind.",
+   "language": "en",
+   "expected": "Oak Dr. Then turn at St. James Road. A.Dr. Dee stayed behind."
+  },
+  {
+   "text": "742 Evergreen Dr. Alice turned onto Oak Dr. South before meeting Dr. Chen.",
+   "language": "en",
+   "expected": "seven hundred and forty-two Evergreen Dr. Alice turned onto Oak Dr. South before meeting Doctor Chen."
+  },
+  {
+   "text": "Bring apples etc. and pears, etc. She left. “Books etc.” “Next!”",
+   "language": "en",
+   "expected": "Bring apples etcetera and pears, etcetera. She left. “Books etcetera.” “Next!”"
+  },
+  {
+   "text": "Pens, etc., are included. Books etc.",
+   "language": "en",
+   "expected": "Pens, etcetera, are included. Books etcetera."
+  },
+  {
+   "text": "The price is $1, €1.00 or 1.0£. Another $1 million or $1.05.",
+   "language": "en",
+   "expected": "The price is one dollar, one euro or one pound. Another one million dollars or one point zero five dollars."
+  },
+  {
+   "text": "At 09:05:30, 9:10 and 9:00.",
+   "language": "en",
+   "expected": "At nine oh five thirty, nine ten and nine."
+  },
+  {
+   "text": "Find Dr. Smith at 9:05.",
+   "language": null,
+   "expected": "Find Doctor Smith at nine oh five."
+  },
+  {
+   "text": "Wybierz 2 z 3 ofert. Wybierz 1 z 10 opcji.",
+   "language": "pl",
+   "expected": "Wybierz dwie z trzech ofert. Wybierz jedną z dziesięciu opcji."
+  },
+  {
+   "text": "Masz 2 nowe wiadomości. Zaznacz 2 z 4 pozycji. Wskaż 1 z 5 plików.",
+   "language": "pl",
+   "expected": "Masz dwie nowe wiadomości. Zaznacz dwie z czterech pozycji. Wskaż jeden z pięciu plików."
+  },
+  {
+   "text": "1 zł, 2 zł, 5 zł, 21 zł, 24 zł i 112 zł.",
+   "language": "pl",
+   "expected": "jeden złoty, dwa złote, pięć złotych, dwadzieścia jeden złotych, dwadzieścia cztery złote i sto dwanaście złotych."
+  },
+  {
+   "text": "0,01 zł; 0,02 zł; 0,12 zł; 12,50 zł; 12,00 zł.",
+   "language": "pl",
+   "expected": "jeden grosz; dwa grosze; dwanaście groszy; dwanaście złotych i pięćdziesiąt groszy; dwanaście złotych."
+  },
+  {
+   "text": "Cena biletu to 22zł. Do zapłaty: 12,05 zł.",
+   "language": "PL",
+   "expected": "Cena biletu to dwadzieścia dwa złote. Do zapłaty: dwanaście złotych i pięć groszy."
+  },
+  {
+   "text": "Zwrot: −0,5 zł. Razem: 2 000 zł.",
+   "language": "pl",
+   "expected": "Zwrot: minus pięćdziesiąt groszy. Razem: dwa tysiące złotych."
+  },
+  {
+   "text": "1 kg, 2 kg, 12 m², 22 m² i 2000 zł.",
+   "language": "pl",
+   "expected": "jeden kilogram, dwa kilogramy, dwanaście metrów kwadratowych, dwadzieścia dwa metry kwadratowe i dwa tysiące złotych."
+  },
+  {
+   "text": "0 kg, 3,5 kg, 1,25 m² i 2,00 kg.",
+   "language": "pl",
+   "expected": "zero kilogramów, trzy przecinek pięć kilograma, jeden przecinek dwa pięć metra kwadratowego i dwa kilogramy."
+  },
+  {
+   "text": "1 234 567,50 zł. 001kg, AK2kg, v1.2kg, 5kgowy, 14,123 zł.",
+   "language": "pl",
+   "expected": "milion dwieście trzydzieści cztery tysiące pięćset sześćdziesiąt siedem złotych i pięćdziesiąt groszy. zero zero jeden ka gie, a ka dwa ka gie, v1.2kg, pięć ka gie o wu igrek, czternaście przecinek jeden dwa trzy zł."
+  },
+  {
+   "text": "2 z 3. Wybierz 2 z 3 produktów. 1,2 wiadomości. 2 kg i 22 zł.",
+   "language": "en",
+   "expected": "two z three. Wybierz two z three produktów. one point two wiadomości. two kg i twenty-two zł."
+  },
+  {
+   "text": "2 z 3. Wybierz 2 z 3 produktów. 1,2 wiadomości.",
+   "language": "pl",
+   "expected": "dwa z trzy. Wybierz dwa z trzech produktów. jeden przecinek dwa wiadomości."
+  },
+  {
    "text": "Hello there.",
    "language": "en",
    "expected": "Hello there."
@@ -346,8 +611,8 @@
   {
    "text": "It is 9:05am now.",
    "language": "en",
-   "expected": "It is nine five am now.",
-   "why": "a minute under ten reads as a plain cardinal, *nine five*, in all twelve. English says *nine oh five* and the word for that zero is not a cardinal, so it is a per-language grammar entry rather than a boundary rule, and this case pins what the funnel says today"
+   "expected": "It is nine oh five am now.",
+   "why": "English reads the leading zero in a nonzero minute below ten as oh."
   },
   {
    "text": "Meet at 11:30AM sharp.",
@@ -881,7 +1146,7 @@
   {
    "text": "Pokój ma 12 m² i kosztuje 2000 zł.",
    "language": "pl",
-   "expected": "Pokój ma dwanaście m dwa i kosztuje dwa tysiące zł.",
+   "expected": "Pokój ma dwanaście metrów kwadratowych i kosztuje dwa tysiące złotych.",
    "why": "the same in Polish, where the respelling pass runs as well"
   },
   {
@@ -1191,9 +1456,590 @@
    "text": "+48 123 456 789 and +12345678",
    "language": "pl",
    "expected": "cztery osiem jeden dwa trzy cztery pięć sześć siedem osiem dziewięć and jeden dwa trzy cztery pięć sześć siedem osiem"
+  },
+  {
+   "text": "£1 234 or $1 234.56; keep together.",
+   "language": "en",
+   "expected": "one thousand two hundred and thirty-four pounds or one thousand two hundred and thirty-four point five six dollars; keep together."
+  },
+  {
+   "text": "J’ai dépensé 1 234,56 €.",
+   "language": "fr",
+   "expected": "J’ai dépensé mille deux cent trente-quatre virgule cinq six euros."
+  },
+  {
+   "text": "Die Auflage beträgt 12 345 Bücher.",
+   "language": "de",
+   "expected": "Die Auflage beträgt zwölftausenddreihundertfünfundvierzig Bücher."
+  },
+  {
+   "text": "Hay 1 234 567 habitantes.",
+   "language": "es",
+   "expected": "Hay un millón doscientos treinta y cuatro mil quinientos sesenta y siete habitantes."
+  },
+  {
+   "text": "Hanno percorso 12 345 chilometri.",
+   "language": "it",
+   "expected": "Hanno percorso dodicimilatrecentoquarantacinque chilometri."
+  },
+  {
+   "text": "Temos 1 234 lugares.",
+   "language": "pt",
+   "expected": "Temos mil duzentos e trinta e quatro lugares."
+  },
+  {
+   "text": "Er zijn 1 234 bomen.",
+   "language": "nl",
+   "expected": "Er zijn duizendtweehonderdvierendertig bomen."
+  },
+  {
+   "text": "Det bor 1 234 personer här.",
+   "language": "sv",
+   "expected": "Det bor ettusen tvåhundratrettiofyra personer här."
+  },
+  {
+   "text": "Der er 12 345 besøgende.",
+   "language": "da",
+   "expected": "Der er tolv tusind trehundrede og femogfyrre besøgende."
+  },
+  {
+   "text": "W badaniu uczestniczyło 12 345 osób.",
+   "language": "pl",
+   "expected": "W badaniu uczestniczyło dwanaście tysięcy trzysta czterdzieści pięć osób."
+  },
+  {
+   "text": "V1.2 345, A1 234, 12 345X, 1234 567, 2 33.",
+   "language": "en",
+   "expected": "V1.2 three hundred and forty-five, A1 two hundred and thirty-four, twelve 345X, one thousand two hundred and thirty-four five hundred and sixty-seven, two thirty-three."
   }
  ],
  "chunking": [
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot, a tu nasz stół, dobrze?",
+   "chunks": [
+    "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot,",
+    "a tu nasz stół, dobrze?"
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot, a tu jest nasz stół i nasz nowy dach.",
+   "chunks": [
+    "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot,",
+    "a tu jest nasz stół i nasz nowy dach."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The old railway carried grain from farms across the valley and the drivers stopped each morning beside a small spring high in the hills. The next train is due at noon.",
+   "chunks": [
+    "The old railway carried grain from farms across the valley and the drivers stopped each morning beside a small spring high in the hills.",
+    "The next train is due at noon."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The bright afternoon sunlight filtered through the branches of the old chestnut tree above the narrow path that the children followed every morning on their way to the little school beside the river.",
+   "chunks": [
+    "The bright afternoon sunlight filtered through the branches of the old chestnut tree above the narrow path that the children",
+    "followed every morning on their way to the little school beside the river."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "On the trail, we watched the river wind slowly through the valley while the children followed the tracks of an animal they had never seen before.",
+   "chunks": [
+    "On the trail, we watched the river wind slowly through the valley while the children followed the tracks of an animal they had never seen before."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "On the trail, we watched the wide river wind slowly through the valley while the children followed the tracks of a wild animal they had never seen before.",
+   "chunks": [
+    "On the trail, we watched the wide river wind slowly through the valley",
+    "while the children followed the tracks of a wild animal they had never seen before."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "“Have you seen the blue folder?” She walked to the opposite end of the room where she could finally talk to her colleague without disturbing the rest of the team.",
+   "chunks": [
+    "“Have you seen the blue folder?”",
+    "She walked to the opposite end of the room where she could finally talk to her colleague without disturbing the rest of the team."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Ask L. Jones about the report because she wrote it after interviewing everyone who examined the building before the fire at the end of August.",
+   "chunks": [
+    "Ask L. Jones about the report because she wrote it after interviewing everyone who examined the building before the fire at the end of August."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "„Wie spät ist es?“\nAuf dem Rückweg gingen wir durch den Park und an den Geschäften vorbei bis zu der kleinen Station am anderen Ende der Stadt.",
+   "chunks": [
+    "„Wie spät ist es?“",
+    "Auf dem Rückweg gingen wir durch den Park und an den Geschäften vorbei bis zu der kleinen Station am anderen Ende der Stadt."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Il demanda «Qui est là?»\nLa voisine prit le temps de regarder par la fenêtre avant de rejoindre ses enfants dans la cuisine au bout du couloir.",
+   "chunks": [
+    "Il demanda «Qui est là?»",
+    "La voisine prit le temps de regarder par la fenêtre avant de rejoindre ses enfants dans la cuisine au bout du couloir."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "There was only one reasonable choice: follow the road across the valley and hope that the last bus would stop beside the old stone bridge before nightfall.",
+   "chunks": [
+    "There was only one reasonable choice:",
+    "follow the road across the valley and hope that the last bus would stop beside the old stone bridge before nightfall."
+   ]
+  },
+  {
+   "config": "shipping",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The cabinet was locked — even the spare key would not turn — and the locksmith would have to return with another set of tools before the shop could open.",
+   "chunks": [
+    "The cabinet was locked — even the spare key would not turn —",
+    "and the locksmith would have to return with another set of tools before the shop could open."
+   ]
+  },
   {
    "config": "shipping",
    "max_tokens": 255,
@@ -1627,8 +2473,7 @@
    "mid_sentence_period": "hold",
    "text": "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at all.",
    "chunks": [
-    "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of",
-    "it at all."
+    "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at all."
    ]
   },
   {
@@ -1715,8 +2560,7 @@
    "mid_sentence_period": "hold",
    "text": "Mr. Norrell, who had been waiting in the hall for the better part of an hour, said nothing at all to either of them about what he had seen there.",
    "chunks": [
-    "Mr. Norrell, who had been waiting in the hall for the better part of an hour,",
-    "said nothing at all to either of them about what he had seen there."
+    "Mr. Norrell, who had been waiting in the hall for the better part of an hour, said nothing at all to either of them about what he had seen there."
    ]
   },
   {
@@ -1803,8 +2647,7 @@
    "mid_sentence_period": "hold",
    "text": "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta.",
    "chunks": [
-    "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie,",
-    "a potem gasna powoli i nikt juz nie pamieta."
+    "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta."
    ]
   },
   {
@@ -1847,8 +2690,7 @@
    "mid_sentence_period": "hold",
    "text": "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long grey afternoon.",
    "chunks": [
-    "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long",
-    "grey afternoon."
+    "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long grey afternoon."
    ]
   },
   {
@@ -1893,6 +2735,617 @@
    "chunks": [
     "Alpha beta gamma delta, epsilon zeta eta theta, iota kappa lambda mu, nu xi omicron pi rho,",
     "sigma tau upsilon phi chi psi omega at the end."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot, a tu nasz stół, dobrze?",
+   "chunks": [
+    "Tak, raz, dwa, trzy,",
+    "tak, to ja, a to ty,",
+    "a to on, a to my,",
+    "to nasz dom,",
+    "tu jest nasz pies,",
+    "tam jest nasz kot,",
+    "a tu nasz stół,",
+    "dobrze?"
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot, a tu jest nasz stół i nasz nowy dach.",
+   "chunks": [
+    "Tak, raz, dwa, trzy,",
+    "tak, to ja, a to ty,",
+    "a to on, a to my,",
+    "to nasz dom,",
+    "tu jest nasz pies,",
+    "tam jest nasz kot,",
+    "a tu jest nasz stół",
+    "i nasz nowy dach."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The old railway carried grain from farms across the valley and the drivers stopped each morning beside a small spring high in the hills. The next train is due at noon.",
+   "chunks": [
+    "The old railway",
+    "carried grain from",
+    "farms across the",
+    "valley and the",
+    "drivers stopped each",
+    "morning beside a",
+    "small spring high in",
+    "the hills.",
+    "The next train is",
+    "due at noon."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The bright afternoon sunlight filtered through the branches of the old chestnut tree above the narrow path that the children followed every morning on their way to the little school beside the river.",
+   "chunks": [
+    "The bright afternoon",
+    "sunlight filtered",
+    "through the branches",
+    "of the old chestnut",
+    "tree above the",
+    "narrow path that the",
+    "children followed",
+    "every morning on",
+    "their way to the",
+    "little school beside",
+    "the river."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "On the trail, we watched the river wind slowly through the valley while the children followed the tracks of an animal they had never seen before.",
+   "chunks": [
+    "On the trail,",
+    "we watched the river",
+    "wind slowly through",
+    "the valley while the",
+    "children followed",
+    "the tracks of an",
+    "animal they had",
+    "never seen before."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "On the trail, we watched the wide river wind slowly through the valley while the children followed the tracks of a wild animal they had never seen before.",
+   "chunks": [
+    "On the trail,",
+    "we watched the wide",
+    "river wind slowly",
+    "through the valley",
+    "while the children",
+    "followed the tracks",
+    "of a wild animal",
+    "they had never seen",
+    "before."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "“Have you seen the blue folder?” She walked to the opposite end of the room where she could finally talk to her colleague without disturbing the rest of the team.",
+   "chunks": [
+    "“Have you seen the",
+    "blue folder?”",
+    "She walked to the",
+    "opposite end of the",
+    "room where she could",
+    "finally talk to her",
+    "colleague without",
+    "disturbing the rest",
+    "of the team."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Ask L. Jones about the report because she wrote it after interviewing everyone who examined the building before the fire at the end of August.",
+   "chunks": [
+    "Ask L. Jones about",
+    "the report because",
+    "she wrote it after",
+    "interviewing",
+    "everyone who",
+    "examined the",
+    "building before the",
+    "fire at the end of",
+    "August."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "„Wie spät ist es?“\nAuf dem Rückweg gingen wir durch den Park und an den Geschäften vorbei bis zu der kleinen Station am anderen Ende der Stadt.",
+   "chunks": [
+    "„Wie spät ist es?“",
+    "Auf dem Rückweg",
+    "gingen wir durch den",
+    "Park und an den",
+    "Geschäften vorbei",
+    "bis zu der kleinen",
+    "Station am anderen",
+    "Ende der Stadt."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "Il demanda «Qui est là?»\nLa voisine prit le temps de regarder par la fenêtre avant de rejoindre ses enfants dans la cuisine au bout du couloir.",
+   "chunks": [
+    "Il demanda «Qui est",
+    "là?»",
+    "La voisine prit le",
+    "temps de regarder",
+    "par la fenêtre avant",
+    "de rejoindre ses",
+    "enfants dans la",
+    "cuisine au bout du",
+    "couloir."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "There was only one reasonable choice: follow the road across the valley and hope that the last bus would stop beside the old stone bridge before nightfall.",
+   "chunks": [
+    "There was only one",
+    "reasonable choice:",
+    "follow the road",
+    "across the valley",
+    "and hope that the",
+    "last bus would stop",
+    "beside the old stone",
+    "bridge before",
+    "nightfall."
+   ]
+  },
+  {
+   "config": "tiny",
+   "max_tokens": 40,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "hold",
+   "text": "The cabinet was locked — even the spare key would not turn — and the locksmith would have to return with another set of tools before the shop could open.",
+   "chunks": [
+    "The cabinet was",
+    "locked —",
+    "even the spare key",
+    "would not turn —",
+    "and the locksmith",
+    "would have to return",
+    "with another set of",
+    "tools before the",
+    "shop could open."
    ]
   },
   {
@@ -2200,7 +3653,8 @@
    "chunks": [
     "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
     "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
-    ". A tail sentence",
+    ".",
+    "A tail sentence",
     "after the emoji run."
    ]
   },
@@ -2247,7 +3701,8 @@
     "𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌",
     "𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋",
     "𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍𠀋𠀌𠀍",
-    ", and a clause after",
+    ",",
+    "and a clause after",
     "the ideographs,",
     "and one more."
    ]
@@ -2433,13 +3888,13 @@
    "text": "Alpha ends here. Mrs. Watson and Mr. Holmes then agreed on the one point that had ever really mattered to either of them at all, and said so.",
    "chunks": [
     "Alpha ends here.",
-    "Mrs. Watson and Mr.",
-    "Holmes then agreed",
-    "on the one point",
-    "that had ever really",
-    "mattered to either",
-    "of them at all,",
-    "and said so."
+    "Mrs. Watson and",
+    "Mr. Holmes then",
+    "agreed on the one",
+    "point that had ever",
+    "really mattered to",
+    "either of them at",
+    "all, and said so."
    ]
   },
   {
@@ -2584,11 +4039,12 @@
    "mid_sentence_period": "hold",
    "text": "Grzeja sie i swieca. ciepłem ktore pamietaja z lata i z kazdej innej pory roku na swiecie, a potem gasna powoli i nikt juz nie pamieta.",
    "chunks": [
-    "Grzeja sie i swieca.",
-    "ciepłem ktore",
-    "pamietaja z lata i z",
-    "kazdej innej pory",
-    "roku na swiecie,",
+    "Grzeja sie i",
+    "swieca. ciepłem",
+    "ktore pamietaja z",
+    "lata i z kazdej",
+    "innej pory roku na",
+    "swiecie,",
     "a potem gasna powoli",
     "i nikt juz nie",
     "pamieta."
@@ -2635,13 +4091,13 @@
    "text": "Dr. Watson walked the length of St. James Street twice over before he found the one door he had been looking for all that long grey afternoon.",
    "chunks": [
     "Dr. Watson walked",
-    "the length of St.",
-    "James Street twice",
-    "over before he found",
-    "the one door he had",
-    "been looking for all",
-    "that long grey",
-    "afternoon."
+    "the length of",
+    "St. James Street",
+    "twice over before he",
+    "found the one door",
+    "he had been looking",
+    "for all that long",
+    "grey afternoon."
    ]
   },
   {
@@ -2695,6 +4151,533 @@
     "sigma tau upsilon",
     "phi chi psi omega at",
     "the end."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot, a tu nasz stół, dobrze?",
+   "chunks": [
+    "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot,",
+    "a tu nasz stół, dobrze?"
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot, a tu jest nasz stół i nasz nowy dach.",
+   "chunks": [
+    "Tak, raz, dwa, trzy, tak, to ja, a to ty, a to on, a to my, to nasz dom, tu jest nasz pies, tam jest nasz kot,",
+    "a tu jest nasz stół i nasz nowy dach."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "The old railway carried grain from farms across the valley and the drivers stopped each morning beside a small spring high in the hills. The next train is due at noon.",
+   "chunks": [
+    "The old railway carried grain from farms across the valley and the drivers stopped each morning beside a small spring high in the hills.",
+    "The next train is due at noon."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "The bright afternoon sunlight filtered through the branches of the old chestnut tree above the narrow path that the children followed every morning on their way to the little school beside the river.",
+   "chunks": [
+    "The bright afternoon sunlight filtered through the branches of the old chestnut tree above the narrow path that the children",
+    "followed every morning on their way to the little school beside the river."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "On the trail, we watched the river wind slowly through the valley while the children followed the tracks of an animal they had never seen before.",
+   "chunks": [
+    "On the trail, we watched the river wind slowly through the valley while the children followed the tracks of an animal they had never seen before."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "On the trail, we watched the wide river wind slowly through the valley while the children followed the tracks of a wild animal they had never seen before.",
+   "chunks": [
+    "On the trail, we watched the wide river wind slowly through the valley",
+    "while the children followed the tracks of a wild animal they had never seen before."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "“Have you seen the blue folder?” She walked to the opposite end of the room where she could finally talk to her colleague without disturbing the rest of the team.",
+   "chunks": [
+    "“Have you seen the blue folder?”",
+    "She walked to the opposite end of the room where she could finally talk to her colleague without disturbing the rest of the team."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Ask L. Jones about the report because she wrote it after interviewing everyone who examined the building before the fire at the end of August.",
+   "chunks": [
+    "Ask L.",
+    "Jones about the report because she wrote it after interviewing everyone who examined the building before the fire at the end of August."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "„Wie spät ist es?“\nAuf dem Rückweg gingen wir durch den Park und an den Geschäften vorbei bis zu der kleinen Station am anderen Ende der Stadt.",
+   "chunks": [
+    "„Wie spät ist es?“",
+    "Auf dem Rückweg gingen wir durch den Park und an den Geschäften vorbei bis zu der kleinen Station am anderen Ende der Stadt."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "Il demanda «Qui est là?»\nLa voisine prit le temps de regarder par la fenêtre avant de rejoindre ses enfants dans la cuisine au bout du couloir.",
+   "chunks": [
+    "Il demanda «Qui est là?»",
+    "La voisine prit le temps de regarder par la fenêtre avant de rejoindre ses enfants dans la cuisine au bout du couloir."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "There was only one reasonable choice: follow the road across the valley and hope that the last bus would stop beside the old stone bridge before nightfall.",
+   "chunks": [
+    "There was only one reasonable choice:",
+    "follow the road across the valley and hope that the last bus would stop beside the old stone bridge before nightfall."
+   ]
+  },
+  {
+   "config": "break",
+   "max_tokens": 255,
+   "prefix_tokens": 6,
+   "split_on": [
+    ". ",
+    "! ",
+    "? ",
+    "; ",
+    ", "
+   ],
+   "abbreviations": [
+    "A",
+    "B",
+    "Cpn",
+    "D",
+    "Dr",
+    "F",
+    "H",
+    "Hr",
+    "I",
+    "J",
+    "K",
+    "M",
+    "Mr",
+    "Mrs",
+    "R",
+    "S",
+    "St",
+    "T",
+    "V",
+    "Vors",
+    "dr",
+    "mrs",
+    "prof",
+    "św"
+   ],
+   "mid_sentence_period": "break",
+   "text": "The cabinet was locked — even the spare key would not turn — and the locksmith would have to return with another set of tools before the shop could open.",
+   "chunks": [
+    "The cabinet was locked — even the spare key would not turn —",
+    "and the locksmith would have to return with another set of tools before the shop could open."
    ]
   },
   {
@@ -3131,8 +5114,7 @@
    "text": "But Mr. Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at all.",
    "chunks": [
     "But Mr.",
-    "Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at",
-    "all."
+    "Smith went home to the house on the hill where he had lived for forty years without ever once complaining about any of it at all."
    ]
   },
   {
@@ -3220,8 +5202,7 @@
    "text": "Mr. Norrell, who had been waiting in the hall for the better part of an hour, said nothing at all to either of them about what he had seen there.",
    "chunks": [
     "Mr.",
-    "Norrell, who had been waiting in the hall for the better part of an hour,",
-    "said nothing at all to either of them about what he had seen there."
+    "Norrell, who had been waiting in the hall for the better part of an hour, said nothing at all to either of them about what he had seen there."
    ]
   },
   {

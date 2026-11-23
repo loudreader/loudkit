@@ -107,7 +107,7 @@ final class ReaderDoorTests: XCTestCase {
         // a manifest that never names `edge_fade_seconds` gets the 5 ms those
         // releases shipped rather than today's field default, which is the one
         // deliberate exception `algorithm_from` documents.
-        let ragged = "2f7468a9a48fa2ab"
+        let ragged = "b5f5c644f0725418"
         XCTAssertEqual(try fingerprint(""), ragged)
         XCTAssertEqual(try fingerprint("\"window\":null"), ragged)
         XCTAssertEqual(try fingerprint("\"eos_floor\":{\"min_tokens_floor\":0}"), ragged)
